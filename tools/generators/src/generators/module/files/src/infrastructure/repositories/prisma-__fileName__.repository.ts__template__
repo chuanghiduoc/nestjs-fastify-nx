@@ -1,0 +1,25 @@
+import { Injectable } from '@nestjs/common';
+import { PrismaService } from '@nestjs-fastify-nx/infra-database';
+import { <%= className %> } from '../../domain';
+import type { <%= className %>RepositoryPort } from '../../domain';
+
+@Injectable()
+export class Prisma<%= className %>Repository implements <%= className %>RepositoryPort {
+  constructor(private readonly prisma: PrismaService) {}
+
+  async findById(id: string): Promise<<%= className %> | null> {
+    // TODO: replace with actual Prisma model query once schema is defined
+    void id;
+    return null;
+  }
+
+  async save(entity: <%= className %>): Promise<void> {
+    // TODO: replace with actual Prisma upsert once schema is defined
+    void entity;
+  }
+
+  async delete(id: string): Promise<void> {
+    // TODO: replace with actual Prisma delete once schema is defined
+    void id;
+  }
+}

@@ -1,0 +1,61 @@
+# infra-redis
+
+Redis modules for cache and queue — two separate Redis instances on different
+ports so cache eviction never disrupts queued jobs.
+
+**Tag**: `scope:infra`.
+
+## Public API
+
+```ts
+import {
+  RedisCacheModule,
+  RedisCacheService,
+  RedisQueueModule,
+  DeadLetterModule,
+  dlqNameFor,
+  createDeadLetterRouterClass,
+  routeFailedJobToDlq,
+  type DeadLetterEnvelope,
+} from '@nestjs-fastify-nx/infra-redis';
+```
+
+## Cache
+
+`RedisCacheModule` wires `cache-manager` over `Keyv` against the cache
+instance (`REDIS_CACHE_HOST` / `REDIS_CACHE_PORT`). `RedisCacheService` is a
+thin typed wrapper exposing `get` / `set` / `del` / `wrap`.
+
+Default TTL: `REDIS_CACHE_TTL_MS` (5 minutes).
+
+## Queue
+
+`RedisQueueModule` configures the BullMQ connection against the queue
+instance (`REDIS_QUEUE_HOST` / `REDIS_QUEUE_PORT`) with prefix
+`REDIS_QUEUE_PREFIX` (`bull` by default). Feature modules declare queues with
+`@nestjs/bullmq`'s `BullModule.registerQueue(...)`.
+
+Queue names live in `@nestjs-fastify-nx/shared` (`QUEUE_NAMES`) so producers
+and consumers can't drift.
+
+## Dead-letter queues
+
+For at-least-once durability, every business queue gets a paired DLQ. The
+naming convention is enforced by `dlqNameFor(queueName)` which appends `:dlq`.
+
+```ts
+@Processor(QUEUE_NAMES.EMAIL_NOTIFICATION)
+class EmailProcessor extends createDeadLetterRouterClass(QUEUE_NAMES.EMAIL_NOTIFICATION) {
+  // failed jobs after retry exhaustion are auto-routed to email-notification:dlq
+}
+```
+
+The `DeadLetterEnvelope` type captures the original payload, error, and
+attempt history — inspect a DLQ via Bull Board (`/api/admin/queues`).
+
+## Pub/sub for Socket.io
+
+The Socket.io adapter (`@socket.io/redis-adapter`) uses `REDIS_PUBSUB_DB` (DB
+index 2 by default on the cache instance) for cross-pod broadcast. That
+configuration is wired in `apps/api`, not here — this lib only owns the
+client connections.

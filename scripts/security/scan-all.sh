@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+# Run every security scanner the repo ships with.
+#
+# Order is intentional — fastest + cheapest first, image-based last:
+#   1. Gitleaks      (~5s)   secrets in source / history
+#   2. OSV-Scanner   (~30s)  dependency CVEs (lockfile)
+#   3. Semgrep      (~2m)    SAST rules (TS/Node/OWASP)
+#   4. Trivy         (~1m)   image-level CVEs (requires built images)
+#
+# Trivy is gated on built images existing locally; skipped with a note when
+# they're absent (e.g. dev hasn't run build-prod.sh yet).
+set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=./_lib.sh
+source "${SCRIPT_DIR}/_lib.sh"
+
+sec::source_env
+
+failures=()
+
+run() {
+  local name="$1"; shift
+  echo
+  sec::log "── ${name} ──────────────────────────────────────────"
+  if "$@"; then sec::ok "${name} passed"; else sec::err "${name} FAILED"; failures+=("${name}"); fi
+}
+
+run "Gitleaks"    "${SCRIPT_DIR}/scan-secrets.sh"
+run "OSV-Scanner" "${SCRIPT_DIR}/scan-deps.sh"
+run "Semgrep"     "${SCRIPT_DIR}/scan-sast.sh"
+
+PREFIX="${IMAGE_REGISTRY:-ghcr.io}/${IMAGE_NAMESPACE:-local}"
+TAG="${IMAGE_TAG:-latest}"
+if docker image inspect "${PREFIX}/api:${TAG}" >/dev/null 2>&1; then
+  run "Trivy" "${SCRIPT_DIR}/scan-images.sh"
+else
+  sec::warn "Skipping Trivy — ${PREFIX}/api:${TAG} not built locally."
+  sec::warn "  Run ./scripts/build-prod.sh first to enable image scans."
+fi
+
+echo
+if (( ${#failures[@]} > 0 )); then
+  sec::err "Failed: ${failures[*]}"
+  exit 1
+fi
+sec::ok "All security scans passed."

@@ -1,0 +1,26 @@
+{
+  "$schema": "http://json-schema.org/schema",
+  "$id": "ModuleGenerator",
+  "title": "DDD Module Generator",
+  "description": "Scaffold a new DDD module with domain/application/infrastructure/presentation layers",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Module name (kebab-case, e.g. 'users', 'orders')",
+      "$default": { "$source": "argv", "index": 0 },
+      "x-prompt": "What is the module name?"
+    },
+    "directory": {
+      "type": "string",
+      "description": "Directory to place the module (default: libs/modules)",
+      "default": "libs/modules"
+    },
+    "withCqrs": {
+      "type": "boolean",
+      "description": "Include CQRS commands and queries",
+      "default": true
+    }
+  },
+  "required": ["name"]
+}

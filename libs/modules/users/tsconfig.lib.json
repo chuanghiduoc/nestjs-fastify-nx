@@ -1,0 +1,58 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "outDir": "../../../dist/out-tsc/libs/modules/users",
+    "declaration": true,
+    "ignoreDeprecations": "6.0",
+    "types": ["node"],
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+    "strictNullChecks": true,
+    "noImplicitAny": true,
+    "strictBindCallApply": true,
+    "forceConsistentCasingInFileNames": true,
+    "noFallthroughCasesInSwitch": true,
+    "composite": true
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": [
+    "vite.config.ts",
+    "vite.config.mts",
+    "vitest.config.ts",
+    "vitest.config.mts",
+    "src/**/*.test.ts",
+    "src/**/*.spec.ts",
+    "src/**/*.test.tsx",
+    "src/**/*.spec.tsx",
+    "src/**/*.test.js",
+    "src/**/*.spec.js",
+    "src/**/*.test.jsx",
+    "src/**/*.spec.jsx"
+  ],
+  "references": [
+    {
+      "path": "../../infra/redis/tsconfig.lib.json"
+    },
+    {
+      "path": "../../infra/messaging/tsconfig.lib.json"
+    },
+    {
+      "path": "../../infra/auth/tsconfig.lib.json"
+    },
+    {
+      "path": "../../contracts/tsconfig.lib.json"
+    },
+    {
+      "path": "../../infra/database/tsconfig.lib.json"
+    },
+    {
+      "path": "../../testing/tsconfig.lib.json"
+    },
+    {
+      "path": "../../core/tsconfig.lib.json"
+    },
+    {
+      "path": "../../shared/tsconfig.lib.json"
+    }
+  ]
+}

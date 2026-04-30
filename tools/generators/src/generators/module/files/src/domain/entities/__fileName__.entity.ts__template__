@@ -1,0 +1,21 @@
+import { generateId } from '@nestjs-fastify-nx/shared';
+
+export class <%= className %> {
+  private constructor(
+    readonly id: string,
+    readonly createdAt: Date,
+    readonly updatedAt: Date,
+  ) {}
+
+  static create(): <%= className %> {
+    return new <%= className %>(generateId(), new Date(), new Date());
+  }
+
+  static reconstitute(raw: {
+    id: string;
+    createdAt: Date;
+    updatedAt: Date;
+  }): <%= className %> {
+    return new <%= className %>(raw.id, raw.createdAt, raw.updatedAt);
+  }
+}

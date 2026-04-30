@@ -1,0 +1,3 @@
+export class Create<%= className %>Command {
+  constructor(readonly requestedBy: string) {}
+}

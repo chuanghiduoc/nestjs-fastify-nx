@@ -1,0 +1,15 @@
+import { Module } from '@nestjs/common';
+import { <%= className %>Controller } from './presentation/controllers/<%= fileName %>.controller';
+<% if (withCqrs) { %>import { Create<%= className %>Handler } from './application/commands/create-<%= fileName %>/create-<%= fileName %>.handler';
+import { Prisma<%= className %>Repository } from './infrastructure/repositories/prisma-<%= fileName %>.repository';
+import { <%= constantName %>_REPOSITORY } from './domain';
+<% } %>
+@Module({
+  controllers: [<%= className %>Controller],
+  providers: [<% if (withCqrs) { %>
+    Create<%= className %>Handler,
+    { provide: <%= constantName %>_REPOSITORY, useClass: Prisma<%= className %>Repository },
+  <% } %>],
+  exports: [],
+})
+export class <%= className %>Module {}

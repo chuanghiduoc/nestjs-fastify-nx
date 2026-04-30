@@ -1,0 +1,204 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+# Production releases run sequentially per tag — concurrent runs against the
+# same tag are nonsensical and would race on registry pushes.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      packages: write
+      # Required by docker/build-push-action when emitting provenance/SBOM
+      # attestations alongside the image (provenance: mode=max).
+      id-token: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - app: api
+            dockerfile: apps/api/Dockerfile
+          - app: worker
+            dockerfile: apps/worker/Dockerfile
+          - app: scheduler
+            dockerfile: apps/scheduler/Dockerfile
+          - app: migration
+            dockerfile: apps/migration/Dockerfile
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up QEMU (for cross-arch base images)
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/${{ matrix.app }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=raw,value=latest
+          # OCI image labels — registries, scanners, and supply-chain tooling
+          # consume these. image.source/revision/created/version come from the
+          # action; we add the human-facing fields per app.
+          labels: |
+            org.opencontainers.image.title=nestjs-fastify-nx-${{ matrix.app }}
+            org.opencontainers.image.description=Production ${{ matrix.app }} image (${{ github.repository }} @ ${{ github.ref_name }})
+            org.opencontainers.image.licenses=MIT
+            org.opencontainers.image.vendor=nestjs-fastify-nx
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.url=https://github.com/${{ github.repository }}
+            org.opencontainers.image.documentation=https://github.com/${{ github.repository }}/blob/main/docs/deployment.md
+
+      - name: Build and push Docker image (${{ matrix.app }})
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          target: production
+          push: true
+          # linux/amd64 only by default — flip to `linux/amd64,linux/arm64`
+          # if multi-arch is needed; QEMU is already available for that.
+          platforms: linux/amd64
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # SBOM + provenance: required for SLSA-3 attestations and any
+          # supply-chain policy that pins on `cosign verify-attestation`.
+          sbom: true
+          provenance: mode=max
+          cache-from: type=gha,scope=${{ matrix.app }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.app }}
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@v3.7.0
+
+      # Keyless signing via Fulcio: identity is the workflow ref + actor, no
+      # long-lived keys. Verifiers later assert against this identity using
+      # `cosign verify --certificate-identity ...`.
+      - name: Sign image (cosign keyless)
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+          IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/${{ matrix.app }}
+        run: cosign sign --yes "${IMAGE}@${DIGEST}"
+
+  security-scan:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: read
+      security-events: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - app: api
+          - app: worker
+          - app: scheduler
+          - app: migration
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Trivy security scan (${{ matrix.app }})
+        uses: aquasecurity/trivy-action@6c175e9c4083a92bbca2f9af4af0408e91440ef0
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/${{ matrix.app }}:${{ github.ref_name }}
+          format: sarif
+          output: trivy-${{ matrix.app }}.sarif
+          exit-code: '1'
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+
+      - name: Upload Trivy results to GitHub Security
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-${{ matrix.app }}.sarif
+          category: trivy-${{ matrix.app }}
+
+  static-analysis:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      security-events: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Semgrep static analysis
+        run: |
+          docker run --rm \
+            -v "${GITHUB_WORKSPACE}:/src" \
+            semgrep/semgrep:latest semgrep scan \
+              --config p/typescript \
+              --config p/nodejs \
+              --config p/secrets \
+              --error \
+              /src
+
+  migrate-and-deploy:
+    needs: [security-scan, static-analysis]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production
+
+    steps:
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run database migration
+        run: |
+          docker run --rm \
+            -e DATABASE_URL='${{ secrets.DATABASE_URL }}' \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/migration:${{ github.ref_name }}
+
+      - name: Deploy to Coolify
+        run: |
+          curl --fail --silent --show-error -X POST "${{ secrets.COOLIFY_WEBHOOK_URL }}" \
+            -H "Authorization: Bearer ${{ secrets.COOLIFY_TOKEN }}" \
+            -H 'Content-Type: application/json' \
+            -d "{\"tag\":\"${{ github.ref_name }}\"}"

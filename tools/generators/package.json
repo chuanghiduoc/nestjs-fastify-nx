@@ -1,0 +1,8 @@
+{
+  "name": "@nestjs-fastify-nx/tools-generators",
+  "version": "0.0.1",
+  "private": true,
+  "generators": "./generators.json",
+  "main": "./src/index.js",
+  "types": "./src/index.d.ts"
+}

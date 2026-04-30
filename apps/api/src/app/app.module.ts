@@ -1,0 +1,66 @@
+import { Module } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
+import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
+import { GqlThrottlerGuard } from '../common/throttler/gql-throttler.guard';
+import { SentryModule } from '@sentry/nestjs/setup';
+import { DatabaseModule } from '@nestjs-fastify-nx/infra-database';
+import { RedisCacheModule, RedisQueueModule } from '@nestjs-fastify-nx/infra-redis';
+import { MessagingModule } from '@nestjs-fastify-nx/infra-messaging';
+import { StorageModule } from '@nestjs-fastify-nx/infra-storage';
+import { BetterAuthModule, BetterAuthGuard, RolesGuard } from '@nestjs-fastify-nx/infra-auth';
+import { EVENT_PUBLISHER_PORT, type EventPublisherPort } from '@nestjs-fastify-nx/core';
+import { UsersModule, UserRegistered } from '@nestjs-fastify-nx/modules-users';
+import { AdminModule } from '@nestjs-fastify-nx/modules-admin';
+import { AuditLogModule } from '@nestjs-fastify-nx/modules-audit-log';
+import { LoggingModule } from '../common/logging/logging.module';
+import { HealthModule } from '../common/health/health.module';
+import { MetricsModule } from '../common/metrics/metrics.module';
+import { ThrottlerModule } from '../common/throttler/throttler.module';
+import { UploadModule } from '../common/upload/upload.module';
+import { GraphqlModule } from '../graphql/graphql.module';
+import { WebsocketModule } from '../websocket/websocket.module';
+import { GlobalExceptionFilter } from '../common/filters/global-exception.filter';
+import { ResponseInterceptor } from '../common/interceptors/response.interceptor';
+import { validateConfig } from '../config/env.validation';
+import { AppController } from './app.controller';
+
+const conditionalImports = process.env['ENABLE_METRICS'] === 'true' ? [MetricsModule] : [];
+
+@Module({
+  imports: [
+    SentryModule.forRoot(),
+    ConfigModule.forRoot({ isGlobal: true, validate: validateConfig }),
+    ThrottlerModule,
+    LoggingModule,
+    HealthModule,
+    DatabaseModule,
+    RedisCacheModule,
+    RedisQueueModule,
+    MessagingModule,
+    StorageModule,
+    BetterAuthModule.forRootAsync({
+      imports: [MessagingModule],
+      inject: [EVENT_PUBLISHER_PORT],
+      useFactory: (publisher: EventPublisherPort) => ({
+        onUserCreated: (user) =>
+          publisher.publish(new UserRegistered(user.id, { email: user.email })),
+      }),
+    }),
+    UsersModule,
+    AdminModule,
+    AuditLogModule,
+    UploadModule,
+    GraphqlModule,
+    WebsocketModule,
+    ...conditionalImports,
+  ],
+  controllers: [AppController],
+  providers: [
+    { provide: APP_GUARD, useClass: GqlThrottlerGuard },
+    { provide: APP_GUARD, useClass: BetterAuthGuard },
+    { provide: APP_GUARD, useClass: RolesGuard },
+    { provide: APP_FILTER, useClass: GlobalExceptionFilter },
+    { provide: APP_INTERCEPTOR, useClass: ResponseInterceptor },
+  ],
+})
+export class AppModule {}

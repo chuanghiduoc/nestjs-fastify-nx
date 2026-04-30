@@ -1,0 +1,47 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 10
+    versioning-strategy: increase
+    labels: [dependencies, npm]
+    groups:
+      nestjs:
+        patterns: ['@nestjs/*']
+      opentelemetry:
+        patterns: ['@opentelemetry/*']
+      prisma:
+        patterns: ['prisma', '@prisma/*']
+      sentry:
+        patterns: ['@sentry/*']
+      nx:
+        patterns: ['nx', '@nx/*']
+      eslint:
+        patterns: ['eslint*', '@typescript-eslint/*', 'typescript-eslint']
+      vitest:
+        patterns: ['vitest', '@vitest/*']
+
+  - package-ecosystem: docker
+    directory: /apps/api
+    schedule: { interval: weekly }
+    labels: [dependencies, docker]
+  - package-ecosystem: docker
+    directory: /apps/worker
+    schedule: { interval: weekly }
+    labels: [dependencies, docker]
+  - package-ecosystem: docker
+    directory: /apps/scheduler
+    schedule: { interval: weekly }
+    labels: [dependencies, docker]
+  - package-ecosystem: docker
+    directory: /apps/migration
+    schedule: { interval: weekly }
+    labels: [dependencies, docker]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: weekly }
+    labels: [dependencies, github-actions]

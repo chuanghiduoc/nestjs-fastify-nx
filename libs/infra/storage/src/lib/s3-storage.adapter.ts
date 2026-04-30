@@ -1,0 +1,130 @@
+import {
+  Injectable,
+  Logger,
+  BadRequestException,
+  InternalServerErrorException,
+} from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import {
+  S3Client,
+  PutObjectCommand,
+  DeleteObjectCommand,
+  GetObjectCommand,
+} from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import type { StoragePort, StoredFile, UploadOptions } from './storage.port';
+
+/**
+ * S3-compatible storage adapter (works with AWS S3 and MinIO).
+ *
+ * Production notes:
+ * - All config values are required in production; defaults are safe for local
+ *   dev/MinIO only and will log a warning when they are used.
+ * - Retry is handled by the AWS SDK's default retry middleware (3 attempts,
+ *   exponential back-off with jitter).  Bump `maxAttempts` if you need more.
+ * - `forcePathStyle: true` is required for MinIO and S3-compatible services
+ *   that do not support virtual-hosted-style URLs.  AWS S3 itself works fine
+ *   with path-style so it is safe to leave enabled.
+ * - The `url` field on `StoredFile` is NOT a pre-signed URL — it is a plain
+ *   path-style object URL suitable for internal use or public buckets.
+ *   For time-limited access use `getSignedUrl`.
+ */
+@Injectable()
+export class S3StorageAdapter implements StoragePort {
+  private readonly logger = new Logger(S3StorageAdapter.name);
+  private readonly client: S3Client;
+  private readonly bucket: string;
+  private readonly endpoint: string;
+
+  constructor(private readonly config: ConfigService) {
+    this.endpoint = this.requireConfig('STORAGE_ENDPOINT', 'http://localhost:9000');
+    this.bucket = this.requireConfig('STORAGE_BUCKET', 'uploads');
+
+    const region = this.requireConfig('STORAGE_REGION', 'us-east-1');
+    const accessKeyId = this.requireConfig('STORAGE_ACCESS_KEY', 'minioadmin');
+    const secretAccessKey = this.requireConfig('STORAGE_SECRET_KEY', 'minioadmin');
+
+    this.client = new S3Client({
+      endpoint: this.endpoint,
+      region,
+      credentials: { accessKeyId, secretAccessKey },
+      forcePathStyle: true,
+      // AWS SDK v3 default is 3 retries.  Explicit here for visibility.
+      maxAttempts: 3,
+    });
+  }
+
+  /**
+   * Reads a config value and warns when the insecure default is used so that
+   * misconfigurations are surfaced immediately at startup.
+   */
+  private requireConfig(key: string, devDefault: string): string {
+    const value = this.config.get<string>(key);
+    if (value === undefined || value === '') {
+      if (process.env['NODE_ENV'] === 'production') {
+        throw new Error(`StorageModule: required env var "${key}" is not set`);
+      }
+      this.logger.warn(`"${key}" not set — using dev default "${devDefault}"`);
+      return devDefault;
+    }
+    return value;
+  }
+
+  async upload(key: string, body: Buffer, options?: UploadOptions): Promise<StoredFile> {
+    if (body.length === 0) {
+      throw new BadRequestException(`Upload rejected — body is empty for key "${key}"`);
+    }
+
+    const bucket = options?.bucket ?? this.bucket;
+
+    try {
+      await this.client.send(
+        new PutObjectCommand({
+          Bucket: bucket,
+          Key: key,
+          Body: body,
+          ContentType: options?.contentType ?? 'application/octet-stream',
+          ContentLength: body.length,
+          Metadata: options?.metadata,
+        }),
+      );
+    } catch (err) {
+      this.logger.error({ err, key }, 'S3 upload failed');
+      throw new InternalServerErrorException('Storage upload failed');
+    }
+
+    // Plain path-style URL — not signed, suitable for internal/public access.
+    // Callers that need time-limited access should use getSignedUrl().
+    const url = `${this.endpoint}/${bucket}/${key}`;
+
+    return { key, bucket, url, size: body.length };
+  }
+
+  async getSignedUrl(key: string, expiresIn = 3600, bucket?: string): Promise<string> {
+    const targetBucket = bucket ?? this.bucket;
+    try {
+      const command = new GetObjectCommand({
+        Bucket: targetBucket,
+        Key: key,
+      });
+      return await getSignedUrl(this.client, command, { expiresIn });
+    } catch (err) {
+      this.logger.error({ err, key }, 'S3 getSignedUrl failed');
+      throw new InternalServerErrorException('Storage signed URL generation failed');
+    }
+  }
+
+  async delete(key: string, bucket?: string): Promise<void> {
+    try {
+      await this.client.send(
+        new DeleteObjectCommand({
+          Bucket: bucket ?? this.bucket,
+          Key: key,
+        }),
+      );
+    } catch (err) {
+      this.logger.error({ err, key }, 'S3 delete failed');
+      throw new InternalServerErrorException('Storage delete failed');
+    }
+  }
+}

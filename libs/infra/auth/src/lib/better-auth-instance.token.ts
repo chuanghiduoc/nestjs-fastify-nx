@@ -1,0 +1,1 @@
+export const BETTER_AUTH_INSTANCE = Symbol('BETTER_AUTH_INSTANCE');

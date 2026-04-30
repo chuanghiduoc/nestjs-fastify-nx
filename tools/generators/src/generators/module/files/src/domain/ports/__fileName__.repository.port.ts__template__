@@ -1,0 +1,9 @@
+import { <%= className %> } from '../entities/<%= fileName %>.entity';
+
+export const <%= constantName %>_REPOSITORY = Symbol('<%= constantName %>_REPOSITORY');
+
+export interface <%= className %>RepositoryPort {
+  findById(id: string): Promise<<%= className %> | null>;
+  save(entity: <%= className %>): Promise<void>;
+  delete(id: string): Promise<void>;
+}
