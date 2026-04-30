@@ -1,12 +1,52 @@
-# nestjs-fastify-nx
+<div align="center">
+  <img src=".github/assets/banner.png" alt="nestjs-fastify-nx — Production-grade NestJS + Fastify + Nx 22 monorepo boilerplate" width="100%" />
+</div>
 
-Production-grade NestJS + Fastify + Nx monorepo boilerplate.  
-DDD/CQRS, Better Auth, GraphQL, Socket.io, BullMQ, OpenTelemetry, Sentry — wired and tested.
+<h1 align="center">nestjs-fastify-nx</h1>
+
+<p align="center">
+  <strong>Production-grade NestJS 11 + Fastify 5 + Nx 22 monorepo boilerplate.</strong><br/>
+  DDD · CQRS · Better Auth · GraphQL · Socket.io · BullMQ · OpenTelemetry · Sentry — wired and tested.
+</p>
+
+<p align="center">
+  <a href="https://github.com/chuanghiduoc/nestjs-fastify-nx/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/chuanghiduoc/nestjs-fastify-nx/ci.yml?branch=main&label=CI&logo=github&style=flat-square" /></a>
+  <a href="https://github.com/chuanghiduoc/nestjs-fastify-nx/actions/workflows/release.yml"><img alt="Release" src="https://img.shields.io/github/actions/workflow/status/chuanghiduoc/nestjs-fastify-nx/release.yml?label=Release&logo=github&style=flat-square" /></a>
+  <a href="https://github.com/chuanghiduoc/nestjs-fastify-nx/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/chuanghiduoc/nestjs-fastify-nx?include_prereleases&sort=semver&label=release&style=flat-square" /></a>
+  <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/github/license/chuanghiduoc/nestjs-fastify-nx?style=flat-square" /></a>
+  <a href="https://github.com/chuanghiduoc/nestjs-fastify-nx/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/chuanghiduoc/nestjs-fastify-nx?style=flat-square" /></a>
+  <a href="https://github.com/chuanghiduoc/nestjs-fastify-nx/issues"><img alt="Open issues" src="https://img.shields.io/github/issues/chuanghiduoc/nestjs-fastify-nx?style=flat-square" /></a>
+  <a href="https://github.com/chuanghiduoc/nestjs-fastify-nx/commits/main"><img alt="Last commit" src="https://img.shields.io/github/last-commit/chuanghiduoc/nestjs-fastify-nx?style=flat-square" /></a>
+</p>
+
+<p align="center">
+  <img alt="NestJS" src="https://img.shields.io/badge/NestJS-11-E0234E?logo=nestjs&logoColor=white&style=flat-square" />
+  <img alt="Fastify" src="https://img.shields.io/badge/Fastify-5-000000?logo=fastify&logoColor=white&style=flat-square" />
+  <img alt="Nx" src="https://img.shields.io/badge/Nx-22-143055?logo=nx&logoColor=white&style=flat-square" />
+  <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-6-3178C6?logo=typescript&logoColor=white&style=flat-square" />
+  <img alt="Node" src="https://img.shields.io/badge/Node.js-22-339933?logo=node.js&logoColor=white&style=flat-square" />
+  <img alt="pnpm" src="https://img.shields.io/badge/pnpm-10.33-F69220?logo=pnpm&logoColor=white&style=flat-square" />
+  <img alt="Prisma" src="https://img.shields.io/badge/Prisma-7-2D3748?logo=prisma&logoColor=white&style=flat-square" />
+  <img alt="PostgreSQL" src="https://img.shields.io/badge/PostgreSQL-18-336791?logo=postgresql&logoColor=white&style=flat-square" />
+  <img alt="Redis" src="https://img.shields.io/badge/Redis-8-DC382D?logo=redis&logoColor=white&style=flat-square" />
+  <img alt="Vitest" src="https://img.shields.io/badge/Vitest-4-6E9F18?logo=vitest&logoColor=white&style=flat-square" />
+  <img alt="Docker" src="https://img.shields.io/badge/Docker-multi--stage-2496ED?logo=docker&logoColor=white&style=flat-square" />
+  <img alt="Cosign" src="https://img.shields.io/badge/Cosign-keyless-1F4B8E?logo=sigstore&logoColor=white&style=flat-square" />
+</p>
+
+<p align="center">
+  <a href="#quick-start">Quick Start</a> ·
+  <a href="#why-this-boilerplate">Why this boilerplate?</a> ·
+  <a href="#architecture">Architecture</a> ·
+  <a href="docs/getting-started.md">Documentation</a> ·
+  <a href="#contributing">Contributing</a>
+</p>
 
 ---
 
 ## Table of Contents
 
+- [Why this boilerplate?](#why-this-boilerplate)
 - [Highlights](#highlights)
 - [Stack](#stack)
 - [Architecture](#architecture)
@@ -21,6 +61,21 @@ DDD/CQRS, Better Auth, GraphQL, Socket.io, BullMQ, OpenTelemetry, Sentry — wir
 - [Contributing](#contributing)
 - [Acknowledgements](#acknowledgements)
 - [License](#license)
+
+## Why this boilerplate?
+
+Most NestJS starters stop at "hello world + auth". This one ships the parts you actually rewrite on every project:
+
+- **Real DDD layout** with module-boundary lint rules (`@nx/enforce-module-boundaries`) so cross-context imports fail in CI, not in code review.
+- **Cookie-session auth** (Better Auth + argon2) reused on REST, GraphQL **and** Socket.io — no JWT, no refresh-token plumbing.
+- **Three API surfaces on one Fastify instance** — REST/OpenAPI, GraphQL (Mercurius), and WebSockets — with Redis pub/sub for horizontal scale.
+- **Background processing** wired correctly: BullMQ + Bull Board UI behind admin auth, transactional outbox so domain events survive crashes.
+- **Day-2 observability** out of the box: OpenTelemetry traces, Sentry errors + profiling, Prometheus `/metrics`, structured pino logs with request-id correlation.
+- **Hardened production images** — pinned by SHA256 digest, non-root, tini PID 1, Node-only healthchecks, no shell utilities.
+- **Five-layer security pipeline** — Gitleaks · OSV-Scanner · Semgrep · Trivy · Cosign keyless — running locally **and** gating CI/release.
+- **Real integration tests** — Vitest + Testcontainers (Postgres + Redis) means "the test passed" actually means "it works".
+
+If you've ever shipped a Node service to production, you've written this code already. Now you don't have to.
 
 ## Highlights
 
@@ -94,15 +149,17 @@ See [docs/architecture.md](docs/architecture.md) for the full module map.
 
 ## Quick Start
 
-**Prerequisites:** Docker 24+, Node 22, pnpm 10.33 (`corepack enable && corepack prepare pnpm@10.33.0 --activate`).
+> **Prerequisites** — Docker 24+, Node 22, pnpm 10.33 (`corepack enable && corepack prepare pnpm@10.33.0 --activate`).
 
 ```bash
 git clone https://github.com/chuanghiduoc/nestjs-fastify-nx.git
 cd nestjs-fastify-nx
 cp .env.example .env
-pnpm install                                       # generates Prisma client via postinstall
-./scripts/build-dev.sh                             # builds + starts the dev stack
+pnpm install                    # generates Prisma client via postinstall
+./scripts/build-dev.sh          # builds + starts the dev stack
 ```
+
+Once the stack is up:
 
 | Service          | URL                                                                                |
 | ---------------- | ---------------------------------------------------------------------------------- |
@@ -185,6 +242,8 @@ Production images are signed with **keyless OIDC via Sigstore Fulcio**, ship wit
 
 Container hardening: pinned base by SHA256 digest, non-root UID 1001, `STOPSIGNAL SIGTERM`, tini PID 1, healthchecks via Node `http` (no wget), npm CLI vendored stripped from the runtime layer. See [docs/security.md](docs/security.md) for the full inventory.
 
+Found a vulnerability? Please report it privately via [GitHub Security Advisories](https://github.com/chuanghiduoc/nestjs-fastify-nx/security/advisories/new) — see [SECURITY.md](.github/SECURITY.md).
+
 ## Observability
 
 - **Traces** — OpenTelemetry SDK with auto-instrumentations; OTLP HTTP exporters.
@@ -210,7 +269,7 @@ pnpm nx run-many -t test --parallel=3
 
 ## Release & Deployment
 
-```
+```bash
 git tag v1.2.3 && git push origin v1.2.3
 ```
 
@@ -245,11 +304,15 @@ Full flow: [docs/deployment.md](docs/deployment.md).
 
 ## Contributing
 
+Contributions are very welcome — bug reports, feature requests, and pull requests. Please:
+
 1. Fork → feature branch from `main`.
-2. Conventional Commits enforced via commitlint (`feat:`, `fix:`, `refactor:`, …).
+2. Use [Conventional Commits](https://www.conventionalcommits.org/) — enforced by commitlint (`feat:`, `fix:`, `refactor:`, `docs:`, …).
 3. Lefthook runs lint-staged + Gitleaks on commit; full Gitleaks history scan on push.
 4. CI must be green: lint, typecheck, unit tests, build, secret + dep scans.
 5. Open a PR — describe the _why_, link the issue, include a test plan.
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the full workflow, and [SECURITY.md](.github/SECURITY.md) for vulnerability disclosure.
 
 ## Acknowledgements
 
@@ -261,6 +324,20 @@ Built on the work of these open-source projects — please consider supporting t
 - [OpenTelemetry](https://opentelemetry.io/) · [Pino](https://getpino.io/) · [Sentry](https://sentry.io/)
 - [Sigstore](https://www.sigstore.dev/) · [Trivy](https://trivy.dev/) · [Semgrep](https://semgrep.dev/) · [OSV-Scanner](https://google.github.io/osv-scanner/) · [Gitleaks](https://gitleaks.io/)
 
+## Star History
+
+<a href="https://star-history.com/#chuanghiduoc/nestjs-fastify-nx&Date">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=chuanghiduoc/nestjs-fastify-nx&type=Date&theme=dark" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=chuanghiduoc/nestjs-fastify-nx&type=Date" />
+    <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=chuanghiduoc/nestjs-fastify-nx&type=Date" />
+  </picture>
+</a>
+
 ## License
 
-[MIT](LICENSE)
+Released under the [MIT License](LICENSE) — see the file for details.
+
+<p align="center">
+  <sub>Built with care by <a href="https://github.com/chuanghiduoc">@chuanghiduoc</a> · If this saved you a week of plumbing, give it a ⭐</sub>
+</p>

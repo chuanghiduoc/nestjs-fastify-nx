@@ -1,0 +1,52 @@
+name: Dependabot auto-merge
+
+# Auto-approve and auto-merge Dependabot PRs once CI passes.
+# Major upgrades (semver-major) are NEVER auto-merged — they get a comment and
+# wait for manual review. Minor/patch and security updates flow through:
+#
+#   PR opened → CI passes → workflow approves + enables auto-merge (squash) →
+#   GitHub merges → branch deleted → Dependabot rebases the next PR onto the
+#   new main → CI re-runs → auto-merges → and so on.
+#
+# Branch protection on main requires `strict: true`, so the sequential rebase
+# is enforced by GitHub itself — this workflow only flips the auto-merge flag.
+on: pull_request
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  auto-merge:
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.user.login == 'dependabot[bot]'
+    steps:
+      - name: Fetch Dependabot metadata
+        id: metadata
+        uses: dependabot/fetch-metadata@v2
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Approve minor/patch updates
+        if: steps.metadata.outputs.update-type != 'version-update:semver-major'
+        run: gh pr review --approve "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Enable auto-merge (squash) for minor/patch updates
+        if: steps.metadata.outputs.update-type != 'version-update:semver-major'
+        run: gh pr merge --auto --squash "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Flag major upgrades for manual review
+        if: steps.metadata.outputs.update-type == 'version-update:semver-major'
+        run: |
+          gh pr edit "$PR_URL" --add-label "needs-review,major-upgrade"
+          gh pr comment "$PR_URL" --body \
+            ":warning: **Major version bump detected** (\`${{ steps.metadata.outputs.dependency-names }}\` → \`${{ steps.metadata.outputs.new-version }}\`). Auto-merge is disabled — please review breaking changes before merging."
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

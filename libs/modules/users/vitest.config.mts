@@ -15,6 +15,7 @@ export default defineConfig(() => ({
     testTimeout: 60_000,
     hookTimeout: 60_000,
     reporters: ['default'],
+    setupFiles: ['../../../vitest.setup.ts'],
     passWithNoTests: true,
     coverage: {
       reportsDirectory: '../../../coverage/libs/modules/users',

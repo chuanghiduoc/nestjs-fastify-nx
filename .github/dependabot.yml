@@ -19,6 +19,12 @@ updates:
       prefix: chore(deps)
       prefix-development: chore(deps-dev)
       include: scope
+    # webpack-cli major bumps depend on @nx/webpack catching up — pin to 5.x
+    # until Nx ships compatibility with webpack-cli 6+ (the `--node-env` flag
+    # was removed in v6).
+    ignore:
+      - dependency-name: webpack-cli
+        update-types: [version-update:semver-major]
     groups:
       production-dependencies:
         dependency-type: production

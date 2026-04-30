@@ -77,7 +77,9 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
     } catch (err) {
       // Re-throw so NestJS lifecycle manager surfaces the error and aborts
       // startup rather than silently running with a dead DB connection.
-      throw new Error(`DatabaseModule: failed to connect — ${String(err)}`);
+      throw new Error(`DatabaseModule: failed to connect — ${String(err)}`, {
+        cause: err,
+      });
     }
   }
 

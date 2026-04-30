@@ -69,11 +69,14 @@ jobs:
       - name: Sync Nx workspace
         run: pnpm nx sync:check
 
-      - name: Format check
-        run: pnpm nx format:check
-
-      - name: Set NX base and head for affected
+      # Must run before any `nx format:check`/`nx affected` so NX_BASE/NX_HEAD
+      # are populated. Without this, nx falls back to `defaultBase: "main"`
+      # which doesn't exist as a local ref in PR checkouts.
+      - name: Set NX base and head
         uses: nrwl/nx-set-shas@v4
+
+      - name: Format check
+        run: pnpm nx format:check --base=$NX_BASE --head=$NX_HEAD
 
       - name: Lint affected
         run: pnpm nx affected --target=lint --base=$NX_BASE --head=$NX_HEAD --parallel=3

@@ -13,6 +13,7 @@ export default defineConfig(() => ({
     environment: 'node',
     include: ['{src,tests}/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
     reporters: ['default'],
+    setupFiles: ['../../../vitest.setup.ts'],
     passWithNoTests: true,
     coverage: {
       reportsDirectory: '../../../coverage/libs/infra/database',
