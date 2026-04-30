@@ -1,0 +1,186 @@
+# Swarm overlay — encrypted overlay network, node-pinned placement, rolling
+# updates with rollback, and ingress routing for `api`. Layer on top of the
+# base + prod overlays:
+#
+#   docker stack deploy \
+#     -c docker/compose.yml \
+#     -c docker/compose.prod.yml \
+#     -c docker/compose.swarm.yml \
+#     --with-registry-auth app
+#
+# ─── Bootstrap (once per cluster) ────────────────────────────────────────────
+#
+# 1. Initialize swarm on the manager node. Use a private IP (cloud VPC) or a
+#    Tailscale/WireGuard interface IP for cross-DC clusters:
+#
+#      docker swarm init --advertise-addr <PRIVATE_IP_OR_TAILSCALE_IP>
+#
+# 2. Join workers using the token printed by `swarm init`:
+#
+#      docker swarm join --token SWMTKN-... <manager>:2377
+#
+# 3. Label nodes by role. A single host carries every label for all-in-one
+#    deployments; split labels across nodes for tiered topologies:
+#
+#      docker node update --label-add role.db=true        <node>
+#      docker node update --label-add role.api=true       <node>
+#      docker node update --label-add role.worker=true    <node>
+#      docker node update --label-add role.scheduler=true <node>
+#
+# 4. Place `.env` on the manager only (mode 0600). It is read at
+#    `stack deploy` time and the resulting service spec is stored in the
+#    raft log (encrypted at rest on managers).
+#
+# ─── Cross-DC / cross-cloud (no shared VPC) ──────────────────────────────────
+#
+# Install Tailscale on every node, join the same tailnet, then init swarm
+# with the tailnet IPs:
+#
+#   docker swarm init \
+#     --advertise-addr  <tailscale-ip-of-manager> \
+#     --data-path-addr  <tailscale-ip-of-manager>
+#
+# Swarm overlay encryption rides on top of WireGuard — east-west traffic is
+# double-encrypted and ports 2377 / 7946 / 4789 stay off the public internet.
+#
+# ─── Migration ───────────────────────────────────────────────────────────────
+#
+# The `migration` service runs once per `stack deploy` with
+# `restart_policy.condition: none` + `replicas: 1`. `prisma migrate deploy`
+# is idempotent, so re-deploys reapply nothing. Swarm ignores
+# `depends_on.condition`, so apps retry their DB connection during cold start
+# rather than relying on ordering.
+#
+# ─── Hardening notes ────────────────────────────────────────────────────────
+#
+# - Postgres / Redis / MinIO ports are reset (`!override []`) so they only
+#   exist on the encrypted overlay — never published on host interfaces.
+# - `api` publishes via `mode: ingress` so any node IP routes to a healthy
+#   replica via Swarm's L4 routing mesh. Front this with Caddy / Traefik /
+#   Cloudflare for TLS termination.
+# - For full secret-management, promote `POSTGRES_PASSWORD`,
+#   `BETTER_AUTH_SECRET`, etc. to `docker secret` and switch the postgres
+#   image to `POSTGRES_PASSWORD_FILE`. Out of scope here to keep .env-based
+#   workflows working as the default.
+
+x-deploy-restart: &deploy-restart
+  restart_policy:
+    condition: any
+    delay: 5s
+    window: 30s
+
+x-deploy-update: &deploy-update
+  update_config:
+    parallelism: 1
+    order: start-first
+    failure_action: rollback
+    delay: 10s
+    monitor: 30s
+  rollback_config:
+    parallelism: 1
+    order: stop-first
+    delay: 5s
+
+networks:
+  app-net:
+    driver: overlay
+    attachable: true
+    driver_opts:
+      # IPsec-encrypted VXLAN — requires kernel modules on every node
+      # (default on Ubuntu/Debian/RHEL hosts; verify on minimalist images).
+      encrypted: 'true'
+
+services:
+  # ── Stateful tier (pin to nodes carrying `role.db=true`) ──────────────────
+  # Named volumes are node-local; the placement constraint guarantees the
+  # task always lands on the same node so data survives across restarts.
+
+  postgres:
+    networks: [app-net]
+    ports: !override []
+    deploy:
+      <<: *deploy-restart
+      replicas: 1
+      placement:
+        constraints: [node.labels.role.db == true]
+        max_replicas_per_node: 1
+
+  redis-cache:
+    networks: [app-net]
+    ports: !override []
+    deploy:
+      <<: *deploy-restart
+      replicas: 1
+      placement:
+        constraints: [node.labels.role.db == true]
+        max_replicas_per_node: 1
+
+  redis-queue:
+    networks: [app-net]
+    ports: !override []
+    deploy:
+      <<: *deploy-restart
+      replicas: 1
+      placement:
+        constraints: [node.labels.role.db == true]
+        max_replicas_per_node: 1
+
+  minio:
+    networks: [app-net]
+    ports: !override []
+    deploy:
+      <<: *deploy-restart
+      replicas: 1
+      placement:
+        constraints: [node.labels.role.db == true]
+        max_replicas_per_node: 1
+
+  # ── One-shot migration ────────────────────────────────────────────────────
+
+  migration:
+    networks: [app-net]
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: none
+      placement:
+        # Co-locate with postgres to avoid an unnecessary network round-trip
+        # during apply; not strictly required, just faster.
+        constraints: [node.labels.role.db == true]
+
+  # ── Stateless app tier ────────────────────────────────────────────────────
+
+  api:
+    networks: [app-net]
+    # Override the host-port mapping inherited from compose.yml: in Swarm we
+    # publish via the routing mesh so any node IP can serve traffic.
+    ports: !override
+      - target: 3000
+        published: ${API_PORT:-3000}
+        protocol: tcp
+        mode: ingress
+    deploy:
+      <<: [*deploy-restart, *deploy-update]
+      replicas: ${API_REPLICAS:-2}
+      placement:
+        constraints: [node.labels.role.api == true]
+
+  worker:
+    networks: [app-net]
+    deploy:
+      <<: [*deploy-restart, *deploy-update]
+      replicas: ${WORKER_REPLICAS:-2}
+      placement:
+        constraints: [node.labels.role.worker == true]
+
+  scheduler:
+    networks: [app-net]
+    # MUST stay at exactly 1 replica — additional replicas duplicate every
+    # cron firing. `max_replicas_per_node: 1` is belt-and-suspenders for
+    # operators who later raise replicas without reading this comment.
+    deploy:
+      <<: *deploy-restart
+      replicas: 1
+      placement:
+        constraints: [node.labels.role.scheduler == true]
+        max_replicas_per_node: 1
