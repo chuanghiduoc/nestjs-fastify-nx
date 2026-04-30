@@ -83,7 +83,7 @@
   "devDependencies": {
     "@commitlint/cli": "^20.5.2",
     "@commitlint/config-conventional": "^20.5.0",
-    "@eslint/js": "^9.39.4",
+    "@eslint/js": "^10.0.1",
     "@nestjs/schematics": "^11.1.0",
     "@nestjs/testing": "^11.0.0",
     "@nx/devkit": "^22.7.0",
@@ -101,7 +101,7 @@
     "@swc/helpers": "~0.5.18",
     "@testcontainers/postgresql": "^11.14.0",
     "@testcontainers/redis": "^11.14.0",
-    "@types/node": "20.19.9",
+    "@types/node": "25.6.0",
     "@types/nodemailer": "^8.0.0",
     "@types/pg": "^8.20.0",
     "@types/supertest": "^7.2.0",
@@ -118,7 +118,7 @@
     "typescript-eslint": "^8.59.1",
     "vite": "^8.0.0",
     "vitest": "~4.1.0",
-    "webpack-cli": "^5.1.4"
+    "webpack-cli": "^7.0.2"
   },
   "engines": {
     "node": ">=20.0.0",
