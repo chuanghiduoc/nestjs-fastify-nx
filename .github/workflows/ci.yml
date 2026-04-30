@@ -35,7 +35,7 @@ jobs:
       # OSV-Scanner pulls advisories from osv.dev — wider feed than npm audit
       # (covers GitHub Security Advisories, GHSA, language ecosystems, OS pkgs).
       - name: OSV-Scanner
-        uses: google/osv-scanner-action/osv-scanner-action@v2.0.2
+        uses: google/osv-scanner-action/osv-scanner-action@v2.3.5
         with:
           scan-args: |-
             --recursive
