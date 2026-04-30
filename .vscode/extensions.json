@@ -1,0 +1,16 @@
+{
+  "recommendations": [
+    "nrwl.angular-console",
+    "esbenp.prettier-vscode",
+    "dbaeumer.vscode-eslint",
+    "prisma.prisma",
+    "ms-azuretools.vscode-docker",
+    "redhat.vscode-yaml",
+    "streetsidesoftware.code-spell-checker",
+    "vitest.explorer",
+    "yoavbls.pretty-ts-errors",
+    "editorconfig.editorconfig",
+    "github.vscode-github-actions"
+  ],
+  "unwantedRecommendations": ["ms-vscode.vscode-typescript-next"]
+}

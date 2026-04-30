@@ -1,0 +1,61 @@
+# Git worktrees
+.worktrees/
+
+# Compiled output
+/dist
+/tmp
+/out-tsc
+/bazel-out
+
+# Node
+/node_modules
+**/node_modules
+npm-debug.log
+yarn-error.log
+
+# IDEs and editors
+/.idea
+.project
+.classpath
+.c9/
+*.launch
+.settings/
+*.sublime-workspace
+
+# Visual Studio Code
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# misc
+/.sass-cache
+/connect.lock
+/coverage
+/libpeerconnection.log
+testem.log
+/typings
+
+# System files
+.DS_Store
+Thumbs.db
+
+# Nx
+.nx/cache
+.nx/workspace-data
+.nx/installation
+
+# pnpm
+.pnpm-debug.log*
+
+# env files
+.env
+.env.*
+!.env.example
+
+vitest.config.*.timestamp*
+.nx/polygraph
+.claude/worktrees
+.claude/settings.local.json
+/generated/prisma

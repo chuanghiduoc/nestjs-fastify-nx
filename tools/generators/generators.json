@@ -1,0 +1,9 @@
+{
+  "generators": {
+    "module": {
+      "factory": "./src/generators/module/generator",
+      "schema": "./src/generators/module/schema.json",
+      "description": "Scaffold a new DDD module with domain/application/infrastructure/presentation layers"
+    }
+  }
+}

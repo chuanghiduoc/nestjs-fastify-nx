@@ -1,0 +1,16 @@
+{
+  "name": "contracts",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/contracts/src",
+  "projectType": "library",
+  "tags": ["scope:contracts"],
+  "targets": {
+    "test": {
+      "executor": "@nx/vitest:test",
+      "outputs": ["{options.reportsDirectory}"],
+      "options": {
+        "reportsDirectory": "coverage/libs/contracts"
+      }
+    }
+  }
+}

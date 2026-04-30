@@ -1,0 +1,13 @@
+import type { DomainEvent } from '@nestjs-fastify-nx/core';
+import { generateId } from '@nestjs-fastify-nx/shared';
+
+export class <%= className %>Created implements DomainEvent {
+  readonly eventId = generateId();
+  readonly eventType = '<%= constantName %>_CREATED';
+  readonly occurredAt = new Date();
+
+  constructor(
+    readonly aggregateId: string,
+    readonly payload: Record<string, unknown>,
+  ) {}
+}

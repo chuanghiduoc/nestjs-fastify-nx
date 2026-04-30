@@ -1,0 +1,16 @@
+{
+  "name": "modules-audit-log",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/modules/audit-log/src",
+  "projectType": "library",
+  "tags": ["scope:modules"],
+  "targets": {
+    "test": {
+      "executor": "@nx/vitest:test",
+      "outputs": ["{options.reportsDirectory}"],
+      "options": {
+        "reportsDirectory": "coverage/libs/modules/audit-log"
+      }
+    }
+  }
+}

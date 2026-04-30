@@ -1,0 +1,53 @@
+name: Feature request
+description: Suggest a new feature or improvement
+title: 'feat: '
+labels: [enhancement, triage]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What problem does this solve? Why does it matter?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Sketch the API / behavior you have in mind.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Other approaches you weighed and why you ruled them out.
+
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Affected scope
+      multiple: true
+      options:
+        - apps/api
+        - apps/worker
+        - apps/scheduler
+        - apps/migration
+        - libs/infra/*
+        - libs/modules/*
+        - libs/core/*
+        - libs/shared
+        - libs/contracts
+        - tools/generators
+        - docker / compose
+        - CI / GitHub Actions
+        - Documentation
+        - Other
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Links, references, prior art, screenshots.

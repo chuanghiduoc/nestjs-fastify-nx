@@ -1,0 +1,88 @@
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [1.0.0] - 2026-05-01
+
+Initial public release of the boilerplate.
+
+### Added
+
+#### Core platform
+
+- **Four runnable apps** — `api`, `worker`, `scheduler`, `migration` — sharing one Nx workspace and one pnpm lockfile
+- **Nx 22** monorepo with `@nx/enforce-module-boundaries` enforcing DDD layering via `scope:*` tags (api, worker, scheduler, migration, modules, composition, infra, core, shared, contracts, testing)
+- **Webpack 5** bundler wired with `tsc` compiler so NestJS decorator metadata resolves correctly in production builds
+- **TypeScript project references** kept in sync via `nx sync`
+
+#### API surfaces (single Fastify instance)
+
+- **REST** with `@nestjs/swagger` — auto-mounted at `/api/docs` outside production, deterministic `operationId` factory consumed by Orval codegen
+- **GraphQL** via `@nestjs/mercurius` — schema-first, GraphiQL exposed at `/graphiql` in dev
+- **Socket.io 4** with `@socket.io/redis-adapter` for cross-pod broadcast; WebSocket upgrades reuse the Better Auth cookie via a custom adapter
+- **OpenAPI codegen** — Orval emits a typed REST client into `libs/api-client` from the live spec exported by `CodegenAppModule`
+
+#### Authentication & authorization
+
+- **Better Auth 1.6** for sign-up / sign-in / sign-out / password reset / social providers — cookie sessions backed by Postgres, scrypt password hashing
+- **`BetterAuthGuard`** + **`RolesGuard`** wired as global `APP_GUARD` providers; `@Roles('ADMIN')` decorator
+- **Cross-context admin module** at `libs/modules/admin` (tag `scope:composition`) exposing `GET /api/v1/admin/users` for ADMIN role
+- **Argon2** available alongside scrypt for legacy hashes
+
+#### Domain & infrastructure
+
+- **DDD/CQRS layout** for bounded contexts under `libs/modules/*` (domain / application / infrastructure / presentation)
+- **`users` module** — profile lookup with cookie-session guard
+- **`audit-log` module** — domain-event listener writes immutable audit rows
+- **Prisma 7** with `@prisma/adapter-pg` driver adapter; PostgreSQL 18 with native `uuidv7()`
+- **Redis 8** — cache (`cache-manager` + Keyv) and queue (BullMQ) on separate instances
+- **Transactional outbox** — `inprocess` (EventEmitter2) and `outbox` (Postgres relay) drivers, switchable via `EVENT_PUBLISHER_DRIVER`
+- **Object storage port** — S3 SDK v3 with presigned URLs, MinIO-compatible in dev
+- **SMTP** via Nodemailer; Mailpit in dev
+
+#### Background work
+
+- **BullMQ** queues with **Bull Board** UI behind admin auth at `/api/admin/queues`
+- **Welcome email** flow — `UserRegistered` domain event → `UserRegisteredListener` → BullMQ job → worker sends mail
+- **Dead-letter queues** with helper router (`createDeadLetterRouterClass`)
+- **`@nestjs/schedule`** in the dedicated scheduler app — `CleanupTask` purges INACTIVE users 90d+, weekly `VACUUM ANALYZE`; `HeartbeatTask` for liveness
+- **File-based liveness probes** for worker (`/tmp/worker-alive`) and scheduler (`/tmp/scheduler-alive`), refreshed every 30s
+
+#### Quality & operations
+
+- **Rate limiting** — `@nest-lab/throttler-storage-redis` for global throttling; per-route overrides
+- **File upload** — `POST /api/v1/upload` via `@fastify/multipart`, streams to `StoragePort` (10 MB cap)
+- **Pagination utilities** — `Page<T>`, `PageMeta`, `paginationSkip`, `buildPageMeta` in `@nestjs-fastify-nx/shared`
+- **UUID v7** (`uuid@14`) for sortable, time-ordered identifiers
+- **Zod env validation** — fail-fast on startup for missing/invalid env vars
+- **nestjs-pino** structured JSON logging with correlation-id middleware and automatic redaction of `cookie` / `authorization` headers
+
+#### Observability
+
+- **OpenTelemetry SDK** with auto-instrumentations (HTTP, Fastify, NestJS, Prisma, BullMQ, Redis, Pino), OTLP/HTTP exporters
+- **Sentry NestJS** integration + `@sentry/profiling-node` continuous profiler
+- **Prometheus** exposition at `/metrics` via `prom-client`; default Node + HTTP request histograms
+- **Terminus health checks** — DB, Redis cache, Redis queue, memory; liveness and readiness probes
+
+#### Security
+
+- **Five-layer scan pipeline** — Gitleaks, OSV-Scanner, Semgrep, Trivy, Cosign — with parity between local (`scripts/security/scan-all.sh`) and CI
+- **Container hardening** — base images pinned by SHA256 digest, non-root UID 1001, `STOPSIGNAL SIGTERM`, tini PID 1, healthcheck via Node `http`, npm CLI vendored stripped from runtime layer
+- **SBOM + max-mode SLSA provenance** attestations on every release image
+- **Cosign keyless OIDC** signing via Sigstore Fulcio recorded in the public Rekor log
+- **pnpm overrides** pinning known-vulnerable transitive deps (fastify, picomatch, brace-expansion, yaml, follow-redirects, @hono/node-server)
+
+#### Tooling
+
+- **Nx generator** at `tools/generators` — scaffold a DDD module with `pnpm nx g @nestjs-fastify-nx/tools-generators:module --name=<context>`
+- **Lefthook** pre-commit/pre-push hooks — lint-staged, commitlint, Gitleaks (staged + history)
+- **GitHub Actions**:
+  - `ci.yml` — lint, typecheck, unit tests, build, secret scan, dep scan
+  - `integration.yml` — Vitest integration suite with Testcontainers services
+  - `release.yml` — buildx + SBOM + provenance, Trivy gate, Semgrep gate, Cosign sign, migrate-and-deploy via Coolify webhook
+- **Vitest 4** + **Testcontainers** (real Postgres + Redis) + **Supertest** for unit, integration, and HTTP e2e suites
+
+[1.0.0]: https://github.com/chuanghiduoc/nestjs-fastify-nx/releases/tag/v1.0.0

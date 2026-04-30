@@ -1,0 +1,78 @@
+version: 2
+
+# Weekly batched updates. Catch-all groups gather every dependency into a
+# single PR per ecosystem so reviewers see one batch per Monday rather than
+# a flurry of individual bumps. Major upgrades stay separate (excluded from
+# catch-alls) so they get explicit review.
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '06:00'
+      timezone: Asia/Ho_Chi_Minh
+    open-pull-requests-limit: 5
+    versioning-strategy: increase
+    labels: [dependencies, npm]
+    commit-message:
+      prefix: chore(deps)
+      prefix-development: chore(deps-dev)
+      include: scope
+    groups:
+      production-dependencies:
+        dependency-type: production
+        update-types: [minor, patch]
+      development-dependencies:
+        dependency-type: development
+        update-types: [minor, patch]
+      production-major:
+        dependency-type: production
+        update-types: [major]
+      development-major:
+        dependency-type: development
+        update-types: [major]
+
+  - package-ecosystem: docker
+    directories:
+      - /apps/api
+      - /apps/worker
+      - /apps/scheduler
+      - /apps/migration
+    schedule:
+      interval: weekly
+      day: monday
+      time: '06:00'
+      timezone: Asia/Ho_Chi_Minh
+    open-pull-requests-limit: 2
+    labels: [dependencies, docker]
+    commit-message:
+      prefix: chore(docker)
+      include: scope
+    groups:
+      docker-images:
+        patterns: ['*']
+        update-types: [minor, patch]
+      docker-images-major:
+        patterns: ['*']
+        update-types: [major]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '06:00'
+      timezone: Asia/Ho_Chi_Minh
+    open-pull-requests-limit: 2
+    labels: [dependencies, github-actions]
+    commit-message:
+      prefix: chore(ci)
+      include: scope
+    groups:
+      github-actions:
+        patterns: ['*']
+        update-types: [minor, patch]
+      github-actions-major:
+        patterns: ['*']
+        update-types: [major]

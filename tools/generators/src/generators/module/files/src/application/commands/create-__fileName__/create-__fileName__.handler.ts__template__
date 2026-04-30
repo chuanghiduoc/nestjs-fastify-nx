@@ -1,0 +1,18 @@
+import { Inject, Injectable } from '@nestjs/common';
+import { Create<%= className %>Command } from './create-<%= fileName %>.command';
+import { <%= constantName %>_REPOSITORY, <%= className %>RepositoryPort } from '../../domain';
+import { <%= className %> } from '../../domain';
+
+@Injectable()
+export class Create<%= className %>Handler {
+  constructor(
+    @Inject(<%= constantName %>_REPOSITORY)
+    private readonly repository: <%= className %>RepositoryPort,
+  ) {}
+
+  async execute(command: Create<%= className %>Command): Promise<<%= className %>> {
+    const entity = <%= className %>.create();
+    await this.repository.save(entity);
+    return entity;
+  }
+}

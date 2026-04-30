@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/chuanghiduoc/nestjs-fastify-nx/security/advisories/new
+    about: Report security issues privately via GitHub Security Advisories.
+  - name: Question / discussion
+    url: https://github.com/chuanghiduoc/nestjs-fastify-nx/discussions
+    about: Ask questions, share ideas, or discuss usage.

@@ -1,0 +1,25 @@
+pre-commit:
+  parallel: true
+  commands:
+    lint-staged:
+      run: pnpm lint-staged
+      glob: '*.{ts,json,yml}'
+    # Secret scan staged hunks only — pre-push catches the full diff. Skips
+    # silently if Docker isn't available so contributors without it aren't
+    # blocked locally; CI still gates.
+    gitleaks:
+      run: bash scripts/security/scan-secrets.sh --staged
+      skip:
+        - merge
+        - rebase
+
+pre-push:
+  commands:
+    # Full repo + history scan — last line of defence before remote sees commits.
+    gitleaks-full:
+      run: bash scripts/security/scan-secrets.sh full
+
+commit-msg:
+  commands:
+    commitlint:
+      run: pnpm commitlint --edit {1}

@@ -1,0 +1,3 @@
+<% if (withCqrs) { %>export { Create<%= className %>Command } from './commands/create-<%= fileName %>/create-<%= fileName %>.command';
+export { Create<%= className %>Handler } from './commands/create-<%= fileName %>/create-<%= fileName %>.handler';
+<% } %>

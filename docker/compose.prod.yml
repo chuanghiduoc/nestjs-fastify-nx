@@ -1,0 +1,207 @@
+# Production overlay — compose with the base `compose.yml` to deploy released
+# images:
+#
+#   docker compose -f docker/compose.yml -f docker/compose.prod.yml up -d
+#
+# Image references resolve against `${IMAGE_REGISTRY}/${IMAGE_NAMESPACE}/<app>:${IMAGE_TAG}`,
+# matching what `release.yml` publishes to GHCR. Operators set those vars in
+# `.env` (or the deploy environment) — `IMAGE_TAG=latest` works for rolling
+# deploys, `IMAGE_TAG=1.2.3` pins a specific release.
+#
+# This file deliberately omits `build:` so a thin host (no source checkout)
+# can pull and run from the registry alone.
+#
+# Note: the base compose.yml exposes postgres/redis/minio ports for dev
+# convenience. In production deployments where these services run on the
+# same docker network as the apps, restrict host firewall rules so those
+# ports are NOT reachable from outside the host.
+
+# x-anchors are reused across api/worker/scheduler so policy stays in one place.
+x-app-security: &app-security
+  read_only: true
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+  tmpfs:
+    # /tmp is read-only otherwise; worker/scheduler write liveness probes here,
+    # api uses it for fastify multipart upload spool. noexec/nosuid blocks
+    # arbitrary execution if an attacker writes a binary into the writable mount.
+    - /tmp:rw,noexec,nosuid,size=64m
+  ulimits:
+    nofile:
+      soft: 65536
+      hard: 65536
+  stop_grace_period: 30s
+
+x-app-logging: &app-logging
+  logging:
+    driver: json-file
+    options:
+      max-size: '50m'
+      max-file: '5'
+      labels: 'service'
+
+services:
+  mailpit:
+    profiles: ['dev-only']
+
+  # docker-network hostnames (postgres / redis-cache / redis-queue) are
+  # determined by compose itself, so we hardcode them here regardless of
+  # what `.env` carries — operators only need to set credentials, not topology.
+  # MAIL_HOST and STORAGE_ENDPOINT are intentionally NOT overridden: prod
+  # deployments terminate at real SMTP / real S3 endpoints supplied via .env.
+
+  postgres:
+    <<: *app-logging
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '1.0'
+        reservations:
+          memory: 256M
+          cpus: '0.25'
+
+  redis-cache:
+    <<: *app-logging
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.5'
+
+  redis-queue:
+    <<: *app-logging
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.5'
+
+  minio:
+    <<: *app-logging
+
+  # Migration intentionally skips read_only because pnpm + prisma migrate write
+  # transient files outside /tmp during migration apply. Other hardening still applies.
+  migration:
+    <<: *app-logging
+    image: ${IMAGE_REGISTRY:-ghcr.io}/${IMAGE_NAMESPACE}/migration:${IMAGE_TAG:-latest}
+    env_file: ../.env
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-nestjs_db}
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+
+  api:
+    <<: [*app-security, *app-logging]
+    image: ${IMAGE_REGISTRY:-ghcr.io}/${IMAGE_NAMESPACE}/api:${IMAGE_TAG:-latest}
+    env_file: ../.env
+    environment:
+      NODE_ENV: production
+      TZ: ${TZ:-UTC}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-nestjs_db}
+      REDIS_CACHE_HOST: redis-cache
+      REDIS_QUEUE_HOST: redis-queue
+      REDIS_QUEUE_PORT: '6380'
+    ports:
+      - '${API_PORT:-3000}:3000'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migration:
+        condition: service_completed_successfully
+      redis-cache:
+        condition: service_healthy
+      redis-queue:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test:
+        ['CMD', 'wget', '--quiet', '--spider', '--tries=1', 'http://127.0.0.1:3000/api/v1/health']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '2.0'
+        reservations:
+          memory: 256M
+          cpus: '0.5'
+
+  worker:
+    <<: [*app-security, *app-logging]
+    image: ${IMAGE_REGISTRY:-ghcr.io}/${IMAGE_NAMESPACE}/worker:${IMAGE_TAG:-latest}
+    env_file: ../.env
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-nestjs_db}
+      REDIS_CACHE_HOST: redis-cache
+      REDIS_QUEUE_HOST: redis-queue
+      REDIS_QUEUE_PORT: '6380'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migration:
+        condition: service_completed_successfully
+      redis-queue:
+        condition: service_healthy
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '2.0'
+        reservations:
+          memory: 256M
+          cpus: '0.5'
+
+  scheduler:
+    <<: [*app-security, *app-logging]
+    image: ${IMAGE_REGISTRY:-ghcr.io}/${IMAGE_NAMESPACE}/scheduler:${IMAGE_TAG:-latest}
+    env_file: ../.env
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-nestjs_db}
+      REDIS_CACHE_HOST: redis-cache
+      REDIS_QUEUE_HOST: redis-queue
+      REDIS_QUEUE_PORT: '6380'
+    # Scheduler MUST run as a single replica — multiple instances duplicate
+    # cron firings. Enforced via deploy.replicas for swarm; under plain
+    # compose, never run `--scale scheduler=N` with N>1.
+    deploy:
+      replicas: 1
+      resources:
+        limits:
+          memory: 512M
+          cpus: '1.0'
+        reservations:
+          memory: 128M
+          cpus: '0.25'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migration:
+        condition: service_completed_successfully
+      redis-cache:
+        condition: service_healthy
+      redis-queue:
+        condition: service_healthy
+    restart: unless-stopped

@@ -1,0 +1,102 @@
+# Build artifacts and dependencies — produced inside the image, never copied in.
+node_modules
+**/node_modules
+dist
+**/dist
+build
+out
+coverage
+.nx
+.nx/cache
+.nx/workspace-data
+tmp
+**/tmp
+
+# VCS / CI / editor metadata — no value at runtime, leaks history into images.
+.git
+.gitignore
+.gitattributes
+.github
+.gitlab
+.circleci
+.husky
+.vscode
+.idea
+.fleet
+.zed
+*.swp
+*.swo
+
+# Environment files — secrets must come from the orchestrator at runtime, never
+# baked into a layer. .env.example is fine to ship; concrete .env files are not.
+.env
+.env.*
+!.env.example
+
+# Logs and OS metadata.
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.DS_Store
+Thumbs.db
+
+# Test surface — unit/integration/e2e specs and their fixtures aren't required at
+# runtime. Excluding them shrinks the build context and the final image.
+**/*.spec.ts
+**/*.spec.js
+**/*.test.ts
+**/*.test.js
+**/__tests__
+**/__mocks__
+**/e2e
+**/test-fixtures
+vitest.workspace.ts
+**/vitest.config.*
+**/vite.config.*
+**/vite.e2e.config.*
+
+# Linting / formatting / type-checking configs are dev-time only.
+.eslintrc*
+eslint.config.*
+.prettierrc*
+.prettierignore
+.editorconfig
+**/tsconfig.spec.json
+**/tsconfig.test.json
+
+# Documentation, planning, examples — irrelevant for production runtime.
+README.md
+CHANGELOG.md
+CONTRIBUTING.md
+LICENSE
+docs
+**/*.md
+!apps/**/*.md
+.planning
+.archive
+plans
+examples
+
+# Infra files outside docker/ — re-included selectively below if needed.
+docker-compose*.yml
+*.local.yml
+infra
+ops
+scripts/local-*
+
+# Auth / IDE plugin local state.
+.claude
+.cursor
+.aider*
+.copilot
+.continue
+
+# Misc tooling.
+.turbo
+.vercel
+.next
+.cache
+.npm
+.pnpm-store

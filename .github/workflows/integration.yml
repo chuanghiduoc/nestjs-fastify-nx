@@ -1,0 +1,86 @@
+name: Integration Tests
+
+on:
+  pull_request:
+    branches: [main, master, develop]
+
+concurrency:
+  group: integration-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: nestjs_test_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis-cache:
+        image: redis:8-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+
+      redis-queue:
+        image: redis:8-alpine
+        ports:
+          - 6380:6380
+        options: >-
+          --health-cmd "redis-cli -p 6380 ping"
+          --health-interval 10s
+        command: redis-server --port 6380
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/nestjs_test_db
+      REDIS_CACHE_HOST: localhost
+      REDIS_CACHE_PORT: 6379
+      REDIS_QUEUE_HOST: localhost
+      REDIS_QUEUE_PORT: 6380
+      # Better Auth replaces the legacy JWT setup; only one secret is needed.
+      BETTER_AUTH_SECRET: integration-better-auth-secret-min-32-chars-long
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+        with:
+          # Pinned to match package.json `packageManager` and the Dockerfiles.
+          version: 10.33.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Sync Nx workspace
+        run: pnpm nx sync
+
+      - name: Run database migrations
+        run: pnpm prisma migrate deploy
+
+      - uses: nrwl/nx-set-shas@v4
+
+      - name: Integration tests
+        run: pnpm nx affected --target=test --base=$NX_BASE --head=$NX_HEAD --testPathPattern=integration --parallel=1
+
+      - name: E2E tests
+        run: pnpm nx affected --target=e2e --base=$NX_BASE --head=$NX_HEAD --parallel=1

@@ -1,0 +1,12 @@
+import { Controller, Get, Param, HttpCode, HttpStatus } from '@nestjs/common';
+
+// Route segment defaults to the module name as-is. Adjust to the conventional
+// REST plural ("/users", "/orders") once you have decided on the URL contract.
+@Controller('<%= fileName %>')
+export class <%= className %>Controller {
+  @Get(':id')
+  @HttpCode(HttpStatus.OK)
+  findOne(@Param('id') id: string): { id: string } {
+    return { id };
+  }
+}
