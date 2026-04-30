@@ -83,7 +83,7 @@
   "devDependencies": {
     "@commitlint/cli": "^20.5.2",
     "@commitlint/config-conventional": "^20.5.0",
-    "@eslint/js": "^9.39.4",
+    "@eslint/js": "^10.0.1",
     "@nestjs/schematics": "^11.1.0",
     "@nestjs/testing": "^11.0.0",
     "@nx/devkit": "^22.7.0",
