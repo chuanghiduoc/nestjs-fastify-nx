@@ -98,7 +98,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=${{ matrix.app }}
 
       - name: Install Cosign
-        uses: sigstore/cosign-installer@v3.7.0
+        uses: sigstore/cosign-installer@v4.1.1
 
       # Keyless signing via Fulcio: identity is the workflow ref + actor, no
       # long-lived keys. Verifiers later assert against this identity using
