@@ -41,7 +41,14 @@ libs/modules/products/src/
 
 ## Example: Minimal Domain Entity
 
+Throw `BusinessRuleException` (from `@nestjs-fastify-nx/core`) for domain
+violations — the global filter renders them as RFC 9457 Problem Details with a
+flat `errors[]` payload, so the frontend treats schema and business failures
+through one rendering path.
+
 ```typescript
+import { BusinessRuleException } from '@nestjs-fastify-nx/core';
+
 export class Product {
   constructor(
     public readonly id: string,
@@ -50,14 +57,54 @@ export class Product {
   ) {}
 
   static create(name: string, price: number): Product {
-    if (price < 0) throw new BadRequestException('Price must be non-negative');
+    if (price < 0) {
+      throw new BusinessRuleException({
+        violations: [
+          {
+            path: 'price',
+            code: 'out_of_range',
+            message: 'price must be greater than or equal to 0',
+            constraint: { min: 0 },
+            received: price,
+          },
+        ],
+      });
+    }
     return new Product(generateId(), name, price);
   }
 }
 ```
 
+## Example: Controller wiring
+
+Apply `@ApiCommonErrors` for the error envelope and `@ApiPaginatedResponse`
+when returning a list — both from `@nestjs-fastify-nx/contracts`.
+
+```typescript
+import { ApiCommonErrors, ApiPaginatedResponse } from '@nestjs-fastify-nx/contracts';
+
+@Controller('products')
+@ApiTags('products')
+export class ProductsController {
+  @Get()
+  @ApiPaginatedResponse(ProductResponseDto)
+  @ApiCommonErrors({ auth: true, validation: true })
+  list(@Query() query: ListProductsDto) { … }
+
+  @Post()
+  @ApiCreatedResponse({ type: ProductResponseDto })
+  @ApiCommonErrors({ auth: true, validation: true, conflict: true })
+  create(@Body() dto: CreateProductDto) { … }
+}
+```
+
+`ProblemDetailsValidationPipe` is wired globally — no extra setup needed for
+422 validation envelopes.
+
 ## Testing Pattern
 
 - Unit tests: use mock ports from `libs/modules/products/src/testing/`
 - Integration tests: use Testcontainers via `@nestjs-fastify-nx/testing`
-- E2E tests: add spec in `apps/api/e2e/products.e2e-spec.ts`
+- E2E tests: add spec in `apps/api/e2e/products.e2e-spec.ts` — assert on the
+  resource directly (`res.body.id`), and on `application/problem+json` for
+  error paths (`res.body.code`, `res.body.errors[]`).

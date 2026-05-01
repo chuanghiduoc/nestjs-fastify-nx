@@ -12,10 +12,12 @@ import {
   ApiBody,
   ApiConsumes,
   ApiCookieAuth,
+  ApiCreatedResponse,
   ApiOperation,
-  ApiResponse,
+  ApiProperty,
   ApiTags,
 } from '@nestjs/swagger';
+import { ApiCommonErrors } from '@nestjs-fastify-nx/contracts';
 import type { FastifyRequest } from 'fastify';
 import '@fastify/multipart';
 import { STORAGE_PORT, StoragePort, StoredFile } from '@nestjs-fastify-nx/infra-storage';
@@ -24,6 +26,27 @@ import { generateId } from '@nestjs-fastify-nx/shared';
 import { ALLOWED_MIME_TYPES, detectFileType } from './file-signature';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
+
+class UploadResponseDto implements StoredFile {
+  @ApiProperty({
+    description: 'Storage key under which the file was persisted (use to build a download URL).',
+    example: 'uploads/019dd1a5-9235-70db-8d57-54ef901d8185.png',
+  })
+  key!: string;
+
+  @ApiProperty({
+    description: 'Public URL of the stored file (presigned or CDN — depends on storage adapter).',
+    example: 'https://cdn.example.com/uploads/019dd1a5-9235-70db-8d57-54ef901d8185.png',
+    format: 'uri',
+  })
+  url!: string;
+
+  @ApiProperty({ description: 'Storage bucket the file landed in.', example: 'app-uploads' })
+  bucket!: string;
+
+  @ApiProperty({ description: 'Size in bytes.', example: 12345 })
+  size!: number;
+}
 
 @ApiTags('upload')
 @Controller('upload')
@@ -36,8 +59,9 @@ export class UploadController {
   @ApiCookieAuth('session')
   @ApiConsumes('multipart/form-data')
   @ApiOperation({
-    summary:
-      'Upload a file (max 10 MB; image/jpeg, image/png, image/gif, image/webp, application/pdf)',
+    summary: 'Upload a file (max 10 MB).',
+    description:
+      'Accepts a single `file` part. Allowed MIME types: `image/jpeg`, `image/png`, `image/gif`, `image/webp`, `application/pdf`. The declared `Content-Type` is verified against the file content (magic-byte sniff) — mismatched types are rejected with 400.',
   })
   @ApiBody({
     schema: {
@@ -46,9 +70,14 @@ export class UploadController {
       properties: { file: { type: 'string', format: 'binary' } },
     },
   })
-  @ApiResponse({ status: 201, description: 'File uploaded successfully' })
-  @ApiResponse({ status: 400, description: 'Invalid file (size, mime, or content mismatch)' })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiCreatedResponse({ type: UploadResponseDto, description: 'File uploaded successfully.' })
+  @ApiCommonErrors({
+    auth: true,
+    forbidden: false,
+    validation: false,
+    unsupportedMediaType: true,
+    payloadTooLarge: true,
+  })
   async uploadFile(@Req() req: FastifyRequest): Promise<StoredFile> {
     if (!req.isMultipart()) {
       throw new BadRequestException('Request must be multipart/form-data');

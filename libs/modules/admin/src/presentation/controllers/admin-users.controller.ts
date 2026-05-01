@@ -1,13 +1,21 @@
 import { Controller, Get, HttpCode, HttpStatus, Query, UseGuards } from '@nestjs/common';
-import { ApiCookieAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
-import type { Page } from '@nestjs-fastify-nx/shared';
+import { ApiCookieAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  ApiCommonErrors,
+  ApiPaginatedResponse,
+  ListResponseDto,
+  toListResponse,
+} from '@nestjs-fastify-nx/contracts';
 import { BetterAuthGuard, Roles, RolesGuard } from '@nestjs-fastify-nx/infra-auth';
 import {
   ListUsersFilterDto,
   ListUsersHandler,
   ListUsersQuery,
+  UserListItemResponseDto,
   type UserListItemDto,
 } from '@nestjs-fastify-nx/modules-users';
+
+const ADMIN_USERS_PATH = '/api/v1/admin/users';
 
 @ApiTags('admin')
 @Controller('admin/users')
@@ -19,12 +27,24 @@ export class AdminUsersController {
 
   @Get()
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Admin only: list users with role/status/search filters' })
-  @ApiResponse({ status: 200, description: 'Paginated user list' })
-  @ApiResponse({ status: 403, description: 'Forbidden — requires ADMIN role' })
-  list(@Query() filter: ListUsersFilterDto): Promise<Page<UserListItemDto>> {
-    return this.listUsersHandler.execute(
+  @ApiOperation({
+    summary: 'List users (admin)',
+    description:
+      'Returns a Stripe-style list envelope with offset pagination. Filterable by `role`, `status`, and `search` (case-insensitive across `email` and `name`). Requires the `ADMIN` role.',
+  })
+  @ApiCommonErrors({ auth: true, forbidden: true, validation: true })
+  @ApiPaginatedResponse(UserListItemResponseDto, { description: 'Paginated list of users.' })
+  async list(@Query() filter: ListUsersFilterDto): Promise<ListResponseDto<UserListItemDto>> {
+    const page = await this.listUsersHandler.execute(
       new ListUsersQuery(filter.page, filter.limit, filter.role, filter.status, filter.search),
     );
+
+    return toListResponse({
+      url: ADMIN_USERS_PATH,
+      items: page.data,
+      page: page.meta.page,
+      perPage: page.meta.limit,
+      total: page.meta.total,
+    });
   }
 }

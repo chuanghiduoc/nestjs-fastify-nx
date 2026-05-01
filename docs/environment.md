@@ -65,6 +65,12 @@ scrypt-hashed via `better-auth/crypto`).
 | `THROTTLER_LIMIT`   | `100`         | No       | Requests per window                                             |
 | `THROTTLER_TTL`     | `60`          | No       | Window length in seconds                                        |
 
+## Error documentation
+
+| Variable              | Default                          | Required | Description                                                                                                  |
+| --------------------- | -------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------ |
+| `ERROR_DOCS_BASE_URL` | `https://api.example.com/errors` | No       | Base URL used to build the `type` field of RFC 9457 Problem Details responses (`<base>/<code-with-dashes>`). |
+
 ## Mail (SMTP)
 
 | Variable             | Default               | Required                   | Description                                          |

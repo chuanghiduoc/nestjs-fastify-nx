@@ -154,6 +154,7 @@ pnpm nx reset                      # if daemon caches go stale
 6. **Conventional Commits** enforced by lefthook + commitlint. Prefixes: `feat`, `fix`, `chore`, `test`, `docs`, `refactor`, `ci`, `perf`, `build`.
 7. **DTOs**: validated with `class-validator`, transformed with `class-transformer`, documented with `@nestjs/swagger` decorators. Re-export from module barrel only what consumers (composition libs, controllers) need — keep internals private.
 8. **Module boundaries are sacred** — if lint fails on `@nx/enforce-module-boundaries`, fix the architecture, do not relax the rule.
+9. **API contract is fixed** — successful 2xx returns the resource **directly** (Stripe-style, no `{ data, meta }` envelope); list endpoints return `ListResponseDto<T>` via `@ApiPaginatedResponse`. Errors are **RFC 9457 Problem Details** (`application/problem+json`) emitted by the global exception filter — never hand-roll error bodies. For domain violations throw `BusinessRuleException` from `@nestjs-fastify-nx/core`; for input validation, the global `ProblemDetailsValidationPipe` already handles it. Decorate controllers with `@ApiCommonErrors` from `@nestjs-fastify-nx/contracts` so Swagger documents the error responses. Naming: camelCase JSON keys, snake_case error `code` values (see `ERROR_CODES`), kebab-case HTTP headers (`X-Request-Id`).
 
 ## Common gotchas
 

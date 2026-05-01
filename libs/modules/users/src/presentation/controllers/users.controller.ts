@@ -1,5 +1,6 @@
 import { Controller, Get, UseGuards, Req } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiCookieAuth } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiOkResponse, ApiCookieAuth } from '@nestjs/swagger';
+import { ApiCommonErrors } from '@nestjs-fastify-nx/contracts';
 import { UserProfileResponseDto } from '../dto/auth-response.dto';
 import { GetUserProfileHandler } from '../../application/queries/get-user-profile/get-user-profile.handler';
 import { GetUserProfileQuery } from '../../application/queries/get-user-profile/get-user-profile.query';
@@ -14,10 +15,16 @@ export class UsersController {
   @Get('me')
   @UseGuards(BetterAuthGuard)
   @ApiCookieAuth('session')
-  @ApiOperation({ summary: 'Get current user profile' })
-  @ApiResponse({ status: 200, type: UserProfileResponseDto })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
-  getProfile(@Req() req: FastifyRequest & { user: AuthenticatedSession }) {
+  @ApiOperation({
+    summary: 'Get the authenticated user profile',
+    description:
+      'Returns the profile of the user owning the session cookie. Use after sign-in to populate `currentUser` in the SPA.',
+  })
+  @ApiOkResponse({ type: UserProfileResponseDto, description: 'The current user profile.' })
+  @ApiCommonErrors({ auth: true, forbidden: false, validation: false })
+  getProfile(
+    @Req() req: FastifyRequest & { user: AuthenticatedSession },
+  ): Promise<UserProfileResponseDto> {
     return this.getProfileHandler.execute(new GetUserProfileQuery(req.user.userId));
   }
 }

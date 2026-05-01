@@ -1,6 +1,5 @@
 import { execSync } from 'child_process';
 import { Test } from '@nestjs/testing';
-import { ValidationPipe } from '@nestjs/common';
 import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify';
 import { toNodeHandler } from 'better-auth/node';
 import { BETTER_AUTH_INSTANCE, type BetterAuthInstance } from '@nestjs-fastify-nx/infra-auth';
@@ -11,6 +10,7 @@ import {
   type TestContainers,
 } from '@nestjs-fastify-nx/testing';
 import { AppModule } from '../src/app/app.module';
+import { ProblemDetailsValidationPipe } from '../src/common/pipes';
 
 export interface TestAppContext {
   app: NestFastifyApplication;
@@ -19,12 +19,11 @@ export interface TestAppContext {
 }
 
 // Bootstraps a NestFastifyApplication that mirrors main.ts: same global prefix
-// (with /metrics excluded), the same single ValidationPipe, and the Better
-// Auth handler mounted at /api/auth/*. We deliberately skip helmet/swagger/
-// sentry/bull-board which are irrelevant for e2e, and we do NOT call
-// useGlobalFilters / useGlobalInterceptors — AppModule already provides
-// GlobalExceptionFilter via APP_FILTER and ResponseInterceptor via
-// APP_INTERCEPTOR; registering them again wraps every response twice.
+// (with /metrics excluded), the same ProblemDetailsValidationPipe, and the
+// Better Auth handler mounted at /api/auth/*. We deliberately skip helmet/
+// swagger/sentry/bull-board which are irrelevant for e2e, and we do NOT call
+// useGlobalFilters — AppModule already provides GlobalExceptionFilter via
+// APP_FILTER; registering it twice would wrap every response twice.
 export async function createTestApp(): Promise<TestAppContext> {
   const containers = await createTestContainers();
   const dbUrl = containers.postgres.getConnectionUri();
@@ -50,9 +49,7 @@ export async function createTestApp(): Promise<TestAppContext> {
 
   const app = moduleRef.createNestApplication<NestFastifyApplication>(new FastifyAdapter());
   app.setGlobalPrefix('api/v1', { exclude: ['metrics'] });
-  app.useGlobalPipes(
-    new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
-  );
+  app.useGlobalPipes(new ProblemDetailsValidationPipe());
 
   // Mirror main.ts: mount Better Auth before init so its routes win against the
   // global prefix. Without this, /api/auth/* hits no route and tests can't sign

@@ -133,6 +133,97 @@ Protected REST and GraphQL endpoints rely on `BetterAuthGuard` and
 WebSocket upgrades go through `createWsAuthMiddleware` which validates the
 same session cookie — see `apps/api/src/websocket/ws-auth.adapter.ts`.
 
+## API Response Contract
+
+The HTTP surface follows two complementary conventions, both designed so the
+frontend can rely on a single rendering path.
+
+### Success — direct (Stripe-style)
+
+Successful 2xx responses return the resource **directly**, with no `{ data, meta }`
+envelope:
+
+```json
+GET /api/v1/users/me  → 200
+{
+  "id": "019dd1a5-9235-70db-8d57-54ef901d8185",
+  "email": "me@example.com",
+  "name": "Me",
+  "role": "USER"
+}
+```
+
+List endpoints wrap items in `ListResponseDto<T>` (Stripe / Linear-style envelope)
+— declared via `@ApiPaginatedResponse(ItemDto)` from
+`@nestjs-fastify-nx/contracts`:
+
+```json
+GET /api/v1/admin/users?limit=20  → 200
+{
+  "object": "list",
+  "url": "/api/v1/admin/users",
+  "data": [ … ],
+  "hasMore": true,
+  "totalCount": 1284,
+  "page": 1,
+  "perPage": 20
+}
+```
+
+Cursor pagination is preferred for high-volume endpoints — clients pass
+`startingAfter` / `endingBefore` as query params (`CursorPaginationDto`) and
+the response omits `page` / `perPage` / `totalCount`.
+
+### Errors — RFC 9457 Problem Details
+
+All error responses (400/401/403/404/409/413/415/422/429/5xx) use
+`Content-Type: application/problem+json` with a stable shape:
+
+```json
+{
+  "type": "https://api.example.com/errors/validation-failed",
+  "title": "Validation failed",
+  "status": 422,
+  "code": "validation_failed",
+  "detail": "One or more fields did not pass validation.",
+  "instance": "/api/v1/users",
+  "requestId": "019dd1a5-9235-70db-8d57-54ef901d8185",
+  "timestamp": "2026-04-30T22:28:27.356Z",
+  "errors": [{ "path": "email", "code": "invalid_email", "message": "email must be an email" }]
+}
+```
+
+- `code` values are **snake_case** stable strings (see `ERROR_CODES` in
+  `libs/contracts/src/lib/errors/error-codes.ts`) — frontends use them as i18n
+  keys and switch-case discriminators. Override the docs URL via
+  `ERROR_DOCS_BASE_URL`.
+- `errors[]` is a **flat** list shared by validation (422) and
+  `BusinessRuleException` (422/409 — throw from domain/application code).
+- `requestId` mirrors the `X-Request-Id` response header — the same id appears
+  in pino logs, OpenTelemetry traces, and Sentry events for cross-system
+  correlation. The `CorrelationIdMiddleware` accepts an inbound `X-Request-Id`
+  or generates a UUID v7.
+
+### Naming conventions
+
+| Surface      | Style      | Example                          |
+| ------------ | ---------- | -------------------------------- |
+| JSON keys    | camelCase  | `requestId`, `endingAfter`       |
+| Error `code` | snake_case | `validation_failed`, `not_found` |
+| HTTP headers | kebab-case | `X-Request-Id`, `Content-Type`   |
+
+### Decorators
+
+Controllers wire the contract through three decorators from
+`@nestjs-fastify-nx/contracts`:
+
+- `@ApiCommonErrors({ auth, forbidden, notFound, conflict, validation, unsupportedMediaType, payloadTooLarge })`
+  — emits `application/problem+json` Swagger responses for the selected codes.
+- `@ApiPaginatedResponse(ItemDto)` — composes `ListResponseDto` over the item
+  schema via OpenAPI `allOf`.
+- `ProblemDetailsValidationPipe` (global, see `apps/api/src/main.ts`) — maps
+  `class-validator` failures to the flat `errors[]` shape.
+
 ## Eventing
 
 Two event publisher drivers are switchable via `EVENT_PUBLISHER_DRIVER`:

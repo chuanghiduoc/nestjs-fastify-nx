@@ -31,10 +31,10 @@
   ],
   "references": [
     {
-      "path": "../../shared/tsconfig.lib.json"
+      "path": "../../infra/auth/tsconfig.lib.json"
     },
     {
-      "path": "../../infra/auth/tsconfig.lib.json"
+      "path": "../../contracts/tsconfig.lib.json"
     },
     {
       "path": "../users/tsconfig.lib.json"

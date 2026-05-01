@@ -68,6 +68,7 @@ Most NestJS starters stop at "hello world + auth". This one ships the parts you 
 
 - **Real DDD layout** with module-boundary lint rules (`@nx/enforce-module-boundaries`) so cross-context imports fail in CI, not in code review.
 - **Cookie-session auth** (Better Auth + argon2) reused on REST, GraphQL **and** Socket.io — no JWT, no refresh-token plumbing.
+- **Stripe-style + RFC 9457 contract** — 2xx returns the resource directly, errors are `application/problem+json` with stable `code`s and a flat `errors[]` for both validation and business-rule failures, every response carries an `X-Request-Id` for log/trace correlation.
 - **Three API surfaces on one Fastify instance** — REST/OpenAPI, GraphQL (Mercurius), and WebSockets — with Redis pub/sub for horizontal scale.
 - **Background processing** wired correctly: BullMQ + Bull Board UI behind admin auth, transactional outbox so domain events survive crashes.
 - **Day-2 observability** out of the box: OpenTelemetry traces, Sentry errors + profiling, Prometheus `/metrics`, structured pino logs with request-id correlation.

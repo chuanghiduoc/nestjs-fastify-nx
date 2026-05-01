@@ -37,10 +37,10 @@
       "path": "../../libs/modules/audit-log/tsconfig.lib.json"
     },
     {
-      "path": "../../libs/modules/users/tsconfig.lib.json"
+      "path": "../../libs/modules/admin/tsconfig.lib.json"
     },
     {
-      "path": "../../libs/modules/admin/tsconfig.lib.json"
+      "path": "../../libs/modules/users/tsconfig.lib.json"
     },
     {
       "path": "../../libs/core/tsconfig.lib.json"
@@ -53,6 +53,9 @@
     },
     {
       "path": "../../libs/infra/redis/tsconfig.lib.json"
+    },
+    {
+      "path": "../../libs/contracts/tsconfig.lib.json"
     },
     {
       "path": "../../libs/testing/tsconfig.lib.json"
