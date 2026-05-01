@@ -9,5 +9,5 @@ export class PageInfoType {
   page!: number;
 
   @Field(() => Int)
-  limit!: number;
+  pageSize!: number;
 }

@@ -7,7 +7,7 @@ import { IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-validato
  *
  * Cursor-based pagination is preferred (`startingAfter`, `endingBefore`) — it
  * is stable under concurrent inserts/deletes and avoids OFFSET scans. Offset
- * fields (`page`, `perPage`, `totalCount`) are optional add-ons for admin /
+ * fields (`page`, `pageSize`, `totalCount`) are optional add-ons for admin /
  * dashboard endpoints that need "Page 5 / 127" UX. Only one paradigm should
  * be exposed per endpoint; mixing them confuses consumers.
  *
@@ -60,7 +60,7 @@ export class ListResponseDto<T = unknown> {
     description: 'Items per page. Present only on offset-paginated endpoints.',
     example: 20,
   })
-  perPage?: number;
+  pageSize?: number;
 }
 
 /**
@@ -68,7 +68,12 @@ export class ListResponseDto<T = unknown> {
  * `startingAfter`/`endingBefore` are mutually exclusive item IDs.
  */
 export class CursorPaginationDto {
-  @ApiPropertyOptional({ description: 'Items per page (1–100).', example: 20, default: 20 })
+  @ApiPropertyOptional({
+    type: Number,
+    description: 'Items per page (1–100).',
+    example: 20,
+    default: 20,
+  })
   @IsOptional()
   @Type(() => Number)
   @IsInt()
@@ -97,7 +102,7 @@ export class CursorPaginationDto {
 }
 
 /**
- * Build a Stripe-style list envelope from offset-paginated handler output.
+ * Build a Stripe-style list envelope from page-paginated handler output.
  * Use this at the controller boundary to translate domain `Page<T>` into the
  * public response shape.
  */
@@ -105,19 +110,19 @@ export function toListResponse<T>(args: {
   url: string;
   items: readonly T[];
   page: number;
-  perPage: number;
+  pageSize: number;
   total: number;
   /** Set true when client opted into the COUNT cost. Defaults to true to preserve current behavior. */
   includeTotal?: boolean;
 }): ListResponseDto<T> {
   const includeTotal = args.includeTotal ?? true;
-  const lastPage = Math.max(1, Math.ceil(args.total / args.perPage));
+  const lastPage = Math.max(1, Math.ceil(args.total / args.pageSize));
   const response = new ListResponseDto<T>();
   response.url = args.url;
   response.data = [...args.items];
   response.hasMore = args.page < lastPage;
   response.page = args.page;
-  response.perPage = args.perPage;
+  response.pageSize = args.pageSize;
   if (includeTotal) {
     response.totalCount = args.total;
   }

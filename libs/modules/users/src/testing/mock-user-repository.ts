@@ -17,7 +17,7 @@ export class MockUserRepository implements UserRepositoryPort {
   }
 
   async findAll(options: FindAllOptions): Promise<FindAllResult> {
-    const { page, limit, role, status, search } = options;
+    const { page, pageSize, role, status, search } = options;
     let rows = [...this.store.values()];
     if (role) rows = rows.filter((u) => u.role === role);
     if (status) rows = rows.filter((u) => u.status === status);
@@ -31,7 +31,7 @@ export class MockUserRepository implements UserRepositoryPort {
     }
     rows.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
     const total = rows.length;
-    const items = rows.slice((page - 1) * limit, (page - 1) * limit + limit);
+    const items = rows.slice((page - 1) * pageSize, (page - 1) * pageSize + pageSize);
     return { items, total };
   }
 

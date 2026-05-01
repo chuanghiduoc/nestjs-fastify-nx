@@ -10,6 +10,7 @@ import fastifyMultipart from '@fastify/multipart';
 import { toNodeHandler } from 'better-auth/node';
 import { BETTER_AUTH_INSTANCE, type BetterAuthInstance } from '@nestjs-fastify-nx/infra-auth';
 import { AppModule } from './app/app.module';
+import { applyFastifyErrorHandler } from './common/filters/fastify-error-handler';
 import { ProblemDetailsValidationPipe } from './common/pipes';
 import { setupSwagger } from './common/swagger/swagger.config';
 import { createBullBoardPlugin } from './common/bull-board/create-bull-board-plugin';
@@ -85,6 +86,11 @@ async function bootstrap() {
     crossOriginResourcePolicy: { policy: 'same-site' },
   });
   await fastify.register(fastifyMultipart);
+
+  // Convert Fastify-level errors (body parser, content-type, schema validation)
+  // into RFC 9457 Problem Details. These fire BEFORE the NestJS exception
+  // filter sees the request, so without this hook they leak Fastify defaults.
+  applyFastifyErrorHandler(fastify);
 
   // Mount Better Auth handler at /api/auth/* before NestJS routes resolve.
   // Must run before global validation pipes — Better Auth handles its own body parsing.

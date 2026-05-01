@@ -4,7 +4,7 @@ export const USER_REPOSITORY_PORT = Symbol('USER_REPOSITORY_PORT');
 
 export interface FindAllOptions {
   page: number;
-  limit: number;
+  pageSize: number;
   role?: UserRole;
   status?: UserStatus;
   search?: string;

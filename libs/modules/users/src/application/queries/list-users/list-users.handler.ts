@@ -12,7 +12,7 @@ export class ListUsersHandler {
   async execute(query: ListUsersQuery): Promise<Page<UserListItemDto>> {
     const { items, total } = await this.users.findAll({
       page: query.page,
-      limit: query.limit,
+      pageSize: query.pageSize,
       role: query.role,
       status: query.status,
       search: query.search,
@@ -28,7 +28,7 @@ export class ListUsersHandler {
         createdAt: user.createdAt,
         updatedAt: user.updatedAt,
       })),
-      meta: buildPageMeta(query.page, query.limit, total),
+      meta: buildPageMeta(query.page, query.pageSize, total),
     };
   }
 }

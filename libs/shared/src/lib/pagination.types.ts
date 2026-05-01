@@ -1,11 +1,11 @@
 export interface PaginationOptions {
   readonly page: number;
-  readonly limit: number;
+  readonly pageSize: number;
 }
 
 export interface PageMeta {
   readonly page: number;
-  readonly limit: number;
+  readonly pageSize: number;
   readonly total: number;
   readonly totalPages: number;
   readonly hasPrevPage: boolean;
@@ -17,11 +17,11 @@ export interface Page<T> {
   readonly meta: PageMeta;
 }
 
-export function buildPageMeta(page: number, limit: number, total: number): PageMeta {
-  const totalPages = Math.max(1, Math.ceil(total / limit));
+export function buildPageMeta(page: number, pageSize: number, total: number): PageMeta {
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
   return {
     page,
-    limit,
+    pageSize,
     total,
     totalPages,
     hasPrevPage: page > 1,
@@ -30,5 +30,5 @@ export function buildPageMeta(page: number, limit: number, total: number): PageM
 }
 
 export function paginationSkip(options: PaginationOptions): number {
-  return (options.page - 1) * options.limit;
+  return (options.page - 1) * options.pageSize;
 }

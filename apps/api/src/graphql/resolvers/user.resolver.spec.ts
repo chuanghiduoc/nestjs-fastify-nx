@@ -51,7 +51,7 @@ describe('UserResolver', () => {
         ],
         meta: {
           page: 1,
-          limit: 20,
+          pageSize: 20,
           total: 1,
           totalPages: 1,
           hasPrevPage: false,

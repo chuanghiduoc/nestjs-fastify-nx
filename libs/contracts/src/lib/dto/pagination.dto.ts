@@ -9,23 +9,33 @@ import {
 } from '@nestjs-fastify-nx/shared';
 
 export class PaginationDto implements PaginationOptions {
-  @ApiPropertyOptional({ description: 'Page number (1-based)', example: 1, default: 1 })
+  @ApiPropertyOptional({
+    type: Number,
+    description: 'Page number (1-based)',
+    example: 1,
+    default: 1,
+  })
   @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)
   page = 1;
 
-  @ApiPropertyOptional({ description: 'Items per page', example: 20, default: 20 })
+  @ApiPropertyOptional({
+    type: Number,
+    description: 'Items per page',
+    example: 20,
+    default: 20,
+  })
   @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)
   @Max(100)
-  limit = 20;
+  pageSize = 20;
 
   get skip(): number {
-    return (this.page - 1) * this.limit;
+    return (this.page - 1) * this.pageSize;
   }
 }
 
@@ -34,7 +44,7 @@ export class PageMetaDto implements PageMeta {
   page: number;
 
   @ApiProperty({ example: 20 })
-  limit: number;
+  pageSize: number;
 
   @ApiProperty({ example: 100 })
   total: number;
@@ -48,10 +58,10 @@ export class PageMetaDto implements PageMeta {
   @ApiProperty({ example: false })
   hasNextPage: boolean;
 
-  constructor(page: number, limit: number, total: number) {
-    const meta = buildPageMeta(page, limit, total);
+  constructor(page: number, pageSize: number, total: number) {
+    const meta = buildPageMeta(page, pageSize, total);
     this.page = meta.page;
-    this.limit = meta.limit;
+    this.pageSize = meta.pageSize;
     this.total = meta.total;
     this.totalPages = meta.totalPages;
     this.hasPrevPage = meta.hasPrevPage;
@@ -66,8 +76,8 @@ export class PageDto<T> implements Page<T> {
   @ApiProperty({ type: PageMetaDto })
   meta: PageMetaDto;
 
-  constructor(data: T[], page: number, limit: number, total: number) {
+  constructor(data: T[], page: number, pageSize: number, total: number) {
     this.data = data;
-    this.meta = new PageMetaDto(page, limit, total);
+    this.meta = new PageMetaDto(page, pageSize, total);
   }
 }

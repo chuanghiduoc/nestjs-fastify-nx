@@ -27,8 +27,8 @@ import {
 | Export                                               | Purpose                                                          |
 | ---------------------------------------------------- | ---------------------------------------------------------------- |
 | `generateId()`                                       | UUID v7 generator (`uuid@14`) — sortable, time-ordered           |
-| `buildPageMeta(total, options)`                      | Builds a `PageMeta` from total count + page/limit                |
-| `paginationSkip(page, limit)`                        | `(page - 1) * limit`, clamped to safe values                     |
+| `buildPageMeta(page, pageSize, total)`               | Builds a `PageMeta` from page/pageSize + total count             |
+| `paginationSkip({ page, pageSize })`                 | `(page - 1) * pageSize`, clamped to safe values                  |
 | `Page<T>`, `PageMeta`, `PaginationOptions`           | Pure type aliases for the paginated query contract               |
 | `QUEUE_NAMES` / `QueueName`                          | Single source of truth for BullMQ queue identifiers              |
 | `SENSITIVE_REDACT_PATHS` / `SENSITIVE_REDACT_CENSOR` | Pino redaction config — drops `cookie` / `authorization` headers |

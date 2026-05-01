@@ -50,13 +50,13 @@ export class UserResolver {
   @Roles('ADMIN')
   async users(
     @Args('page', { type: () => Int, defaultValue: 1 }) page: number,
-    @Args('limit', { type: () => Int, defaultValue: 20 }) limit: number,
+    @Args('pageSize', { type: () => Int, defaultValue: 20 }) pageSize: number,
     @Args('role', { type: () => String, nullable: true }) role?: UserRole,
     @Args('status', { type: () => String, nullable: true }) status?: UserStatus,
     @Args('search', { type: () => String, nullable: true }) search?: string,
   ): Promise<UserPageType> {
     const result = await this.listUsersHandler.execute(
-      new ListUsersQuery(page, limit, role, status, search),
+      new ListUsersQuery(page, pageSize, role, status, search),
     );
     return {
       data: result.data.map((u) => ({

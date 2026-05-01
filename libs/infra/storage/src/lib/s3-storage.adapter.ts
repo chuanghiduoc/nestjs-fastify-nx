@@ -3,6 +3,7 @@ import {
   Logger,
   BadRequestException,
   InternalServerErrorException,
+  type OnModuleInit,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
@@ -10,6 +11,8 @@ import {
   PutObjectCommand,
   DeleteObjectCommand,
   GetObjectCommand,
+  HeadBucketCommand,
+  CreateBucketCommand,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import type { StoragePort, StoredFile, UploadOptions } from './storage.port';
@@ -30,7 +33,7 @@ import type { StoragePort, StoredFile, UploadOptions } from './storage.port';
  *   For time-limited access use `getSignedUrl`.
  */
 @Injectable()
-export class S3StorageAdapter implements StoragePort {
+export class S3StorageAdapter implements StoragePort, OnModuleInit {
   private readonly logger = new Logger(S3StorageAdapter.name);
   private readonly client: S3Client;
   private readonly bucket: string;
@@ -52,6 +55,40 @@ export class S3StorageAdapter implements StoragePort {
       // AWS SDK v3 default is 3 retries.  Explicit here for visibility.
       maxAttempts: 3,
     });
+  }
+
+  /**
+   * Bootstrap the configured bucket on startup. MinIO ships empty by default,
+   * so the very first upload would 500 with `NoSuchBucket`. In production we
+   * still attempt creation but only swallow the "already exists" cases —
+   * permission errors must surface so misconfigured IAM is caught early.
+   */
+  async onModuleInit(): Promise<void> {
+    try {
+      await this.client.send(new HeadBucketCommand({ Bucket: this.bucket }));
+      return;
+    } catch (err) {
+      const status = (err as { $metadata?: { httpStatusCode?: number } })?.$metadata
+        ?.httpStatusCode;
+      if (status !== 404 && status !== undefined) {
+        this.logger.warn(
+          { err, bucket: this.bucket, status },
+          'Bucket head check failed — skipping auto-create',
+        );
+        return;
+      }
+    }
+
+    try {
+      await this.client.send(new CreateBucketCommand({ Bucket: this.bucket }));
+      this.logger.log(`Created storage bucket "${this.bucket}"`);
+    } catch (err) {
+      const code = (err as { name?: string })?.name;
+      if (code === 'BucketAlreadyOwnedByYou' || code === 'BucketAlreadyExists') {
+        return;
+      }
+      this.logger.error({ err, bucket: this.bucket }, 'Failed to create storage bucket');
+    }
   }
 
   /**

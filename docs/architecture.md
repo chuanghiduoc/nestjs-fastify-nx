@@ -158,7 +158,7 @@ List endpoints wrap items in `ListResponseDto<T>` (Stripe / Linear-style envelop
 `@nestjs-fastify-nx/contracts`:
 
 ```json
-GET /api/v1/admin/users?limit=20  → 200
+GET /api/v1/admin/users?page=1&pageSize=20  → 200
 {
   "object": "list",
   "url": "/api/v1/admin/users",
@@ -166,13 +166,19 @@ GET /api/v1/admin/users?limit=20  → 200
   "hasMore": true,
   "totalCount": 1284,
   "page": 1,
-  "perPage": 20
+  "pageSize": 20
 }
 ```
 
-Cursor pagination is preferred for high-volume endpoints — clients pass
-`startingAfter` / `endingBefore` as query params (`CursorPaginationDto`) and
-the response omits `page` / `perPage` / `totalCount`.
+Pagination conventions:
+
+- **Page-based** (`PaginationDto`): query `page` + `pageSize`; response carries
+  matching `page` + `pageSize` + `totalCount`.
+- **Cursor-based** (`CursorPaginationDto`, preferred for high-volume endpoints):
+  query `limit` + `startingAfter` / `endingBefore`; response carries `hasMore`
+  and omits `page` / `pageSize` / `totalCount`.
+- **Offset-based**: query `limit` + `offset` — only adopt when neither of the
+  above fits.
 
 ### Errors — RFC 9457 Problem Details
 
@@ -203,6 +209,14 @@ All error responses (400/401/403/404/409/413/415/422/429/5xx) use
   in pino logs, OpenTelemetry traces, and Sentry events for cross-system
   correlation. The `CorrelationIdMiddleware` accepts an inbound `X-Request-Id`
   or generates a UUID v7.
+
+> **Better Auth exception:** `/api/auth/*` is mounted as a raw Fastify route
+> that calls `reply.hijack()` and delegates the response stream to Better Auth's
+> own handler (see `apps/api/src/main.ts`). It therefore returns Better Auth's
+> native JSON shape (`{ message, code }`) — **not** Problem Details — and is
+> exempt from the global exception filter and the `application/problem+json`
+> contract. Treat that surface as an upstream library boundary; downstream
+> clients should branch on the path prefix when consuming errors.
 
 ### Naming conventions
 

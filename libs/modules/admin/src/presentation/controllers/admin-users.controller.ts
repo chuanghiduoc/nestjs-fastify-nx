@@ -36,14 +36,14 @@ export class AdminUsersController {
   @ApiPaginatedResponse(UserListItemResponseDto, { description: 'Paginated list of users.' })
   async list(@Query() filter: ListUsersFilterDto): Promise<ListResponseDto<UserListItemDto>> {
     const page = await this.listUsersHandler.execute(
-      new ListUsersQuery(filter.page, filter.limit, filter.role, filter.status, filter.search),
+      new ListUsersQuery(filter.page, filter.pageSize, filter.role, filter.status, filter.search),
     );
 
     return toListResponse({
       url: ADMIN_USERS_PATH,
       items: page.data,
       page: page.meta.page,
-      perPage: page.meta.limit,
+      pageSize: page.meta.pageSize,
       total: page.meta.total,
     });
   }

@@ -12,11 +12,11 @@ backend modules and generated clients.
 import { PaginationDto, PageMetaDto, PageDto } from '@nestjs-fastify-nx/contracts';
 ```
 
-| Export          | Purpose                                                    |
-| --------------- | ---------------------------------------------------------- |
-| `PaginationDto` | `class-validator`-decorated request DTO (`page`, `limit`)  |
-| `PageMetaDto`   | Response metadata (`total`, `page`, `limit`, `totalPages`) |
-| `PageDto<T>`    | Generic paginated response envelope (`items`, `meta`)      |
+| Export          | Purpose                                                       |
+| --------------- | ------------------------------------------------------------- |
+| `PaginationDto` | `class-validator`-decorated request DTO (`page`, `pageSize`)  |
+| `PageMetaDto`   | Response metadata (`total`, `page`, `pageSize`, `totalPages`) |
+| `PageDto<T>`    | Generic paginated response envelope (`items`, `meta`)         |
 
 The runtime helpers (`buildPageMeta`, `paginationSkip`, type aliases) live in
 [`@nestjs-fastify-nx/shared`](../shared/README.md). Use this lib when you need

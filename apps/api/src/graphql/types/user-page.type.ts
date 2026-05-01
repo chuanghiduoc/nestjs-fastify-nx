@@ -7,7 +7,7 @@ export class PageMetaType {
   page!: number;
 
   @Field(() => Int)
-  limit!: number;
+  pageSize!: number;
 
   @Field(() => Int)
   total!: number;

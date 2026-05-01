@@ -101,7 +101,7 @@ export class PrismaUserRepository implements UserRepositoryPort {
   }
 
   async findAll(options: FindAllOptions): Promise<FindAllResult> {
-    const { page, limit, role, status, search } = options;
+    const { page, pageSize, role, status, search } = options;
     const where: Prisma.UserWhereInput = {};
     if (role) where.role = role;
     if (status) where.status = status;
@@ -116,8 +116,8 @@ export class PrismaUserRepository implements UserRepositoryPort {
         this.prisma.db.user.findMany({
           where,
           orderBy: { createdAt: 'desc' },
-          skip: (page - 1) * limit,
-          take: limit,
+          skip: (page - 1) * pageSize,
+          take: pageSize,
         }),
         this.prisma.db.user.count({ where }),
       ]);
