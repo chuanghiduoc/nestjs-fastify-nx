@@ -1,0 +1,16 @@
+* text=auto eol=lf
+
+# Shell scripts MUST use LF — CRLF endings break bash parsing, especially
+# when the comment lines contain multi-byte UTF-8 characters (em-dashes,
+# tildes) that confuse the line-numbering on dual-stack Windows hosts.
+*.sh         text eol=lf
+*.bash       text eol=lf
+
+# Dockerfiles and lockfiles also expect LF on every platform.
+Dockerfile*  text eol=lf
+*.lock       text eol=lf
+*.yaml       text eol=lf
+*.yml        text eol=lf
+
+# Lockfiles are auto-generated, mark them as such to clean up `git diff`.
+pnpm-lock.yaml  -diff linguist-generated
