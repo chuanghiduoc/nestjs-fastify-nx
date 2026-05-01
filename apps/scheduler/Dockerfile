@@ -22,7 +22,9 @@ RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
     && pnpm install --frozen-lockfile
 COPY . .
 RUN pnpm prisma generate && pnpm nx sync
-RUN pnpm nx build scheduler --configuration=development
+RUN pnpm nx build scheduler --configuration=development \
+    && chown -R node:node /app
+USER node
 CMD ["node", "dist/apps/scheduler/main.js"]
 
 FROM base AS builder

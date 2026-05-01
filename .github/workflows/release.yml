@@ -166,15 +166,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Semgrep static analysis
-        run: |
-          docker run --rm \
-            -v "${GITHUB_WORKSPACE}:/src" \
-            semgrep/semgrep:latest semgrep scan \
-              --config p/typescript \
-              --config p/nodejs \
-              --config p/secrets \
-              --error \
-              /src
+        run: ./scripts/security/scan-sast.sh
 
   migrate-and-deploy:
     needs: [security-scan, static-analysis]
@@ -191,14 +183,22 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Run database migration
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          MIGRATION_IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/migration:${{ github.ref_name }}
         run: |
           docker run --rm \
-            -e DATABASE_URL='${{ secrets.DATABASE_URL }}' \
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/migration:${{ github.ref_name }}
+            -e DATABASE_URL="$DATABASE_URL" \
+            "$MIGRATION_IMAGE"
 
       - name: Deploy to Coolify
+        env:
+          COOLIFY_WEBHOOK_URL: ${{ secrets.COOLIFY_WEBHOOK_URL }}
+          COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}
+          RELEASE_TAG: ${{ github.ref_name }}
         run: |
-          curl --fail --silent --show-error -X POST "${{ secrets.COOLIFY_WEBHOOK_URL }}" \
-            -H "Authorization: Bearer ${{ secrets.COOLIFY_TOKEN }}" \
+          payload=$(jq -nc --arg tag "$RELEASE_TAG" '{tag: $tag}')
+          curl --fail --silent --show-error -X POST "$COOLIFY_WEBHOOK_URL" \
+            -H "Authorization: Bearer $COOLIFY_TOKEN" \
             -H 'Content-Type: application/json' \
-            -d "{\"tag\":\"${{ github.ref_name }}\"}"
+            -d "$payload"

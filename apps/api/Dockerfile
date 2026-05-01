@@ -22,7 +22,9 @@ RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
     && pnpm install --frozen-lockfile
 COPY . .
 RUN pnpm prisma generate && pnpm nx sync
-RUN pnpm nx build api --configuration=development
+RUN pnpm nx build api --configuration=development \
+    && chown -R node:node /app
+USER node
 EXPOSE 3000 9229
 CMD ["node", "dist/apps/api/main.js"]
 
