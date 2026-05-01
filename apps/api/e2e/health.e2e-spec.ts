@@ -114,10 +114,10 @@ describe('Health & Metrics E2E', () => {
     });
   });
 
-  describe('POST /api/v1/upload', () => {
+  describe('POST /api/v1/upload/presign', () => {
     it('returns 401 with Problem Details when the cookie is missing', async () => {
       // BetterAuthGuard is the global APP_GUARD; unauthenticated calls are 401.
-      const res = await request(ctx.app.getHttpServer()).post('/api/v1/upload').expect(401);
+      const res = await request(ctx.app.getHttpServer()).post('/api/v1/upload/presign').expect(401);
 
       expect(res.headers['content-type']).toMatch(/application\/problem\+json/);
       expect(res.body.status).toBe(401);

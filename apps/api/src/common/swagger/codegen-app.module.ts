@@ -30,9 +30,7 @@ import { AppController } from '../../app/app.controller';
     RedisQueueModule,
     MessagingModule,
     StorageModule,
-    BetterAuthModule.forRootAsync({
-      useFactory: () => ({}),
-    }),
+    BetterAuthModule,
     UsersModule,
     AdminModule,
     AuditLogModule,

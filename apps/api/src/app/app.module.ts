@@ -8,8 +8,7 @@ import { RedisCacheModule, RedisQueueModule } from '@nestjs-fastify-nx/infra-red
 import { MessagingModule } from '@nestjs-fastify-nx/infra-messaging';
 import { StorageModule } from '@nestjs-fastify-nx/infra-storage';
 import { BetterAuthModule, BetterAuthGuard, RolesGuard } from '@nestjs-fastify-nx/infra-auth';
-import { EVENT_PUBLISHER_PORT, type EventPublisherPort } from '@nestjs-fastify-nx/core';
-import { UsersModule, UserRegistered } from '@nestjs-fastify-nx/modules-users';
+import { UsersModule } from '@nestjs-fastify-nx/modules-users';
 import { AdminModule } from '@nestjs-fastify-nx/modules-admin';
 import { AuditLogModule } from '@nestjs-fastify-nx/modules-audit-log';
 import { LoggingModule } from '../common/logging/logging.module';
@@ -37,14 +36,12 @@ const conditionalImports = process.env['ENABLE_METRICS'] === 'true' ? [MetricsMo
     RedisQueueModule,
     MessagingModule,
     StorageModule,
-    BetterAuthModule.forRootAsync({
-      imports: [MessagingModule],
-      inject: [EVENT_PUBLISHER_PORT],
-      useFactory: (publisher: EventPublisherPort) => ({
-        onUserCreated: (user) =>
-          publisher.publish(new UserRegistered(user.id, { email: user.email })),
-      }),
-    }),
+    // `users.registered` events are emitted by a Postgres AFTER INSERT trigger
+    // on `users` (see prisma/migrations/*_add_user_registered_outbox_trigger).
+    // The trigger writes the outbox row inside the same transaction as the
+    // user insert, so signup + event are atomic. The outbox relay then
+    // dispatches to in-process listeners — no application-side hook needed.
+    BetterAuthModule,
     UsersModule,
     AdminModule,
     AuditLogModule,

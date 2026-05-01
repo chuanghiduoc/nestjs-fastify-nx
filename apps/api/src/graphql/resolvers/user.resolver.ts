@@ -1,4 +1,4 @@
-import { Resolver, Query, Context, Args, Int } from '@nestjs/graphql';
+import { Resolver, Query, Context, Args } from '@nestjs/graphql';
 import { Inject, UseGuards } from '@nestjs/common';
 import {
   BetterAuthGuard,
@@ -11,11 +11,10 @@ import {
   UserRepositoryPort,
   ListUsersHandler,
   ListUsersQuery,
-  UserRole,
-  UserStatus,
 } from '@nestjs-fastify-nx/modules-users';
 import { UserType } from '../types/user.type';
 import { UserPageType } from '../types/user-page.type';
+import { ListUsersArgs } from '../dto/list-users.args';
 
 @Resolver(() => UserType)
 export class UserResolver {
@@ -48,15 +47,9 @@ export class UserResolver {
   @Query(() => UserPageType, { name: 'users' })
   @UseGuards(BetterAuthGuard, RolesGuard)
   @Roles('ADMIN')
-  async users(
-    @Args('page', { type: () => Int, defaultValue: 1 }) page: number,
-    @Args('pageSize', { type: () => Int, defaultValue: 20 }) pageSize: number,
-    @Args('role', { type: () => String, nullable: true }) role?: UserRole,
-    @Args('status', { type: () => String, nullable: true }) status?: UserStatus,
-    @Args('search', { type: () => String, nullable: true }) search?: string,
-  ): Promise<UserPageType> {
+  async users(@Args() args: ListUsersArgs): Promise<UserPageType> {
     const result = await this.listUsersHandler.execute(
-      new ListUsersQuery(page, pageSize, role, status, search),
+      new ListUsersQuery(args.page, args.pageSize, args.role, args.status, args.search),
     );
     return {
       data: result.data.map((u) => ({

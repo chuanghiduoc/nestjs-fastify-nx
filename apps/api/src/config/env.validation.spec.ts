@@ -85,6 +85,22 @@ describe('validateConfig', () => {
     expect(() => validateConfig(rest)).toThrow(/BETTER_AUTH_SECRET/);
   });
 
+  it('rejects empty BETTER_AUTH_SECRET in production (treated as unset)', () => {
+    expect(() => validateConfig({ ...baseProdEnv, BETTER_AUTH_SECRET: '' })).toThrow(
+      /BETTER_AUTH_SECRET/,
+    );
+  });
+
+  it('rejects too-short BETTER_AUTH_SECRET (<32 chars) in development', () => {
+    expect(() => validateConfig({ ...baseDevEnv, BETTER_AUTH_SECRET: 'short' })).toThrow(
+      /BETTER_AUTH_SECRET/,
+    );
+  });
+
+  it('treats empty BETTER_AUTH_URL as unset (not as a malformed url)', () => {
+    expect(() => validateConfig({ ...baseDevEnv, BETTER_AUTH_URL: '' })).not.toThrow();
+  });
+
   it('accepts a valid production environment', () => {
     expect(() => validateConfig(baseProdEnv)).not.toThrow();
   });

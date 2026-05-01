@@ -73,7 +73,10 @@ describe('module generator', () => {
     });
 
     const tsconfig = readJson(tree, 'tsconfig.base.json');
-    expect(tsconfig.compilerOptions.paths['@nestjs-fastify-nx/invoices']).toBeDefined();
+    expect(tsconfig.compilerOptions.paths['@nestjs-fastify-nx/modules-invoices']).toBeDefined();
+    expect(tsconfig.compilerOptions.paths['@nestjs-fastify-nx/modules-invoices']).toEqual([
+      './libs/modules/invoices/src/index.ts',
+    ]);
   });
 
   it('generates cqrs files when withCqrs=true', async () => {

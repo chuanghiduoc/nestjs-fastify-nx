@@ -37,7 +37,11 @@ export async function moduleGenerator(tree: Tree, options: ModuleGeneratorSchema
     },
   });
 
-  const importPath = `@nestjs-fastify-nx/${moduleNames.fileName}`;
+  // Import path mirrors the project name (`modules-${name}`) so consumers
+  // can tell at a glance which scope a barrel belongs to — `@nestjs-fastify-nx/modules-users`
+  // is unambiguously a bounded-context module, while `@nestjs-fastify-nx/infra-redis`
+  // is infrastructure. Keep the two in lockstep.
+  const importPath = `@nestjs-fastify-nx/modules-${moduleNames.fileName}`;
   updateJson(tree, 'tsconfig.base.json', (json) => {
     json.compilerOptions.paths ??= {};
     json.compilerOptions.paths[importPath] = [`./${projectRoot}/src/index.ts`];

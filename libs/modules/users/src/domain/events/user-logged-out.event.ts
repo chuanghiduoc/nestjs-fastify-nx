@@ -5,6 +5,7 @@ export interface UserLoggedOutPayload extends Record<string, unknown> {
   tokenId: string;
   ip?: string;
   userAgent?: string;
+  sessionExpiresAt?: string;
 }
 
 export class UserLoggedOut implements DomainEvent {

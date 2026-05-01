@@ -2,6 +2,7 @@ import type { DomainEvent } from '@nestjs-fastify-nx/core';
 import { generateId } from '@nestjs-fastify-nx/shared';
 
 export interface UserLoggedInPayload extends Record<string, unknown> {
+  sessionId: string;
   ip?: string;
   userAgent?: string;
 }

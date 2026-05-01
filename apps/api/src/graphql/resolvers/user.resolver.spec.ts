@@ -82,7 +82,7 @@ describe('UserResolver', () => {
 
   describe('users', () => {
     it('returns paginated users page from handler', async () => {
-      const result = await resolver.users(1, 20);
+      const result = await resolver.users({ page: 1, pageSize: 20 });
       expect(result.data).toHaveLength(1);
       expect(result.data[0].id).toBe('u1');
       expect(result.meta.total).toBe(1);

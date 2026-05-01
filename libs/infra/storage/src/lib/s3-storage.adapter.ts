@@ -11,11 +11,20 @@ import {
   PutObjectCommand,
   DeleteObjectCommand,
   GetObjectCommand,
+  HeadObjectCommand,
   HeadBucketCommand,
   CreateBucketCommand,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
-import type { StoragePort, StoredFile, UploadOptions } from './storage.port';
+import { createPresignedPost } from '@aws-sdk/s3-presigned-post';
+import type {
+  ObjectMetadata,
+  PresignedUpload,
+  PresignUploadOptions,
+  StoragePort,
+  StoredFile,
+  UploadOptions,
+} from './storage.port';
 
 /**
  * S3-compatible storage adapter (works with AWS S3 and MinIO).
@@ -91,10 +100,6 @@ export class S3StorageAdapter implements StoragePort, OnModuleInit {
     }
   }
 
-  /**
-   * Reads a config value and warns when the insecure default is used so that
-   * misconfigurations are surfaced immediately at startup.
-   */
   private requireConfig(key: string, devDefault: string): string {
     const value = this.config.get<string>(key);
     if (value === undefined || value === '') {
@@ -135,6 +140,56 @@ export class S3StorageAdapter implements StoragePort, OnModuleInit {
     const url = `${this.endpoint}/${bucket}/${key}`;
 
     return { key, bucket, url, size: body.length };
+  }
+
+  // Issues a short-lived POST policy so the browser uploads bytes directly to
+  // S3/MinIO. Conditions pin Content-Type and total size, so a client cannot
+  // smuggle in a different mime type or oversized payload.
+  async presignUpload(key: string, options: PresignUploadOptions): Promise<PresignedUpload> {
+    const bucket = options.bucket ?? this.bucket;
+    const expiresInSeconds = options.expiresInSeconds ?? 300;
+
+    try {
+      const { url, fields } = await createPresignedPost(this.client, {
+        Bucket: bucket,
+        Key: key,
+        Conditions: [
+          ['content-length-range', 1, options.maxBytes],
+          ['eq', '$Content-Type', options.contentType],
+        ],
+        Fields: { 'Content-Type': options.contentType },
+        Expires: expiresInSeconds,
+      });
+
+      const expiresAt = new Date(Date.now() + expiresInSeconds * 1000).toISOString();
+      return { url, fields, key, bucket, expiresAt, maxBytes: options.maxBytes };
+    } catch (err) {
+      this.logger.error({ err, key }, 'S3 presign upload failed');
+      throw new InternalServerErrorException('Storage presign failed');
+    }
+  }
+
+  // Returns null for missing objects so callers can distinguish "not yet
+  // uploaded" from a transport error without parsing AWS error shapes.
+  async head(key: string, bucket?: string): Promise<ObjectMetadata | null> {
+    const targetBucket = bucket ?? this.bucket;
+    try {
+      const res = await this.client.send(new HeadObjectCommand({ Bucket: targetBucket, Key: key }));
+      return {
+        contentType: res.ContentType ?? 'application/octet-stream',
+        size: Number(res.ContentLength ?? 0),
+        bucket: targetBucket,
+      };
+    } catch (err) {
+      const status = (err as { $metadata?: { httpStatusCode?: number } })?.$metadata
+        ?.httpStatusCode;
+      const name = (err as { name?: string })?.name;
+      if (status === 404 || name === 'NotFound' || name === 'NoSuchKey') {
+        return null;
+      }
+      this.logger.error({ err, key }, 'S3 head failed');
+      throw new InternalServerErrorException('Storage head failed');
+    }
   }
 
   async getSignedUrl(key: string, expiresIn = 3600, bucket?: string): Promise<string> {

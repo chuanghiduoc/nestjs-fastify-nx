@@ -1,4 +1,5 @@
 import { ObjectType, Field, ID } from '@nestjs/graphql';
+import { UserRole, UserStatus } from './user-enums';
 
 @ObjectType()
 export class UserType {
@@ -11,11 +12,11 @@ export class UserType {
   @Field()
   name!: string;
 
-  @Field()
-  role!: string;
+  @Field(() => UserRole)
+  role!: UserRole;
 
-  @Field()
-  status!: string;
+  @Field(() => UserStatus)
+  status!: UserStatus;
 
   @Field()
   createdAt!: Date;

@@ -20,6 +20,10 @@ model User {
   accounts      Account[]
 
   @@index([email])
+  @@index([role])
+  @@index([status])
+  @@index([createdAt])
+  @@index([status, updatedAt])
   @@map("users")
 }
 
@@ -85,8 +89,13 @@ model OutboxEvent {
 }
 
 // `userId` intentionally has no FK — audit must survive User deletion.
+// Range-partitioned monthly by `createdAt` (see migration
+// `partition_audit_logs`). Postgres requires the partition key to participate
+// in the primary key, hence the composite `@@id([id, createdAt])` —
+// application stamps UUIDv7 ids so id-only uniqueness is preserved by
+// construction even though no global UNIQUE constraint enforces it.
 model AuditLog {
-  id        String   @id @db.Uuid
+  id        String   @db.Uuid
   userId    String?  @db.Uuid
   action    String
   resource  String?
@@ -95,6 +104,7 @@ model AuditLog {
   userAgent String?
   createdAt DateTime @default(now())
 
+  @@id([id, createdAt])
   @@index([userId, createdAt])
   @@index([action, createdAt])
   @@index([createdAt])

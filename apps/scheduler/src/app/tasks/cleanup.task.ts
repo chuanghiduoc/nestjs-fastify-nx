@@ -3,35 +3,31 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '@nestjs-fastify-nx/infra-database';
 import { UserStatus } from '@nestjs-fastify-nx/modules-users';
 
-/**
- * CleanupTask — scheduled maintenance jobs for the database.
- *
- * Token cleanup note:
- *   Blacklisted access-token keys (`blacklist:<jti>`) and refresh-token keys
- *   (`refresh:<userId>:<jti>`) are stored in Redis with an explicit TTL that
- *   mirrors the token's own expiry.  Redis expires those keys automatically,
- *   so no scheduled cleanup job is required for token data.  Any key stored
- *   without a TTL would indicate a bug in the auth layer, not something this
- *   task should paper over.
- */
+const PURGE_BATCH_SIZE = 500;
+const PURGE_MAX_BATCHES = 200;
+
+// Names emitted by `ensure_audit_log_partition` follow this exact shape; the
+// retention purge validates child names against it before issuing DROP, so a
+// rogue table sharing the `audit_logs_*` prefix can't be dropped accidentally.
+const AUDIT_PARTITION_NAME = /^audit_logs_(\d{4})_(\d{2})$/;
+
+function intEnv(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (raw === undefined || raw === '') return fallback;
+  const parsed = Number.parseInt(raw, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
 @Injectable()
 export class CleanupTask {
   private readonly logger = new Logger(CleanupTask.name);
+  private readonly auditRetentionMonths = intEnv('AUDIT_LOG_RETENTION_MONTHS', 12);
 
   constructor(private readonly prisma: PrismaService) {}
 
-  /**
-   * Runs every day at 02:00 UTC.
-   *
-   * Hard-deletes User records that have been in INACTIVE status for more than
-   * 90 days.  INACTIVE accounts are set by the deactivation flow and represent
-   * users that have been soft-deleted.  Keeping them longer than 90 days
-   * provides a grace period for reactivation before permanent removal.
-   *
-   * The `refresh_tokens` table referenced in a previous version of this task
-   * does NOT exist — the application uses Redis for token storage.  That raw
-   * SQL has been removed.
-   */
+  // Hard-deletes Users that have been INACTIVE for >90 days. Batched to avoid
+  // long-running transactions and lock contention with online traffic — relies
+  // on the (status, updatedAt) composite index for cheap range scans.
   @Cron(CronExpression.EVERY_DAY_AT_2AM)
   async purgeInactiveUsers(): Promise<void> {
     this.logger.log('Starting inactive-user purge (>90 days INACTIVE)');
@@ -39,17 +35,36 @@ export class CleanupTask {
     const cutoff = new Date();
     cutoff.setDate(cutoff.getDate() - 90);
 
+    let totalPurged = 0;
     try {
-      const { count } = await this.prisma.db.user.deleteMany({
-        where: {
-          status: UserStatus.INACTIVE,
-          updatedAt: { lt: cutoff },
-        },
-      });
+      for (let batch = 0; batch < PURGE_MAX_BATCHES; batch++) {
+        const candidates = await this.prisma.db.user.findMany({
+          where: {
+            status: UserStatus.INACTIVE,
+            updatedAt: { lt: cutoff },
+          },
+          select: { id: true },
+          take: PURGE_BATCH_SIZE,
+        });
 
-      this.logger.log(`Purged ${count} inactive user(s) updated before ${cutoff.toISOString()}`);
+        if (candidates.length === 0) break;
+
+        const { count } = await this.prisma.db.user.deleteMany({
+          where: { id: { in: candidates.map((u) => u.id) } },
+        });
+
+        totalPurged += count;
+
+        if (candidates.length < PURGE_BATCH_SIZE) break;
+      }
+
+      this.logger.log(
+        `Purged ${totalPurged} inactive user(s) updated before ${cutoff.toISOString()}`,
+      );
     } catch (error) {
-      this.logger.error(`Inactive-user purge failed: ${String(error)}`);
+      this.logger.error(
+        `Inactive-user purge failed after ${totalPurged} deletion(s): ${String(error)}`,
+      );
     }
   }
 
@@ -63,6 +78,70 @@ export class CleanupTask {
       this.logger.log('VACUUM ANALYZE complete');
     } catch (error) {
       this.logger.error(`VACUUM ANALYZE failed: ${String(error)}`);
+    }
+  }
+
+  // Roll the audit_logs partition window forward. `ensure_audit_log_partition`
+  // is idempotent (CREATE TABLE IF NOT EXISTS) so re-running every day is
+  // cheap and gives us slack against scheduler downtime around month boundaries.
+  @Cron(CronExpression.EVERY_DAY_AT_4AM)
+  async ensureAuditLogPartitions(): Promise<void> {
+    try {
+      for (const offset of [0, 1, 2]) {
+        await this.prisma.db
+          .$executeRaw`SELECT ensure_audit_log_partition(NOW() + (${offset} || ' months')::interval)`;
+      }
+      this.logger.log('Ensured audit_logs partitions for current + next 2 months');
+    } catch (error) {
+      this.logger.error(`Audit partition ensure failed: ${String(error)}`);
+    }
+  }
+
+  // Drop audit_logs partitions whose month falls before the retention cutoff.
+  // Partition drop is O(1) — much cheaper than a streaming DELETE — and
+  // reclaims disk immediately. Runs at 04:30 on the 1st of every month so
+  // it lines up with a fresh partition having been created the prior tick.
+  @Cron('30 4 1 * *')
+  async purgeAuditLogPartitions(): Promise<void> {
+    const cutoff = new Date();
+    cutoff.setUTCDate(1);
+    cutoff.setUTCHours(0, 0, 0, 0);
+    cutoff.setUTCMonth(cutoff.getUTCMonth() - this.auditRetentionMonths);
+
+    const cutoffYear = cutoff.getUTCFullYear();
+    const cutoffMonth = cutoff.getUTCMonth() + 1;
+
+    let dropped = 0;
+    try {
+      const partitions = await this.prisma.db.$queryRaw<{ table_name: string }[]>`
+        SELECT child.relname AS "table_name"
+          FROM pg_inherits i
+          JOIN pg_class parent ON parent.oid = i.inhparent
+          JOIN pg_class child  ON child.oid = i.inhrelid
+         WHERE parent.relname = 'audit_logs'`;
+
+      for (const { table_name } of partitions) {
+        const match = AUDIT_PARTITION_NAME.exec(table_name);
+        if (!match) continue;
+
+        const year = Number(match[1]);
+        const month = Number(match[2]);
+        const isOlder = year < cutoffYear || (year === cutoffYear && month < cutoffMonth);
+        if (!isOlder) continue;
+
+        // `table_name` matched the strict YYYY_MM regex above, so direct
+        // identifier interpolation is safe — `$executeRawUnsafe` does not
+        // accept identifier parameters and `format(%I)` would require a
+        // wrapper procedure for what is otherwise a one-line DDL.
+        await this.prisma.db.$executeRawUnsafe(`DROP TABLE IF EXISTS "${table_name}"`);
+        dropped++;
+      }
+
+      this.logger.log(
+        `Purged ${dropped} audit_logs partition(s) older than ${cutoffYear}-${String(cutoffMonth).padStart(2, '0')}`,
+      );
+    } catch (error) {
+      this.logger.error(`Audit partition purge failed after dropping ${dropped}: ${String(error)}`);
     }
   }
 }

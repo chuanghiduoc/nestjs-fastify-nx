@@ -101,6 +101,11 @@ const envSchema = z
     OUTBOX_BATCH_SIZE: z.coerce.number().int().min(1).max(1_000).default(50),
     OUTBOX_MAX_ATTEMPTS: z.coerce.number().int().min(1).max(1_000).default(10),
 
+    // Audit log retention — number of monthly partitions kept. Cleanup task
+    // drops anything older on the 1st of each month. Lower bound = 1 to
+    // avoid zero-retention misconfiguration purging the active partition.
+    AUDIT_LOG_RETENTION_MONTHS: z.coerce.number().int().min(1).max(120).default(12),
+
     // Bull Board
     BULL_BOARD_ENABLED: z
       .string()
@@ -189,8 +194,20 @@ const envSchema = z
 
 export type EnvConfig = z.infer<typeof envSchema>;
 
+// dotenv loads `KEY=` as `""`, which is NOT `undefined` — so `.optional()` on
+// the schema would happily accept the empty string and skip `.min(32)`. Strip
+// empty strings so optional fields fall back to their defaults (or stay unset)
+// and required fields raise the expected validation error.
+function stripEmptyStrings(config: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(config)) {
+    out[key] = typeof value === 'string' && value.trim() === '' ? undefined : value;
+  }
+  return out;
+}
+
 export function validateConfig(config: Record<string, unknown>): EnvConfig {
-  const result = envSchema.safeParse(config);
+  const result = envSchema.safeParse(stripEmptyStrings(config));
 
   if (!result.success) {
     const formatted = result.error.issues
