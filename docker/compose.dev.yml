@@ -10,8 +10,8 @@ services:
   api:
     build:
       context: ..
-      dockerfile: apps/api/Dockerfile
-      target: development
+      dockerfile: Dockerfile
+      target: api-dev
     ports:
       - '3000:3000'
       - '9229:9229'
@@ -39,8 +39,8 @@ services:
   worker:
     build:
       context: ..
-      dockerfile: apps/worker/Dockerfile
-      target: development
+      dockerfile: Dockerfile
+      target: worker-dev
     env_file: ../.env
     environment:
       NODE_ENV: development
@@ -74,8 +74,8 @@ services:
   scheduler:
     build:
       context: ..
-      dockerfile: apps/scheduler/Dockerfile
-      target: development
+      dockerfile: Dockerfile
+      target: scheduler-dev
     env_file: ../.env
     environment:
       NODE_ENV: development

@@ -29,11 +29,19 @@ Images are built automatically by the [release workflow](../.github/workflows/re
 To build manually:
 
 ```bash
-# Production images
-docker build -f apps/api/Dockerfile --target production -t your-registry/nestjs-api:latest .
-docker build -f apps/worker/Dockerfile --target production -t your-registry/nestjs-worker:latest .
-docker build -f apps/scheduler/Dockerfile --target production -t your-registry/nestjs-scheduler:latest .
-docker build -f apps/migration/Dockerfile -t your-registry/nestjs-migration:latest .
+# Production images — api/worker/scheduler share the root Dockerfile so the
+# `workspace` stage (install + source + prisma generate + nx sync) is built
+# once and reused. Migration uses its own Dockerfile (--prod install only).
+docker build -f Dockerfile --target api       -t your-registry/nestjs-api:latest .
+docker build -f Dockerfile --target worker    -t your-registry/nestjs-worker:latest .
+docker build -f Dockerfile --target scheduler -t your-registry/nestjs-scheduler:latest .
+docker build -f apps/migration/Dockerfile     -t your-registry/nestjs-migration:latest .
+```
+
+For all four in one shot (BuildKit shares stages across siblings):
+
+```bash
+./scripts/build-prod.sh                       # gated by Trivy on local
 ```
 
 ## Database Migrations

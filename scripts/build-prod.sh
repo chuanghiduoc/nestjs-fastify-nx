@@ -49,9 +49,13 @@ build() {
     --load -t "${PREFIX}/${app}:${IMAGE_TAG}" .
 }
 
-build api       apps/api/Dockerfile        production
-build worker    apps/worker/Dockerfile     production
-build scheduler apps/scheduler/Dockerfile  production
+# api/worker/scheduler share a single Dockerfile so BuildKit reuses the
+# `workspace` stage (install + COPY + prisma generate + nx sync) across all
+# three. Migration keeps its own Dockerfile — it installs --prod only and
+# never copies app source, so there is nothing to share.
+build api       Dockerfile                api
+build worker    Dockerfile                worker
+build scheduler Dockerfile                scheduler
 build migration apps/migration/Dockerfile
 
 echo ""

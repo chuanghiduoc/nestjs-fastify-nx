@@ -29,15 +29,23 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # api/worker/scheduler share the root Dockerfile so BuildKit reuses
+        # the `workspace` stage (install + COPY + prisma generate + nx sync)
+        # across all three builds. Migration ships its own Dockerfile because
+        # it installs --prod only and never copies app source.
         include:
           - app: api
-            dockerfile: apps/api/Dockerfile
+            dockerfile: Dockerfile
+            target: api
           - app: worker
-            dockerfile: apps/worker/Dockerfile
+            dockerfile: Dockerfile
+            target: worker
           - app: scheduler
-            dockerfile: apps/scheduler/Dockerfile
+            dockerfile: Dockerfile
+            target: scheduler
           - app: migration
             dockerfile: apps/migration/Dockerfile
+            target: production
 
     steps:
       - uses: actions/checkout@v4
@@ -83,7 +91,7 @@ jobs:
         with:
           context: .
           file: ${{ matrix.dockerfile }}
-          target: production
+          target: ${{ matrix.target }}
           push: true
           # linux/amd64 only by default — flip to `linux/amd64,linux/arm64`
           # if multi-arch is needed; QEMU is already available for that.
