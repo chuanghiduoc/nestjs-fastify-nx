@@ -12,8 +12,16 @@ cd "$(dirname "$0")/.."
 # the host-side substitution that env_file cannot.
 COMPOSE_BASE="--env-file .env -f docker/compose.yml -f docker/compose.dev.yml"
 
+# --no-cache invalidates ALL layers (incl. pnpm install) which rebuilds 3
+# images from scratch — costs ~6-7 min for what is usually a source-only
+# change. Default to incremental builds; set NO_CACHE=1 to force a clean one.
+BUILD_FLAGS=()
+if [[ "${NO_CACHE:-0}" = "1" ]]; then
+  BUILD_FLAGS+=(--no-cache)
+fi
+
 echo "==> Building dev images (api, worker, scheduler)..."
-docker compose $COMPOSE_BASE build --no-cache api worker scheduler
+docker compose $COMPOSE_BASE build "${BUILD_FLAGS[@]}" api worker scheduler
 
 echo ""
 echo "==> Starting / recreating all services..."
