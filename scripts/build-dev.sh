@@ -29,8 +29,22 @@ docker compose $COMPOSE_BASE ps
 
 echo ""
 echo "==> Smoke test: GET /api/v1/health/live"
-curl -sf http://localhost:3000/api/v1/health/live | python3 -m json.tool 2>/dev/null \
-  || curl -s http://localhost:3000/api/v1/health/live
+# Use 127.0.0.1: on Windows / dual-stack hosts `localhost` resolves to ::1 first
+# and curl hangs if the listener is bound only on IPv4. -m caps each attempt; we
+# retry for ~30s while Nest finishes wiring up its providers.
+SMOKE_URL="http://127.0.0.1:3000/api/v1/health/live"
+SMOKE_OUT=""
+for _ in $(seq 1 15); do
+  if SMOKE_OUT=$(curl -sf -m 2 "$SMOKE_URL" 2>/dev/null); then
+    break
+  fi
+  sleep 2
+done
+if [[ -n "$SMOKE_OUT" ]]; then
+  echo "$SMOKE_OUT" | python3 -m json.tool 2>/dev/null || echo "$SMOKE_OUT"
+else
+  echo "Smoke test failed: API did not respond at $SMOKE_URL within 30s"
+fi
 
 # Dev images carry devDeps so unfixed-and-noisy CVEs are normal — gate is OFF
 # (TRIVY_EXIT_CODE=0). Awareness, not blocking. Set TRIVY_SCAN=0 to skip.
