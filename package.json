@@ -15,9 +15,9 @@
   },
   "private": true,
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.1040.0",
-    "@aws-sdk/s3-presigned-post": "^3.1040.0",
-    "@aws-sdk/s3-request-presigner": "^3.1040.0",
+    "@aws-sdk/client-s3": "^3.1041.0",
+    "@aws-sdk/s3-presigned-post": "^3.1041.0",
+    "@aws-sdk/s3-request-presigner": "^3.1041.0",
     "@bull-board/api": "^7.0.0",
     "@bull-board/fastify": "^7.0.0",
     "@fastify/helmet": "^13.0.2",
@@ -56,9 +56,9 @@
     "@sentry/profiling-node": "^10.50.0",
     "@socket.io/redis-adapter": "^8.3.0",
     "argon2": "^0.44.0",
-    "axios": "^1.15.2",
+    "axios": "^1.16.0",
     "better-auth": "^1.6.9",
-    "bullmq": "^5.76.2",
+    "bullmq": "^5.76.5",
     "cache-manager": "^7.2.8",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.15.1",
@@ -79,7 +79,7 @@
     "socket.io": "^4.8.3",
     "tslib": "^2.8.0",
     "uuid": "^14.0.0",
-    "zod": "^4.3.6"
+    "zod": "^4.4.2"
   },
   "devDependencies": {
     "@commitlint/cli": "^20.5.2",
