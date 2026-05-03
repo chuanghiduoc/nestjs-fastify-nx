@@ -54,7 +54,7 @@ jobs:
       BETTER_AUTH_SECRET: integration-better-auth-secret-min-32-chars-long
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
