@@ -58,7 +58,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         with:
           # Pinned to match package.json `packageManager` and the Dockerfiles.
           version: 10.33.0
