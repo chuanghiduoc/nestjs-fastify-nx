@@ -106,7 +106,7 @@
     "@types/nodemailer": "^8.0.0",
     "@types/pg": "^8.20.0",
     "@types/supertest": "^7.2.0",
-    "@vitest/coverage-v8": "~4.1.0",
+    "@vitest/coverage-v8": "~4.1.6",
     "eslint": "^10.3.0",
     "lefthook": "^2.1.6",
     "lint-staged": "^16.4.0",
@@ -118,7 +118,7 @@
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.59.2",
     "vite": "^8.0.11",
-    "vitest": "~4.1.0",
+    "vitest": "~4.1.6",
     "webpack-cli": "^5.1.4"
   },
   "engines": {
