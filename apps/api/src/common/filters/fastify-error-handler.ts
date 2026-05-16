@@ -56,6 +56,15 @@ export function applyFastifyErrorHandler(fastify: FastifyInstance): void {
       reply.header('x-request-id', requestId);
     }
 
+    // Pass-through for errors already shaped as RFC 9457 (e.g. @fastify/rate-limit's
+    // errorResponseBuilder returns { type, title, status, detail, retryAfter }).
+    // Rebuilding via buildProblemDetails here would drop plugin-specific fields.
+    const preShaped = error as unknown as ProblemDetailsLike;
+    if (typeof preShaped.status === 'number' && typeof preShaped.title === 'string') {
+      void reply.status(status).header('content-type', PROBLEM_CONTENT_TYPE).send(preShaped);
+      return;
+    }
+
     void reply
       .status(status)
       .header('content-type', PROBLEM_CONTENT_TYPE)
@@ -70,6 +79,14 @@ export function applyFastifyErrorHandler(fastify: FastifyInstance): void {
         }),
       );
   });
+}
+
+interface ProblemDetailsLike {
+  status?: number;
+  title?: string;
+  type?: string;
+  detail?: string;
+  retryAfter?: number;
 }
 
 function resolveStatus(error: FastifyError): number {

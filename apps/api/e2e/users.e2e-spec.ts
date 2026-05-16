@@ -5,6 +5,7 @@ import { createTestApp, cookieHeaderFromSetCookies, type TestAppContext } from '
 describe('Users E2E', () => {
   let ctx: TestAppContext;
   let cookie: string;
+  let userEmail: string;
 
   beforeAll(async () => {
     ctx = await createTestApp();
@@ -16,9 +17,12 @@ describe('Users E2E', () => {
 
   beforeEach(async () => {
     await ctx.cleaner.truncateAll();
+    // Unique email per test so the strict rate-limit bucket (keyed by ip+email)
+    // never collides across the 6 sign-ups in this suite.
+    userEmail = `me-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
     const signUp = await request(ctx.app.getHttpServer())
       .post('/api/auth/sign-up/email')
-      .send({ email: 'me@example.com', password: 'password123', name: 'Me' });
+      .send({ email: userEmail, password: 'password123', name: 'Me' });
     cookie = cookieHeaderFromSetCookies(signUp.headers['set-cookie']);
   });
 
@@ -29,7 +33,7 @@ describe('Users E2E', () => {
         .set('Cookie', cookie)
         .expect(200);
 
-      expect(res.body.email).toBe('me@example.com');
+      expect(res.body.email).toBe(userEmail);
       expect(res.body.id).toBeDefined();
       expect(res.body.role).toBe('USER');
       // No `data`/`meta` envelope — Stripe-style direct response.
