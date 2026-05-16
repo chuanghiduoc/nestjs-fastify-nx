@@ -27,10 +27,21 @@ if (sentryDsn) {
   });
 }
 
+/**
+ * Safe env integer reader for values consumed before ConfigService is
+ * available. Falls back to `defaultValue` when the env var is absent,
+ * empty, or parses to NaN / a non-positive number.
+ */
+function parseIntEnv(value: string | undefined, defaultValue: number): number {
+  if (value === undefined || value.trim() === '') return defaultValue;
+  const n = Number.parseInt(value, 10);
+  return Number.isFinite(n) && n > 0 ? n : defaultValue;
+}
+
 async function bootstrap() {
   // Read body limit from env early — before the adapter is created — so the
   // Fastify http parser enforces it before any route handler fires.
-  const bodyLimitBytes = Number(process.env['HTTP_BODY_LIMIT_BYTES'] ?? 1_048_576);
+  const bodyLimitBytes = parseIntEnv(process.env['HTTP_BODY_LIMIT_BYTES'], 1_048_576);
 
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
@@ -93,7 +104,7 @@ async function bootstrap() {
 
   // Multipart plugin scoped to upload endpoints. Limits prevent DoS via
   // oversized file uploads independent of the JSON bodyLimit above.
-  const uploadMaxBytes = Number(process.env['UPLOAD_MAX_FILE_BYTES'] ?? 10_485_760);
+  const uploadMaxBytes = parseIntEnv(process.env['UPLOAD_MAX_FILE_BYTES'], 10_485_760);
   await fastify.register(fastifyMultipart, {
     limits: {
       fileSize: uploadMaxBytes,
@@ -113,6 +124,10 @@ async function bootstrap() {
     // Global rate-limit disabled — we apply it only on the auth prefix below.
     // This registration just wires the plugin; per-route limits override it.
     global: false,
+    // preHandler runs after body parsing, so req.body is populated when
+    // keyGenerator fires. The default 'onRequest' hook fires before parsing —
+    // req.body would always be undefined and the email branch would be dead.
+    hook: 'preHandler',
     max: authRateLimitMax,
     timeWindow: authRateLimitWindowMs,
     // Key by IP + email body field so distributed clients on the same NAT
@@ -135,6 +150,20 @@ async function bootstrap() {
       'x-ratelimit-reset': true,
       'retry-after': true,
     },
+  });
+
+  // B2: The rate-limit plugin serializes errorResponseBuilder's return value via
+  // Fastify's default JSON serializer, which sets Content-Type: application/json.
+  // This onSend hook rewrites the Content-Type to application/problem+json for
+  // every 429 response so the repo's RFC 9457 contract is upheld uniformly.
+  fastify.addHook('onSend', (_req, reply, _payload, done) => {
+    if (
+      reply.statusCode === 429 &&
+      !reply.getHeader('content-type')?.toString().includes('problem+json')
+    ) {
+      reply.header('content-type', 'application/problem+json');
+    }
+    done();
   });
 
   // Convert Fastify-level errors (body parser, content-type, schema validation)
@@ -171,11 +200,15 @@ async function bootstrap() {
         // betterAuthHandler threw after hijack — Fastify's error handler will
         // not run because the reply is already hijacked. We must close the
         // connection manually to prevent a slowloris-style hang.
+        Sentry.captureException(err);
         const logger = app.get(Logger);
         logger.error(
           `Better Auth handler threw unexpectedly: ${err instanceof Error ? err.message : String(err)}`,
         );
-        if (!reply.sent && !reply.raw.headersSent) {
+        // reply.sent is always false after hijack (Fastify tracks sent state
+        // internally and hijack detaches that tracking). The meaningful guard
+        // is reply.raw.headersSent — kept for defensive clarity.
+        if (!reply.raw.headersSent) {
           const body = JSON.stringify({
             type: 'https://tools.ietf.org/html/rfc7231#section-6.6.1',
             title: 'Internal Server Error',

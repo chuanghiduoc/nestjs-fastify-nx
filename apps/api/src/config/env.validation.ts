@@ -100,6 +100,10 @@ const envSchema = z
     OUTBOX_POLL_INTERVAL_MS: z.coerce.number().int().min(50).default(1_000),
     OUTBOX_BATCH_SIZE: z.coerce.number().int().min(1).max(1_000).default(50),
     OUTBOX_MAX_ATTEMPTS: z.coerce.number().int().min(1).max(1_000).default(10),
+    // Prisma interactive-transaction timeout. Default 5000 ms is too short when
+    // batchSize rows trigger sync DB writes inside listeners (e.g. audit-log).
+    // P2028 on expiry rolls back processedAt → duplicate re-publish next tick.
+    OUTBOX_TX_TIMEOUT_MS: z.coerce.number().int().min(1000).default(30_000),
 
     // Audit log retention — number of monthly partitions kept. Cleanup task
     // drops anything older on the 1st of each month. Lower bound = 1 to

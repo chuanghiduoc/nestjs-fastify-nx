@@ -34,8 +34,12 @@ function buildPrisma(opts: { claim: (limit: number) => OutboxRow[] }): {
     }),
   );
 
+  // Stub db.$queryRawUnsafe used by checkStuckRows — returns 0 stuck rows so
+  // the periodic check doesn't emit spurious warnings during unit tests.
+  const db = { $queryRawUnsafe: vi.fn(async () => [{ count: BigInt(0) }]) };
+
   return {
-    prisma: { transaction } as unknown as PrismaService,
+    prisma: { transaction, db } as unknown as PrismaService,
     txExecuteCalls,
   };
 }
@@ -66,12 +70,14 @@ describe('OutboxRelayService', () => {
     process.env['OUTBOX_POLL_INTERVAL_MS'] = '60000';
     process.env['OUTBOX_BATCH_SIZE'] = '10';
     process.env['OUTBOX_MAX_ATTEMPTS'] = '5';
+    process.env['OUTBOX_TX_TIMEOUT_MS'] = '30000';
   });
 
   afterEach(() => {
     delete process.env['OUTBOX_POLL_INTERVAL_MS'];
     delete process.env['OUTBOX_BATCH_SIZE'];
     delete process.env['OUTBOX_MAX_ATTEMPTS'];
+    delete process.env['OUTBOX_TX_TIMEOUT_MS'];
   });
 
   it('returns 0 when there is nothing to dispatch', async () => {
@@ -133,6 +139,41 @@ describe('OutboxRelayService', () => {
     expect(await relay.tick()).toBe(0);
     expect(bus.publish).not.toHaveBeenCalled();
     expect(txExecuteCalls).toHaveLength(0);
+  });
+
+  it('passes timeout options to prisma.transaction to prevent P2028 rollback on large batches', async () => {
+    const { prisma } = buildPrisma({ claim: () => [buildRow()] });
+    const bus = buildBus();
+    const relay = new OutboxRelayService(prisma, bus);
+
+    await relay.tick();
+
+    // Verify transaction was called with { timeout, maxWait } so the relay
+    // does not default to Prisma's 5000 ms limit (which causes P2028 under load).
+    expect(prisma.transaction).toHaveBeenCalledWith(
+      expect.any(Function),
+      expect.objectContaining({ timeout: 30_000, maxWait: 5_000 }),
+    );
+  });
+
+  it('logs a warning when stuck rows exist (attempts >= maxAttempts, processedAt IS NULL)', async () => {
+    const { prisma } = buildPrisma({ claim: () => [] });
+    // Override db stub to return 2 stuck rows.
+    (prisma.db.$queryRawUnsafe as ReturnType<typeof vi.fn>).mockResolvedValueOnce([
+      { count: BigInt(2) },
+    ]);
+    const bus = buildBus();
+    const relay = new OutboxRelayService(prisma, bus);
+
+    // Spy on the private logger to assert the warn is emitted.
+    const warnSpy = vi.spyOn(
+      (relay as unknown as { logger: { warn: (m: string) => void } }).logger,
+      'warn',
+    );
+
+    await relay.tick();
+
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('2 permanently-stuck'));
   });
 
   it('skips overlapping ticks while a previous cycle is still running', async () => {

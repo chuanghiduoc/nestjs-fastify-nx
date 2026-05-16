@@ -142,6 +142,38 @@ describe('Auth E2E (Better Auth)', () => {
         .send({ email: 'unknown@example.com', password: 'password123' })
         .expect(401);
     });
+
+    // AUTH_RATE_LIMIT_MAX is set to 3 in test-app.ts so the 4th request hits 429.
+    it('returns 429 with application/problem+json after exceeding rate limit', async () => {
+      const payload = { email: 'ratelimit@example.com', password: 'wrongpassword' };
+      for (let i = 0; i < 3; i++) {
+        await request(ctx.app.getHttpServer()).post('/api/auth/sign-in/email').send(payload);
+      }
+      const res = await request(ctx.app.getHttpServer())
+        .post('/api/auth/sign-in/email')
+        .send(payload)
+        .expect(429);
+
+      expect(res.headers['content-type']).toMatch(/application\/problem\+json/);
+      expect(res.body.status).toBe(429);
+      expect(res.body.title).toBe('Too Many Requests');
+      expect(res.body.retryAfter).toBeGreaterThan(0);
+    });
+  });
+
+  describe('Body size limits', () => {
+    it('returns 413 with application/problem+json when JSON body exceeds bodyLimit', async () => {
+      // HTTP_BODY_LIMIT_BYTES is set to 64 KB in test-app.ts; send 128 KB payload.
+      const oversizedBody = JSON.stringify({ data: 'x'.repeat(130 * 1024) });
+      const res = await request(ctx.app.getHttpServer())
+        .post('/api/auth/sign-up/email')
+        .set('Content-Type', 'application/json')
+        .send(oversizedBody)
+        .expect(413);
+
+      expect(res.headers['content-type']).toMatch(/application\/problem\+json/);
+      expect(res.body.status).toBe(413);
+    });
   });
 
   describe('GET /api/auth/get-session', () => {
