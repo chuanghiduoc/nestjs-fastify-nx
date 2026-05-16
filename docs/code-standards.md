@@ -4,7 +4,7 @@ Standards and conventions enforced across the codebase to maintain production qu
 
 ## Logging
 
-**Use nestjs-pino exclusively** via dependency injection. Never use `console.log`, `console.error`, or `console.warn` in application code.
+**Use nestjs-pino exclusively** via dependency injection. Never use `console.log`, `console.error`, or `console.warn` in application code. Exceptions: one-shot CLI scripts in `apps/migration/` and Webpack/build-time scripts where the NestJS DI container is not available.
 
 ```typescript
 // DO
@@ -62,7 +62,7 @@ export class UserDto {
 // DON'T: create UserApplicationDto and UserPresentationDto unless justified
 ```
 
-**Re-export from module barrel only what is public.** Keep domain entities, repositories, and command/query handlers private.
+**Re-export from module barrel only what is public.** Keep domain entities and repositories private. Command/query handlers and their query types SHOULD also be private by default. Export them from the barrel only when a composition lib or cross-cutting resolver must inject them directly for DI — document each such export with a brief comment explaining why. Prefer `QueryBus.execute(new SomeQuery(...))` over direct handler injection when feasible.
 
 ```typescript
 // libs/modules/users/src/index.ts
@@ -71,6 +71,8 @@ export { UserDto } from './application/dtos/user.dto';
 export { CreateUserCommand } from './application/commands/create-user.command';
 
 // Don't export: User (entity), UserRepository, UserEntity
+// Only export handlers when a composition lib requires direct DI injection
+// (document the reason inline in the barrel).
 ```
 
 ## Module Boundaries
