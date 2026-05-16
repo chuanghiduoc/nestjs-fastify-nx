@@ -17,7 +17,9 @@ export class UserRegisteredListener {
     // the in-process emitter or the outbox relay never produce a second email.
     // Tying the jobId to the immutable `event.eventId` keeps the dedupe stable
     // across retries while remaining unique per registration attempt.
-    const jobId = `welcome-email:${event.eventId}`;
+    // BullMQ rejects ':' in custom jobIds (reserves it for internal keys) —
+    // use '__' as separator instead.
+    const jobId = `welcome-email__${event.eventId}`;
     await this.emailQueue.add(
       'welcome-email',
       {
