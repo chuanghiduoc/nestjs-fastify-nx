@@ -59,9 +59,9 @@ export function applyFastifyErrorHandler(fastify: FastifyInstance): void {
     // Pass-through for errors already shaped as RFC 9457 (e.g. @fastify/rate-limit's
     // errorResponseBuilder returns { type, title, status, detail, retryAfter }).
     // Rebuilding via buildProblemDetails here would drop plugin-specific fields.
-    const preShaped = error as unknown as ProblemDetailsLike;
-    if (typeof preShaped.status === 'number' && typeof preShaped.title === 'string') {
-      void reply.status(status).header('content-type', PROBLEM_CONTENT_TYPE).send(preShaped);
+    // Strict check: all three required fields present + status in HTTP error range.
+    if (isProblemDetailsShape(error)) {
+      void reply.status(status).header('content-type', PROBLEM_CONTENT_TYPE).send(error);
       return;
     }
 
@@ -82,11 +82,23 @@ export function applyFastifyErrorHandler(fastify: FastifyInstance): void {
 }
 
 interface ProblemDetailsLike {
-  status?: number;
-  title?: string;
-  type?: string;
+  status: number;
+  title: string;
+  type: string;
   detail?: string;
   retryAfter?: number;
+}
+
+function isProblemDetailsShape(error: unknown): error is ProblemDetailsLike {
+  if (!error || typeof error !== 'object') return false;
+  const e = error as Record<string, unknown>;
+  return (
+    typeof e['status'] === 'number' &&
+    e['status'] >= 400 &&
+    e['status'] < 600 &&
+    typeof e['title'] === 'string' &&
+    typeof e['type'] === 'string'
+  );
 }
 
 function resolveStatus(error: FastifyError): number {

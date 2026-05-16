@@ -63,6 +63,8 @@ scope:core / scope:contracts
 
 **Key invariant**: `scope:modules` cannot depend on another `scope:modules`. Cross-context aggregation goes through `scope:composition` (one-way: composition → modules, never reverse). Do not "fix" lint errors by adding cross-module imports — extract a composition lib instead.
 
+**Composition discipline (anti-bloat)**: `scope:composition` libs are **orchestrators only** — they wire HTTP routes + call CQRS handlers from multiple modules. Business rules MUST live on the domain entity / value object of the owning module. If a composition lib starts growing its own `domain/` or `application/` layer, the rule is being broken: the logic belongs in a module, and what's missing is a domain event from one module that another module listens to (use the outbox / EventEmitter pattern). The boundary lint will not catch this — it's a code-review smell.
+
 Test files (`*.spec.ts`, `*.integration.ts`, `e2e/**`) are exempt from boundary rules.
 
 ## Where things live
@@ -111,12 +113,18 @@ application/
   commands/        CQRS command handlers
   queries/         CQRS query handlers
   listeners/       domain-event subscribers
-  dtos/            application transport types
+  dtos/            application transport types — PURE TS, no @nestjs/swagger
+                   nor class-validator decorators. Application stays
+                   framework-agnostic so a handler can be reused from REST,
+                   GraphQL, or a queue consumer without dragging HTTP shape.
 infrastructure/
   repositories/    Prisma adapters of domain ports
 presentation/
   controllers/     HTTP handlers (REST)
-  dto/             request/response DTOs (class-validator + Swagger)
+  dto/             request/response DTOs (class-validator + Swagger decorators
+                   live HERE only — never reuse an application DTO as a
+                   presentation DTO, otherwise application starts depending
+                   on @nestjs/swagger and the boundary collapses)
 <context>.module.ts
 index.ts           public barrel — re-export only what consumers need
 ```
@@ -166,16 +174,20 @@ pnpm nx g @nestjs-fastify-nx/tools-generators:module --name=my-feature --directo
 3. **No JWT terminology** — auth is Better Auth cookie sessions. Don't reintroduce `refresh-token`, `JWT blacklist`, `access-token` plumbing.
 4. **No mocks for DB tests** — integration tests must hit real Postgres via Testcontainers (see `libs/testing`).
 5. **No `apps/api/test/`** — e2e specs live at `apps/api/e2e/`. Use `createTestApp()` from `e2e/test-app.ts`.
-6. **Conventional Commits** enforced by lefthook + commitlint. Prefixes: `feat`, `fix`, `chore`, `test`, `docs`, `refactor`, `ci`, `perf`, `build`.
+6. **Conventional Commits** enforced by lefthook + commitlint. Prefixes: `feat`, `fix`, `chore`, `test`, `docs`, `refactor`, `ci`, `perf`, `build`, `revert`. Subjects MUST be lowercase (commitlint `subject-case: lower-case`), max 100 chars.
 7. **DTOs**: validated with `class-validator`, transformed with `class-transformer`, documented with `@nestjs/swagger` decorators. Re-export from module barrel only what consumers (composition libs, controllers) need — keep internals private.
 8. **Module boundaries are sacred** — if lint fails on `@nx/enforce-module-boundaries`, fix the architecture, do not relax the rule.
    8a. **Pre-commit gate (mandatory)** — before any commit, run `pnpm nx affected -t lint test build typecheck --base=main`. Typecheck must be green (commitlint won't catch TS errors). For changes touching `apps/api/`, also run `pnpm nx run api:e2e` locally before pushing — CI integration job will block the PR otherwise. Write tests defensively: unit-test domain logic + handler edge cases, integration-test repositories against real Postgres (Testcontainers), and add an e2e spec for every new endpoint or middleware behavior. Coverage targets: domain + application ≥ 90 %, infrastructure ≥ 60 %, presentation ≥ 30 %.
 9. **API contract is fixed** — successful 2xx returns the resource **directly** (Stripe-style, no `{ data, meta }` envelope); list endpoints return `ListResponseDto<T>` via `@ApiPaginatedResponse`. Errors are **RFC 9457 Problem Details** (`application/problem+json`) emitted by the global exception filter — never hand-roll error bodies. For domain violations throw `BusinessRuleException` from `@nestjs-fastify-nx/core`; for input validation, the global `ProblemDetailsValidationPipe` already handles it. Decorate controllers with `@ApiCommonErrors` from `@nestjs-fastify-nx/contracts` so Swagger documents the error responses. Naming: camelCase JSON keys, snake_case error `code` values (see `ERROR_CODES`), kebab-case HTTP headers (`X-Request-Id`).
-   - **Pagination**: `?page=1&limit=20` (offset-based default). Max `limit` = 100; default = 20. `ListResponseDto<T>` shape: `{ items: T[], total: number, page: number, limit: number, hasMore: boolean }`. Headers: `X-Total-Count` (parallel with `total` for streaming clients), `X-Request-Id` on every response.
-   - **Sorting**: `?sort=createdAt:desc,name:asc` (CSV, colon-separated field:direction). Multiple fields resolved left-to-right.
-   - **Filtering**: simple key=value (`?status=active`); complex filters use dedicated query DTOs — no magic `?filter[field][op]=val` syntax.
-   - **Cursor pagination**: only for streams/feeds where offset is semantically wrong; offset-based is the default for all resource lists.
-   - **Response headers**: `X-Request-Id` echoed on every response; `X-Total-Count` on list responses.
+   - **Pagination**: Offset is the default for resource lists (`?page=1&pageSize=20` via `PaginationDto`, `pageSize` capped at 100). Cursor (`?limit=20&startingAfter=<id>` via `CursorPaginationDto`) is reserved for streams/feeds where offset is semantically wrong. List endpoints return Stripe-style flat envelope `ListResponseDto<T>` = `{ object: 'list', url, data: T[], hasMore, totalCount?, page?, pageSize? }` via `toListResponse()` / `toCursorListResponse()` (`libs/contracts/src/lib/dto/list-response.dto.ts`). Single-resource fetches stay un-enveloped. `totalCount` is exposed in the body — no `X-Total-Count` header (Stripe pattern).
+   - **Sorting**: `?sort=createdAt:desc,name:asc` (CSV, colon-separated field:direction) is the agreed convention. Add a `SortDto` to the query when implementing — not currently consumed by any list handler.
+   - **Filtering**: simple key=value (`?status=active`); complex filters use dedicated query DTOs (see `ListUsersFilterDto extends PaginationDto`) — no magic `?filter[field][op]=val` syntax.
+   - **Response headers**: `X-Request-Id` echoed on every response. No cursor `Link` header — clients follow `hasMore` + the last id in `data[]`.
+   - **Upload**: presign-confirm pattern (`POST /api/v1/upload/{presign,confirm}`). Browser uploads bytes directly to S3 via the issued policy; server only HEADs the object on confirm and verifies size + MIME against the magic-byte allow-list in `libs/modules/upload/src/presentation/controllers/file-signature.ts`. `UPLOAD_MAX_FILE_BYTES` is the single source of truth — wired into both `@fastify/multipart` and the controller's policy cap so both layers reject at the same threshold.
+   - **Cursor encoding (when implementing)**: when wiring `toCursorListResponse`, the cursor passed back to clients MUST be `base64url(${sortField.toISOString()}:${id})` — never the raw id alone, otherwise rows with identical timestamps duplicate or drop across pages. Decode in the repository layer with `WHERE (sortField, id) < (cursorTs, cursorId)`.
+   - **`totalCount` skip policy**: handlers should omit `totalCount` (leave undefined) whenever the underlying table is large enough that COUNT(\*) becomes a hot path. Clients already follow `hasMore` for navigation; total is a UX nicety, not a contract. Never return `-1` — undefined IS the "unknown" signal in the Stripe envelope.
+   - **Sensitive-field redaction**: do NOT rely on `ClassSerializerInterceptor` / `@Exclude`. The repo's policy is _explicit DTO mapping_ — handlers project domain entities into purpose-built DTOs (e.g. `UserProfileDto`) that simply do not declare sensitive columns. Logger redact list (`libs/shared/src/lib/logger-redact.ts`) covers the same fields for structured logs.
+   - **`X-Request-Id` is automatic** — set by `CorrelationIdMiddleware` (NestJS layer) and `fastify-error-handler` (Fastify-level errors before pipeline). Never set it manually in a controller; it always echoes the incoming `x-request-id` or mints a fresh one.
 
 ## Common gotchas
 
@@ -187,7 +199,16 @@ pnpm nx g @nestjs-fastify-nx/tools-generators:module --name=my-feature --directo
 - **Migration app** (`apps/migration`) has an empty allow-list for module boundaries on purpose. Do **not** import domain code there — schema rollouts must stay decoupled from runtime business logic.
 - **TypeScript 6 tsconfig rules**: `baseUrl` is removed (deprecated); path aliases still work via `tsconfig.base.json` `paths`. Do not re-add `baseUrl`. Default inheritance is `ES2022` / `NodeNext` / `NodeNext` from `tsconfig.base.json`. Apps override `module: "CommonJS"` + `moduleResolution: "Node10"` only because Webpack 5 requires CommonJS output — this is a bundler constraint, not a TS 6 issue. Libs inherit all settings from base; do not duplicate `strict*`, `target`, `module`, or `moduleResolution` in `tsconfig.lib.json`. The `ignoreDeprecations: "6.0"` grace period ends at TS 7 — no further suppressions will be possible.
 - **VS Code "Invalid value for '--ignoreDeprecations'"**: VS Code's bundled TypeScript (often older) flags `"6.0"` as invalid. Force the workspace TS via `.vscode/settings.json` → `"typescript.tsdk": "node_modules/typescript/lib"` (committed). If still red after pull: Command Palette → "TypeScript: Select TypeScript Version" → "Use Workspace Version".
-- **Auth rate-limit + body/multipart caps**: Fastify hook `fastify-rate-limit` guards `/api/auth/*` (AUTH_RATE_LIMIT_MAX=5, AUTH_RATE_LIMIT_WINDOW_MS=900000). Multipart upload + raw body limits set via HTTP_BODY_LIMIT_BYTES (1 MB) and UPLOAD_MAX_FILE_BYTES (10 MB) env vars. Validate these before going live.
+- **Auth rate-limit + body/multipart caps**: Fastify plugin `@fastify/rate-limit` guards `/api/auth/*` with a TWO-TIER scheme (Auth0/Cognito pattern). STRICT bucket on credential paths (`sign-in/email`, `sign-up/email`, `request-password-reset`, `reset-password`) — `AUTH_RATE_LIMIT_MAX=5` per `AUTH_RATE_LIMIT_WINDOW_MS=900000` keyed by IP+email. LOOSE bucket on every other `/api/auth/*` route (sign-out, get-session, list-sessions, change-email, delete-user, …) — `AUTH_SESSION_RATE_LIMIT_MAX=60` per `AUTH_SESSION_RATE_LIMIT_WINDOW_MS=60000` keyed by IP. The rate-limit registration MUST be before the betterAuthHandler hook because `reply.hijack()` skips NestJS's ThrottlerGuard. Multipart upload + raw body limits via `HTTP_BODY_LIMIT_BYTES` (1 MB) and `UPLOAD_MAX_FILE_BYTES` (10 MB). Validate these before going live.
+- **FSTWRN004 at boot is expected and harmless.** Fastify warns once when `setErrorHandler` is called on a scope that already has one. We intentionally override the default errorHandler that `NestFastifyAdapter` installs (via `applyFastifyErrorHandler()` in `main.ts`) so Fastify-level failures — body parser, multipart parse, `@fastify/rate-limit` 429, FST*ERR*\* — emit RFC 9457 problem+json instead of Fastify's default JSON shape. The warning is a one-shot at boot, does NOT affect runtime, and is left in stderr on purpose (suppressing it would also need to filter `process.emit('warning', ...)` and Fastify caches the reference at import time, so a runtime filter loses the race anyway).
+- **BullMQ custom jobId MUST NOT contain `:`** — BullMQ reserves `:` for its internal Redis key scheme (`<prefix>:<queue>:<id>:state`) and throws `Custom Id cannot contain :` at `Job.validateOptions`. Use `__` as separator instead. Pattern: `<purpose>__<discriminator>[__<discriminator>…]`. Examples in this repo: `welcome-email__${event.eventId}`, `auth-email__${templateId}__${to}__${ts}`, `dlq__${originalJobId}`. The error is async — it surfaces inside a `failed` queue-event handler or a `BackgroundTask` log line (NOT at the call site), so it is easy to miss in a smoke test. Grep for `\`[^\`]_:._\${._}._\``in`add(...)` callsites whenever you change job naming.
+- **Better Auth email flows are FE-owned UI, BE-owned validation.** Backend wires `sendResetPassword` + `emailVerification.sendVerificationEmail` + `user.deleteUser.sendDeleteAccountVerification` in `libs/infra/auth/src/lib/better-auth.config.ts`. Each callback enqueues a BullMQ job on `QUEUE_NAMES.EMAIL_NOTIFICATION`; the worker process owns SMTP. The link inside the email points at **`FRONTEND_BASE_URL`** — the SPA host that renders these pages:
+  - `GET /reset?token=<t>` → FE form (new password), submits `POST /api/auth/reset-password { token, newPassword }`
+  - `GET /verify-email?token=<t>` → FE confirmation page, submits `POST /api/auth/verify-email { token }`
+  - `GET /delete-account?token=<t>` → FE confirmation page, submits `POST /api/auth/delete-user/callback { token }` (Better Auth handles)
+
+  The API has NO server-rendered HTML for these flows. `FRONTEND_BASE_URL` is REQUIRED in production — `resolveFrontendBase()` throws on boot if missing. In dev it falls back to `BETTER_AUTH_URL` with a runtime warning so smoke tests can still verify the dispatch path, but the link itself will 404 in a real browser. When adding a new auth-side email, mirror the dispatcher pattern — never call `nodemailer` from the API process.
+
 - **Outbox interactive tx timeout**: domain mutations trigger Postgres `sql_outbox` inserts; outbox relay publishes within same tx with OUTBOX_TX_TIMEOUT_MS (default 30s). If events hang, increase timeout or reduce batch size in `libs/infra/messaging`.
 - **Health readiness BullMQ probe**: `/health/ready` now includes a `BullMqHealthIndicator` that pings the email-notification queue (2s timeout). If queue is not bootstrapped before probe, readiness fails.
 - **Metrics endpoint IP allowlist**: `MetricsIpAllowGuard` reads `METRICS_ALLOW_CIDRS` (comma-separated CIDR ranges) and uses `socket.remoteAddress` (not `req.ip`, which is spoofable via X-Forwarded-For). Empty list fails closed (no metrics). Kubernetes typically needs `127.0.0.1/32` or pod CIDR.

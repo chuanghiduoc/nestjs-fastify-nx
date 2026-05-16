@@ -290,3 +290,66 @@ curl -v http://<api-host>:3000/metrics 2>&1 | grep "< HTTP"
 3. Restart the API container for env changes to take effect.
 
 **Escalation:** If metrics are confirmed reachable from the public internet, treat as a security incident — Prometheus metrics expose internal labels, queue depths, and memory usage that aid attackers in profiling the system. Rotate any secrets that may appear in metric labels, restrict access immediately, and review ingress firewall rules.
+
+---
+
+## 7. Upload bucket fills up with orphan objects
+
+**Symptom:** S3 bucket size grows beyond what active users justify; many objects under `uploads/` were never referenced from any domain entity.
+
+**Root cause:** The upload flow is presign → browser POST → confirm. If the browser uploads to S3 but the client never calls `POST /api/v1/upload/confirm`, the object lives forever — the backend never learned about that key.
+
+**Mitigation in code:** `UploadController.confirm()` calls `storage.commit(key)` after MIME + size pass, which sets the S3 object tag `committed=true`. Untagged objects are orphans and MUST be expired by an S3 lifecycle rule.
+
+**Required bucket lifecycle rule (apply at infra time, NOT in code):**
+
+```json
+{
+  "Rules": [
+    {
+      "ID": "expire-uncommitted-uploads",
+      "Status": "Enabled",
+      "Filter": {
+        "And": {
+          "Prefix": "uploads/",
+          "Tags": [{ "Key": "committed", "Value": "false" }]
+        }
+      },
+      "Expiration": { "Days": 1 }
+    }
+  ]
+}
+```
+
+S3 treats a missing tag as no-match, so additionally configure a sweep rule on untagged objects (apply via `aws s3api put-bucket-lifecycle-configuration --bucket <name> --lifecycle-configuration file://lifecycle.json`).
+
+**MinIO equivalent (`mc`):**
+
+```bash
+mc ilm rule add --expire-days 1 --tags "committed=false" myminio/<your-bucket>
+```
+
+**Action when bucket already bloated:** list orphan objects via `aws s3api list-objects-v2` + filter by missing tag, then bulk delete. Cost-wise the lifecycle rule is the right long-term fix; manual cleanup is one-time.
+
+**Escalation:** If orphan rate is high (>10% of total uploads), investigate whether legitimate clients are failing to call `/confirm` (network errors, FE bug, mobile background suspend). Add a Prometheus alert on `s3_bucket_object_count` divergence from a confirmed-upload counter.
+
+---
+
+## 8. Tampered upload (declared MIME ≠ actual binary)
+
+**Symptom:** Worker log entry like `verify-magic-bytes: MIME mismatch — deleting tampered upload`. The object disappears without a `/confirm` follow-through visible to the client.
+
+**Cause:** Async magic-byte verification (`UploadVerificationProcessor` in the worker) reads the first 16 bytes of every confirmed object via S3 `GetObject Range`, runs `detectFileType()` from `libs/shared/src/lib/file-signature.ts`, and deletes the object if the binary signature contradicts the MIME declared at presign time. This catches `.exe` renamed to `.png` and similar evasion attempts.
+
+**Diagnostic:**
+
+- Bull Board UI: `http://localhost:3000/api/admin/queues` → `upload-verification` queue → inspect failed/completed jobs.
+- Worker logs for the specific key: `docker compose logs worker | grep "<key>"`.
+
+**Action:**
+
+1. Genuine tampering — no action needed beyond noting the source IP in audit logs.
+2. False positive on a legitimate format — extend `SIGNATURES` in `libs/shared/src/lib/file-signature.ts` to recognize the binary header, add a unit test, redeploy worker.
+3. Repeated false positives from a single user — review whether the allow-list in the `presign` DTO is too narrow for the use case.
+
+**Escalation:** Surge of deletions correlated with a single IP range may indicate an automated probe. Tighten `/upload/presign` rate-limit (currently 10/min per session — see `PRESIGN_LIMIT` in `upload.controller.ts`) or add a global ban list.

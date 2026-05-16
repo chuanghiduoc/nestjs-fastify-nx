@@ -133,8 +133,70 @@ GET /api/v1/admin/users → AdminUsersController.list (BetterAuthGuard + RolesGu
 
 Protected REST and GraphQL endpoints rely on `BetterAuthGuard` and
 `RolesGuard`, both wired globally as `APP_GUARD` providers in `AppModule`.
-WebSocket upgrades go through `createWsAuthMiddleware` which validates the
-same session cookie — see `apps/api/src/websocket/ws-auth.adapter.ts`.
+
+### Tokenized email flows (password reset, email verify, account delete)
+
+These three flows split responsibility between FE and BE. Backend mints a
+short-lived token, signs it, dispatches the email, and validates the token
+on the follow-up POST. Frontend owns every page the user actually sees.
+
+```
+            ┌────────────── BACKEND (NestJS) ──────────────┐
+user clicks │ POST /api/auth/request-password-reset        │
+"forgot"    │   ↓ Better Auth mints token + persists hash  │
+in FE       │   ↓ sendResetPassword callback fires         │
+            │   ↓ enqueues BullMQ EMAIL_NOTIFICATION job   │
+            │   ↓ worker → SMTP → mailbox                  │
+            └──────────────────┬───────────────────────────┘
+                               ↓
+            mail body links: ${FRONTEND_BASE_URL}/reset?token=<t>
+                               ↓ user clicks
+            ┌────────────── FRONTEND (SPA) ────────────────┐
+            │ GET /reset?token=<t>                         │
+            │   ↓ read token from URL                      │
+            │   ↓ render <form> for new password           │
+            │   ↓ on submit:                               │
+            │       POST /api/auth/reset-password          │
+            │       { token, newPassword }                 │
+            └──────────────────┬───────────────────────────┘
+                               ↓
+            ┌────────────── BACKEND ───────────────────────┐
+            │ Better Auth validates token + hashes pwd     │
+            │ → 200 OK, user can now sign in               │
+            └──────────────────────────────────────────────┘
+```
+
+The same shape applies to the other two flows:
+
+| Flow                   | FE page (must exist)        | API endpoint POSTed back              |
+| ---------------------- | --------------------------- | ------------------------------------- |
+| Password reset         | `/reset?token=<t>`          | `POST /api/auth/reset-password`       |
+| Email verification     | `/verify-email?token=<t>`   | `POST /api/auth/verify-email`         |
+| Delete-account confirm | `/delete-account?token=<t>` | `POST /api/auth/delete-user/callback` |
+
+**Configuration**:
+
+- `FRONTEND_BASE_URL` is the SPA origin (e.g. `https://app.example.com`).
+- In production, boot fails if it is unset — the backend has no UI to fall
+  back to and a stale `BETTER_AUTH_URL` link would 404 in the browser.
+- In dev, missing `FRONTEND_BASE_URL` falls back to `BETTER_AUTH_URL` with a
+  runtime warning; the link itself will 404 in a real browser, but the
+  dispatcher path (callback → BullMQ → SMTP → Mailpit) can still be
+  smoke-tested.
+
+**FE responsibilities (checklist for the consuming SPA)**:
+
+- Render three pages: `/reset`, `/verify-email`, `/delete-account`.
+- Read `?token=` from the URL on mount.
+- For password reset, render a form and POST `{ token, newPassword }` to
+  `/api/auth/reset-password`. For the other two, a single confirm button is
+  enough — POST `{ token }` to the matching endpoint.
+- Show the API error (RFC 9457 `code` / `detail`) on failure; redirect to
+  sign-in on success.
+- Never store the token anywhere — it is single-use and short-lived (1 h
+  for reset, 24 h for verify, configurable in `better-auth.config.ts`).
+  WebSocket upgrades go through `createWsAuthMiddleware` which validates the
+  same session cookie — see `apps/api/src/websocket/ws-auth.adapter.ts`.
 
 **Auth rate-limit**: Fastify hook `fastify-rate-limit` guards `/api/auth/*`
 with configurable per-IP limits (AUTH_RATE_LIMIT_MAX, AUTH_RATE_LIMIT_WINDOW_MS).
@@ -194,7 +256,7 @@ All error responses (400/401/403/404/409/413/415/422/429/5xx) use
 
 ```json
 {
-  "type": "https://api.example.com/errors/validation-failed",
+  "type": "/errors/validation-failed",
   "title": "Validation failed",
   "status": 422,
   "code": "validation_failed",

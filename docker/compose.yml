@@ -75,10 +75,14 @@ services:
     ports:
       - '${MAIL_PORT:-1025}:1025'
       - '${MAILPIT_UI_PORT:-8025}:8025'
-    # Mailpit ships a static binary without wget/curl; use the built-in
-    # `/bin/mailpit version` for a zero-dep readiness probe.
+    # Mailpit ships a static binary on scratch (no shell/wget/curl). The
+    # `version` subcommand contacts GitHub for an update check and exits
+    # non-zero when the release-JSON parser hiccups (known upstream bug in
+    # ghru), so it can't be used as a readiness probe. Use the offline
+    # `help` subcommand — it exits 0 once the binary is loadable, and
+    # mailpit boots in well under start_period.
     healthcheck:
-      test: ['CMD', '/mailpit', 'version']
+      test: ['CMD', '/mailpit', '--help']
       interval: 10s
       timeout: 3s
       retries: 5
