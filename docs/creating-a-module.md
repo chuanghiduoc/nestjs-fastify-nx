@@ -57,6 +57,33 @@ libs/modules/products/
 
 Path alias `@nestjs-fastify-nx/modules-products` is wired into `tsconfig.base.json` automatically.
 
+## Composition Variant
+
+Use `--directory=composition` for cross-cutting aggregates that orchestrate multiple bounded contexts
+(e.g. an admin dashboard that reads from users, audit-log, and upload).
+
+```bash
+pnpm nx g @nestjs-fastify-nx/tools-generators:module --name=billing-report --directory=composition
+```
+
+This produces the same DDD layout under `libs/composition/billing-report/` with two differences:
+
+- Project name: `composition-billing-report` (not `modules-billing-report`)
+- Scope tag: `scope:composition` (not `scope:modules`)
+- Path alias: `@nestjs-fastify-nx/composition-billing-report`
+
+**When to use composition vs modules:**
+
+| Use `modules`                                  | Use `composition`                                            |
+| ---------------------------------------------- | ------------------------------------------------------------ |
+| Single bounded context (users, orders, upload) | Orchestrates 2+ bounded contexts                             |
+| Owns its own Prisma model                      | Aggregates read-models from other modules                    |
+| Other modules must NOT import it               | Composition can depend on `scope:modules`; never the reverse |
+
+The `@nx/enforce-module-boundaries` rule enforces this: `scope:modules` libs cannot import from each
+other, but `scope:composition` can import from `scope:modules`. If you find yourself needing
+cross-module imports inside a `scope:modules` lib, extract a composition lib instead.
+
 ## After Generating
 
 1. **Add Prisma model** to `prisma/schema.prisma`

@@ -138,11 +138,32 @@ describe('module generator', () => {
     expect(controller).not.toContain("@Controller('userss')");
   });
 
-  it('places module under libs/composition when directory=composition', async () => {
+  it('places module under libs/composition with correct project name and scope tag when directory=composition', async () => {
     await moduleGenerator(tree, { name: 'admin', directory: 'composition', withCqrs: false });
 
-    const config = readProjectConfiguration(tree, 'modules-admin');
+    const config = readProjectConfiguration(tree, 'composition-admin');
     expect(config.root).toBe('libs/composition/admin');
+    expect(config.tags).toContain('scope:composition');
+    expect(config.tags).not.toContain('scope:modules');
+    expect(config.tags).toContain('type:feature');
     expect(tree.exists('libs/composition/admin/src/admin.module.ts')).toBe(true);
+  });
+
+  it('composition module tsconfig path uses composition- prefix', async () => {
+    await moduleGenerator(tree, { name: 'billing', directory: 'composition', withCqrs: false });
+
+    const tsconfig = readJson(tree, 'tsconfig.base.json');
+    expect(tsconfig.compilerOptions.paths['@nestjs-fastify-nx/composition-billing']).toEqual([
+      './libs/composition/billing/src/index.ts',
+    ]);
+    expect(tsconfig.compilerOptions.paths['@nestjs-fastify-nx/modules-billing']).toBeUndefined();
+  });
+
+  it('modules module gets scope:modules tag (boundary integrity)', async () => {
+    await moduleGenerator(tree, { name: 'orders', directory: 'modules', withCqrs: false });
+
+    const config = readProjectConfiguration(tree, 'modules-orders');
+    expect(config.tags).toContain('scope:modules');
+    expect(config.tags).not.toContain('scope:composition');
   });
 });

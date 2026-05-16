@@ -151,7 +151,7 @@ Enforced by ESLint + Lefthook + CI.
 | Module not found | `pnpm nx reset && pnpm nx sync` |
 | Stale Nx cache | `pnpm nx reset` |
 | Migration fails | `pnpm prisma migrate resolve --rolled-back <name>` |
-| Outbox stuck | See [docs/runbook.md](./docs/runbook.md#outbox-messages-not-publishing) |
+| Outbox stuck | See [docs/runbook.md](./docs/runbook.md#1-outbox-stuck) |
 
 ## Getting Help
 

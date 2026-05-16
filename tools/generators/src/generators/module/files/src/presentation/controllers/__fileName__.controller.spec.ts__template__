@@ -3,11 +3,23 @@ import { Test } from '@nestjs/testing';
 import { <%= className %>Controller } from './<%= fileName %>.controller';
 
 describe('<%= className %>Controller', () => {
-  it('is defined', async () => {
-    const module = await Test.createTestingModule({
+  async function buildModule() {
+    return Test.createTestingModule({
       controllers: [<%= className %>Controller],
     }).compile();
+  }
 
+  it('is defined', async () => {
+    const module = await buildModule();
     expect(module.get(<%= className %>Controller)).toBeDefined();
+  });
+
+  it('findOne returns the id passed in the route param', async () => {
+    const module = await buildModule();
+    const controller = module.get(<%= className %>Controller);
+
+    const result = controller.findOne('test-id-123');
+
+    expect(result).toEqual({ id: 'test-id-123' });
   });
 });

@@ -23,15 +23,21 @@ export async function moduleGenerator(tree: Tree, options: ModuleGeneratorSchema
   const projectRoot = `${directory}/${moduleNames.fileName}`;
   const offset = offsetFromRoot(projectRoot);
 
+  // Project name and scope tag are derived from the target directory so that
+  // composition modules get `composition-foo` / `scope:composition` rather than
+  // the modules variants — matching the convention in libs/composition/admin.
+  const projectName = `${rawDir}-${moduleNames.fileName}`;
+  const scopeTag = `scope:${rawDir}`;
+
   // `build` and `typecheck` targets are auto-inferred by `@nx/js/typescript`
   // from `tsconfig.lib.json`; `lint` is inferred by `@nx/eslint/plugin` from
   // the workspace eslint config. We only need to declare the test target
   // explicitly because the executor takes module-specific options.
-  addProjectConfiguration(tree, `modules-${moduleNames.fileName}`, {
+  addProjectConfiguration(tree, projectName, {
     root: projectRoot,
     projectType: 'library',
     sourceRoot: `${projectRoot}/src`,
-    tags: [`scope:modules`, `type:feature`],
+    tags: [scopeTag, `type:feature`],
     targets: {
       test: {
         executor: '@nx/vitest:test',
@@ -44,11 +50,11 @@ export async function moduleGenerator(tree: Tree, options: ModuleGeneratorSchema
     },
   });
 
-  // Import path mirrors the project name (`modules-${name}`) so consumers
-  // can tell at a glance which scope a barrel belongs to — `@nestjs-fastify-nx/modules-users`
-  // is unambiguously a bounded-context module, while `@nestjs-fastify-nx/infra-redis`
-  // is infrastructure. Keep the two in lockstep.
-  const importPath = `@nestjs-fastify-nx/modules-${moduleNames.fileName}`;
+  // Import path mirrors the project name so consumers can tell at a glance
+  // which scope a barrel belongs to — `@nestjs-fastify-nx/modules-users` is a
+  // bounded-context module, `@nestjs-fastify-nx/composition-admin` is a
+  // cross-cutting aggregate. Keep name and path in lockstep.
+  const importPath = `@nestjs-fastify-nx/${projectName}`;
   updateJson(tree, 'tsconfig.base.json', (json) => {
     json.compilerOptions.paths ??= {};
     json.compilerOptions.paths[importPath] = [`./${projectRoot}/src/index.ts`];
