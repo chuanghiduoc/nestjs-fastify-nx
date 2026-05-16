@@ -44,6 +44,20 @@ jobs:
           --health-interval 10s
         command: redis-server --port 6380
 
+      minio:
+        image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+        ports:
+          - 9000:9000
+        env:
+          MINIO_ROOT_USER: minioadmin
+          MINIO_ROOT_PASSWORD: minioadmin
+        options: >-
+          --health-cmd "curl -f http://localhost:9000/minio/health/live"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        command: server /data
+
     env:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/nestjs_test_db
       REDIS_CACHE_HOST: localhost
@@ -52,6 +66,11 @@ jobs:
       REDIS_QUEUE_PORT: 6380
       # Better Auth replaces the legacy JWT setup; only one secret is needed.
       BETTER_AUTH_SECRET: integration-better-auth-secret-min-32-chars-long
+      STORAGE_ENDPOINT: http://localhost:9000
+      STORAGE_ACCESS_KEY: minioadmin
+      STORAGE_SECRET_KEY: minioadmin
+      STORAGE_BUCKET: uploads
+      STORAGE_REGION: us-east-1
 
     steps:
       - uses: actions/checkout@v6
