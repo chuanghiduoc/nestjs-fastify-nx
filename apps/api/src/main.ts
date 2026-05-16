@@ -6,6 +6,7 @@ import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify
 import { ConfigService } from '@nestjs/config';
 import { Logger } from 'nestjs-pino';
 import { fastifyHelmet } from '@fastify/helmet';
+import fastifyRateLimit from '@fastify/rate-limit';
 import fastifyMultipart from '@fastify/multipart';
 import { toNodeHandler } from 'better-auth/node';
 import { BETTER_AUTH_INSTANCE, type BetterAuthInstance } from '@nestjs-fastify-nx/infra-auth';
@@ -27,9 +28,13 @@ if (sentryDsn) {
 }
 
 async function bootstrap() {
+  // Read body limit from env early — before the adapter is created — so the
+  // Fastify http parser enforces it before any route handler fires.
+  const bodyLimitBytes = Number(process.env['HTTP_BODY_LIMIT_BYTES'] ?? 1_048_576);
+
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
-    new FastifyAdapter({ trustProxy: 1 }),
+    new FastifyAdapter({ trustProxy: 1, bodyLimit: bodyLimitBytes }),
     { bufferLogs: true },
   );
 
@@ -85,7 +90,52 @@ async function bootstrap() {
     crossOriginOpenerPolicy: { policy: 'same-origin' },
     crossOriginResourcePolicy: { policy: 'same-site' },
   });
-  await fastify.register(fastifyMultipart);
+
+  // Multipart plugin scoped to upload endpoints. Limits prevent DoS via
+  // oversized file uploads independent of the JSON bodyLimit above.
+  const uploadMaxBytes = Number(process.env['UPLOAD_MAX_FILE_BYTES'] ?? 10_485_760);
+  await fastify.register(fastifyMultipart, {
+    limits: {
+      fileSize: uploadMaxBytes,
+      files: 1,
+      fields: 20,
+      parts: 50,
+    },
+  });
+
+  // Rate-limit for /api/auth/* must be registered BEFORE the betterAuthHandler
+  // hook because reply.hijack() bypasses the NestJS request pipeline entirely,
+  // meaning Nest's ThrottlerGuard never sees auth requests.
+  const authRateLimitMax = config.get('AUTH_RATE_LIMIT_MAX', { infer: true });
+  const authRateLimitWindowMs = config.get('AUTH_RATE_LIMIT_WINDOW_MS', { infer: true });
+
+  await fastify.register(fastifyRateLimit, {
+    // Global rate-limit disabled — we apply it only on the auth prefix below.
+    // This registration just wires the plugin; per-route limits override it.
+    global: false,
+    max: authRateLimitMax,
+    timeWindow: authRateLimitWindowMs,
+    // Key by IP + email body field so distributed clients on the same NAT
+    // are not unfairly bucketed together, while still capping per-IP abuse.
+    keyGenerator: (req) => {
+      const body = req.body as Record<string, unknown> | undefined;
+      const email = body && typeof body['email'] === 'string' ? body['email'].toLowerCase() : '';
+      return `${req.ip}:${email}`;
+    },
+    errorResponseBuilder: (_req, context) => ({
+      type: 'https://tools.ietf.org/html/rfc6585#section-4',
+      title: 'Too Many Requests',
+      status: 429,
+      detail: `Rate limit exceeded. Try again in ${Math.ceil(context.ttl / 1000)} seconds.`,
+      retryAfter: Math.ceil(context.ttl / 1000),
+    }),
+    addHeaders: {
+      'x-ratelimit-limit': true,
+      'x-ratelimit-remaining': true,
+      'x-ratelimit-reset': true,
+      'retry-after': true,
+    },
+  });
 
   // Convert Fastify-level errors (body parser, content-type, schema validation)
   // into RFC 9457 Problem Details. These fire BEFORE the NestJS exception
@@ -96,16 +146,52 @@ async function bootstrap() {
   // Must run before global validation pipes — Better Auth handles its own body parsing.
   const auth = app.get<BetterAuthInstance>(BETTER_AUTH_INSTANCE);
   const betterAuthHandler = toNodeHandler(auth.handler);
-  fastify.all('/api/auth/*', async (req, reply) => {
-    // Fastify consumes the request stream into `req.body`. Better Auth's
-    // toNodeHandler reads from req.raw — propagate the parsed body so its
-    // fallback path can re-serialize it into a Web Request.
-    if (req.body !== undefined && (req.raw as unknown as { body?: unknown }).body === undefined) {
-      (req.raw as unknown as { body: unknown }).body = req.body;
-    }
-    reply.hijack();
-    await betterAuthHandler(req.raw, reply.raw);
-  });
+  fastify.all(
+    '/api/auth/*',
+    {
+      config: {
+        // Apply the auth-specific rate limit on these routes.
+        rateLimit: {
+          max: authRateLimitMax,
+          timeWindow: authRateLimitWindowMs,
+        },
+      },
+    },
+    async (req, reply) => {
+      // Fastify consumes the request stream into `req.body`. Better Auth's
+      // toNodeHandler reads from req.raw — propagate the parsed body so its
+      // fallback path can re-serialize it into a Web Request.
+      if (req.body !== undefined && (req.raw as unknown as { body?: unknown }).body === undefined) {
+        (req.raw as unknown as { body: unknown }).body = req.body;
+      }
+      reply.hijack();
+      try {
+        await betterAuthHandler(req.raw, reply.raw);
+      } catch (err) {
+        // betterAuthHandler threw after hijack — Fastify's error handler will
+        // not run because the reply is already hijacked. We must close the
+        // connection manually to prevent a slowloris-style hang.
+        const logger = app.get(Logger);
+        logger.error(
+          `Better Auth handler threw unexpectedly: ${err instanceof Error ? err.message : String(err)}`,
+        );
+        if (!reply.sent && !reply.raw.headersSent) {
+          const body = JSON.stringify({
+            type: 'https://tools.ietf.org/html/rfc7231#section-6.6.1',
+            title: 'Internal Server Error',
+            status: 500,
+          });
+          reply.raw.writeHead(500, {
+            'Content-Type': 'application/problem+json',
+            'Content-Length': Buffer.byteLength(body),
+          });
+          reply.raw.end(body);
+        }
+        // Forcibly destroy the socket so half-open connections don't linger.
+        reply.raw.socket?.destroy();
+      }
+    },
+  );
 
   if (config.get('BULL_BOARD_ENABLED', { infer: true })) {
     // Mounted as a Fastify plugin, so Nest's `setGlobalPrefix('api/v1')` does

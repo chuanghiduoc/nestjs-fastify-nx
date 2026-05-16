@@ -106,6 +106,17 @@ const envSchema = z
     // avoid zero-retention misconfiguration purging the active partition.
     AUDIT_LOG_RETENTION_MONTHS: z.coerce.number().int().min(1).max(120).default(12),
 
+    // Auth rate limiting — applied on /api/auth/* before the hijack handler,
+    // since Better Auth bypasses NestJS ThrottlerGuard entirely.
+    AUTH_RATE_LIMIT_MAX: z.coerce.number().int().min(1).default(5),
+    AUTH_RATE_LIMIT_WINDOW_MS: z.coerce.number().int().min(1000).default(900_000),
+
+    // HTTP body size caps — enforced by Fastify's built-in body parser (JSON)
+    // and @fastify/multipart respectively. Both are read at bootstrap time so
+    // they apply before any route handler runs.
+    HTTP_BODY_LIMIT_BYTES: z.coerce.number().int().min(1024).default(1_048_576),
+    UPLOAD_MAX_FILE_BYTES: z.coerce.number().int().min(1024).default(10_485_760),
+
     // Bull Board
     BULL_BOARD_ENABLED: z
       .string()
