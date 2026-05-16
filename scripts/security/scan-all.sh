@@ -14,6 +14,21 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=./_lib.sh
 source "${SCRIPT_DIR}/_lib.sh"
 
+if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
+  echo "Usage: ./scripts/security/scan-all.sh [--help]"
+  echo ""
+  echo "Runs all security scanners in order:"
+  echo "  1. Gitleaks   — secret detection"
+  echo "  2. OSV        — dependency CVEs"
+  echo "  3. Semgrep    — SAST"
+  echo "  4. Trivy      — image CVEs (skipped if images not built)"
+  echo ""
+  echo "Env flags:"
+  echo "  IMAGE_NAMESPACE  Required for Trivy (defaults to 'local')"
+  echo "  IMAGE_TAG        Image tag (default: latest)"
+  exit 0
+fi
+
 sec::source_env
 
 failures=()

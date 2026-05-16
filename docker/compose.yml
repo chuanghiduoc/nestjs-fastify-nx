@@ -48,7 +48,7 @@ services:
       retries: 5
 
   minio:
-    image: minio/minio:latest
+    image: minio/minio:RELEASE.2025-05-24T17-08-30Z
     restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:
@@ -60,9 +60,15 @@ services:
     ports:
       - '${MINIO_PORT:-9000}:9000'
       - '${MINIO_CONSOLE_PORT:-9001}:9001'
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:9000/minio/health/ready']
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
 
   mailpit:
-    image: axllent/mailpit:latest
+    image: axllent/mailpit:v1.27.11
     restart: unless-stopped
     environment:
       TZ: ${TZ:-UTC}
@@ -115,4 +121,3 @@ services:
 volumes:
   postgres_data:
   minio_data:
-  mailpit_data:

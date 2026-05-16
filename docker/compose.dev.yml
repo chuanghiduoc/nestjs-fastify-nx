@@ -1,4 +1,23 @@
 services:
+  # One-shot: creates the STORAGE_BUCKET if it does not already exist.
+  # Runs after minio is healthy; restarts on failure until mc alias connects.
+  minio-init:
+    image: minio/mc:RELEASE.2025-05-21T01-59-54Z
+    restart: 'no'
+    depends_on:
+      minio:
+        condition: service_healthy
+    env_file: ../.env
+    entrypoint: >
+      /bin/sh -c "
+        until mc alias set local http://minio:9000 $$MINIO_ROOT_USER $$MINIO_ROOT_PASSWORD; do
+          echo 'waiting for minio...'; sleep 2;
+        done;
+        mc mb -p local/$$STORAGE_BUCKET;
+        mc anonymous set download local/$$STORAGE_BUCKET || true;
+        echo 'bucket ready: '$$STORAGE_BUCKET
+      "
+
   migration:
     build:
       context: ..
@@ -55,6 +74,8 @@ services:
         condition: service_healthy
       migration:
         condition: service_completed_successfully
+      redis-cache:
+        condition: service_healthy
       redis-queue:
         condition: service_healthy
     restart: unless-stopped

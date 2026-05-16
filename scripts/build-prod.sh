@@ -8,31 +8,52 @@
 #   docker compose --env-file .env -f docker/compose.yml -f docker/compose.prod.yml up -d
 #
 # IMAGE_REGISTRY / IMAGE_NAMESPACE / IMAGE_TAG are read from .env (sourced
-# below) or from the calling shell. IMAGE_NAMESPACE must be set — leaving
-# it empty would produce malformed tags like `ghcr.io//api:latest`.
+# below) or from the calling shell. If IMAGE_NAMESPACE is empty a 'local'
+# fallback is used so the script always completes — set it before pushing.
 set -euo pipefail
 
-cd "$(dirname "$0")/.."
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-if [[ -f .env ]]; then
-  # shellcheck disable=SC1091
-  set -a; source .env; set +a
+# Source shared color helpers.
+# shellcheck disable=SC1091
+source "${SCRIPT_DIR}/security/_lib.sh"
+
+if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
+  echo "Usage: ./scripts/build-prod.sh [--help]"
+  echo ""
+  echo "Builds production images for api, worker, scheduler, and migration."
+  echo "Reads IMAGE_REGISTRY / IMAGE_NAMESPACE / IMAGE_TAG from .env or environment."
+  echo ""
+  echo "Env flags:"
+  echo "  TRIVY_SCAN=0        Skip Trivy gate"
+  echo "  TRIVY_EXIT_CODE=0   Demote Trivy failures to warnings"
+  echo "  IMAGE_NAMESPACE     Required for registry push; defaults to 'local' for smoke"
+  echo ""
+  echo "Examples:"
+  echo "  ./scripts/build-prod.sh"
+  echo "  TRIVY_EXIT_CODE=0 ./scripts/build-prod.sh   # warn-only scan"
+  echo "  TRIVY_SCAN=0 ./scripts/build-prod.sh        # skip scan"
+  exit 0
 fi
+
+cd "$(sec::repo_root)"
+
+sec::source_env
 
 IMAGE_REGISTRY="${IMAGE_REGISTRY:-ghcr.io}"
 IMAGE_NAMESPACE="${IMAGE_NAMESPACE:-}"
 IMAGE_TAG="${IMAGE_TAG:-latest}"
 
 if [[ -z "$IMAGE_NAMESPACE" ]]; then
-  echo "ERROR: IMAGE_NAMESPACE is empty." >&2
-  echo "Set it in .env (e.g. IMAGE_NAMESPACE=your-org/your-repo) — the same" >&2
-  echo "value docker/compose.prod.yml uses to resolve image references." >&2
-  exit 1
+  sec::warn "IMAGE_NAMESPACE is not set — falling back to 'local' for smoke test."
+  sec::warn "Set IMAGE_NAMESPACE in .env (e.g. IMAGE_NAMESPACE=your-org/your-repo)"
+  sec::warn "before pushing to a registry or running docker/compose.prod.yml."
+  IMAGE_NAMESPACE="local"
 fi
 
 PREFIX="${IMAGE_REGISTRY}/${IMAGE_NAMESPACE}"
 
-echo "==> Building production images under ${PREFIX}/*:${IMAGE_TAG}"
+sec::log "Building production images under ${PREFIX}/*:${IMAGE_TAG}"
 
 # SBOM + max-mode provenance attestations let Scout/Trivy/registry policy engines
 # reason about the image without re-indexing the filesystem. Buildx ships them
@@ -59,7 +80,7 @@ build scheduler Dockerfile                scheduler
 build migration apps/migration/Dockerfile
 
 echo ""
-echo "==> All production images built:"
+sec::ok "All production images built:"
 docker images --format 'table {{.Repository}}:{{.Tag}}\t{{.Size}}\t{{.CreatedSince}}' \
   | grep -E "^${PREFIX}/(api|worker|scheduler|migration):${IMAGE_TAG}\b" || true
 
@@ -67,16 +88,16 @@ docker images --format 'table {{.Repository}}:{{.Tag}}\t{{.Size}}\t{{.CreatedSin
 # pass TRIVY_EXIT_CODE=0 to demote to warn-only, TRIVY_SCAN=0 to skip entirely.
 if [[ "${TRIVY_SCAN:-1}" = "1" ]]; then
   echo ""
-  echo "==> Image vulnerability scan (Trivy)"
+  sec::log "Image vulnerability scan (Trivy)"
   ./scripts/security/scan-images.sh || {
     echo ""
-    echo "Trivy gate failed. To inspect:  ./scripts/security/scan-images.sh <app>"
-    echo "To bypass for a quick local smoke:  TRIVY_EXIT_CODE=0 ./scripts/build-prod.sh"
+    sec::err "Trivy gate failed. To inspect:  ./scripts/security/scan-images.sh <app>"
+    sec::err "To bypass for a quick local smoke:  TRIVY_EXIT_CODE=0 ./scripts/build-prod.sh"
     exit 1
   }
 fi
 
 echo ""
-echo "==> Bring the stack up with the same image refs:"
+sec::ok "Bring the stack up with the same image refs:"
 echo "    docker compose --env-file .env -f docker/compose.yml -f docker/compose.prod.yml up -d"
-echo "Done."
+sec::ok "Done."

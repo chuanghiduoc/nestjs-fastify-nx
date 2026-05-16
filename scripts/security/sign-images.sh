@@ -13,6 +13,23 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=./_lib.sh
 source "${SCRIPT_DIR}/_lib.sh"
 
+if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
+  echo "Usage: ./scripts/security/sign-images.sh [ACTION] [APP...] [--help]"
+  echo ""
+  echo "Actions:"
+  echo "  sign        Sign images with Sigstore Fulcio keyless OIDC (default: verify)"
+  echo "  verify      Verify signature + attestations"
+  echo "  attest-sbom Attach SBOM attestation (requires SBOM_DIR)"
+  echo ""
+  echo "Env flags:"
+  echo "  COSIGN_VERSION    Override Cosign version (default: v2.4.1)"
+  echo "  IMAGE_NAMESPACE   Required — e.g. your-org/your-repo"
+  echo "  IMAGE_TAG         Tag to sign/verify (default: latest)"
+  echo "  COSIGN_IDENTITY   Required for verify — workflow ref URL"
+  echo "  SBOM_DIR          Required for attest-sbom — dir with .sbom.json files"
+  exit 0
+fi
+
 sec::source_env
 cd "$(sec::repo_root)"
 

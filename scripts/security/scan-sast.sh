@@ -7,6 +7,18 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=./_lib.sh
 source "${SCRIPT_DIR}/_lib.sh"
 
+if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
+  echo "Usage: ./scripts/security/scan-sast.sh [MODE] [--help]"
+  echo ""
+  echo "Modes:"
+  echo "  (none)    Gate on ERROR-level findings (default, CI parity)"
+  echo "  --audit   Show all severities without failing"
+  echo ""
+  echo "Env flags:"
+  echo "  SEMGREP_VERSION   Override image version (default: 1.99.0)"
+  exit 0
+fi
+
 cd "$(sec::repo_root)"
 
 SEMGREP_VERSION="${SEMGREP_VERSION:-1.99.0}"
