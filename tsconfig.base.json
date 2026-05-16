@@ -19,7 +19,6 @@
     "strictNullChecks": true,
     "forceConsistentCasingInFileNames": true,
     "noFallthroughCasesInSwitch": true,
-    "baseUrl": ".",
     "paths": {
       "@nestjs-fastify-nx/core": ["./libs/core/src/index.ts"],
       "@nestjs-fastify-nx/shared": ["./libs/shared/src/index.ts"],

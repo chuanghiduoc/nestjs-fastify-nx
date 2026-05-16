@@ -1,6 +1,7 @@
 import { defineConfig } from 'prisma/config';
-import { PrismaPg } from '@prisma/adapter-pg';
 
+// Driver adapter (PrismaPg) is configured at runtime in PrismaService,
+// not here — `adapter` is not a valid PrismaConfig field in Prisma 7.
 export default defineConfig({
   schema: 'prisma/schema.prisma',
   migrations: {
@@ -8,10 +9,5 @@ export default defineConfig({
   },
   datasource: {
     url: process.env['DATABASE_URL'] ?? '',
-  },
-  adapter: () => {
-    const url = process.env['DATABASE_URL'];
-    if (!url) throw new Error('DATABASE_URL is not set');
-    return new PrismaPg({ connectionString: url });
   },
 });

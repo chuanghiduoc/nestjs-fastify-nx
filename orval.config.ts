@@ -10,7 +10,7 @@ export default defineConfig({
       schemas: 'libs/api-client/src/generated/schemas',
       client: 'axios',
       mode: 'tags-split',
-      prettier: true,
+      formatter: 'prettier',
       override: {
         mutator: {
           path: 'libs/api-client/src/lib/axios-instance.ts',

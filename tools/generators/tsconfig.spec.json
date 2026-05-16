@@ -2,9 +2,8 @@
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "outDir": "../../dist/out-tsc",
-    "declaration": true,
-    "ignoreDeprecations": "6.0",
-    "types": ["vitest/globals", "vitest/importMeta", "node", "vitest"]
+    "types": ["vitest/globals", "vitest/importMeta", "node", "vitest"],
+    "ignoreDeprecations": "6.0"
   },
   "include": [
     "vite.config.ts",

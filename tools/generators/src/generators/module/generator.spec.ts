@@ -1,3 +1,4 @@
+/// <reference types="vitest/globals" />
 import { createTreeWithEmptyWorkspace } from '@nx/devkit/testing';
 import { readProjectConfiguration, readJson } from '@nx/devkit';
 import type { Tree } from '@nx/devkit';
