@@ -33,6 +33,8 @@ for arg in "$@"; do
       echo "  --keep-volumes  Skip -v flag — named volumes are preserved"
       echo "  --help          Show this help text"
       echo ""
+      echo "WARNING: --prod removes prod volumes; use --keep-volumes to preserve data"
+      echo ""
       echo "Examples:"
       echo "  ./scripts/teardown.sh                  # dev stack, remove volumes"
       echo "  ./scripts/teardown.sh --keep-volumes   # dev stack, keep volumes"

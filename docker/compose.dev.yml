@@ -10,11 +10,12 @@ services:
     env_file: ../.env
     entrypoint: >
       /bin/sh -c "
-        until mc alias set local http://minio:9000 $$MINIO_ROOT_USER $$MINIO_ROOT_PASSWORD; do
-          echo 'waiting for minio...'; sleep 2;
+        for i in $$(seq 1 15); do
+          mc alias set local http://minio:9000 $$MINIO_ROOT_USER $$MINIO_ROOT_PASSWORD && break;
+          echo 'waiting for minio... attempt '$$i; sleep 2;
         done;
+        mc alias set local http://minio:9000 $$MINIO_ROOT_USER $$MINIO_ROOT_PASSWORD || { echo 'minio-init: cannot reach minio after 30s'; exit 1; };
         mc mb -p local/$$STORAGE_BUCKET;
-        mc anonymous set download local/$$STORAGE_BUCKET || true;
         echo 'bucket ready: '$$STORAGE_BUCKET
       "
 
@@ -53,6 +54,10 @@ services:
         condition: service_healthy
       redis-queue:
         condition: service_healthy
+      minio:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
     restart: unless-stopped
 
   worker:
@@ -78,6 +83,10 @@ services:
         condition: service_healthy
       redis-queue:
         condition: service_healthy
+      minio:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
     restart: unless-stopped
     healthcheck:
       test:
@@ -115,6 +124,10 @@ services:
         condition: service_healthy
       redis-queue:
         condition: service_healthy
+      minio:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
     restart: unless-stopped
     healthcheck:
       test:
