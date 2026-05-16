@@ -32,10 +32,17 @@ function intEnv(name: string, fallback: number): number {
  * even if the operator accidentally runs more than one instance.
  *
  * Configuration (env):
- *   OUTBOX_POLL_INTERVAL_MS — milliseconds between polling cycles (default 1000)
- *   OUTBOX_BATCH_SIZE      — max rows fetched per cycle (default 50)
- *   OUTBOX_MAX_ATTEMPTS    — rows beyond this attempt count are skipped and
- *                            require manual inspection (default 10)
+ *   OUTBOX_POLL_INTERVAL_MS  — milliseconds between polling cycles (default 1000)
+ *   OUTBOX_BATCH_SIZE        — max rows fetched per cycle (default 50)
+ *   OUTBOX_MAX_ATTEMPTS      — rows beyond this attempt count are skipped and
+ *                              require manual inspection (default 10)
+ *   OUTBOX_TX_TIMEOUT_MS     — Prisma interactive-transaction timeout in ms
+ *                              (default 30000). The default Prisma timeout of
+ *                              5000 ms is too short when batchSize rows trigger
+ *                              synchronous DB writes inside bus.publish (e.g.
+ *                              audit-log listener). Exceeding the timeout causes
+ *                              a P2028 rollback which rolls back processedAt →
+ *                              every published event re-fires on the next tick.
  */
 @Injectable()
 export class OutboxRelayService implements OnModuleInit, OnModuleDestroy {
@@ -43,6 +50,7 @@ export class OutboxRelayService implements OnModuleInit, OnModuleDestroy {
   private readonly pollIntervalMs = intEnv('OUTBOX_POLL_INTERVAL_MS', 1_000);
   private readonly batchSize = intEnv('OUTBOX_BATCH_SIZE', 50);
   private readonly maxAttempts = intEnv('OUTBOX_MAX_ATTEMPTS', 10);
+  private readonly txTimeoutMs = intEnv('OUTBOX_TX_TIMEOUT_MS', 30_000);
   private timer?: NodeJS.Timeout;
   private running = false;
   private stopped = false;
@@ -75,28 +83,57 @@ export class OutboxRelayService implements OnModuleInit, OnModuleDestroy {
     if (this.running || this.stopped) return 0;
     this.running = true;
     try {
-      return await this.dispatchBatch();
+      const dispatched = await this.dispatchBatch();
+      // Rows with attempts >= maxAttempts are excluded from the claim WHERE clause
+      // and are never dispatched or warned inside dispatchBatch (they are simply
+      // invisible to the relay). A separate count surfaces them so operators can
+      // act before the backlog silently grows.
+      await this.checkStuckRows();
+      return dispatched;
     } finally {
       this.running = false;
     }
   }
 
+  private async checkStuckRows(): Promise<void> {
+    try {
+      const result = await this.prisma.db.$queryRawUnsafe<[{ count: bigint }]>(
+        `SELECT COUNT(*) AS count FROM "outbox_events" WHERE attempts >= $1 AND "processedAt" IS NULL`,
+        this.maxAttempts,
+      );
+      const stuck = Number(result[0]?.count ?? 0);
+      if (stuck > 0) {
+        this.logger.warn(
+          `Outbox has ${stuck} permanently-stuck row(s) (attempts >= maxAttempts=${this.maxAttempts}); manual intervention required`,
+        );
+      }
+    } catch (err) {
+      // Non-fatal — stuck-row monitoring must not disrupt normal relay operation.
+      this.logger.error(`Outbox stuck-row check failed: ${String(err)}`);
+    }
+  }
+
   /**
-   * Claim a batch of rows atomically: select unprocessed rows with
-   * `FOR UPDATE SKIP LOCKED`, bump their `attempts` counter and return them.
-   * The bump acts as a soft lock that survives transaction commit — once a
-   * row's `attempts` is incremented, another relay instance picking it up in
-   * a later cycle will see the new value, but it will still respect the
-   * `processedAt IS NULL` guard until we mark it processed below.
+   * Claim, publish, and mark rows processed — all within a single transaction.
    *
-   * If the relay crashes between claim and publish, the row remains
-   * unprocessed but with attempts > 0; the polling loop will retry up to
-   * `maxAttempts` before giving up.
+   * Keeping the Postgres row-level lock alive until after publish prevents a
+   * second replica from re-claiming the same row while the first is mid-flight.
+   * The trade-off is a slightly longer transaction (~ms for the publish call),
+   * which is acceptable given that the bus call is in-process.
+   *
+   * Row-level isolation guarantees:
+   *   - Claim: `FOR UPDATE SKIP LOCKED` acquires exclusive locks.
+   *   - Publish: executes inside the open transaction (lock still held).
+   *   - Mark processed / record error: committed atomically at the end.
+   *   - On crash between claim and commit: the transaction rolls back,
+   *     attempts was incremented by the UPDATE, so the row retries up to
+   *     `maxAttempts` before requiring manual intervention.
    */
   private async dispatchBatch(): Promise<number> {
-    const rows = await this.prisma.transaction(async (tx) => {
-      const claimed = await tx.$queryRawUnsafe<OutboxRow[]>(
-        `WITH locked AS (
+    return this.prisma.transaction(
+      async (tx) => {
+        const rows = await tx.$queryRawUnsafe<OutboxRow[]>(
+          `WITH locked AS (
            SELECT id
            FROM "outbox_events"
            WHERE "processedAt" IS NULL AND attempts < $1
@@ -109,41 +146,53 @@ export class OutboxRelayService implements OnModuleInit, OnModuleDestroy {
            FROM locked
           WHERE o.id = locked.id
          RETURNING o.id, o."eventType", o."aggregateId", o.payload, o.attempts`,
-        this.maxAttempts,
-        this.batchSize,
-      );
-      return claimed;
-    });
-
-    if (rows.length === 0) return 0;
-
-    let dispatched = 0;
-    for (const row of rows) {
-      try {
-        const event: DomainEvent = {
-          eventId: row.payload.eventId,
-          eventType: row.eventType,
-          aggregateId: row.aggregateId,
-          occurredAt: new Date(row.payload.occurredAt),
-          payload: row.payload.payload,
-        };
-        await this.bus.publish(event);
-        await this.prisma.db.outboxEvent.update({
-          where: { id: row.id },
-          data: { processedAt: new Date(), lastError: null },
-        });
-        dispatched++;
-      } catch (err) {
-        const message = String(err);
-        this.logger.error(
-          `Outbox dispatch failed for ${row.eventType} (id=${row.id}, attempt=${row.attempts}) — ${message}`,
+          this.maxAttempts,
+          this.batchSize,
         );
-        await this.prisma.db.outboxEvent.update({
-          where: { id: row.id },
-          data: { lastError: message.slice(0, 2_000) },
-        });
-      }
-    }
-    return dispatched;
+
+        if (rows.length === 0) return 0;
+
+        let dispatched = 0;
+        for (const row of rows) {
+          if (row.attempts > this.maxAttempts) {
+            // Row has exhausted retries — log a warning so ops can inspect and
+            // manually resolve the stuck event without silently dropping it.
+            this.logger.warn(
+              `Outbox row ${row.id} (${row.eventType}) has exceeded maxAttempts=${this.maxAttempts} — skipping; manual intervention required`,
+            );
+            continue;
+          }
+
+          try {
+            const event: DomainEvent = {
+              eventId: row.payload.eventId,
+              eventType: row.eventType,
+              aggregateId: row.aggregateId,
+              occurredAt: new Date(row.payload.occurredAt),
+              payload: row.payload.payload,
+            };
+            await this.bus.publish(event);
+            await tx.$executeRawUnsafe(
+              `UPDATE "outbox_events" SET "processedAt" = $1, "lastError" = NULL WHERE id = $2`,
+              new Date(),
+              row.id,
+            );
+            dispatched++;
+          } catch (err) {
+            const message = String(err);
+            this.logger.error(
+              `Outbox dispatch failed for ${row.eventType} (id=${row.id}, attempt=${row.attempts}) — ${message}`,
+            );
+            await tx.$executeRawUnsafe(
+              `UPDATE "outbox_events" SET "lastError" = $1 WHERE id = $2`,
+              message.slice(0, 2_000),
+              row.id,
+            );
+          }
+        }
+        return dispatched;
+      },
+      { timeout: this.txTimeoutMs, maxWait: 5_000 },
+    );
   }
 }

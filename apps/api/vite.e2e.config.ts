@@ -13,5 +13,8 @@ export default defineConfig({
     pool: 'forks',
     fileParallelism: false,
     reporters: ['default'],
+    // Boot Postgres + Redis once for the entire e2e run; each spec calls
+    // databaseCleaner.truncateAll() in beforeEach to maintain isolation.
+    globalSetup: ['./e2e/global-setup.ts'],
   },
 });

@@ -9,6 +9,16 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=./_lib.sh
 source "${SCRIPT_DIR}/_lib.sh"
 
+if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
+  echo "Usage: ./scripts/security/scan-deps.sh [--help]"
+  echo ""
+  echo "Scans pnpm-lock.yaml against the OSV.dev vulnerability database."
+  echo ""
+  echo "Env flags:"
+  echo "  OSV_VERSION   Override image version (default: v2.0.2)"
+  exit 0
+fi
+
 cd "$(sec::repo_root)"
 
 OSV_VERSION="${OSV_VERSION:-v2.0.2}"

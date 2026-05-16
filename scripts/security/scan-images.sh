@@ -13,6 +13,21 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=./_lib.sh
 source "${SCRIPT_DIR}/_lib.sh"
 
+if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
+  echo "Usage: ./scripts/security/scan-images.sh [APP...] [--help]"
+  echo ""
+  echo "Arguments:"
+  echo "  APP...   Image names to scan (default: api worker scheduler migration)"
+  echo ""
+  echo "Env flags:"
+  echo "  TRIVY_VERSION     Override Trivy version (default: 0.62.0)"
+  echo "  TRIVY_SEVERITY    Severity filter (default: HIGH,CRITICAL)"
+  echo "  TRIVY_EXIT_CODE   1 = gate (default), 0 = warn-only"
+  echo "  IMAGE_NAMESPACE   Required — image prefix (e.g. your-org/your-repo)"
+  echo "  IMAGE_TAG         Tag to scan (default: latest)"
+  exit 0
+fi
+
 sec::source_env
 cd "$(sec::repo_root)"
 

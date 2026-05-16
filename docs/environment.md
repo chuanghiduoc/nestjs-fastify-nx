@@ -40,6 +40,16 @@ Copy `.env.example` to `.env` and fill in the values.
 | `STORAGE_BUCKET`     | `uploads`               | Yes                  | Default bucket name    |
 | `STORAGE_REGION`     | `us-east-1`             | No                   | S3 region              |
 
+**Upload pattern** — clients call `POST /api/v1/upload/presign` to receive a
+short-lived (5 min) S3 presigned-POST policy, upload the bytes browser→S3
+directly, then call `POST /api/v1/upload/confirm` so the server HEADs the
+object and verifies size + MIME via magic-byte detection
+(`libs/modules/upload/src/presentation/controllers/file-signature.ts`). The
+allow-list is hard-coded to `image/jpeg`, `image/png`, `image/gif`,
+`image/webp`, `application/pdf`. Both the multipart parser and the presign
+policy honour `UPLOAD_MAX_FILE_BYTES` so the two layers reject at the same
+threshold.
+
 ## Authentication (Better Auth)
 
 Auth is handled by [Better Auth](https://www.better-auth.com/) using cookie
@@ -48,11 +58,12 @@ session tokens from `BETTER_AUTH_SECRET` and stores them in the `Session`
 table. Credentials live in the `Account` table (provider `credential`,
 scrypt-hashed via `better-auth/crypto`).
 
-| Variable             | Default | Required | Description                                                                              |
-| -------------------- | ------- | -------- | ---------------------------------------------------------------------------------------- |
-| `BETTER_AUTH_SECRET` | —       | Yes      | Min 32 chars; signs cookies and derives session tokens                                   |
-| `BETTER_AUTH_URL`    | —       | Prod     | Public origin used to build cookie scope and trusted-origin list                         |
-| `CORS_ORIGINS`       | —       | Prod     | Comma-separated allowed origins; required for cookie-bearing CORS and Socket.io upgrades |
+| Variable             | Default                                                                        | Required   | Description                                                                                                                                                                                                          |
+| -------------------- | ------------------------------------------------------------------------------ | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `BETTER_AUTH_SECRET` | —                                                                              | Yes        | Min 32 chars; signs cookies and derives session tokens                                                                                                                                                               |
+| `BETTER_AUTH_URL`    | —                                                                              | Prod       | Public origin used to build cookie scope and trusted-origin list                                                                                                                                                     |
+| `FRONTEND_BASE_URL`  | dev: falls back to `BETTER_AUTH_URL` w/ warning; **prod: boot fails if unset** | Yes (prod) | SPA origin that renders `/reset`, `/verify-email`, `/delete-account` pages. The SPA pulls `?token=` from the URL, shows a form, and POSTs to the matching `/api/auth/*` endpoint. Backend has no UI for these flows. |
+| `CORS_ORIGINS`       | —                                                                              | Prod       | Comma-separated allowed origins; required for cookie-bearing CORS and Socket.io upgrades                                                                                                                             |
 
 ## Application
 
@@ -65,11 +76,28 @@ scrypt-hashed via `better-auth/crypto`).
 | `THROTTLER_LIMIT`   | `100`         | No       | Requests per window                                             |
 | `THROTTLER_TTL`     | `60`          | No       | Window length in seconds                                        |
 
+## Rate Limiting & Request Body Limits
+
+Two-tier auth rate limit (Auth0/Cognito pattern). STRICT bucket guards
+credential endpoints (`sign-in`, `sign-up`, `forget-password`, `reset-password`)
+keyed by IP + email; LOOSE bucket guards session ops (`sign-out`, `get-session`,
+`list-sessions`, …) keyed by IP only. Both are enforced by `@fastify/rate-limit`
+because `reply.hijack()` bypasses the NestJS ThrottlerGuard.
+
+| Variable                            | Default    | Required | Description                                                                 |
+| ----------------------------------- | ---------- | -------- | --------------------------------------------------------------------------- |
+| `AUTH_RATE_LIMIT_MAX`               | `5`        | No       | STRICT: max requests per window on credential paths (per IP+email)          |
+| `AUTH_RATE_LIMIT_WINDOW_MS`         | `900000`   | No       | STRICT window in milliseconds (15 min default)                              |
+| `AUTH_SESSION_RATE_LIMIT_MAX`       | `60`       | No       | LOOSE: max requests per window on other `/api/auth/*` paths (per IP)        |
+| `AUTH_SESSION_RATE_LIMIT_WINDOW_MS` | `60000`    | No       | LOOSE window in milliseconds (60 sec default)                               |
+| `HTTP_BODY_LIMIT_BYTES`             | `1048576`  | No       | Max raw JSON request body size (1 MB default)                               |
+| `UPLOAD_MAX_FILE_BYTES`             | `10485760` | No       | Max multipart file size (10 MB default); pinned in S3 presigned-POST policy |
+
 ## Error documentation
 
-| Variable              | Default                          | Required | Description                                                                                                  |
-| --------------------- | -------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------ |
-| `ERROR_DOCS_BASE_URL` | `https://api.example.com/errors` | No       | Base URL used to build the `type` field of RFC 9457 Problem Details responses (`<base>/<code-with-dashes>`). |
+| Variable              | Default              | Required | Description                                                                                                                                                                                                                                                                                   |
+| --------------------- | -------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ERROR_DOCS_BASE_URL` | `/errors` (relative) | No       | Base URL used to build the `type` field of RFC 9457 Problem Details responses (`<base>/<code-with-dashes>`). RFC 9457 §3.1 allows relative URIs — leave unset in dev. Set to an absolute URL (e.g. `https://docs.example.com/errors`) in production if you publish error documentation pages. |
 
 ## Mail (SMTP)
 
@@ -98,6 +126,7 @@ scrypt-hashed via `better-auth/crypto`).
 | Variable                  | Default     | Required | Description                                                                 |
 | ------------------------- | ----------- | -------- | --------------------------------------------------------------------------- |
 | `EVENT_PUBLISHER_DRIVER`  | `inprocess` | No       | `inprocess` (EventEmitter2) or `outbox` (Postgres outbox + scheduler relay) |
+| `OUTBOX_TX_TIMEOUT_MS`    | `30000`     | No       | Outbox interactive tx timeout (30 sec); increase if events hang in publish  |
 | `OUTBOX_POLL_INTERVAL_MS` | `1000`      | No       | Relay polling cadence                                                       |
 | `OUTBOX_BATCH_SIZE`       | `50`        | No       | Max events relayed per poll                                                 |
 | `OUTBOX_MAX_ATTEMPTS`     | `10`        | No       | Retry budget before an event is parked                                      |
@@ -112,20 +141,27 @@ scrypt-hashed via `better-auth/crypto`).
 
 ## Observability
 
-| Variable                      | Default                 | Required | Description                                                      |
-| ----------------------------- | ----------------------- | -------- | ---------------------------------------------------------------- |
-| `LOG_LEVEL`                   | `info`                  | No       | pino log level: `trace`, `debug`, `info`, `warn`, `error`        |
-| `ENABLE_METRICS`              | `false`                 | No       | Expose `/metrics` for Prometheus (excluded from `api/v1` prefix) |
-| `OTEL_ENABLED`                | `false`                 | No       | Bootstrap the OpenTelemetry SDK                                  |
-| `OTEL_SERVICE_NAME`           | `nestjs-fastify-api`    | No       | Reported service name                                            |
-| `OTEL_SERVICE_NAMESPACE`      | `app`                   | No       | Reported service namespace                                       |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://localhost:4318` | No       | OTLP/HTTP collector endpoint                                     |
-| `OTEL_EXPORTER_OTLP_HEADERS`  | —                       | No       | Optional collector auth headers                                  |
-| `OTEL_TRACES_SAMPLER_RATIO`   | `1`                     | No       | Trace sampling ratio                                             |
-| `OTEL_DEBUG`                  | `false`                 | No       | Verbose SDK logging                                              |
-| `SENTRY_DSN`                  | —                       | No       | Sentry DSN; leave empty to disable                               |
-| `SENTRY_TRACES_SAMPLE_RATE`   | `0.1`                   | No       | Sentry tracing sample rate                                       |
-| `SENTRY_ENVIRONMENT`          | `development`           | No       | Reported Sentry environment tag                                  |
+| Variable                      | Default                 | Required | Description                                                          |
+| ----------------------------- | ----------------------- | -------- | -------------------------------------------------------------------- |
+| `LOG_LEVEL`                   | `info`                  | No       | pino log level: `trace`, `debug`, `info`, `warn`, `error`            |
+| `ENABLE_METRICS`              | `false`                 | No       | Expose `/metrics` for Prometheus (excluded from `api/v1` prefix)     |
+| `METRICS_ALLOW_CIDRS`         | —                       | No       | Comma-separated CIDR ranges allowed to hit `/metrics` (empty=closed) |
+| `OTEL_ENABLED`                | `false`                 | No       | Bootstrap the OpenTelemetry SDK                                      |
+| `OTEL_SERVICE_NAME`           | `nestjs-fastify-api`    | No       | Reported service name                                                |
+| `OTEL_SERVICE_NAMESPACE`      | `app`                   | No       | Reported service namespace                                           |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://localhost:4318` | No       | OTLP/HTTP collector endpoint                                         |
+| `OTEL_EXPORTER_OTLP_HEADERS`  | —                       | No       | Optional collector auth headers                                      |
+| `OTEL_TRACES_SAMPLER_RATIO`   | `1`                     | No       | Trace sampling ratio                                                 |
+| `OTEL_DEBUG`                  | `false`                 | No       | Verbose SDK logging                                                  |
+| `SENTRY_DSN`                  | —                       | No       | Sentry DSN; leave empty to disable                                   |
+| `SENTRY_TRACES_SAMPLE_RATE`   | `0.1`                   | No       | Sentry tracing sample rate                                           |
+| `SENTRY_ENVIRONMENT`          | `development`           | No       | Reported Sentry environment tag                                      |
+
+## CI / Nx Cloud
+
+| Variable              | Default | Required | Description                            |
+| --------------------- | ------- | -------- | -------------------------------------- |
+| `NX_CLOUD_AUTH_TOKEN` | —       | No       | Auth token for Nx Cloud remote caching |
 
 ## Docker images
 
@@ -135,3 +171,4 @@ scrypt-hashed via `better-auth/crypto`).
 | `IMAGE_NAMESPACE` | —         | No       | Owner/org segment of the image reference     |
 | `IMAGE_TAG`       | `latest`  | No       | Image tag pulled in production               |
 | `API_PORT`        | `3000`    | No       | Host port mapped to the API container        |
+| `API_DEBUG_PORT`  | `9229`    | No       | Host port mapped to the Node inspector (dev) |

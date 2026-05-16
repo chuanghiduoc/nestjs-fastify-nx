@@ -1,0 +1,12 @@
+import { generateId } from '@nestjs-fastify-nx/shared';
+import { <%= className %> } from '../domain/entities/<%= fileName %>.entity';
+
+export class <%= className %>Factory {
+  static create(): <%= className %> {
+    return <%= className %>.reconstitute({
+      id: generateId(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+  }
+}

@@ -1,4 +1,4 @@
 export { <%= className %> } from './entities/<%= fileName %>.entity';
 export { <%= className %>Created } from './events/<%= fileName %>-created.event';
-export { <%= constantName %>_REPOSITORY } from './ports/<%= fileName %>.repository.port';
-export type { <%= className %>RepositoryPort } from './ports/<%= fileName %>.repository.port';
+export { <%= constantName %>_REPOSITORY } from './ports/<%= fileName %>-repository.port';
+export type { <%= className %>RepositoryPort } from './ports/<%= fileName %>-repository.port';

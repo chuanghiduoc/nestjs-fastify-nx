@@ -28,6 +28,11 @@ const envSchema = z
     // a stable secret is required in production for cross-restart session validity).
     BETTER_AUTH_SECRET: z.string().trim().min(32).optional(),
     BETTER_AUTH_URL: z.string().url().optional(),
+    // Public URL of the frontend SPA that owns the password-reset, verify-email,
+    // and account-deletion confirmation pages. Better Auth embeds this as the
+    // base of the tokenized link sent by email. Defaults to BETTER_AUTH_URL so
+    // dev works out of the box without configuring a separate SPA host.
+    FRONTEND_BASE_URL: z.string().url().optional(),
 
     // Storage (S3 / MinIO)
     STORAGE_ENDPOINT: z.string().default('http://localhost:9000'),
@@ -83,6 +88,10 @@ const envSchema = z
       .string()
       .default('false')
       .transform((v) => v === 'true'),
+    // Comma-separated CIDRs (or exact IPs) allowed to scrape /metrics.
+    // Loopback is always allowed. Empty string = loopback-only (fail closed).
+    // Example for Kubernetes pod CIDR: "10.244.0.0/16"
+    METRICS_ALLOW_CIDRS: z.string().default(''),
 
     // OpenTelemetry
     OTEL_ENABLED: z
@@ -100,11 +109,28 @@ const envSchema = z
     OUTBOX_POLL_INTERVAL_MS: z.coerce.number().int().min(50).default(1_000),
     OUTBOX_BATCH_SIZE: z.coerce.number().int().min(1).max(1_000).default(50),
     OUTBOX_MAX_ATTEMPTS: z.coerce.number().int().min(1).max(1_000).default(10),
+    // Prisma interactive-transaction timeout. Default 5000 ms is too short when
+    // batchSize rows trigger sync DB writes inside listeners (e.g. audit-log).
+    // P2028 on expiry rolls back processedAt → duplicate re-publish next tick.
+    OUTBOX_TX_TIMEOUT_MS: z.coerce.number().int().min(1000).default(30_000),
 
     // Audit log retention — number of monthly partitions kept. Cleanup task
     // drops anything older on the 1st of each month. Lower bound = 1 to
     // avoid zero-retention misconfiguration purging the active partition.
     AUDIT_LOG_RETENTION_MONTHS: z.coerce.number().int().min(1).max(120).default(12),
+
+    // Two-tier auth rate limit (NestJS ThrottlerGuard bypassed by reply.hijack).
+    // STRICT for credential endpoints, LOOSE for session ops — see main.ts.
+    AUTH_RATE_LIMIT_MAX: z.coerce.number().int().min(1).default(5),
+    AUTH_RATE_LIMIT_WINDOW_MS: z.coerce.number().int().min(1000).default(900_000),
+    AUTH_SESSION_RATE_LIMIT_MAX: z.coerce.number().int().min(1).default(60),
+    AUTH_SESSION_RATE_LIMIT_WINDOW_MS: z.coerce.number().int().min(1000).default(60_000),
+
+    // HTTP body size caps — enforced by Fastify's built-in body parser (JSON)
+    // and @fastify/multipart respectively. Both are read at bootstrap time so
+    // they apply before any route handler runs.
+    HTTP_BODY_LIMIT_BYTES: z.coerce.number().int().min(1024).default(1_048_576),
+    UPLOAD_MAX_FILE_BYTES: z.coerce.number().int().min(1024).default(10_485_760),
 
     // Bull Board
     BULL_BOARD_ENABLED: z

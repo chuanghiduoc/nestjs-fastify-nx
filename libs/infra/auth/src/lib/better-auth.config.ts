@@ -1,27 +1,20 @@
+import { Logger } from '@nestjs/common';
 import { betterAuth } from 'better-auth';
 import { prismaAdapter } from 'better-auth/adapters/prisma';
 import { openAPI } from 'better-auth/plugins';
 import type { PrismaClient } from '@prisma/client';
 
-/**
- * Side-effect hooks fired after Better Auth completes a database operation.
- *
- * Note: `users.registered` domain events are NOT published from this hook.
- * Better Auth's prismaAdapter commits the user INSERT before the hook runs,
- * so any application-side outbox write here would be non-transactional and
- * could be lost on crash. The `users` table has an AFTER INSERT trigger
- * (`emit_user_registered_outbox`) that writes the outbox row inside the
- * same transaction — the relay picks it up from there. Use this surface
- * only for best-effort, non-critical side-effects (analytics pings, etc.);
- * hook failures must not abort signup.
- */
-export interface BetterAuthHooks {
-  onUserCreated?(user: { id: string; email: string }): Promise<void> | void;
+// Narrow contract so unit tests can swap a stub without dragging BullMQ in.
+export interface AuthMailDispatcher {
+  send(opts: { to: string; subject: string; body: string; templateId?: string }): Promise<void>;
 }
 
-export function createBetterAuth(prisma: PrismaClient, hooks: BetterAuthHooks = {}) {
+const logger = new Logger('BetterAuth');
+
+export function createBetterAuth(prisma: PrismaClient, mail: AuthMailDispatcher) {
   const secret = process.env['BETTER_AUTH_SECRET'];
   const baseURL = process.env['BETTER_AUTH_URL'];
+  const frontendBase = resolveFrontendBase();
   const trustedOrigins =
     process.env['CORS_ORIGINS']
       ?.split(',')
@@ -35,6 +28,28 @@ export function createBetterAuth(prisma: PrismaClient, hooks: BetterAuthHooks = 
     emailAndPassword: {
       enabled: true,
       minPasswordLength: 8,
+      sendResetPassword: async ({ user, token }) => {
+        const link = `${frontendBase}/reset?token=${encodeURIComponent(token)}`;
+        await mail.send({
+          to: user.email,
+          subject: 'Reset your password',
+          body: passwordResetTemplate({ name: user.name, link }),
+          templateId: 'password-reset',
+        });
+      },
+    },
+    emailVerification: {
+      // Intentionally NOT setting `requireEmailVerification: true` — that
+      // blocks sign-in for unverified users, which is a product decision.
+      sendVerificationEmail: async ({ user, token }) => {
+        const link = `${frontendBase}/verify-email?token=${encodeURIComponent(token)}`;
+        await mail.send({
+          to: user.email,
+          subject: 'Verify your email',
+          body: emailVerificationTemplate({ name: user.name, link }),
+          templateId: 'email-verification',
+        });
+      },
     },
     session: {
       expiresIn: 60 * 60 * 24 * 7,
@@ -46,43 +61,28 @@ export function createBetterAuth(prisma: PrismaClient, hooks: BetterAuthHooks = 
     },
     user: {
       additionalFields: {
-        role: {
-          type: 'string',
-          defaultValue: 'USER',
-          input: false,
-        },
-        status: {
-          type: 'string',
-          defaultValue: 'ACTIVE',
-          input: false,
-        },
+        role: { type: 'string', defaultValue: 'USER', input: false },
+        status: { type: 'string', defaultValue: 'ACTIVE', input: false },
       },
-    },
-    databaseHooks: {
-      user: {
-        create: {
-          after: async (user) => {
-            if (!hooks.onUserCreated) return;
-            try {
-              await hooks.onUserCreated({
-                id: (user as { id: string }).id,
-                email: (user as { email: string }).email,
-              });
-            } catch (err) {
-              // Signup is already committed; swallow + log so the API still
-              // returns success. Downstream side-effects (welcome email) are
-              // recoverable via outbox replay or operator intervention.
-              console.error('[better-auth] onUserCreated hook failed', err);
-            }
-          },
+      changeEmail: { enabled: true },
+      // Email confirmation is mandatory — without it a stolen cookie could
+      // nuke the account in one POST.
+      deleteUser: {
+        enabled: true,
+        sendDeleteAccountVerification: async ({ user, token }) => {
+          const link = `${frontendBase}/delete-account?token=${encodeURIComponent(token)}`;
+          await mail.send({
+            to: user.email,
+            subject: 'Confirm account deletion',
+            body: accountDeletionTemplate({ name: user.name, link }),
+            templateId: 'account-deletion',
+          });
         },
       },
     },
     trustedOrigins,
     advanced: {
-      // Defer to Postgres `uuidv7()` default in `prisma/schema.prisma` — the DB
-      // is the single source of truth for primary keys, and v7 is sortable so
-      // index locality stays B-tree friendly across high write volume.
+      // DB owns primary keys via Postgres `uuidv7()` — sortable + B-tree friendly.
       database: { generateId: false },
     },
     plugins: [openAPI()],
@@ -90,3 +90,68 @@ export function createBetterAuth(prisma: PrismaClient, hooks: BetterAuthHooks = 
 }
 
 export type BetterAuthInstance = ReturnType<typeof createBetterAuth>;
+
+// FRONTEND_BASE_URL is the SPA host that renders /reset, /verify-email and
+// /delete-account pages — the backend has no UI for these flows, so a stale
+// fallback to BETTER_AUTH_URL would silently produce broken email links.
+// Required in production; in dev we emit a warning and fall back to the API
+// origin so the smoke test can verify the link is dispatched at all.
+function resolveFrontendBase(): string {
+  const raw = process.env['FRONTEND_BASE_URL']?.trim();
+  if (raw) return raw.replace(/\/+$/, '');
+
+  if (process.env['NODE_ENV'] === 'production') {
+    throw new Error(
+      'FRONTEND_BASE_URL must be set in production — it is the SPA host that owns ' +
+        '/reset, /verify-email and /delete-account pages. Email links cannot be ' +
+        'built without it.',
+    );
+  }
+
+  const apiOrigin = process.env['BETTER_AUTH_URL']?.replace(/\/+$/, '') ?? '';
+  logger.warn(
+    `FRONTEND_BASE_URL not set; falling back to API origin "${apiOrigin}" for dev. ` +
+      'Email reset/verify/delete links will 404 in a browser — configure the SPA host before going live.',
+  );
+  return apiOrigin;
+}
+
+function passwordResetTemplate({ name, link }: { name?: string; link: string }): string {
+  const greeting = name ? `Hi ${escapeHtml(name)},` : 'Hi,';
+  return `<!doctype html><html><body style="font-family:system-ui,sans-serif;line-height:1.5">
+<p>${greeting}</p>
+<p>We received a request to reset your password. Click the link below to choose a new one:</p>
+<p><a href="${link}">${link}</a></p>
+<p>If you did not request this, you can safely ignore this email — your password will stay the same. The link expires in 1 hour.</p>
+</body></html>`;
+}
+
+function emailVerificationTemplate({ name, link }: { name?: string; link: string }): string {
+  const greeting = name ? `Hi ${escapeHtml(name)},` : 'Hi,';
+  return `<!doctype html><html><body style="font-family:system-ui,sans-serif;line-height:1.5">
+<p>${greeting}</p>
+<p>Please confirm your email address by clicking the link below:</p>
+<p><a href="${link}">${link}</a></p>
+<p>This link expires in 24 hours.</p>
+</body></html>`;
+}
+
+function accountDeletionTemplate({ name, link }: { name?: string; link: string }): string {
+  const greeting = name ? `Hi ${escapeHtml(name)},` : 'Hi,';
+  return `<!doctype html><html><body style="font-family:system-ui,sans-serif;line-height:1.5">
+<p>${greeting}</p>
+<p>We received a request to delete your account. This action is permanent.</p>
+<p>If you really want to proceed, confirm via this link:</p>
+<p><a href="${link}">${link}</a></p>
+<p>If this was not you, change your password immediately.</p>
+</body></html>`;
+}
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}

@@ -85,6 +85,42 @@ MinIO) and healthcheck specs for worker/scheduler. The
 (`${IMAGE_REGISTRY}/${IMAGE_NAMESPACE}/<app>:${IMAGE_TAG}`), enforces a single
 scheduler replica, and excludes mailpit via the `dev-only` profile.
 
+## Local Observability Stack (opt-in)
+
+The `docker/compose.observability.yml` overlay starts Prometheus, Grafana, Jaeger, and an OTel collector alongside the dev stack. It is intentionally excluded from the base compose files to keep the default stack lightweight.
+
+```bash
+# Start dev stack + observability
+./scripts/build-dev.sh --with-obs
+
+# Or manually
+docker compose --env-file .env \
+  -f docker/compose.yml \
+  -f docker/compose.dev.yml \
+  -f docker/compose.observability.yml \
+  up -d
+```
+
+Enable instrumentation in `.env`:
+
+```bash
+OTEL_ENABLED=true
+OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
+ENABLE_METRICS=true
+# Allow the Prometheus container (Docker bridge) to scrape /metrics
+METRICS_ALLOW_CIDRS=172.0.0.0/8
+```
+
+| Service    | URL                    | Notes                 |
+| ---------- | ---------------------- | --------------------- |
+| Grafana    | http://localhost:3001  | admin / admin         |
+| Jaeger UI  | http://localhost:16686 | Trace explorer        |
+| Prometheus | http://localhost:9090  | Metrics scrape target |
+| OTel gRPC  | localhost:4317         | OTLP receiver         |
+| OTel HTTP  | localhost:4318         | OTLP receiver         |
+
+Config files live under `docker/prometheus/`, `docker/otel-collector/`, and `docker/grafana/provisioning/`. The observability stack is for local development and demos — production observability should use a managed service or a dedicated cluster.
+
 ## Release Process
 
 1. Merge to `main`

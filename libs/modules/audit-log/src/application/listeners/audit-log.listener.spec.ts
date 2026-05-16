@@ -55,7 +55,7 @@ describe('AuditLogListener', () => {
     expect(persisted.metadata).toEqual({ tokenId: 'tok-1', eventId: 'evt-2' });
   });
 
-  it('swallows repository errors so they do not break event publishing', async () => {
+  it('propagates repository errors so the outbox relay marks lastError', async () => {
     const repository: AuditLogRepositoryPort = {
       append: vi.fn().mockRejectedValue(new Error('db down')),
     };
@@ -68,6 +68,8 @@ describe('AuditLogListener', () => {
       payload: {},
     };
 
-    await expect(listener.handleUserEvent(event)).resolves.toBeUndefined();
+    // Errors bubble up to EventEmitter2 (ignoreErrors: false) which lets the
+    // outbox relay record lastError instead of marking the row processed.
+    await expect(listener.handleUserEvent(event)).rejects.toThrow('db down');
   });
 });

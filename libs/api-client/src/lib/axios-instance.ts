@@ -1,10 +1,15 @@
 import axios from 'axios';
 import type { AxiosRequestConfig } from 'axios';
 
-const BASE_URL =
-  typeof window !== 'undefined'
-    ? ((window as Window & { __API_URL__?: string }).__API_URL__ ?? '/api/v1')
-    : (process.env['API_BASE_URL'] ?? 'http://localhost:3000/api/v1');
+// Access window via globalThis so this file type-checks without DOM lib
+// in non-browser tsconfig contexts (Node.js codegen, SSR). At runtime in a
+// browser, globalThis === window so the cast is correct.
+const _globalThis = globalThis as Record<string, unknown>;
+const _isBrowser = typeof _globalThis['window'] !== 'undefined';
+
+const BASE_URL = _isBrowser
+  ? ((_globalThis['__API_URL__'] as string | undefined) ?? '/api/v1')
+  : (process.env['API_BASE_URL'] ?? 'http://localhost:3000/api/v1');
 
 export const axiosInstance = axios.create({
   baseURL: BASE_URL,

@@ -1,8 +1,8 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "module": "commonjs",
-    "moduleResolution": "node",
+    "module": "CommonJS",
+    "moduleResolution": "Node10",
     "ignoreDeprecations": "6.0",
     "forceConsistentCasingInFileNames": true,
     "strict": true,

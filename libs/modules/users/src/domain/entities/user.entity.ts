@@ -1,4 +1,3 @@
-import { AggregateRoot } from '@nestjs-fastify-nx/core';
 import { generateId } from '@nestjs-fastify-nx/shared';
 import { Email } from '../value-objects/email.vo';
 
@@ -23,10 +22,8 @@ interface UserProps {
   updatedAt: Date;
 }
 
-export class User extends AggregateRoot {
-  private constructor(private readonly props: UserProps) {
-    super();
-  }
+export class User {
+  private constructor(private readonly props: UserProps) {}
 
   static create(email: Email, name = ''): User {
     return new User({

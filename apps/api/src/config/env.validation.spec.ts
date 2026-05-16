@@ -34,6 +34,28 @@ describe('validateConfig', () => {
     expect(result.REDIS_CACHE_PORT).toBe(6379);
   });
 
+  it('applies safe defaults for auth rate-limit and body-limit caps', () => {
+    const result = validateConfig(baseDevEnv);
+    expect(result.AUTH_RATE_LIMIT_MAX).toBe(5);
+    expect(result.AUTH_RATE_LIMIT_WINDOW_MS).toBe(900_000);
+    expect(result.HTTP_BODY_LIMIT_BYTES).toBe(1_048_576);
+    expect(result.UPLOAD_MAX_FILE_BYTES).toBe(10_485_760);
+  });
+
+  it('accepts custom auth rate-limit and body-limit values', () => {
+    const result = validateConfig({
+      ...baseDevEnv,
+      AUTH_RATE_LIMIT_MAX: '10',
+      AUTH_RATE_LIMIT_WINDOW_MS: '60000',
+      HTTP_BODY_LIMIT_BYTES: '2097152',
+      UPLOAD_MAX_FILE_BYTES: '20971520',
+    });
+    expect(result.AUTH_RATE_LIMIT_MAX).toBe(10);
+    expect(result.AUTH_RATE_LIMIT_WINDOW_MS).toBe(60_000);
+    expect(result.HTTP_BODY_LIMIT_BYTES).toBe(2_097_152);
+    expect(result.UPLOAD_MAX_FILE_BYTES).toBe(20_971_520);
+  });
+
   it('coerces boolean THROTTLER_ENABLED from string', () => {
     const result = validateConfig({ ...baseDevEnv, THROTTLER_ENABLED: 'false' });
     expect(result.THROTTLER_ENABLED).toBe(false);

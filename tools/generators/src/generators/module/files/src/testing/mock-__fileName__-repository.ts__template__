@@ -1,0 +1,23 @@
+import type { <%= className %>RepositoryPort } from '../domain/ports/<%= fileName %>-repository.port';
+import type { <%= className %> } from '../domain/entities/<%= fileName %>.entity';
+
+// In-memory stand-in for unit tests — keeps handlers fast and hermetic.
+export class Mock<%= className %>Repository implements <%= className %>RepositoryPort {
+  private store = new Map<string, <%= className %>>();
+
+  async findById(id: string): Promise<<%= className %> | null> {
+    return this.store.get(id) ?? null;
+  }
+
+  async save(entity: <%= className %>): Promise<void> {
+    this.store.set(entity.id, entity);
+  }
+
+  async delete(id: string): Promise<void> {
+    this.store.delete(id);
+  }
+
+  clear(): void {
+    this.store.clear();
+  }
+}

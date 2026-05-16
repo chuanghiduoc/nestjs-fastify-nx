@@ -1,4 +1,24 @@
 services:
+  # One-shot: creates the STORAGE_BUCKET if it does not already exist.
+  # Runs after minio is healthy; restarts on failure until mc alias connects.
+  minio-init:
+    image: minio/mc:RELEASE.2025-05-21T01-59-54Z
+    restart: 'no'
+    depends_on:
+      minio:
+        condition: service_healthy
+    env_file: ../.env
+    entrypoint: >
+      /bin/sh -c "
+        for i in $$(seq 1 15); do
+          mc alias set local http://minio:9000 $$MINIO_ROOT_USER $$MINIO_ROOT_PASSWORD && break;
+          echo 'waiting for minio... attempt '$$i; sleep 2;
+        done;
+        mc alias set local http://minio:9000 $$MINIO_ROOT_USER $$MINIO_ROOT_PASSWORD || { echo 'minio-init: cannot reach minio after 30s'; exit 1; };
+        mc mb -p local/$$STORAGE_BUCKET;
+        echo 'bucket ready: '$$STORAGE_BUCKET
+      "
+
   migration:
     build:
       context: ..
@@ -13,8 +33,8 @@ services:
       dockerfile: Dockerfile
       target: api-dev
     ports:
-      - '3000:3000'
-      - '9229:9229'
+      - '${API_PORT:-3000}:3000'
+      - '${API_DEBUG_PORT:-9229}:9229'
     env_file: ../.env
     environment:
       NODE_ENV: development
@@ -33,6 +53,12 @@ services:
       redis-cache:
         condition: service_healthy
       redis-queue:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+      mailpit:
         condition: service_healthy
     restart: unless-stopped
 
@@ -55,7 +81,15 @@ services:
         condition: service_healthy
       migration:
         condition: service_completed_successfully
+      redis-cache:
+        condition: service_healthy
       redis-queue:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+      mailpit:
         condition: service_healthy
     restart: unless-stopped
     healthcheck:
@@ -93,6 +127,12 @@ services:
       redis-cache:
         condition: service_healthy
       redis-queue:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+      mailpit:
         condition: service_healthy
     restart: unless-stopped
     healthcheck:

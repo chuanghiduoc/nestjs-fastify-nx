@@ -3,9 +3,11 @@ import * as Sentry from '@sentry/nestjs';
 import { nodeProfilingIntegration } from '@sentry/profiling-node';
 import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify';
+import type { FastifyReply, FastifyRequest, RouteShorthandOptions } from 'fastify';
 import { ConfigService } from '@nestjs/config';
 import { Logger } from 'nestjs-pino';
 import { fastifyHelmet } from '@fastify/helmet';
+import fastifyRateLimit from '@fastify/rate-limit';
 import fastifyMultipart from '@fastify/multipart';
 import { toNodeHandler } from 'better-auth/node';
 import { BETTER_AUTH_INSTANCE, type BetterAuthInstance } from '@nestjs-fastify-nx/infra-auth';
@@ -16,20 +18,93 @@ import { setupSwagger } from './common/swagger/swagger.config';
 import { createBullBoardPlugin } from './common/bull-board/create-bull-board-plugin';
 import type { EnvConfig } from './config/env.validation';
 
+// Sentry init runs at module-load time, BEFORE NestFactory creates the
+// ConfigService that would normally validate env. We therefore read
+// process.env directly with conservative fallbacks; values get re-validated
+// (and rejected on bad inputs) once env.validation.ts runs at bootstrap.
 const sentryDsn = process.env['SENTRY_DSN'];
 if (sentryDsn) {
+  const isProduction = process.env['NODE_ENV'] === 'production';
+  // Hard cap sample rates in prod so a stray `SAMPLE_RATE=1` setting cannot
+  // burn through the Sentry quota.
+  const sampleRateCap = isProduction ? 0.1 : 1;
+  const tracesSampleRate = Math.min(
+    Number(process.env['SENTRY_TRACES_SAMPLE_RATE'] ?? 0.1),
+    sampleRateCap,
+  );
+  const profilesSampleRate = Math.min(0.1, sampleRateCap);
+
   Sentry.init({
     dsn: sentryDsn,
     environment: process.env['SENTRY_ENVIRONMENT'] ?? 'development',
-    tracesSampleRate: Number(process.env['SENTRY_TRACES_SAMPLE_RATE'] ?? 0.1),
+    tracesSampleRate,
+    profilesSampleRate,
     integrations: [nodeProfilingIntegration()],
+    sendDefaultPii: false,
+    // Scrub PII Sentry auto-captures (cookies, auth headers, bodies) plus any
+    // sensitive keys leaked via breadcrumbs / extra contexts. Aligns with the
+    // pino redact list (libs/shared/src/lib/logger-redact.ts).
+    beforeSend(event) {
+      if (event.request) {
+        delete event.request.cookies;
+        delete event.request.data;
+        if (event.request.headers) {
+          delete event.request.headers['authorization'];
+          delete event.request.headers['cookie'];
+          delete event.request.headers['set-cookie'];
+        }
+      }
+
+      const sensitiveKeys = /password|token|secret|cookie/i;
+      const scrubObject = (obj: Record<string, unknown>): void => {
+        for (const key of Object.keys(obj)) {
+          if (sensitiveKeys.test(key)) {
+            obj[key] = '[Filtered]';
+          }
+        }
+      };
+
+      if (event.extra) scrubObject(event.extra as Record<string, unknown>);
+      if (event.contexts) {
+        for (const ctx of Object.values(event.contexts)) {
+          if (ctx && typeof ctx === 'object') scrubObject(ctx as Record<string, unknown>);
+        }
+      }
+      // event.breadcrumbs typing varies by SDK version; cast to avoid type drift.
+      const breadcrumbList = (event.breadcrumbs as { values?: unknown[] } | undefined)?.values;
+      if (Array.isArray(breadcrumbList)) {
+        for (const crumb of breadcrumbList) {
+          const data = (crumb as { data?: unknown })?.data;
+          if (data && typeof data === 'object') {
+            scrubObject(data as Record<string, unknown>);
+          }
+        }
+      }
+
+      return event;
+    },
   });
 }
 
+/**
+ * Safe env integer reader for values consumed before ConfigService is
+ * available. Falls back to `defaultValue` when the env var is absent,
+ * empty, or parses to NaN / a non-positive number.
+ */
+function parseIntEnv(value: string | undefined, defaultValue: number): number {
+  if (value === undefined || value.trim() === '') return defaultValue;
+  const n = Number.parseInt(value, 10);
+  return Number.isFinite(n) && n > 0 ? n : defaultValue;
+}
+
 async function bootstrap() {
+  // Read body limit from env early — before the adapter is created — so the
+  // Fastify http parser enforces it before any route handler fires.
+  const bodyLimitBytes = parseIntEnv(process.env['HTTP_BODY_LIMIT_BYTES'], 1_048_576);
+
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
-    new FastifyAdapter({ trustProxy: 1 }),
+    new FastifyAdapter({ trustProxy: 1, bodyLimit: bodyLimitBytes }),
     { bufferLogs: true },
   );
 
@@ -85,7 +160,70 @@ async function bootstrap() {
     crossOriginOpenerPolicy: { policy: 'same-origin' },
     crossOriginResourcePolicy: { policy: 'same-site' },
   });
-  await fastify.register(fastifyMultipart);
+
+  // Multipart plugin scoped to upload endpoints. Limits prevent DoS via
+  // oversized file uploads independent of the JSON bodyLimit above.
+  const uploadMaxBytes = parseIntEnv(process.env['UPLOAD_MAX_FILE_BYTES'], 10_485_760);
+  await fastify.register(fastifyMultipart, {
+    limits: {
+      fileSize: uploadMaxBytes,
+      files: 1,
+      fields: 20,
+      parts: 50,
+    },
+  });
+
+  // Rate-limit for /api/auth/* must be registered BEFORE the betterAuthHandler
+  // hook because reply.hijack() bypasses the NestJS request pipeline entirely,
+  // meaning Nest's ThrottlerGuard never sees auth requests.
+  const authRateLimitMax = config.get('AUTH_RATE_LIMIT_MAX', { infer: true });
+  const authRateLimitWindowMs = config.get('AUTH_RATE_LIMIT_WINDOW_MS', { infer: true });
+
+  await fastify.register(fastifyRateLimit, {
+    // Global rate-limit disabled — we apply it only on the auth prefix below.
+    // This registration just wires the plugin; per-route limits override it.
+    global: false,
+    // preHandler runs after body parsing, so req.body is populated when
+    // keyGenerator fires. The default 'onRequest' hook fires before parsing —
+    // req.body would always be undefined and the email branch would be dead.
+    hook: 'preHandler',
+    max: authRateLimitMax,
+    timeWindow: authRateLimitWindowMs,
+    // Key by IP + email body field so distributed clients on the same NAT
+    // are not unfairly bucketed together, while still capping per-IP abuse.
+    keyGenerator: (req) => {
+      const body = req.body as Record<string, unknown> | undefined;
+      const email = body && typeof body['email'] === 'string' ? body['email'].toLowerCase() : '';
+      return `${req.ip}:${email}`;
+    },
+    errorResponseBuilder: (_req, context) => ({
+      type: 'https://tools.ietf.org/html/rfc6585#section-4',
+      title: 'Too Many Requests',
+      status: 429,
+      detail: `Rate limit exceeded. Try again in ${Math.ceil(context.ttl / 1000)} seconds.`,
+      retryAfter: Math.ceil(context.ttl / 1000),
+    }),
+    addHeaders: {
+      'x-ratelimit-limit': true,
+      'x-ratelimit-remaining': true,
+      'x-ratelimit-reset': true,
+      'retry-after': true,
+    },
+  });
+
+  // B2: The rate-limit plugin serializes errorResponseBuilder's return value via
+  // Fastify's default JSON serializer, which sets Content-Type: application/json.
+  // This onSend hook rewrites the Content-Type to application/problem+json for
+  // every 429 response so the repo's RFC 9457 contract is upheld uniformly.
+  fastify.addHook('onSend', (_req, reply, _payload, done) => {
+    if (
+      reply.statusCode === 429 &&
+      !reply.getHeader('content-type')?.toString().includes('problem+json')
+    ) {
+      reply.header('content-type', 'application/problem+json');
+    }
+    done();
+  });
 
   // Convert Fastify-level errors (body parser, content-type, schema validation)
   // into RFC 9457 Problem Details. These fire BEFORE the NestJS exception
@@ -96,7 +234,37 @@ async function bootstrap() {
   // Must run before global validation pipes — Better Auth handles its own body parsing.
   const auth = app.get<BetterAuthInstance>(BETTER_AUTH_INSTANCE);
   const betterAuthHandler = toNodeHandler(auth.handler);
-  fastify.all('/api/auth/*', async (req, reply) => {
+
+  // STRICT bucket = credential endpoints (sign-in/sign-up/forget/reset). Keyed by
+  // ${ip}:${email} per NIST SP 800-63B. LOOSE bucket = session ops (sign-out,
+  // get-session) keyed by ${ip} only — collapsing them into the strict ${ip}:
+  // bucket would lock out browsers polling concurrent tabs.
+  const STRICT_AUTH_PATHS = [
+    '/api/auth/sign-in/email',
+    '/api/auth/sign-up/email',
+    '/api/auth/request-password-reset',
+    '/api/auth/reset-password',
+  ] as const;
+  const authSessionRateLimitMax = config.get('AUTH_SESSION_RATE_LIMIT_MAX', { infer: true });
+  const authSessionRateLimitWindowMs = config.get('AUTH_SESSION_RATE_LIMIT_WINDOW_MS', {
+    infer: true,
+  });
+  const strictAuthRouteConfig: RouteShorthandOptions = {
+    config: {
+      rateLimit: { max: authRateLimitMax, timeWindow: authRateLimitWindowMs },
+    },
+  };
+  const looseAuthRouteConfig: RouteShorthandOptions = {
+    config: {
+      rateLimit: {
+        max: authSessionRateLimitMax,
+        timeWindow: authSessionRateLimitWindowMs,
+        keyGenerator: (req) => req.ip,
+      },
+    },
+  };
+
+  const authRouteHandler = async (req: FastifyRequest, reply: FastifyReply): Promise<void> => {
     // Fastify consumes the request stream into `req.body`. Better Auth's
     // toNodeHandler reads from req.raw — propagate the parsed body so its
     // fallback path can re-serialize it into a Web Request.
@@ -104,8 +272,41 @@ async function bootstrap() {
       (req.raw as unknown as { body: unknown }).body = req.body;
     }
     reply.hijack();
-    await betterAuthHandler(req.raw, reply.raw);
-  });
+    try {
+      await betterAuthHandler(req.raw, reply.raw);
+    } catch (err) {
+      // betterAuthHandler threw after hijack — Fastify's error handler will
+      // not run because the reply is already hijacked. We must close the
+      // connection manually to prevent a slowloris-style hang.
+      Sentry.captureException(err);
+      const logger = app.get(Logger);
+      logger.error(
+        `Better Auth handler threw unexpectedly: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      // reply.sent is always false after hijack (Fastify tracks sent state
+      // internally and hijack detaches that tracking). The meaningful guard
+      // is reply.raw.headersSent — kept for defensive clarity.
+      if (!reply.raw.headersSent) {
+        const body = JSON.stringify({
+          type: 'https://tools.ietf.org/html/rfc7231#section-6.6.1',
+          title: 'Internal Server Error',
+          status: 500,
+        });
+        reply.raw.writeHead(500, {
+          'Content-Type': 'application/problem+json',
+          'Content-Length': Buffer.byteLength(body),
+        });
+        reply.raw.end(body);
+      }
+      // Forcibly destroy the socket so half-open connections don't linger.
+      reply.raw.socket?.destroy();
+    }
+  };
+
+  for (const path of STRICT_AUTH_PATHS) {
+    fastify.all(path, strictAuthRouteConfig, authRouteHandler);
+  }
+  fastify.all('/api/auth/*', looseAuthRouteConfig, authRouteHandler);
 
   if (config.get('BULL_BOARD_ENABLED', { infer: true })) {
     // Mounted as a Fastify plugin, so Nest's `setGlobalPrefix('api/v1')` does

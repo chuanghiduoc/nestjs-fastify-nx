@@ -98,7 +98,10 @@ export function startTracing(options: StartTracingOptions = {}): NodeSDK | null 
     sdk
       .shutdown()
       .catch((err) => {
-        console.error('OpenTelemetry shutdown failed', err);
+        // No DI container at SIGTERM/SIGINT — write directly to stderr.
+        process.stderr.write(
+          `[otel] shutdown failed: ${err instanceof Error ? err.stack : String(err)}\n`,
+        );
       })
       .finally(() => process.exit(0));
   };

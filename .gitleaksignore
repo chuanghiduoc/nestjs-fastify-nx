@@ -1,0 +1,6 @@
+# scripts/smoke-expanded.sh uses `curl -u "${BULL_BOARD_USER:-admin}:..."` to
+# hit /api/admin/queues. The values are env-driven; the inline default `admin`
+# matches the dev-only Bull Board credentials shipped in .env.example (the env
+# validator rejects them in production). Not a real secret.
+scripts/smoke-expanded.sh:curl-auth-user:86
+scripts/smoke-expanded.sh:curl-auth-user:89

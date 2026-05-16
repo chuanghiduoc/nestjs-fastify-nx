@@ -2,6 +2,18 @@ import { Injectable } from '@nestjs/common';
 import { HealthIndicator, HealthIndicatorResult, HealthCheckError } from '@nestjs/terminus';
 import { PrismaService } from '@nestjs-fastify-nx/infra-database';
 
+const PROBE_TIMEOUT_MS = 2_000;
+
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  // Clear the timer whether the probe wins or loses — without this the reject
+  // closure keeps a reference alive until the timer fires, blocking clean shutdown.
+  let timer: NodeJS.Timeout | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`Health probe timed out after ${ms}ms`)), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
 @Injectable()
 export class PrismaHealthIndicator extends HealthIndicator {
   constructor(private readonly prisma: PrismaService) {
@@ -10,7 +22,7 @@ export class PrismaHealthIndicator extends HealthIndicator {
 
   async isHealthy(key: string): Promise<HealthIndicatorResult> {
     try {
-      await this.prisma.db.$queryRaw`SELECT 1`;
+      await withTimeout(this.prisma.db.$queryRaw`SELECT 1`, PROBE_TIMEOUT_MS);
       return this.getStatus(key, true);
     } catch (error) {
       throw new HealthCheckError(

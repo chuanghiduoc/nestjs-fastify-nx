@@ -56,6 +56,15 @@ export function applyFastifyErrorHandler(fastify: FastifyInstance): void {
       reply.header('x-request-id', requestId);
     }
 
+    // Pass-through for errors already shaped as RFC 9457 (e.g. @fastify/rate-limit's
+    // errorResponseBuilder returns { type, title, status, detail, retryAfter }).
+    // Rebuilding via buildProblemDetails here would drop plugin-specific fields.
+    // Strict check: all three required fields present + status in HTTP error range.
+    if (isProblemDetailsShape(error)) {
+      void reply.status(status).header('content-type', PROBLEM_CONTENT_TYPE).send(error);
+      return;
+    }
+
     void reply
       .status(status)
       .header('content-type', PROBLEM_CONTENT_TYPE)
@@ -72,9 +81,33 @@ export function applyFastifyErrorHandler(fastify: FastifyInstance): void {
   });
 }
 
+interface ProblemDetailsLike {
+  status: number;
+  title: string;
+  type: string;
+  detail?: string;
+  retryAfter?: number;
+}
+
+function isProblemDetailsShape(error: unknown): error is ProblemDetailsLike {
+  if (!error || typeof error !== 'object') return false;
+  const e = error as Record<string, unknown>;
+  return (
+    typeof e['status'] === 'number' &&
+    e['status'] >= 400 &&
+    e['status'] < 600 &&
+    typeof e['title'] === 'string' &&
+    typeof e['type'] === 'string'
+  );
+}
+
 function resolveStatus(error: FastifyError): number {
-  if (typeof error.statusCode === 'number' && error.statusCode >= 400 && error.statusCode < 600) {
-    return error.statusCode;
+  // RFC 9457 problem-details schema uses `status`; Fastify/Nest native errors
+  // use `statusCode`. @fastify/rate-limit's errorResponseBuilder returns the
+  // former — fall through to 500 here would mask 429 as Internal Server Error.
+  const candidates = [error.statusCode, (error as unknown as { status?: number }).status];
+  for (const c of candidates) {
+    if (typeof c === 'number' && c >= 400 && c < 600) return c;
   }
   if (error.code && FASTIFY_CODE_TO_ERROR_CODE[error.code]) {
     return error.code === 'FST_ERR_CTP_BODY_TOO_LARGE'

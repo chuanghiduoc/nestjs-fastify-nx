@@ -1,18 +1,11 @@
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
-    "outDir": "../../../dist/out-tsc/libs/modules/admin",
+    "outDir": "../../../dist/out-tsc/libs/composition/admin",
     "declaration": true,
-    "ignoreDeprecations": "6.0",
+    "composite": true,
     "types": ["node"],
-    "experimentalDecorators": true,
-    "emitDecoratorMetadata": true,
-    "strictNullChecks": true,
-    "noImplicitAny": true,
-    "strictBindCallApply": true,
-    "forceConsistentCasingInFileNames": true,
-    "noFallthroughCasesInSwitch": true,
-    "composite": true
+    "ignoreDeprecations": "6.0"
   },
   "include": ["src/**/*.ts"],
   "exclude": [
@@ -37,7 +30,7 @@
       "path": "../../contracts/tsconfig.lib.json"
     },
     {
-      "path": "../users/tsconfig.lib.json"
+      "path": "../../modules/users/tsconfig.lib.json"
     }
   ]
 }

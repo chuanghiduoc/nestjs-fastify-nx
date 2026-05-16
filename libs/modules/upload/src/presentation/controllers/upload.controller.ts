@@ -5,10 +5,15 @@ import {
   HttpCode,
   HttpStatus,
   Inject,
+  Logger,
   NotFoundException,
   Post,
   UseGuards,
 } from '@nestjs/common';
+import { InjectQueue } from '@nestjs/bullmq';
+import type { Queue } from 'bullmq';
+import { Throttle } from '@nestjs/throttler';
+import { QUEUE_NAMES } from '@nestjs-fastify-nx/shared';
 import {
   ApiBody,
   ApiCookieAuth,
@@ -27,12 +32,17 @@ import {
   StoredFile,
 } from '@nestjs-fastify-nx/infra-storage';
 import { BetterAuthGuard } from '@nestjs-fastify-nx/infra-auth';
-import { generateId } from '@nestjs-fastify-nx/shared';
-import { ALLOWED_MIME_TYPES } from './file-signature';
+import { ALLOWED_MIME_TYPES, generateId } from '@nestjs-fastify-nx/shared';
 
-const MAX_FILE_SIZE = 10 * 1024 * 1024;
+const DEFAULT_MAX_FILE_SIZE = 10 * 1024 * 1024;
 const PRESIGN_EXPIRES_SECONDS = 5 * 60;
 const ALLOWED_MIME_LIST = Array.from(ALLOWED_MIME_TYPES);
+
+// Per-route throttle on top of the global ThrottlerGuard. /presign is the
+// expensive side (mints S3 policy + creates an orphan key); /confirm is
+// cheaper but still rate-limited to defeat key-enumeration attempts.
+const PRESIGN_LIMIT = { default: { limit: 10, ttl: 60_000 } };
+const CONFIRM_LIMIT = { default: { limit: 30, ttl: 60_000 } };
 
 const MIME_EXTENSIONS: Record<string, string> = {
   'image/jpeg': 'jpg',
@@ -108,7 +118,7 @@ class PresignedUploadDto implements PresignedUpload {
 
   @ApiProperty({
     description: 'Maximum bytes the policy will accept — clients should validate locally too.',
-    example: MAX_FILE_SIZE,
+    example: DEFAULT_MAX_FILE_SIZE,
   })
   maxBytes!: number;
 }
@@ -139,14 +149,27 @@ class StoredFileDto implements StoredFile {
 @UseGuards(BetterAuthGuard)
 @ApiCookieAuth('session')
 export class UploadController {
-  constructor(@Inject(STORAGE_PORT) private readonly storage: StoragePort) {}
+  private readonly logger = new Logger(UploadController.name);
+  // Mirrors the cap enforced by @fastify/multipart in main.ts so both the
+  // parser-level and policy-level rejections trigger at the same threshold.
+  private readonly maxFileSize: number;
+
+  constructor(
+    @Inject(STORAGE_PORT) private readonly storage: StoragePort,
+    @InjectQueue(QUEUE_NAMES.UPLOAD_VERIFICATION) private readonly verifyQueue: Queue,
+  ) {
+    const raw = process.env['UPLOAD_MAX_FILE_BYTES'];
+    const parsed = raw ? Number.parseInt(raw, 10) : Number.NaN;
+    this.maxFileSize = Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_MAX_FILE_SIZE;
+  }
 
   @Post('presign')
+  @Throttle(PRESIGN_LIMIT)
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({
     summary: 'Issue a presigned POST policy for a direct browser→S3 upload.',
     description:
-      'Returns the URL and form fields a browser must POST `multipart/form-data` to. The policy pins `Content-Type` and a 10 MB size cap; mismatches are rejected by S3 itself. After the upload completes, call `POST /upload/confirm` with the returned `key`.',
+      'Returns the URL and form fields a browser must POST `multipart/form-data` to. The policy pins `Content-Type` and the configured size cap (UPLOAD_MAX_FILE_BYTES); mismatches are rejected by S3 itself. After the upload completes, call `POST /upload/confirm` with the returned `key`.',
   })
   @ApiBody({ type: PresignUploadDto })
   @ApiCreatedResponse({ type: PresignedUploadDto, description: 'Presigned upload policy issued.' })
@@ -161,12 +184,13 @@ export class UploadController {
     const key = `uploads/${generateId()}.${extension}`;
     return this.storage.presignUpload(key, {
       contentType: dto.contentType,
-      maxBytes: MAX_FILE_SIZE,
+      maxBytes: this.maxFileSize,
       expiresInSeconds: PRESIGN_EXPIRES_SECONDS,
     });
   }
 
   @Post('confirm')
+  @Throttle(CONFIRM_LIMIT)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Confirm a direct upload completed and return its stored metadata.',
@@ -188,12 +212,43 @@ export class UploadController {
       throw new BadRequestException(`Mime type "${meta.contentType}" is not allowed`);
     }
 
-    if (meta.size <= 0 || meta.size > MAX_FILE_SIZE) {
+    if (meta.size <= 0 || meta.size > this.maxFileSize) {
       await this.storage.delete(dto.key).catch(() => undefined);
       throw new BadRequestException(
-        `Object size ${meta.size} bytes is outside the allowed range (1..${MAX_FILE_SIZE})`,
+        `Object size ${meta.size} bytes is outside the allowed range (1..${this.maxFileSize})`,
       );
     }
+
+    // Tag the object so the S3 lifecycle rule preserves it. Untagged orphans
+    // (presigned but never confirmed) auto-expire — see docs/runbook.md.
+    await this.storage.commit(dto.key).catch((err) => {
+      this.logger.warn(
+        { err, key: dto.key },
+        'commit tag failed (lifecycle may expire the object)',
+      );
+    });
+
+    // Async magic-byte audit. We accept the upload now (HEAD already proved
+    // declared MIME + size), but the worker re-reads the first 16 bytes and
+    // deletes the object if the binary signature contradicts the declared
+    // type. Non-blocking so the user gets their response immediately.
+    await this.verifyQueue
+      .add(
+        'verify-magic-bytes',
+        { key: dto.key, declaredContentType: meta.contentType, bucket: meta.bucket },
+        {
+          // Strip '/' from the key for the jobId — BullMQ uses ':' internally
+          // and '/' is fine, but normalizing to '_' keeps jobId portable.
+          jobId: `verify__${dto.key.replace(/\//g, '_')}`,
+          attempts: 3,
+          backoff: { type: 'exponential', delay: 5_000 },
+          removeOnComplete: { count: 100 },
+          removeOnFail: { count: 50 },
+        },
+      )
+      .catch((err) => {
+        this.logger.error({ err, key: dto.key }, 'enqueue verify-magic-bytes failed');
+      });
 
     const url = await this.storage.getSignedUrl(dto.key);
     return { key: dto.key, url, bucket: meta.bucket, size: meta.size };

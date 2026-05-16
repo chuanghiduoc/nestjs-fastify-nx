@@ -1,0 +1,28 @@
+# Trivy ignore list — acknowledged risks documented.
+# Format: one CVE per line; optional `expiration: YYYY-MM-DD` comment.
+#
+# ---------------------------------------------------------------------------
+# Lefthook (devDependency) Go stdlib CVEs — bundled binary at
+# node_modules/.pnpm/lefthook-linux-x64@2.1.6/.../bin/lefthook
+#
+# Why ignored: lefthook is a git-hook runner used by developers locally and
+# in the dev compose `workspace` stage only. It is NOT installed in any
+# production runtime image (api/worker/scheduler/migration all use
+# `pnpm install --prod` which omits devDependencies). The CVEs cannot be
+# patched until upstream lefthook publishes a release built against
+# Go >= 1.26.3. Latest stable on npm is 2.1.6 as of 2026-05-17.
+#
+# Re-evaluate when lefthook 2.2+ ships. Track:
+#   https://github.com/evilmartians/lefthook/releases
+# ---------------------------------------------------------------------------
+CVE-2026-25679
+CVE-2026-27137
+CVE-2026-32280
+CVE-2026-32281
+CVE-2026-32283
+CVE-2026-33810
+CVE-2026-33811
+CVE-2026-33814
+CVE-2026-39820
+CVE-2026-39836
+CVE-2026-42499

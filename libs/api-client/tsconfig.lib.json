@@ -3,15 +3,10 @@
   "compilerOptions": {
     "outDir": "../../dist/out-tsc/libs/api-client",
     "declaration": true,
-    "ignoreDeprecations": "6.0",
+    "composite": true,
     "types": ["node"],
     "lib": ["ES2022", "DOM"],
-    "strictNullChecks": true,
-    "noImplicitAny": true,
-    "strictBindCallApply": true,
-    "forceConsistentCasingInFileNames": true,
-    "noFallthroughCasesInSwitch": true,
-    "composite": true
+    "ignoreDeprecations": "6.0"
   },
   "include": ["src/**/*.ts"],
   "exclude": ["src/**/*.test.ts", "src/**/*.spec.ts"]

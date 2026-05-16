@@ -5,6 +5,45 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] — Best-Practice Overhaul (2026-05-16)
+
+### Removed
+
+- `AggregateRoot` dead inheritance — domain entities no longer extend it
+- `RequestContext` zombie class — removed from codebase; use NestJS `@Req()` + guard injection
+- Parallel `UserProfileDto` in application layer — unified to single DTO per shape
+- `BetterAuthModule.forRootAsync()` and `BETTER_AUTH_HOOKS` scaffolding — simplified to direct factory
+- `libs/modules/admin` (moved to `libs/composition/admin` with `scope:composition` tag)
+- `apps/api/src/common/upload` (moved to `libs/modules/upload`)
+- Logger duplicates — three `LoggerModule.forRoot()` calls unified to single shared factory
+- `BetterAuthHooks` interface and `databaseHooks.user.create.after` block — dead code removed (user registration events flow through Postgres trigger → outbox, not this hook)
+
+### Added
+
+- Auth rate-limit enforcement — `fastify-rate-limit` hook guards `/api/auth/*` (AUTH_RATE_LIMIT_MAX, AUTH_RATE_LIMIT_WINDOW_MS)
+- HTTP body + multipart caps — HTTP_BODY_LIMIT_BYTES, UPLOAD_MAX_FILE_BYTES env vars with validation
+- Outbox interactive transaction — lock-through-publish semantics with OUTBOX_TX_TIMEOUT_MS timeout
+- Health readiness probe for BullMQ — `BullMqHealthIndicator` pings email-notification queue (2s timeout)
+- Sentry PII scrubbing — beforeSend filter masks password, token, secret, cookie patterns in event.extra and breadcrumbs
+- Metrics IP allowlist — `METRICS_ALLOW_CIDRS` (comma-separated CIDR ranges) with socket.remoteAddress validation
+- Metrics IP allowlist health check — `MetricsIpAllowGuard` reads `METRICS_ALLOW_CIDRS` at guard evaluation time
+- NX_CLOUD_AUTH_TOKEN for Nx Cloud remote caching in CI
+- Shared Testcontainers setup — global-setup/teardown with SIGINT handler for clean container teardown on CI cancel
+- docs/code-standards.md — enforcement of logging (pino-only), error handling (BusinessRuleException), DTOs (1 per shape), module boundaries, testing ratios
+- docs/runbook.md — 6 sections for ops troubleshooting (health, metrics, outbox, BullMQ, performance, security)
+- **Phase 6** — Module generator overhaul: `pnpm nx g @nestjs-fastify-nx/tools-generators:module --name=foo --directory=modules` scaffolds full DDD layout (domain/application/infrastructure/presentation) with zero TODOs, kebab-case validation, correct `scope:*` tag scheme
+- **Phase 7** — Ops tooling: `scripts/doctor.sh` (preflight check: Docker, Node, pnpm, ports, env vars), `scripts/teardown.sh` (clean compose stack wrapper), `scripts/build-dev.sh --with-obs` flag, `docker/compose.observability.yml` (opt-in Prometheus + Grafana + Jaeger + OTel collector), MinIO bucket auto-provision + healthcheck
+- **Phase 8** — Documentation polish: CLAUDE.md updated (honest HMR comment, .env.example guidance, post-clone sanity check, Better Auth body parser gotcha, generator invocation hints, runbook/code-standards links), new CONTRIBUTING.md (human dev onboarding, 5-minute quick start, daily commands table, PR checklist, troubleshooting table)
+
+### Fixed
+
+- Audit listener no longer silently swallows persistence errors — re-throws to trigger transaction rollback
+- GraphQL `me` query delegates to `GetUserProfileHandler` for REST/GraphQL parity
+- Hijack handler try/catch + socket.destroy for slowloris mitigation (socket reset on timeout)
+- Health indicator timer leaks — clear setTimeout via .finally() in prisma and redis health checks
+- E2E test isolation — shared Testcontainers containers + global truncateAll cleanup between test suites
+- Sentry sample rate cap at 0.1 in production (avoid over-sampling high-volume services)
+
 ## [1.0.0] - 2026-05-01
 
 Initial public release of the boilerplate.

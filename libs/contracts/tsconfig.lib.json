@@ -3,16 +3,9 @@
   "compilerOptions": {
     "outDir": "../../dist/out-tsc/libs/contracts",
     "declaration": true,
-    "ignoreDeprecations": "6.0",
+    "composite": true,
     "types": ["node"],
-    "experimentalDecorators": true,
-    "emitDecoratorMetadata": true,
-    "strictNullChecks": true,
-    "noImplicitAny": true,
-    "strictBindCallApply": true,
-    "forceConsistentCasingInFileNames": true,
-    "noFallthroughCasesInSwitch": true,
-    "composite": true
+    "ignoreDeprecations": "6.0"
   },
   "include": ["src/**/*.ts"],
   "exclude": [

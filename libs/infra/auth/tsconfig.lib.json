@@ -4,15 +4,8 @@
     "outDir": "../../../dist/out-tsc/libs/infra/auth",
     "declaration": true,
     "composite": true,
-    "ignoreDeprecations": "6.0",
     "types": ["node"],
-    "experimentalDecorators": true,
-    "emitDecoratorMetadata": true,
-    "strictNullChecks": true,
-    "noImplicitAny": true,
-    "strictBindCallApply": true,
-    "forceConsistentCasingInFileNames": true,
-    "noFallthroughCasesInSwitch": true
+    "ignoreDeprecations": "6.0"
   },
   "include": ["src/**/*.ts"],
   "exclude": [
@@ -30,6 +23,9 @@
     "src/**/*.spec.jsx"
   ],
   "references": [
+    {
+      "path": "../../shared/tsconfig.lib.json"
+    },
     {
       "path": "../database/tsconfig.lib.json"
     }

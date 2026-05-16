@@ -2,22 +2,61 @@
 # Build all services in development mode using docker compose.
 #
 # Usage:
-#   ./scripts/build-dev.sh                  # build api + worker + scheduler
-#   ./scripts/build-dev.sh api              # build only api
-#   ./scripts/build-dev.sh api worker       # build only api + worker
+#   ./scripts/build-dev.sh [SERVICE...] [--with-obs] [--help]
+#
+# Arguments:
+#   SERVICE...    One or more service names to build (default: api worker scheduler)
+#   --with-obs    Include the observability overlay (Prometheus, Grafana, Jaeger, OTel)
 #
 # Env flags:
 #   NO_CACHE=1     full clean rebuild (default: incremental)
 #   TRIVY_SCAN=0   skip vulnerability scan
 set -euo pipefail
 
-# Always run from project root regardless of where the script is called from
-cd "$(dirname "$0")/.."
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Source shared color helpers.
+# shellcheck disable=SC1091
+source "${SCRIPT_DIR}/security/_lib.sh"
+
+# Always run from project root regardless of where the script is called from.
+cd "$(sec::repo_root)"
+
+if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
+  echo "Usage: ./scripts/build-dev.sh [SERVICE...] [--with-obs] [--help]"
+  echo ""
+  echo "Arguments:"
+  echo "  SERVICE...    Services to build (default: api worker scheduler)"
+  echo "  --with-obs    Also start the observability stack (Prometheus/Grafana/Jaeger/OTel)"
+  echo ""
+  echo "Env flags:"
+  echo "  NO_CACHE=1    Full clean rebuild"
+  echo "  TRIVY_SCAN=0  Skip Trivy vulnerability scan"
+  echo ""
+  echo "Examples:"
+  echo "  ./scripts/build-dev.sh"
+  echo "  ./scripts/build-dev.sh api"
+  echo "  ./scripts/build-dev.sh --with-obs"
+  echo "  NO_CACHE=1 ./scripts/build-dev.sh api worker"
+  exit 0
+fi
 
 DEFAULT_SERVICES=(api worker scheduler)
-if [[ $# -gt 0 ]]; then
-  SERVICES=("$@")
-else
+WITH_OBS=0
+SERVICES=()
+
+for arg in "$@"; do
+  case "$arg" in
+    --with-obs) WITH_OBS=1 ;;
+    --*)
+      sec::err "Unknown flag: $arg  (try --help)"
+      exit 1
+      ;;
+    *) SERVICES+=("$arg") ;;
+  esac
+done
+
+if [[ ${#SERVICES[@]} -eq 0 ]]; then
   SERVICES=("${DEFAULT_SERVICES[@]}")
 fi
 
@@ -27,6 +66,10 @@ fi
 # is also injected into containers via `env_file: ../.env`; the CLI flag
 # covers the host-side substitution that env_file cannot.
 COMPOSE_BASE="--env-file .env -f docker/compose.yml -f docker/compose.dev.yml"
+if [[ $WITH_OBS -eq 1 ]]; then
+  COMPOSE_BASE="${COMPOSE_BASE} -f docker/compose.observability.yml"
+  sec::log "Observability overlay enabled (Prometheus + Grafana + Jaeger + OTel)"
+fi
 
 # --no-cache invalidates every layer (incl. pnpm install) and rebuilds the
 # 3 images from scratch. Default to incremental; set NO_CACHE=1 to force.
@@ -40,31 +83,30 @@ fi
 # the post-build phase to no benefit on local dev images.
 export BUILDX_NO_DEFAULT_ATTESTATIONS=1
 
-echo "==> Building dev images: ${SERVICES[*]}"
+sec::log "Building dev images: ${SERVICES[*]}"
 BUILD_START=$(date +%s)
+# shellcheck disable=SC2086
 docker compose $COMPOSE_BASE build "${BUILD_FLAGS[@]}" "${SERVICES[@]}"
 BUILD_END=$(date +%s)
 BUILD_ELAPSED=$((BUILD_END - BUILD_START))
 
 echo ""
-echo "==> Starting / recreating: ${SERVICES[*]}"
+sec::log "Starting / recreating: ${SERVICES[*]}"
 # `up -d <svc>` brings up listed services plus their depends_on chain
 # (postgres, redis-cache, redis-queue, migration). --force-recreate ensures
 # the just-rebuilt image actually replaces any running container.
+# shellcheck disable=SC2086
 docker compose $COMPOSE_BASE up -d --force-recreate "${SERVICES[@]}"
 
 echo ""
-echo "==> Waiting 10s for services to start..."
-sleep 10
-
-echo ""
-echo "==> Container status:"
+sec::log "Container status:"
+# shellcheck disable=SC2086
 docker compose $COMPOSE_BASE ps
 
 # Smoke test only meaningful when api is part of this build run.
 if printf '%s\n' "${SERVICES[@]}" | grep -qx api; then
   echo ""
-  echo "==> Smoke test: GET /api/v1/health/live"
+  sec::log "Smoke test: GET /api/v1/health/live"
   # Use 127.0.0.1: on Windows / dual-stack hosts `localhost` resolves to ::1 first
   # and curl hangs if the listener is bound only on IPv4. -m caps each attempt; we
   # retry for ~30s while Nest finishes wiring up its providers.
@@ -78,8 +120,9 @@ if printf '%s\n' "${SERVICES[@]}" | grep -qx api; then
   done
   if [[ -n "$SMOKE_OUT" ]]; then
     echo "$SMOKE_OUT" | python3 -m json.tool 2>/dev/null || echo "$SMOKE_OUT"
+    sec::ok "API health check passed"
   else
-    echo "Smoke test failed: API did not respond at $SMOKE_URL within 30s"
+    sec::warn "Smoke test: API did not respond at $SMOKE_URL within 30s"
   fi
 fi
 
@@ -90,14 +133,30 @@ COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-$(basename "$(pwd)")}"
 
 # Dev images carry devDeps so unfixed-and-noisy CVEs are normal: gate is OFF
 # (TRIVY_EXIT_CODE=0). Awareness, not blocking. Set TRIVY_SCAN=0 to skip.
+#
+# api/worker/scheduler all derive from the shared `workspace` stage, so they
+# share identical base layers. Scanning all three would produce duplicate CVE
+# reports for every Node/OS finding. Scan only the first built image and note
+# that its findings cover the shared workspace layers for all three services.
 if [[ "${TRIVY_SCAN:-1}" = "1" ]] && command -v docker >/dev/null 2>&1; then
   echo ""
-  echo "==> Image vulnerability scan (Trivy, warn-only on dev images)"
+  sec::log "Image vulnerability scan (Trivy, warn-only on dev images)"
+
+  # Collect built images in order; stop at the first one that exists.
+  SCAN_IMG=""
+  SCAN_SVC=""
   for svc in "${SERVICES[@]}"; do
     img="${COMPOSE_PROJECT_NAME}-${svc}:latest"
-    docker image inspect "$img" >/dev/null 2>&1 || continue
+    if docker image inspect "$img" >/dev/null 2>&1; then
+      SCAN_IMG="$img"
+      SCAN_SVC="$svc"
+      break
+    fi
+  done
+
+  if [[ -n "$SCAN_IMG" ]]; then
     echo ""
-    echo "--- trivy: ${svc} ---"
+    echo "--- trivy: ${SCAN_SVC} (workspace base layers shared by all services) ---"
     MSYS_NO_PATHCONV=1 docker run --rm \
       -v //var/run/docker.sock:/var/run/docker.sock \
       -v "${HOME}/.cache/trivy:/root/.cache/trivy" \
@@ -107,16 +166,21 @@ if [[ "${TRIVY_SCAN:-1}" = "1" ]] && command -v docker >/dev/null 2>&1; then
       --scanners vuln \
       --exit-code 0 \
       --format table \
-      "$img" || true
-  done
+      "$SCAN_IMG" || true
+
+    # Report skipped services so the output is explicit, not silently absent.
+    for svc in "${SERVICES[@]}"; do
+      [[ "$svc" == "$SCAN_SVC" ]] && continue
+      img="${COMPOSE_PROJECT_NAME}-${svc}:latest"
+      docker image inspect "$img" >/dev/null 2>&1 \
+        && sec::log "Skipping trivy: ${svc} — same workspace base layers as ${SCAN_SVC}"
+    done
+  fi
 fi
 
 # --- Build report -----------------------------------------------------------
-# Time + image size per service. Prints both raw bytes and human MB so the
-# numbers are diffable across runs without parsing docker's locale-specific
-# size formatter (e.g. "1.23GB" vs "1,23 GB").
 echo ""
-echo "==> Build report"
+sec::log "Build report"
 printf 'Time:  %d:%02d  (%ds total for: %s)\n' \
   $((BUILD_ELAPSED / 60)) $((BUILD_ELAPSED % 60)) \
   "$BUILD_ELAPSED" "${SERVICES[*]}"
@@ -136,5 +200,10 @@ for svc in "${SERVICES[@]}"; do
 done
 
 echo ""
-echo "==> Swagger UI available at: http://localhost:3000/api/docs"
-echo "Done."
+sec::ok "Swagger UI: http://localhost:3000/api/docs"
+if [[ $WITH_OBS -eq 1 ]]; then
+  sec::ok "Grafana:    http://localhost:3001  (admin / admin)"
+  sec::ok "Jaeger:     http://localhost:16686"
+  sec::ok "Prometheus: http://localhost:9090"
+fi
+sec::ok "Done."

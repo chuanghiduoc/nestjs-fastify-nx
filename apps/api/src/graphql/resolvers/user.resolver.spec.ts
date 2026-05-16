@@ -1,11 +1,12 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { NotFoundException } from '@nestjs/common';
 import { UserResolver } from './user.resolver';
-import type { UserRepositoryPort, ListUsersHandler } from '@nestjs-fastify-nx/modules-users';
+import type { ListUsersHandler, GetUserProfileHandler } from '@nestjs-fastify-nx/modules-users';
 import type { AuthenticatedSession } from '@nestjs-fastify-nx/infra-auth';
 
-const mockUser = {
+const mockProfileResult = {
   id: 'u1',
-  email: { toString: () => 'test@example.com' },
+  email: 'test@example.com',
   name: 'Test User',
   role: 'USER' as const,
   status: 'ACTIVE' as const,
@@ -25,17 +26,14 @@ const mockSession: AuthenticatedSession = {
 
 describe('UserResolver', () => {
   let resolver: UserResolver;
-  let mockRepo: UserRepositoryPort;
   let mockListHandler: ListUsersHandler;
+  let mockGetProfileHandler: GetUserProfileHandler;
 
   beforeEach(() => {
-    mockRepo = {
-      findById: vi.fn().mockResolvedValue(mockUser),
-      findByEmail: vi.fn().mockResolvedValue(null),
-      findAll: vi.fn().mockResolvedValue({ items: [], total: 0 }),
-      save: vi.fn().mockResolvedValue(undefined),
-      exists: vi.fn().mockResolvedValue(false),
-    };
+    mockGetProfileHandler = {
+      execute: vi.fn().mockResolvedValue(mockProfileResult),
+    } as unknown as GetUserProfileHandler;
+
     mockListHandler = {
       execute: vi.fn().mockResolvedValue({
         data: [
@@ -59,23 +57,32 @@ describe('UserResolver', () => {
         },
       }),
     } as unknown as ListUsersHandler;
-    resolver = new UserResolver(mockRepo, mockListHandler);
+
+    resolver = new UserResolver(mockListHandler, mockGetProfileHandler);
   });
 
   describe('me', () => {
-    it('returns user for authenticated request', async () => {
+    it('returns user profile for authenticated request', async () => {
       const ctx: { req: { user: AuthenticatedSession } } = { req: { user: mockSession } };
       const result = await resolver.me(ctx);
       expect(result?.id).toBe('u1');
       expect(result?.email).toBe('test@example.com');
       expect(result?.name).toBe('Test User');
-      expect(mockRepo.findById).toHaveBeenCalledWith('u1');
+      expect(mockGetProfileHandler.execute).toHaveBeenCalledWith(
+        expect.objectContaining({ userId: 'u1' }),
+      );
     });
 
     it('returns null when user is not found', async () => {
-      vi.mocked(mockRepo.findById).mockResolvedValue(null);
+      vi.mocked(mockGetProfileHandler.execute).mockRejectedValue(new NotFoundException());
       const ctx: { req: { user: AuthenticatedSession } } = { req: { user: mockSession } };
       const result = await resolver.me(ctx);
+      expect(result).toBeNull();
+    });
+
+    it('returns null when no session userId', async () => {
+      const ctx = { req: { user: undefined } };
+      const result = await resolver.me(ctx as unknown as { req: { user?: AuthenticatedSession } });
       expect(result).toBeNull();
     });
   });

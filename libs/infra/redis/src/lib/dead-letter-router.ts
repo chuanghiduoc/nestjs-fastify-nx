@@ -35,7 +35,7 @@ const DLQ_JOB_OPTIONS: JobsOptions = {
  * contains true dead-letters that operators must act on.
  *
  * Concurrency: all subscribers receive the same `failed` event via Redis
- * pub/sub. Idempotency comes from `jobId: dlq:<originalJobId>` — even if two
+ * pub/sub. Idempotency comes from `jobId: dlq__<originalJobId>` — even if two
  * processes both observe the failure, BullMQ deduplicates on jobId so only
  * the first add() persists.
  */
@@ -64,7 +64,8 @@ export async function routeFailedJobToDlq(
 
     await dlq.add(job.name, envelope, {
       ...DLQ_JOB_OPTIONS,
-      jobId: `dlq:${envelope.originalJobId}`,
+      // BullMQ rejects ':' in custom jobIds — use '__' separator.
+      jobId: `dlq__${envelope.originalJobId}`,
     });
 
     logger.warn(

@@ -96,7 +96,7 @@ describe('routeFailedJobToDlq', () => {
     expect(envelope.attemptsMade).toBe(3);
     expect(envelope.payload).toEqual({ to: 'a@b.c', subject: 'Welcome' });
     expect(typeof envelope.failedAt).toBe('string');
-    expect(opts).toMatchObject({ jobId: 'dlq:job-2', attempts: 1 });
+    expect(opts).toMatchObject({ jobId: 'dlq__job-2', attempts: 1 });
   });
 
   it('treats a missing opts.attempts as a single-attempt budget', async () => {

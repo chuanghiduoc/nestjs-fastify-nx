@@ -9,6 +9,13 @@ const workerEnvSchema = z.object({
   REDIS_QUEUE_PORT: z.coerce.number().int().min(1).max(65535).default(6380),
   REDIS_QUEUE_PREFIX: z.string().default('bull'),
 
+  // Storage (S3 / MinIO) — needed by the upload-verification processor.
+  STORAGE_ENDPOINT: z.string().default('http://localhost:9000'),
+  STORAGE_BUCKET: z.string().default('uploads'),
+  STORAGE_REGION: z.string().default('us-east-1'),
+  STORAGE_ACCESS_KEY: z.string().default('minioadmin'),
+  STORAGE_SECRET_KEY: z.string().default('minioadmin'),
+
   // Mail (Nodemailer SMTP)
   MAIL_HOST: z.string().default('localhost'),
   MAIL_PORT: z.coerce.number().int().min(1).max(65535).default(1025),

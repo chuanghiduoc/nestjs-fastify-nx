@@ -157,8 +157,29 @@ git clone https://github.com/chuanghiduoc/nestjs-fastify-nx.git
 cd nestjs-fastify-nx
 cp .env.example .env
 pnpm install                    # generates Prisma client via postinstall
-./scripts/build-dev.sh          # builds + starts the dev stack
+
+./scripts/doctor.sh             # verify prerequisites (Docker, Node, pnpm, ports)
+./scripts/build-dev.sh          # builds + starts the dev stack (MinIO bucket auto-created)
 ```
+
+When done:
+
+```bash
+./scripts/teardown.sh           # stop stack + remove volumes
+./scripts/teardown.sh --keep-volumes  # stop stack, keep data
+```
+
+Optional — local observability (Prometheus · Grafana · Jaeger · OTel collector):
+
+```bash
+./scripts/build-dev.sh --with-obs
+# Grafana:    http://localhost:3001  (admin / admin)
+# Jaeger:     http://localhost:16686
+# Prometheus: http://localhost:9090
+```
+
+> Enable in `.env`: `OTEL_ENABLED=true`, `OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318`,
+> `ENABLE_METRICS=true`, `METRICS_ALLOW_CIDRS=172.0.0.0/8`
 
 Once the stack is up:
 
@@ -184,7 +205,7 @@ pnpm nx affected -t lint test build # run only affected projects (CI parity)
 pnpm nx run-many -t test            # all projects
 
 # Single project
-pnpm nx serve api                   # dev server (HMR via webpack)
+pnpm nx serve api                   # build once then spawn Node (@nx/js:node, no HMR)
 pnpm nx test api                    # vitest
 pnpm nx build api --configuration=production
 
@@ -214,16 +235,19 @@ pnpm codegen:full                   # export OpenAPI → orval → libs/api-clie
 │   ├── contracts/    # DTOs, OpenAPI types, GraphQL SDL
 │   ├── core/         # auth, errors, events, outbox, validation
 │   ├── infra/        # prisma, redis, bullmq, s3, mailer, otel
-│   ├── modules/      # bounded contexts (users, audit-log, …)
+│   ├── modules/      # bounded contexts (users, audit-log, upload)
+│   ├── composition/  # cross-cutting aggregators (admin — scope:composition)
 │   ├── shared/       # framework-agnostic utilities
 │   └── testing/      # test harnesses + fixtures
 ├── docker/           # compose.yml + compose.dev.yml + compose.prod.yml
 ├── prisma/           # schema, migrations, seed
 ├── scripts/
-│   ├── build-dev.sh
-│   ├── build-prod.sh
-│   └── security/     # gitleaks / osv / semgrep / trivy / cosign
-├── docs/             # architecture, deployment, security, …
+│   ├── build-dev.sh          # build + start dev stack (--with-obs flag)
+│   ├── build-prod.sh         # build production images with SBOM + provenance
+│   ├── doctor.sh             # preflight: Docker, Node, pnpm, ports, .env
+│   ├── teardown.sh           # stop stack + optional volume removal
+│   └── security/             # gitleaks / osv / semgrep / trivy / cosign
+├── docs/             # architecture, deployment, security, runbook, code-standards
 └── .github/workflows # ci.yml, integration.yml, release.yml
 ```
 
@@ -301,6 +325,8 @@ Full flow: [docs/deployment.md](docs/deployment.md).
 - [Deployment](docs/deployment.md) — Docker, GHCR, Coolify, migrations
 - [Security Scanning](docs/security.md) — five-layer pipeline, local + CI parity
 - [Troubleshooting](docs/troubleshooting.md) — known issues, debug tips
+- [Runbook](docs/runbook.md) — ops runbook: health, metrics, outbox, BullMQ, performance
+- [Code Standards](docs/code-standards.md) — logging, error handling, DTOs, boundary rules
 - [API Reference](http://localhost:3000/api/docs) (Swagger UI, dev only)
 
 ## Contributing

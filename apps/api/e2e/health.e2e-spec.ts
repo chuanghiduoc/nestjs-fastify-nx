@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import request from 'supertest';
 import { createTestApp, type TestAppContext } from './test-app';
 
@@ -10,11 +10,14 @@ describe('Health & Metrics E2E', () => {
 
   beforeAll(async () => {
     ctx = await createTestApp();
-  }, 180_000);
+  }, 60_000);
 
   afterAll(async () => {
     await ctx.app.close();
-    await ctx.containers.teardown();
+  });
+
+  beforeEach(async () => {
+    await ctx.cleaner.truncateAll();
   });
 
   describe('GET /api/v1/health/live', () => {
@@ -114,14 +117,7 @@ describe('Health & Metrics E2E', () => {
     });
   });
 
-  describe('POST /api/v1/upload/presign', () => {
-    it('returns 401 with Problem Details when the cookie is missing', async () => {
-      // BetterAuthGuard is the global APP_GUARD; unauthenticated calls are 401.
-      const res = await request(ctx.app.getHttpServer()).post('/api/v1/upload/presign').expect(401);
-
-      expect(res.headers['content-type']).toMatch(/application\/problem\+json/);
-      expect(res.body.status).toBe(401);
-      expect(res.body.code).toBe('unauthorized');
-    });
-  });
+  // Upload endpoint coverage lives in upload.e2e-spec.ts (presign success +
+  // adversarial MIME / key-regex / 404 cases). Auth-guard smoke for /upload
+  // is asserted there too.
 });

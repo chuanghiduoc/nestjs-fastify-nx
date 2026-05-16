@@ -10,21 +10,51 @@ import {
 import * as path from 'path';
 import type { ModuleGeneratorSchema } from './schema';
 
+type DirectoryEnum = 'modules' | 'composition';
+
+const DIRECTORY_MAP: Record<DirectoryEnum, string> = {
+  modules: 'libs/modules',
+  composition: 'libs/composition',
+};
+
+// Normalizes the raw --directory option to the canonical enum value.
+// Accepts full paths (libs/modules, libs/composition) for backward compat
+// with old tooling that passed absolute-style paths. Any other value is
+// rejected early so invalid project names / scope tags can never be generated.
+function normalizeDirectory(raw: string): DirectoryEnum {
+  const base = raw.replace(/^libs\//, '');
+  if (base === 'modules' || base === 'composition') {
+    return base;
+  }
+  throw new Error(
+    `Invalid --directory "${raw}". Accepted values: "modules", "composition" ` +
+      `(or their full-path equivalents "libs/modules", "libs/composition").`,
+  );
+}
+
 export async function moduleGenerator(tree: Tree, options: ModuleGeneratorSchema): Promise<void> {
-  const { name, directory = 'libs/modules', withCqrs = true } = options;
+  const { name, withCqrs = true } = options;
+  const rawDir = normalizeDirectory(options.directory ?? 'modules');
+  const directory = DIRECTORY_MAP[rawDir];
   const moduleNames = names(name);
   const projectRoot = `${directory}/${moduleNames.fileName}`;
   const offset = offsetFromRoot(projectRoot);
+
+  // Project name and scope tag are derived from the target directory so that
+  // composition modules get `composition-foo` / `scope:composition` rather than
+  // the modules variants — matching the convention in libs/composition/admin.
+  const projectName = `${rawDir}-${moduleNames.fileName}`;
+  const scopeTag = `scope:${rawDir}`;
 
   // `build` and `typecheck` targets are auto-inferred by `@nx/js/typescript`
   // from `tsconfig.lib.json`; `lint` is inferred by `@nx/eslint/plugin` from
   // the workspace eslint config. We only need to declare the test target
   // explicitly because the executor takes module-specific options.
-  addProjectConfiguration(tree, `modules-${moduleNames.fileName}`, {
+  addProjectConfiguration(tree, projectName, {
     root: projectRoot,
     projectType: 'library',
     sourceRoot: `${projectRoot}/src`,
-    tags: [`scope:modules`, `module:${moduleNames.fileName}`],
+    tags: [scopeTag, `type:feature`],
     targets: {
       test: {
         executor: '@nx/vitest:test',
@@ -37,11 +67,11 @@ export async function moduleGenerator(tree: Tree, options: ModuleGeneratorSchema
     },
   });
 
-  // Import path mirrors the project name (`modules-${name}`) so consumers
-  // can tell at a glance which scope a barrel belongs to — `@nestjs-fastify-nx/modules-users`
-  // is unambiguously a bounded-context module, while `@nestjs-fastify-nx/infra-redis`
-  // is infrastructure. Keep the two in lockstep.
-  const importPath = `@nestjs-fastify-nx/modules-${moduleNames.fileName}`;
+  // Import path mirrors the project name so consumers can tell at a glance
+  // which scope a barrel belongs to — `@nestjs-fastify-nx/modules-users` is a
+  // bounded-context module, `@nestjs-fastify-nx/composition-admin` is a
+  // cross-cutting aggregate. Keep name and path in lockstep.
+  const importPath = `@nestjs-fastify-nx/${projectName}`;
   updateJson(tree, 'tsconfig.base.json', (json) => {
     json.compilerOptions.paths ??= {};
     json.compilerOptions.paths[importPath] = [`./${projectRoot}/src/index.ts`];

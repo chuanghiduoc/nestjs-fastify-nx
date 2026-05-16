@@ -8,17 +8,19 @@
     "name": {
       "type": "string",
       "description": "Module name (kebab-case, e.g. 'users', 'orders')",
+      "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$",
       "$default": { "$source": "argv", "index": 0 },
-      "x-prompt": "What is the module name?"
+      "x-prompt": "What is the module name? (kebab-case)"
     },
     "directory": {
       "type": "string",
-      "description": "Directory to place the module (default: libs/modules)",
-      "default": "libs/modules"
+      "description": "Target scope: 'modules' (default) for bounded contexts, 'composition' for cross-cutting aggregates",
+      "enum": ["modules", "composition"],
+      "default": "modules"
     },
     "withCqrs": {
       "type": "boolean",
-      "description": "Include CQRS commands and queries",
+      "description": "Include CQRS command skeleton",
       "default": true
     }
   },

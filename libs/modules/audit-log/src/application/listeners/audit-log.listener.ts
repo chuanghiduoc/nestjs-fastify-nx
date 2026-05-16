@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import type { DomainEvent } from '@nestjs-fastify-nx/core';
 import { AUDIT_LOG_REPOSITORY_PORT } from '../../domain/ports/audit-log-repository.port';
@@ -21,8 +21,6 @@ function isAuditPayload(value: unknown): value is AuditPayload {
  */
 @Injectable()
 export class AuditLogListener {
-  private readonly logger = new Logger(AuditLogListener.name);
-
   constructor(
     @Inject(AUDIT_LOG_REPOSITORY_PORT) private readonly repository: AuditLogRepositoryPort,
   ) {}
@@ -42,13 +40,11 @@ export class AuditLogListener {
       occurredAt: event.occurredAt,
     });
 
-    try {
-      await this.repository.append(entry);
-    } catch (err) {
-      this.logger.error(
-        `Audit listener failed for event ${event.eventType} (id=${event.eventId})`,
-        err instanceof Error ? err.stack : String(err),
-      );
-    }
+    // Intentionally not catching: EventEmitter2 is configured with
+    // `ignoreErrors: false`, so a thrown error propagates back to the caller of
+    // `EventBusService.publish` (typically a CQRS command handler). Under the
+    // outbox driver, the relay additionally marks `lastError` on the outbox row;
+    // under the default in-process driver the rejection aborts the command handler.
+    await this.repository.append(entry);
   }
 }

@@ -13,7 +13,9 @@ nestjs-fastify-nx/
 │   ├── modules/      # Bounded contexts (DDD)
 │   │   ├── users/        # scope:modules — user profile, session lookup
 │   │   ├── audit-log/    # scope:modules — domain-event listener writes audit rows
-│   │   └── admin/        # scope:composition — cross-context admin surface
+│   │   └── upload/       # scope:modules — multipart handler, file processing
+│   ├── composition/   # Cross-cutting aggregators (scope:composition)
+│   │   └── admin/     # admin surface + Bull Board (scope:composition tag; composed into api)
 │   ├── infra/        # Adapters
 │   │   ├── auth/         # Better Auth integration, BetterAuthGuard, RolesGuard
 │   │   ├── database/     # Prisma service + module
@@ -106,11 +108,12 @@ cookie issuance. The full endpoint catalogue is published at
 
 ```
 POST /api/auth/sign-up/email → Better Auth
-  → creates User row + Session row
-  → databaseHooks.user.create.after fires
-    → publishes UserRegistered domain event via EVENT_PUBLISHER_PORT
-    → UserRegisteredListener enqueues EMAIL_NOTIFICATION job (BullMQ)
-    → worker process sends the welcome email
+  → creates User row + Session row (via Prisma direct INSERT)
+  → Postgres trigger fires on user table
+    → writes UserRegistered event row to outbox_events (same schema transaction)
+    → EventBusService.publish() (in-process, EVENT_PUBLISHER_DRIVER=inprocess default)
+    → UserRegisteredListener dispatches EMAIL_NOTIFICATION job to BullMQ
+    → worker process consumes job, sends welcome email
   → sets `better-auth.session_token` cookie
 
 POST /api/auth/sign-in/email → Better Auth
@@ -130,8 +133,74 @@ GET /api/v1/admin/users → AdminUsersController.list (BetterAuthGuard + RolesGu
 
 Protected REST and GraphQL endpoints rely on `BetterAuthGuard` and
 `RolesGuard`, both wired globally as `APP_GUARD` providers in `AppModule`.
-WebSocket upgrades go through `createWsAuthMiddleware` which validates the
-same session cookie — see `apps/api/src/websocket/ws-auth.adapter.ts`.
+
+### Tokenized email flows (password reset, email verify, account delete)
+
+These three flows split responsibility between FE and BE. Backend mints a
+short-lived token, signs it, dispatches the email, and validates the token
+on the follow-up POST. Frontend owns every page the user actually sees.
+
+```
+            ┌────────────── BACKEND (NestJS) ──────────────┐
+user clicks │ POST /api/auth/request-password-reset        │
+"forgot"    │   ↓ Better Auth mints token + persists hash  │
+in FE       │   ↓ sendResetPassword callback fires         │
+            │   ↓ enqueues BullMQ EMAIL_NOTIFICATION job   │
+            │   ↓ worker → SMTP → mailbox                  │
+            └──────────────────┬───────────────────────────┘
+                               ↓
+            mail body links: ${FRONTEND_BASE_URL}/reset?token=<t>
+                               ↓ user clicks
+            ┌────────────── FRONTEND (SPA) ────────────────┐
+            │ GET /reset?token=<t>                         │
+            │   ↓ read token from URL                      │
+            │   ↓ render <form> for new password           │
+            │   ↓ on submit:                               │
+            │       POST /api/auth/reset-password          │
+            │       { token, newPassword }                 │
+            └──────────────────┬───────────────────────────┘
+                               ↓
+            ┌────────────── BACKEND ───────────────────────┐
+            │ Better Auth validates token + hashes pwd     │
+            │ → 200 OK, user can now sign in               │
+            └──────────────────────────────────────────────┘
+```
+
+The same shape applies to the other two flows:
+
+| Flow                   | FE page (must exist)        | API endpoint POSTed back              |
+| ---------------------- | --------------------------- | ------------------------------------- |
+| Password reset         | `/reset?token=<t>`          | `POST /api/auth/reset-password`       |
+| Email verification     | `/verify-email?token=<t>`   | `POST /api/auth/verify-email`         |
+| Delete-account confirm | `/delete-account?token=<t>` | `POST /api/auth/delete-user/callback` |
+
+**Configuration**:
+
+- `FRONTEND_BASE_URL` is the SPA origin (e.g. `https://app.example.com`).
+- In production, boot fails if it is unset — the backend has no UI to fall
+  back to and a stale `BETTER_AUTH_URL` link would 404 in the browser.
+- In dev, missing `FRONTEND_BASE_URL` falls back to `BETTER_AUTH_URL` with a
+  runtime warning; the link itself will 404 in a real browser, but the
+  dispatcher path (callback → BullMQ → SMTP → Mailpit) can still be
+  smoke-tested.
+
+**FE responsibilities (checklist for the consuming SPA)**:
+
+- Render three pages: `/reset`, `/verify-email`, `/delete-account`.
+- Read `?token=` from the URL on mount.
+- For password reset, render a form and POST `{ token, newPassword }` to
+  `/api/auth/reset-password`. For the other two, a single confirm button is
+  enough — POST `{ token }` to the matching endpoint.
+- Show the API error (RFC 9457 `code` / `detail`) on failure; redirect to
+  sign-in on success.
+- Never store the token anywhere — it is single-use and short-lived (1 h
+  for reset, 24 h for verify, configurable in `better-auth.config.ts`).
+  WebSocket upgrades go through `createWsAuthMiddleware` which validates the
+  same session cookie — see `apps/api/src/websocket/ws-auth.adapter.ts`.
+
+**Auth rate-limit**: Fastify hook `fastify-rate-limit` guards `/api/auth/*`
+with configurable per-IP limits (AUTH_RATE_LIMIT_MAX, AUTH_RATE_LIMIT_WINDOW_MS).
+Exceeding the limit returns 429 with `application/problem+json` response.
 
 ## API Response Contract
 
@@ -187,7 +256,7 @@ All error responses (400/401/403/404/409/413/415/422/429/5xx) use
 
 ```json
 {
-  "type": "https://api.example.com/errors/validation-failed",
+  "type": "/errors/validation-failed",
   "title": "Validation failed",
   "status": 422,
   "code": "validation_failed",
@@ -240,15 +309,15 @@ Controllers wire the contract through three decorators from
 
 ## Eventing
 
-Two event publisher drivers are switchable via `EVENT_PUBLISHER_DRIVER`:
+Event flow is **transactional**:
 
-- **`inprocess`** (default) — `EventEmitter2`, in-memory, no durability. Fine
-  for dev and single-pod setups.
-- **`outbox`** — domain events are written to `outbox_events` in the same
-  transaction as the aggregate change; the `OutboxRelayService` (running in
-  the scheduler app) polls the table and dispatches durable jobs to BullMQ.
-  Provides at-least-once delivery and survives crashes between commit and
-  publish.
+1. **Domain mutation** writes aggregate change to Postgres
+2. **Postgres trigger** fires (e.g. `sql_events.users.created`) and writes event row to `outbox_events` **in the same transaction**
+3. **EventBusService.publish()** publishes event to in-process listeners immediately (not durable; DEFAULT)
+4. **Listeners** run synchronously; durable side-effects (email, audit) dispatch **BullMQ jobs** which survive process crashes
+5. **Worker process** consumes BullMQ jobs and executes side-effects (send email, write audit log)
+
+The outbox pattern guarantees atomicity: either both the domain row and the event row commit together, or both roll back. Listeners run in-process for development simplicity; production deployments can switch to `EVENT_PUBLISHER_DRIVER=outbox` to defer event publishing until the scheduler's `OutboxRelayService` polls and publishes them durably.
 
 Listeners are NestJS event subscribers; durable side-effects (email, audit)
 always go through BullMQ so retries and dead-letter routing are uniform.

@@ -1,0 +1,78 @@
+# Opt-in observability overlay — local traces, metrics, and dashboards.
+#
+# Usage (dev stack + observability):
+#   docker compose --env-file .env \
+#     -f docker/compose.yml \
+#     -f docker/compose.dev.yml \
+#     -f docker/compose.observability.yml \
+#     up -d
+#
+# Or via the build script:
+#   ./scripts/build-dev.sh --with-obs
+#
+# Ports exposed on the host:
+#   16686  Jaeger UI         http://localhost:16686
+#   9090   Prometheus        http://localhost:9090
+#   3001   Grafana           http://localhost:3001  (admin / admin)
+#   4317   OTLP gRPC         (set OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317)
+#   4318   OTLP HTTP         (set OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318)
+#
+# Enable in the api container:
+#   OTEL_ENABLED=true
+#   OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
+#   ENABLE_METRICS=true
+#   METRICS_ALLOW_CIDRS=172.0.0.0/8   # docker bridge CIDR so prometheus can scrape
+
+services:
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.123.0
+    restart: unless-stopped
+    command: ['--config=/etc/otel/config.yaml']
+    volumes:
+      - ./otel-collector/config.yaml:/etc/otel/config.yaml:ro
+    ports:
+      - '4317:4317' # OTLP gRPC
+      - '4318:4318' # OTLP HTTP
+      - '8888:8888' # collector internal metrics (scraped by Prometheus)
+      - '8889:8889' # Prometheus exporter for app metrics forwarded by collector
+
+  jaeger:
+    image: jaegertracing/jaeger:2.6.0
+    restart: unless-stopped
+    environment:
+      COLLECTOR_OTLP_ENABLED: 'true'
+    ports:
+      - '16686:16686' # Jaeger UI
+
+  prometheus:
+    image: prom/prometheus:v3.3.0
+    restart: unless-stopped
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=7d'
+      - '--web.enable-lifecycle'
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - '9090:9090'
+
+  grafana:
+    image: grafana/grafana:11.6.0
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: 'false'
+      GF_SERVER_HTTP_PORT: '3001'
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafana_data:/var/lib/grafana
+    ports:
+      - '3001:3001'
+    depends_on:
+      - prometheus
+
+volumes:
+  prometheus_data:
+  grafana_data:
