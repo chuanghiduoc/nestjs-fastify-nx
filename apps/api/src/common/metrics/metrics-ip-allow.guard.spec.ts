@@ -3,11 +3,12 @@ import { describe, it, expect } from 'vitest';
 import { ExecutionContext } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { MetricsIpAllowGuard } from './metrics-ip-allow.guard';
+import type { EnvConfig } from '../../config/env.validation';
 
 function makeGuard(cidrs: string): MetricsIpAllowGuard {
   const config = {
     get: () => cidrs,
-  } as unknown as ConfigService;
+  } as unknown as ConfigService<EnvConfig, true>;
   return new MetricsIpAllowGuard(config);
 }
 
