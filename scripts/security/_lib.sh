@@ -16,7 +16,9 @@ sec::err()  { echo "${C_RED}✗${C_RST} $*" >&2; }
 
 # Repo root regardless of caller location.
 sec::repo_root() {
-  cd "$(dirname "${BASH_SOURCE[1]}")/../.." && pwd
+  local lib_dir
+  lib_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  cd "${lib_dir}/../.." && pwd
 }
 
 # MSYS_NO_PATHCONV bypass for Git-Bash on Windows; harmless on Linux/macOS.

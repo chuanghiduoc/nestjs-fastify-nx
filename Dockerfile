@@ -37,11 +37,16 @@ WORKDIR /app
 # ---------------------------------------------------------------------------
 FROM base AS workspace
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc* ./
+# pnpm-store: reuses downloaded tarballs across rebuilds (warm = ~10s vs ~60s cold).
+# --prefer-offline resolves from store without a network round-trip when cache is warm.
 RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
     pnpm config set store-dir /pnpm/store \
-    && pnpm install --frozen-lockfile
+    && pnpm install --frozen-lockfile --prefer-offline
 COPY . .
-RUN pnpm prisma generate && pnpm nx sync
+# nx-cache: persists Nx computation cache across image rebuilds so unchanged
+# projects are not re-compiled on every docker build invocation.
+RUN --mount=type=cache,id=nx-cache,target=/app/.nx/cache \
+    pnpm prisma generate && pnpm nx sync
 
 # ===========================================================================
 # DEV TARGETS — used by docker/compose.dev.yml. Single layer per service:
@@ -50,20 +55,28 @@ RUN pnpm prisma generate && pnpm nx sync
 
 FROM workspace AS api-dev
 ENV NODE_ENV=development
-RUN pnpm nx build api --configuration=development
+# webpack-cache: persists incremental webpack build artifacts; eliminates full
+# recompile when only application source changes (not deps or tsconfig).
+RUN --mount=type=cache,id=webpack-cache-api,target=/app/.cache/webpack \
+    --mount=type=cache,id=nx-cache,target=/app/.nx/cache \
+    pnpm nx build api --configuration=development
 USER node
 EXPOSE 3000 9229
 CMD ["node", "dist/apps/api/main.js"]
 
 FROM workspace AS worker-dev
 ENV NODE_ENV=development
-RUN pnpm nx build worker --configuration=development
+RUN --mount=type=cache,id=webpack-cache-worker,target=/app/.cache/webpack \
+    --mount=type=cache,id=nx-cache,target=/app/.nx/cache \
+    pnpm nx build worker --configuration=development
 USER node
 CMD ["node", "dist/apps/worker/main.js"]
 
 FROM workspace AS scheduler-dev
 ENV NODE_ENV=development
-RUN pnpm nx build scheduler --configuration=development
+RUN --mount=type=cache,id=webpack-cache-scheduler,target=/app/.cache/webpack \
+    --mount=type=cache,id=nx-cache,target=/app/.nx/cache \
+    pnpm nx build scheduler --configuration=development
 USER node
 CMD ["node", "dist/apps/scheduler/main.js"]
 
@@ -74,15 +87,21 @@ CMD ["node", "dist/apps/scheduler/main.js"]
 
 FROM workspace AS api-builder
 ENV NODE_ENV=production
-RUN pnpm nx build api --configuration=production
+RUN --mount=type=cache,id=webpack-cache-api,target=/app/.cache/webpack \
+    --mount=type=cache,id=nx-cache,target=/app/.nx/cache \
+    pnpm nx build api --configuration=production
 
 FROM workspace AS worker-builder
 ENV NODE_ENV=production
-RUN pnpm nx build worker --configuration=production
+RUN --mount=type=cache,id=webpack-cache-worker,target=/app/.cache/webpack \
+    --mount=type=cache,id=nx-cache,target=/app/.nx/cache \
+    pnpm nx build worker --configuration=production
 
 FROM workspace AS scheduler-builder
 ENV NODE_ENV=production
-RUN pnpm nx build scheduler --configuration=production
+RUN --mount=type=cache,id=webpack-cache-scheduler,target=/app/.cache/webpack \
+    --mount=type=cache,id=nx-cache,target=/app/.nx/cache \
+    pnpm nx build scheduler --configuration=production
 
 # ---------------------------------------------------------------------------
 # Production deps stages — pruned, --prod only. Mirror the original per-app

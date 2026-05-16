@@ -133,14 +133,30 @@ COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-$(basename "$(pwd)")}"
 
 # Dev images carry devDeps so unfixed-and-noisy CVEs are normal: gate is OFF
 # (TRIVY_EXIT_CODE=0). Awareness, not blocking. Set TRIVY_SCAN=0 to skip.
+#
+# api/worker/scheduler all derive from the shared `workspace` stage, so they
+# share identical base layers. Scanning all three would produce duplicate CVE
+# reports for every Node/OS finding. Scan only the first built image and note
+# that its findings cover the shared workspace layers for all three services.
 if [[ "${TRIVY_SCAN:-1}" = "1" ]] && command -v docker >/dev/null 2>&1; then
   echo ""
   sec::log "Image vulnerability scan (Trivy, warn-only on dev images)"
+
+  # Collect built images in order; stop at the first one that exists.
+  SCAN_IMG=""
+  SCAN_SVC=""
   for svc in "${SERVICES[@]}"; do
     img="${COMPOSE_PROJECT_NAME}-${svc}:latest"
-    docker image inspect "$img" >/dev/null 2>&1 || continue
+    if docker image inspect "$img" >/dev/null 2>&1; then
+      SCAN_IMG="$img"
+      SCAN_SVC="$svc"
+      break
+    fi
+  done
+
+  if [[ -n "$SCAN_IMG" ]]; then
     echo ""
-    echo "--- trivy: ${svc} ---"
+    echo "--- trivy: ${SCAN_SVC} (workspace base layers shared by all services) ---"
     MSYS_NO_PATHCONV=1 docker run --rm \
       -v //var/run/docker.sock:/var/run/docker.sock \
       -v "${HOME}/.cache/trivy:/root/.cache/trivy" \
@@ -150,8 +166,16 @@ if [[ "${TRIVY_SCAN:-1}" = "1" ]] && command -v docker >/dev/null 2>&1; then
       --scanners vuln \
       --exit-code 0 \
       --format table \
-      "$img" || true
-  done
+      "$SCAN_IMG" || true
+
+    # Report skipped services so the output is explicit, not silently absent.
+    for svc in "${SERVICES[@]}"; do
+      [[ "$svc" == "$SCAN_SVC" ]] && continue
+      img="${COMPOSE_PROJECT_NAME}-${svc}:latest"
+      docker image inspect "$img" >/dev/null 2>&1 \
+        && sec::log "Skipping trivy: ${svc} — same workspace base layers as ${SCAN_SVC}"
+    done
+  fi
 fi
 
 # --- Build report -----------------------------------------------------------
