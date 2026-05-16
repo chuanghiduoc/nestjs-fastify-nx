@@ -71,14 +71,16 @@ Test files (`*.spec.ts`, `*.integration.ts`, `e2e/**`) are exempt from boundary 
 apps/
   api/          HTTP + GraphQL + WebSocket entrypoint
     e2e/        Supertest e2e suite (NOT apps/api/test/)
-    src/common/ filters, interceptors, swagger, throttler
+    src/common/ filters, interceptors, swagger, throttler, health
   worker/       BullMQ consumer
   scheduler/    cron jobs (@nestjs/schedule)
   migration/    one-shot `prisma migrate deploy` + optional seed
 
 libs/
   modules/      bounded contexts (DDD per module — see below)
-  composition/  ← if you create one (admin already lives at libs/modules/admin with scope:composition tag)
+    admin/      admin panel + Bull Board (scope:composition tag; composed into api)
+    upload/     multipart handler (see HTTP_BODY_LIMIT_BYTES, UPLOAD_MAX_FILE_BYTES env)
+  composition/  cross-cutting libs (admin lives here with scope:composition tag)
   core/         auth, errors, events, outbox, validation
   infra/        auth, database, redis, messaging, storage, observability
   contracts/    DTOs, OpenAPI types, GraphQL SDL
@@ -89,7 +91,7 @@ libs/
 prisma/         schema.prisma, migrations/, seed.mjs
 docker/         compose.yml + compose.dev.yml + compose.prod.yml + compose.test.yml
 scripts/        build-dev.sh, build-prod.sh, security/*
-docs/           architecture, deployment, environment, security, troubleshooting
+docs/           architecture, deployment, environment, security, troubleshooting, runbook
 tools/generators/  Nx generator → `@nestjs-fastify-nx/tools-generators:module`
 ```
 
@@ -164,6 +166,10 @@ pnpm nx reset                      # if daemon caches go stale
 - **Swagger codegen**: `apps/api/src/common/swagger/codegen-app.module.ts` is an HTTP-only module used by `export-spec.ts` for spec generation — keep it in sync when adding feature modules to `AppModule`. It deliberately drops Socket.io/GraphQL/Sentry/Metrics to avoid side-effects during spec export.
 - **pnpm overrides** in `package.json` pin transitive vulnerable versions (fastify, picomatch, brace-expansion, …). Trivy may still flag declared ranges in transitive `package.json` files — that's a scanner artifact; runtime resolves to the override.
 - **Migration app** (`apps/migration`) has an empty allow-list for module boundaries on purpose. Do **not** import domain code there — schema rollouts must stay decoupled from runtime business logic.
+- **Auth rate-limit + body/multipart caps**: Fastify hook `fastify-rate-limit` guards `/api/auth/*` (AUTH_RATE_LIMIT_MAX=5, AUTH_RATE_LIMIT_WINDOW_MS=900000). Multipart upload + raw body limits set via HTTP_BODY_LIMIT_BYTES (1 MB) and UPLOAD_MAX_FILE_BYTES (10 MB) env vars. Validate these before going live.
+- **Outbox interactive tx timeout**: domain mutations trigger Postgres `sql_outbox` inserts; outbox relay publishes within same tx with OUTBOX_TX_TIMEOUT_MS (default 30s). If events hang, increase timeout or reduce batch size in `libs/infra/messaging`.
+- **Health readiness BullMQ probe**: `/health/ready` now includes a `BullMqHealthIndicator` that pings the email-notification queue (2s timeout). If queue is not bootstrapped before probe, readiness fails.
+- **Metrics endpoint IP allowlist**: `MetricsIpAllowGuard` reads `METRICS_ALLOW_CIDRS` (comma-separated CIDR ranges) and uses `socket.remoteAddress` (not `req.ip`, which is spoofable via X-Forwarded-For). Empty list fails closed (no metrics). Kubernetes typically needs `127.0.0.1/32` or pod CIDR.
 
 ## Documentation map
 

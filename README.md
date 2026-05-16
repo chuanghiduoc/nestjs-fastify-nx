@@ -214,7 +214,8 @@ pnpm codegen:full                   # export OpenAPI → orval → libs/api-clie
 │   ├── contracts/    # DTOs, OpenAPI types, GraphQL SDL
 │   ├── core/         # auth, errors, events, outbox, validation
 │   ├── infra/        # prisma, redis, bullmq, s3, mailer, otel
-│   ├── modules/      # bounded contexts (users, audit-log, …)
+│   ├── modules/      # bounded contexts (users, audit-log, admin, upload)
+│   ├── composition/   # cross-cutting aggregators (admin lives here too)
 │   ├── shared/       # framework-agnostic utilities
 │   └── testing/      # test harnesses + fixtures
 ├── docker/           # compose.yml + compose.dev.yml + compose.prod.yml
@@ -223,7 +224,7 @@ pnpm codegen:full                   # export OpenAPI → orval → libs/api-clie
 │   ├── build-dev.sh
 │   ├── build-prod.sh
 │   └── security/     # gitleaks / osv / semgrep / trivy / cosign
-├── docs/             # architecture, deployment, security, …
+├── docs/             # architecture, deployment, security, runbook, code-standards
 └── .github/workflows # ci.yml, integration.yml, release.yml
 ```
 

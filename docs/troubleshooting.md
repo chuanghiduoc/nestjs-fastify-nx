@@ -31,6 +31,23 @@ Run `pnpm prisma generate && pnpm nx sync`. The Prisma client is generated
 into `node_modules/.prisma`, and Nx path mappings flow through `tsconfig`
 references that `nx sync` regenerates from `project.json`.
 
+### Import `@nestjs-fastify-nx/admin` not found (moved library)
+
+Symptom: `Cannot find module '@nestjs-fastify-nx/admin'`.
+
+Cause: admin module was moved from `libs/modules/admin` to `libs/composition/admin`.
+
+Resolution: update your import from `@nestjs-fastify-nx/admin` to
+`@nestjs-fastify-nx/composition-admin` (verify the mapping in `tsconfig.base.json`).
+
+### Import `@nestjs-fastify-nx/upload` pointing to old path
+
+Symptom: `Cannot find module from apps/api/src/common/upload`.
+
+Cause: upload module moved from `apps/api/src/common/upload` to `libs/modules/upload`.
+
+Resolution: update your import to `@nestjs-fastify-nx/modules-upload`.
+
 ## Database & migrations
 
 ### `prisma migrate deploy` aborts mid-migration
@@ -84,6 +101,22 @@ DROP TABLE IF EXISTS sessions, accounts, verifications CASCADE;
 
 Production deployments will not hit this — the orphan tables exist only on
 local DBs that have run feature-branch migrations.
+
+## Eventing & Outbox
+
+### Domain events hang or timeout during publish
+
+Symptom: `Outbox interactive tx timeout after 30000ms` in logs when publishing events.
+
+Cause: the outbox relay holds an interactive transaction while publishing all
+queued events. If event listeners take too long or there are many events,
+the transaction may exceed `OUTBOX_TX_TIMEOUT_MS`.
+
+Resolution:
+1. Increase `OUTBOX_TX_TIMEOUT_MS` (default 30s) — set it higher and redeploy.
+2. Reduce `OUTBOX_BATCH_SIZE` to publish fewer events per transaction.
+3. Audit listeners for slow operations (db queries, external API calls) — move
+   them to BullMQ jobs if they block the transaction.
 
 ## BullMQ & queues
 
@@ -164,13 +197,25 @@ the failing dependency from the JSON body of `/health`.
 
 ## Observability
 
-### Metrics endpoint returns empty output
+### Metrics endpoint returns 403 Forbidden or no data
 
 Endpoint: `GET /api/v1/metrics`.
 
-Cause: `ENABLE_METRICS=false` in the env. Set it to `true` to enable Prometheus
-collection. The endpoint is exposed unconditionally so scrape targets don't
-break, but the body is empty when the feature is off.
+Cause 1: `ENABLE_METRICS=false` in the env. Set it to `true` to enable Prometheus
+collection.
+
+Cause 2 (403): `METRICS_ALLOW_CIDRS` is empty or does not include your IP.
+The metrics endpoint uses `socket.remoteAddress` (not `req.ip`) to enforce
+IP-based access control. If the allowlist is empty, all requests are rejected.
+
+Resolution: set `METRICS_ALLOW_CIDRS` to include your IP range (e.g.
+`127.0.0.1/32` for localhost, or `10.0.0.0/8` for a private network). Use
+`socket.remoteAddress` (not `req.ip` which can be spoofed via X-Forwarded-For).
+
+### Metrics endpoint unreachable or leaking data (see runbook)
+
+See `docs/runbook.md` → Section 6 (Metrics endpoint issues) for ops procedures
+and security hardening steps.
 
 ### OpenTelemetry traces don't reach the collector
 

@@ -13,7 +13,10 @@ nestjs-fastify-nx/
 │   ├── modules/      # Bounded contexts (DDD)
 │   │   ├── users/        # scope:modules — user profile, session lookup
 │   │   ├── audit-log/    # scope:modules — domain-event listener writes audit rows
-│   │   └── admin/        # scope:composition — cross-context admin surface
+│   │   ├── admin/        # scope:composition — cross-context admin surface + Bull Board
+│   │   └── upload/       # multipart handler, file processing
+│   ├── composition/   # Cross-cutting aggregators (composition libs)
+│   │   └── admin/     # (same as libs/modules/admin above)
 │   ├── infra/        # Adapters
 │   │   ├── auth/         # Better Auth integration, BetterAuthGuard, RolesGuard
 │   │   ├── database/     # Prisma service + module
@@ -106,11 +109,12 @@ cookie issuance. The full endpoint catalogue is published at
 
 ```
 POST /api/auth/sign-up/email → Better Auth
-  → creates User row + Session row
-  → databaseHooks.user.create.after fires
-    → publishes UserRegistered domain event via EVENT_PUBLISHER_PORT
-    → UserRegisteredListener enqueues EMAIL_NOTIFICATION job (BullMQ)
-    → worker process sends the welcome email
+  → creates User row + Session row (via Prisma direct INSERT)
+  → Postgres trigger fires on user table
+    → writes UserRegistered event row to outbox_events (same schema transaction)
+    → EventBusService.publish() (in-process, EVENT_PUBLISHER_DRIVER=inprocess default)
+    → UserRegisteredListener dispatches EMAIL_NOTIFICATION job to BullMQ
+    → worker process consumes job, sends welcome email
   → sets `better-auth.session_token` cookie
 
 POST /api/auth/sign-in/email → Better Auth
@@ -132,6 +136,10 @@ Protected REST and GraphQL endpoints rely on `BetterAuthGuard` and
 `RolesGuard`, both wired globally as `APP_GUARD` providers in `AppModule`.
 WebSocket upgrades go through `createWsAuthMiddleware` which validates the
 same session cookie — see `apps/api/src/websocket/ws-auth.adapter.ts`.
+
+**Auth rate-limit**: Fastify hook `fastify-rate-limit` guards `/api/auth/*`
+with configurable per-IP limits (AUTH_RATE_LIMIT_MAX, AUTH_RATE_LIMIT_WINDOW_MS).
+Exceeding the limit returns 429 with `application/problem+json` response.
 
 ## API Response Contract
 
@@ -240,15 +248,15 @@ Controllers wire the contract through three decorators from
 
 ## Eventing
 
-Two event publisher drivers are switchable via `EVENT_PUBLISHER_DRIVER`:
+Event flow is **transactional**:
 
-- **`inprocess`** (default) — `EventEmitter2`, in-memory, no durability. Fine
-  for dev and single-pod setups.
-- **`outbox`** — domain events are written to `outbox_events` in the same
-  transaction as the aggregate change; the `OutboxRelayService` (running in
-  the scheduler app) polls the table and dispatches durable jobs to BullMQ.
-  Provides at-least-once delivery and survives crashes between commit and
-  publish.
+1. **Domain mutation** writes aggregate change to Postgres
+2. **Postgres trigger** fires (e.g. `sql_events.users.created`) and writes event row to `outbox_events` **in the same transaction**
+3. **EventBusService.publish()** publishes event to in-process listeners immediately (not durable; DEFAULT)
+4. **Listeners** run synchronously; durable side-effects (email, audit) dispatch **BullMQ jobs** which survive process crashes
+5. **Worker process** consumes BullMQ jobs and executes side-effects (send email, write audit log)
+
+The outbox pattern guarantees atomicity: either both the domain row and the event row commit together, or both roll back. Listeners run in-process for development simplicity; production deployments can switch to `EVENT_PUBLISHER_DRIVER=outbox` to defer event publishing until the scheduler's `OutboxRelayService` polls and publishes them durably.
 
 Listeners are NestJS event subscribers; durable side-effects (email, audit)
 always go through BullMQ so retries and dead-letter routing are uniform.
