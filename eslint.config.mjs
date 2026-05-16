@@ -88,12 +88,13 @@ export default tseslint.config(
               ],
             },
             {
-              // Composition modules (e.g. admin) cross-cut multiple bounded
-              // contexts to expose grouped surfaces (admin, BFF, ...). Feature
-              // modules MUST NOT depend on these — flow is one-way.
+              // Composition modules cross-cut multiple bounded contexts to expose
+              // grouped surfaces (admin, BFF, ...). Feature modules MUST NOT
+              // depend on these — flow is one-way downward: composition → modules.
               sourceTag: 'scope:composition',
               onlyDependOnLibsWithTags: [
                 'scope:modules',
+                'scope:composition',
                 'scope:core',
                 'scope:shared',
                 'scope:contracts',

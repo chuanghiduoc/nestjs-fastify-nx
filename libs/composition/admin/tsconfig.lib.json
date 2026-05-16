@@ -1,7 +1,7 @@
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
-    "outDir": "../../../dist/out-tsc/libs/modules/admin",
+    "outDir": "../../../dist/out-tsc/libs/composition/admin",
     "declaration": true,
     "ignoreDeprecations": "6.0",
     "types": ["node"],
@@ -37,7 +37,7 @@
       "path": "../../contracts/tsconfig.lib.json"
     },
     {
-      "path": "../users/tsconfig.lib.json"
+      "path": "../../modules/users/tsconfig.lib.json"
     }
   ]
 }

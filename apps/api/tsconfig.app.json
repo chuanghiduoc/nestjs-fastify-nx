@@ -31,19 +31,22 @@
       "path": "../../libs/infra/observability/tsconfig.lib.json"
     },
     {
+      "path": "../../libs/core/tsconfig.lib.json"
+    },
+    {
       "path": "../../libs/shared/tsconfig.lib.json"
+    },
+    {
+      "path": "../../libs/modules/upload/tsconfig.lib.json"
     },
     {
       "path": "../../libs/modules/audit-log/tsconfig.lib.json"
     },
     {
-      "path": "../../libs/modules/admin/tsconfig.lib.json"
+      "path": "../../libs/composition/admin/tsconfig.lib.json"
     },
     {
       "path": "../../libs/modules/users/tsconfig.lib.json"
-    },
-    {
-      "path": "../../libs/core/tsconfig.lib.json"
     },
     {
       "path": "../../libs/infra/storage/tsconfig.lib.json"
@@ -61,10 +64,10 @@
       "path": "../../libs/testing/tsconfig.lib.json"
     },
     {
-      "path": "../../libs/infra/database/tsconfig.lib.json"
+      "path": "../../libs/infra/auth/tsconfig.lib.json"
     },
     {
-      "path": "../../libs/infra/auth/tsconfig.lib.json"
+      "path": "../../libs/infra/database/tsconfig.lib.json"
     }
   ]
 }

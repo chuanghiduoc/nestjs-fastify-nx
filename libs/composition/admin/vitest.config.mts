@@ -4,10 +4,10 @@ import { nxCopyAssetsPlugin } from '@nx/vite/plugins/nx-copy-assets.plugin';
 
 export default defineConfig(() => ({
   root: __dirname,
-  cacheDir: '../../../node_modules/.vite/libs/modules/admin',
+  cacheDir: '../../../node_modules/.vite/libs/composition/admin',
   plugins: [nxViteTsPaths(), nxCopyAssetsPlugin(['*.md'])],
   test: {
-    name: 'modules-admin',
+    name: 'composition-admin',
     watch: false,
     globals: true,
     environment: 'node',
@@ -18,7 +18,7 @@ export default defineConfig(() => ({
     setupFiles: ['../../../vitest.setup.ts'],
     passWithNoTests: true,
     coverage: {
-      reportsDirectory: '../../../coverage/libs/modules/admin',
+      reportsDirectory: '../../../coverage/libs/composition/admin',
       provider: 'v8' as const,
       include: ['src/**/*.ts'],
       exclude: [

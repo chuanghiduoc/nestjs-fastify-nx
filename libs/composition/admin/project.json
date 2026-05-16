@@ -1,15 +1,15 @@
 {
-  "name": "modules-admin",
+  "name": "composition-admin",
   "$schema": "../../../node_modules/nx/schemas/project-schema.json",
-  "sourceRoot": "libs/modules/admin/src",
+  "sourceRoot": "libs/composition/admin/src",
   "projectType": "library",
-  "tags": ["scope:composition"],
+  "tags": ["scope:composition", "type:feature"],
   "targets": {
     "test": {
       "executor": "@nx/vitest:test",
       "outputs": ["{options.reportsDirectory}"],
       "options": {
-        "reportsDirectory": "coverage/libs/modules/admin"
+        "reportsDirectory": "coverage/libs/composition/admin"
       }
     }
   }
