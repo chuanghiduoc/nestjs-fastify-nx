@@ -16,7 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `libs/modules/admin` (moved to `libs/composition/admin` with `scope:composition` tag)
 - `apps/api/src/common/upload` (moved to `libs/modules/upload`)
 - Logger duplicates — three `LoggerModule.forRoot()` calls unified to single shared factory
-- Unused `databaseHooks.user.create.after` event publisher pattern (replaced with Postgres trigger + outbox)
+- `BetterAuthHooks` interface and `databaseHooks.user.create.after` block — dead code removed (user registration events flow through Postgres trigger → outbox, not this hook)
 
 ### Added
 
@@ -26,7 +26,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Health readiness probe for BullMQ — `BullMqHealthIndicator` pings email-notification queue (2s timeout)
 - Sentry PII scrubbing — beforeSend filter masks password, token, secret, cookie patterns in event.extra and breadcrumbs
 - Metrics IP allowlist — `METRICS_ALLOW_CIDRS` (comma-separated CIDR ranges) with socket.remoteAddress validation
-- Metrics health probes — NX_CLOUD_AUTH_TOKEN for Nx Cloud remote caching in CI
+- Metrics IP allowlist health check — `MetricsIpAllowGuard` reads `METRICS_ALLOW_CIDRS` at guard evaluation time
+- NX_CLOUD_AUTH_TOKEN for Nx Cloud remote caching in CI
 - Shared Testcontainers setup — global-setup/teardown with SIGINT handler for clean container teardown on CI cancel
 - docs/code-standards.md — enforcement of logging (pino-only), error handling (BusinessRuleException), DTOs (1 per shape), module boundaries, testing ratios
 - docs/runbook.md — 6 sections for ops troubleshooting (health, metrics, outbox, BullMQ, performance, security)

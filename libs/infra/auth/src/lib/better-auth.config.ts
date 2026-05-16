@@ -1,28 +1,9 @@
 import { betterAuth } from 'better-auth';
 import { prismaAdapter } from 'better-auth/adapters/prisma';
 import { openAPI } from 'better-auth/plugins';
-import { Logger } from '@nestjs/common';
 import type { PrismaClient } from '@prisma/client';
 
-const logger = new Logger('BetterAuth');
-
-/**
- * Side-effect hooks fired after Better Auth completes a database operation.
- *
- * Note: `users.registered` domain events are NOT published from this hook.
- * Better Auth's prismaAdapter commits the user INSERT before the hook runs,
- * so any application-side outbox write here would be non-transactional and
- * could be lost on crash. The `users` table has an AFTER INSERT trigger
- * (`emit_user_registered_outbox`) that writes the outbox row inside the
- * same transaction — the relay picks it up from there. Use this surface
- * only for best-effort, non-critical side-effects (analytics pings, etc.);
- * hook failures must not abort signup.
- */
-export interface BetterAuthHooks {
-  onUserCreated?(user: { id: string; email: string }): Promise<void> | void;
-}
-
-export function createBetterAuth(prisma: PrismaClient, hooks: BetterAuthHooks = {}) {
+export function createBetterAuth(prisma: PrismaClient) {
   const secret = process.env['BETTER_AUTH_SECRET'];
   const baseURL = process.env['BETTER_AUTH_URL'];
   const trustedOrigins =
@@ -58,29 +39,6 @@ export function createBetterAuth(prisma: PrismaClient, hooks: BetterAuthHooks = 
           type: 'string',
           defaultValue: 'ACTIVE',
           input: false,
-        },
-      },
-    },
-    databaseHooks: {
-      user: {
-        create: {
-          after: async (user) => {
-            if (!hooks.onUserCreated) return;
-            try {
-              await hooks.onUserCreated({
-                id: (user as { id: string }).id,
-                email: (user as { email: string }).email,
-              });
-            } catch (err) {
-              // Signup is already committed; swallow + log so the API still
-              // returns success. Downstream side-effects (welcome email) are
-              // recoverable via outbox replay or operator intervention.
-              logger.error(
-                'onUserCreated hook failed',
-                err instanceof Error ? err.stack : String(err),
-              );
-            }
-          },
         },
       },
     },

@@ -13,10 +13,9 @@ nestjs-fastify-nx/
 │   ├── modules/      # Bounded contexts (DDD)
 │   │   ├── users/        # scope:modules — user profile, session lookup
 │   │   ├── audit-log/    # scope:modules — domain-event listener writes audit rows
-│   │   ├── admin/        # scope:composition — cross-context admin surface + Bull Board
-│   │   └── upload/       # multipart handler, file processing
-│   ├── composition/   # Cross-cutting aggregators (composition libs)
-│   │   └── admin/     # (same as libs/modules/admin above)
+│   │   └── upload/       # scope:modules — multipart handler, file processing
+│   ├── composition/   # Cross-cutting aggregators (scope:composition)
+│   │   └── admin/     # admin surface + Bull Board (scope:composition tag; composed into api)
 │   ├── infra/        # Adapters
 │   │   ├── auth/         # Better Auth integration, BetterAuthGuard, RolesGuard
 │   │   ├── database/     # Prisma service + module

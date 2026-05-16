@@ -184,7 +184,7 @@ pnpm nx affected -t lint test build # run only affected projects (CI parity)
 pnpm nx run-many -t test            # all projects
 
 # Single project
-pnpm nx serve api                   # dev server (HMR via webpack)
+pnpm nx serve api                   # build once then spawn Node (@nx/js:node, no HMR)
 pnpm nx test api                    # vitest
 pnpm nx build api --configuration=production
 
@@ -214,8 +214,8 @@ pnpm codegen:full                   # export OpenAPI → orval → libs/api-clie
 │   ├── contracts/    # DTOs, OpenAPI types, GraphQL SDL
 │   ├── core/         # auth, errors, events, outbox, validation
 │   ├── infra/        # prisma, redis, bullmq, s3, mailer, otel
-│   ├── modules/      # bounded contexts (users, audit-log, admin, upload)
-│   ├── composition/   # cross-cutting aggregators (admin lives here too)
+│   ├── modules/      # bounded contexts (users, audit-log, upload)
+│   ├── composition/  # cross-cutting aggregators (admin — scope:composition)
 │   ├── shared/       # framework-agnostic utilities
 │   └── testing/      # test harnesses + fixtures
 ├── docker/           # compose.yml + compose.dev.yml + compose.prod.yml
@@ -302,6 +302,8 @@ Full flow: [docs/deployment.md](docs/deployment.md).
 - [Deployment](docs/deployment.md) — Docker, GHCR, Coolify, migrations
 - [Security Scanning](docs/security.md) — five-layer pipeline, local + CI parity
 - [Troubleshooting](docs/troubleshooting.md) — known issues, debug tips
+- [Runbook](docs/runbook.md) — ops runbook: health, metrics, outbox, BullMQ, performance
+- [Code Standards](docs/code-standards.md) — logging, error handling, DTOs, boundary rules
 - [API Reference](http://localhost:3000/api/docs) (Swagger UI, dev only)
 
 ## Contributing

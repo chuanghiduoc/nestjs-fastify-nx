@@ -78,9 +78,9 @@ apps/
 
 libs/
   modules/      bounded contexts (DDD per module — see below)
-    admin/      admin panel + Bull Board (scope:composition tag; composed into api)
     upload/     multipart handler (see HTTP_BODY_LIMIT_BYTES, UPLOAD_MAX_FILE_BYTES env)
-  composition/  cross-cutting libs (admin lives here with scope:composition tag)
+  composition/  cross-cutting libs
+    admin/      admin panel + Bull Board (scope:composition tag; composed into api)
   core/         auth, errors, events, outbox, validation
   infra/        auth, database, redis, messaging, storage, observability
   contracts/    DTOs, OpenAPI types, GraphQL SDL
@@ -127,7 +127,7 @@ cp .env.example .env && pnpm install
 ./scripts/build-dev.sh             # builds + boots full dev stack
 
 # Inner loop
-pnpm nx serve api                  # HMR via webpack
+pnpm nx serve api                  # build once then spawn Node (@nx/js:node, no HMR)
 pnpm nx test <project>             # vitest
 pnpm nx affected -t lint test build
 pnpm nx run api:e2e                # Testcontainers — Docker required

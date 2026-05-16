@@ -113,6 +113,7 @@ queued events. If event listeners take too long or there are many events,
 the transaction may exceed `OUTBOX_TX_TIMEOUT_MS`.
 
 Resolution:
+
 1. Increase `OUTBOX_TX_TIMEOUT_MS` (default 30s) — set it higher and redeploy.
 2. Reduce `OUTBOX_BATCH_SIZE` to publish fewer events per transaction.
 3. Audit listeners for slow operations (db queries, external API calls) — move
@@ -230,4 +231,4 @@ and security hardening steps.
 `AuditLog` rows are written by `AuditLogListener`, which subscribes to
 specific events. If an action you expected to be audited is missing, check
 that the producing aggregate publishes an event registered in the listener's
-event map (see `libs/modules/audit-logs/src/application/listeners/`).
+event map (see `libs/modules/audit-log/src/application/listeners/`).
