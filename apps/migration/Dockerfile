@@ -40,6 +40,7 @@ COPY --from=deps --chown=appuser:appgroup /app/node_modules ./node_modules
 COPY --from=deps --chown=appuser:appgroup /app/prisma ./prisma
 COPY --from=deps --chown=appuser:appgroup /app/prisma.config.ts ./prisma.config.ts
 COPY --chown=appuser:appgroup package.json ./package.json
+COPY --chown=appuser:appgroup dist/apps/migration ./dist
 USER appuser
 
 LABEL org.opencontainers.image.title="nestjs-fastify-nx-migration" \
@@ -47,7 +48,8 @@ LABEL org.opencontainers.image.title="nestjs-fastify-nx-migration" \
       org.opencontainers.image.licenses="MIT" \
       org.opencontainers.image.vendor="nestjs-fastify-nx"
 
-# RUN_SEED gates seed.mjs so routine deploys never touch user data.
+# Entry point is the compiled Node bundle (dist/main.js) — structured logging +
+# clean exit codes. RUN_SEED gates seed.mjs so routine deploys never touch user data.
 STOPSIGNAL SIGTERM
 ENTRYPOINT ["/sbin/tini", "--"]
-CMD ["sh", "-c", "node_modules/.bin/prisma migrate deploy && { [ \"${RUN_SEED:-false}\" = \"true\" ] && node prisma/seed.mjs || echo '[migration] RUN_SEED!=true — skipping seed'; }"]
+CMD ["node", "dist/main.js"]
