@@ -73,8 +73,12 @@ export function applyFastifyErrorHandler(fastify: FastifyInstance): void {
 }
 
 function resolveStatus(error: FastifyError): number {
-  if (typeof error.statusCode === 'number' && error.statusCode >= 400 && error.statusCode < 600) {
-    return error.statusCode;
+  // RFC 9457 problem-details schema uses `status`; Fastify/Nest native errors
+  // use `statusCode`. @fastify/rate-limit's errorResponseBuilder returns the
+  // former — fall through to 500 here would mask 429 as Internal Server Error.
+  const candidates = [error.statusCode, (error as unknown as { status?: number }).status];
+  for (const c of candidates) {
+    if (typeof c === 'number' && c >= 400 && c < 600) return c;
   }
   if (error.code && FASTIFY_CODE_TO_ERROR_CODE[error.code]) {
     return error.code === 'FST_ERR_CTP_BODY_TOO_LARGE'

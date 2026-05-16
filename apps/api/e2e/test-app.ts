@@ -1,5 +1,6 @@
 import { Test } from '@nestjs/testing';
 import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify';
+import type { FastifyReply, FastifyRequest, RouteShorthandOptions } from 'fastify';
 import { toNodeHandler } from 'better-auth/node';
 import fastifyRateLimit from '@fastify/rate-limit';
 import fastifyMultipart from '@fastify/multipart';
@@ -43,9 +44,12 @@ export async function createTestApp(): Promise<TestAppContext> {
   process.env['REDIS_QUEUE_PORT'] = redisPort;
   process.env['BETTER_AUTH_SECRET'] = 'e2e-better-auth-secret-must-be-32-chars-long';
 
-  // Use a low rate-limit max in tests so the 429 test doesn't need many requests.
+  // Low strict cap so the 429 test fires after 3 requests; loose cap stays
+  // high enough that session ops between tests don't trip it.
   process.env['AUTH_RATE_LIMIT_MAX'] = '3';
   process.env['AUTH_RATE_LIMIT_WINDOW_MS'] = '60000';
+  process.env['AUTH_SESSION_RATE_LIMIT_MAX'] = '200';
+  process.env['AUTH_SESSION_RATE_LIMIT_WINDOW_MS'] = '60000';
   // 64 KB body limit — small enough for the >bodyLimit 413 test to fire cheaply.
   process.env['HTTP_BODY_LIMIT_BYTES'] = String(64 * 1024);
   process.env['UPLOAD_MAX_FILE_BYTES'] = String(5 * 1024 * 1024); // 5 MB for test
@@ -111,24 +115,38 @@ export async function createTestApp(): Promise<TestAppContext> {
 
   const auth = app.get<BetterAuthInstance>(BETTER_AUTH_INSTANCE);
   const betterAuthHandler = toNodeHandler(auth.handler);
-  fastify.all(
-    '/api/auth/*',
-    {
-      config: {
-        rateLimit: {
-          max: Number(process.env['AUTH_RATE_LIMIT_MAX']),
-          timeWindow: Number(process.env['AUTH_RATE_LIMIT_WINDOW_MS']),
-        },
-      },
+
+  const strictMax = Number(process.env['AUTH_RATE_LIMIT_MAX']);
+  const strictWindow = Number(process.env['AUTH_RATE_LIMIT_WINDOW_MS']);
+  const looseMax = Number(process.env['AUTH_SESSION_RATE_LIMIT_MAX']);
+  const looseWindow = Number(process.env['AUTH_SESSION_RATE_LIMIT_WINDOW_MS']);
+  const strictConfig: RouteShorthandOptions = {
+    config: { rateLimit: { max: strictMax, timeWindow: strictWindow } },
+  };
+  const looseConfig: RouteShorthandOptions = {
+    config: {
+      rateLimit: { max: looseMax, timeWindow: looseWindow, keyGenerator: (req) => req.ip },
     },
-    async (req, reply) => {
-      if (req.body !== undefined && (req.raw as unknown as { body?: unknown }).body === undefined) {
-        (req.raw as unknown as { body: unknown }).body = req.body;
-      }
-      reply.hijack();
-      await betterAuthHandler(req.raw, reply.raw);
-    },
-  );
+  };
+  const STRICT_AUTH_PATHS = [
+    '/api/auth/sign-in/email',
+    '/api/auth/sign-up/email',
+    '/api/auth/forget-password',
+    '/api/auth/reset-password',
+  ] as const;
+
+  const authRouteHandler = async (req: FastifyRequest, reply: FastifyReply): Promise<void> => {
+    if (req.body !== undefined && (req.raw as unknown as { body?: unknown }).body === undefined) {
+      (req.raw as unknown as { body: unknown }).body = req.body;
+    }
+    reply.hijack();
+    await betterAuthHandler(req.raw, reply.raw);
+  };
+
+  for (const path of STRICT_AUTH_PATHS) {
+    fastify.all(path, strictConfig, authRouteHandler);
+  }
+  fastify.all('/api/auth/*', looseConfig, authRouteHandler);
 
   await app.init();
   await fastify.ready();

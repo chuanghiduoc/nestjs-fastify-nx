@@ -3,6 +3,7 @@ import * as Sentry from '@sentry/nestjs';
 import { nodeProfilingIntegration } from '@sentry/profiling-node';
 import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify';
+import type { FastifyReply, FastifyRequest, RouteShorthandOptions } from 'fastify';
 import { ConfigService } from '@nestjs/config';
 import { Logger } from 'nestjs-pino';
 import { fastifyHelmet } from '@fastify/helmet';
@@ -231,56 +232,79 @@ async function bootstrap() {
   // Must run before global validation pipes — Better Auth handles its own body parsing.
   const auth = app.get<BetterAuthInstance>(BETTER_AUTH_INSTANCE);
   const betterAuthHandler = toNodeHandler(auth.handler);
-  fastify.all(
-    '/api/auth/*',
-    {
-      config: {
-        // Apply the auth-specific rate limit on these routes.
-        rateLimit: {
-          max: authRateLimitMax,
-          timeWindow: authRateLimitWindowMs,
-        },
+
+  // STRICT bucket = credential endpoints (sign-in/sign-up/forget/reset). Keyed by
+  // ${ip}:${email} per NIST SP 800-63B. LOOSE bucket = session ops (sign-out,
+  // get-session) keyed by ${ip} only — collapsing them into the strict ${ip}:
+  // bucket would lock out browsers polling concurrent tabs.
+  const STRICT_AUTH_PATHS = [
+    '/api/auth/sign-in/email',
+    '/api/auth/sign-up/email',
+    '/api/auth/forget-password',
+    '/api/auth/reset-password',
+  ] as const;
+  const authSessionRateLimitMax = config.get('AUTH_SESSION_RATE_LIMIT_MAX', { infer: true });
+  const authSessionRateLimitWindowMs = config.get('AUTH_SESSION_RATE_LIMIT_WINDOW_MS', {
+    infer: true,
+  });
+  const strictAuthRouteConfig: RouteShorthandOptions = {
+    config: {
+      rateLimit: { max: authRateLimitMax, timeWindow: authRateLimitWindowMs },
+    },
+  };
+  const looseAuthRouteConfig: RouteShorthandOptions = {
+    config: {
+      rateLimit: {
+        max: authSessionRateLimitMax,
+        timeWindow: authSessionRateLimitWindowMs,
+        keyGenerator: (req) => req.ip,
       },
     },
-    async (req, reply) => {
-      // Fastify consumes the request stream into `req.body`. Better Auth's
-      // toNodeHandler reads from req.raw — propagate the parsed body so its
-      // fallback path can re-serialize it into a Web Request.
-      if (req.body !== undefined && (req.raw as unknown as { body?: unknown }).body === undefined) {
-        (req.raw as unknown as { body: unknown }).body = req.body;
+  };
+
+  const authRouteHandler = async (req: FastifyRequest, reply: FastifyReply): Promise<void> => {
+    // Fastify consumes the request stream into `req.body`. Better Auth's
+    // toNodeHandler reads from req.raw — propagate the parsed body so its
+    // fallback path can re-serialize it into a Web Request.
+    if (req.body !== undefined && (req.raw as unknown as { body?: unknown }).body === undefined) {
+      (req.raw as unknown as { body: unknown }).body = req.body;
+    }
+    reply.hijack();
+    try {
+      await betterAuthHandler(req.raw, reply.raw);
+    } catch (err) {
+      // betterAuthHandler threw after hijack — Fastify's error handler will
+      // not run because the reply is already hijacked. We must close the
+      // connection manually to prevent a slowloris-style hang.
+      Sentry.captureException(err);
+      const logger = app.get(Logger);
+      logger.error(
+        `Better Auth handler threw unexpectedly: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      // reply.sent is always false after hijack (Fastify tracks sent state
+      // internally and hijack detaches that tracking). The meaningful guard
+      // is reply.raw.headersSent — kept for defensive clarity.
+      if (!reply.raw.headersSent) {
+        const body = JSON.stringify({
+          type: 'https://tools.ietf.org/html/rfc7231#section-6.6.1',
+          title: 'Internal Server Error',
+          status: 500,
+        });
+        reply.raw.writeHead(500, {
+          'Content-Type': 'application/problem+json',
+          'Content-Length': Buffer.byteLength(body),
+        });
+        reply.raw.end(body);
       }
-      reply.hijack();
-      try {
-        await betterAuthHandler(req.raw, reply.raw);
-      } catch (err) {
-        // betterAuthHandler threw after hijack — Fastify's error handler will
-        // not run because the reply is already hijacked. We must close the
-        // connection manually to prevent a slowloris-style hang.
-        Sentry.captureException(err);
-        const logger = app.get(Logger);
-        logger.error(
-          `Better Auth handler threw unexpectedly: ${err instanceof Error ? err.message : String(err)}`,
-        );
-        // reply.sent is always false after hijack (Fastify tracks sent state
-        // internally and hijack detaches that tracking). The meaningful guard
-        // is reply.raw.headersSent — kept for defensive clarity.
-        if (!reply.raw.headersSent) {
-          const body = JSON.stringify({
-            type: 'https://tools.ietf.org/html/rfc7231#section-6.6.1',
-            title: 'Internal Server Error',
-            status: 500,
-          });
-          reply.raw.writeHead(500, {
-            'Content-Type': 'application/problem+json',
-            'Content-Length': Buffer.byteLength(body),
-          });
-          reply.raw.end(body);
-        }
-        // Forcibly destroy the socket so half-open connections don't linger.
-        reply.raw.socket?.destroy();
-      }
-    },
-  );
+      // Forcibly destroy the socket so half-open connections don't linger.
+      reply.raw.socket?.destroy();
+    }
+  };
+
+  for (const path of STRICT_AUTH_PATHS) {
+    fastify.all(path, strictAuthRouteConfig, authRouteHandler);
+  }
+  fastify.all('/api/auth/*', looseAuthRouteConfig, authRouteHandler);
 
   if (config.get('BULL_BOARD_ENABLED', { infer: true })) {
     // Mounted as a Fastify plugin, so Nest's `setGlobalPrefix('api/v1')` does
