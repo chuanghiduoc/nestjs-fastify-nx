@@ -33,8 +33,8 @@ services:
       dockerfile: Dockerfile
       target: api-dev
     ports:
-      - '3000:3000'
-      - '9229:9229'
+      - '${API_PORT:-3000}:3000'
+      - '${API_DEBUG_PORT:-9229}:9229'
     env_file: ../.env
     environment:
       NODE_ENV: development
@@ -58,6 +58,8 @@ services:
         condition: service_healthy
       minio-init:
         condition: service_completed_successfully
+      mailpit:
+        condition: service_healthy
     restart: unless-stopped
 
   worker:
@@ -87,6 +89,8 @@ services:
         condition: service_healthy
       minio-init:
         condition: service_completed_successfully
+      mailpit:
+        condition: service_healthy
     restart: unless-stopped
     healthcheck:
       test:
@@ -128,6 +132,8 @@ services:
         condition: service_healthy
       minio-init:
         condition: service_completed_successfully
+      mailpit:
+        condition: service_healthy
     restart: unless-stopped
     healthcheck:
       test:

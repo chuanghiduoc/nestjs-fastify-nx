@@ -75,6 +75,14 @@ services:
     ports:
       - '${MAIL_PORT:-1025}:1025'
       - '${MAILPIT_UI_PORT:-8025}:8025'
+    # Mailpit ships a static binary without wget/curl; use the built-in
+    # `/bin/mailpit version` for a zero-dep readiness probe.
+    healthcheck:
+      test: ['CMD', '/mailpit', 'version']
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
 
   migration:
     restart: on-failure
