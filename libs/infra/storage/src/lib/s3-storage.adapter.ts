@@ -9,6 +9,7 @@ import { ConfigService } from '@nestjs/config';
 import {
   S3Client,
   PutObjectCommand,
+  PutObjectTaggingCommand,
   DeleteObjectCommand,
   GetObjectCommand,
   HeadObjectCommand,
@@ -26,21 +27,11 @@ import type {
   UploadOptions,
 } from './storage.port';
 
-/**
- * S3-compatible storage adapter (works with AWS S3 and MinIO).
- *
- * Production notes:
- * - All config values are required in production; defaults are safe for local
- *   dev/MinIO only and will log a warning when they are used.
- * - Retry is handled by the AWS SDK's default retry middleware (3 attempts,
- *   exponential back-off with jitter).  Bump `maxAttempts` if you need more.
- * - `forcePathStyle: true` is required for MinIO and S3-compatible services
- *   that do not support virtual-hosted-style URLs.  AWS S3 itself works fine
- *   with path-style so it is safe to leave enabled.
- * - The `url` field on `StoredFile` is NOT a pre-signed URL — it is a plain
- *   path-style object URL suitable for internal use or public buckets.
- *   For time-limited access use `getSignedUrl`.
- */
+// `forcePathStyle: true` is needed for MinIO + most S3-compatible services
+// (Cloudflare R2, Backblaze B2); AWS S3 itself accepts both styles, so this
+// is safe as a global default. `url` returned from `upload()` is the plain
+// path-style URL (not pre-signed) — callers needing time-limited access
+// must call `getSignedUrl()` instead.
 @Injectable()
 export class S3StorageAdapter implements StoragePort, OnModuleInit {
   private readonly logger = new Logger(S3StorageAdapter.name);
@@ -217,6 +208,45 @@ export class S3StorageAdapter implements StoragePort, OnModuleInit {
     } catch (err) {
       this.logger.error({ err, key }, 'S3 delete failed');
       throw new InternalServerErrorException('Storage delete failed');
+    }
+  }
+
+  // Tag the object with `committed=true`. The bucket lifecycle rule keeps
+  // anything tagged committed; everything else (presigned-but-not-confirmed
+  // orphans) is auto-expired after 24h. See docs/runbook.md.
+  async commit(key: string, bucket?: string): Promise<void> {
+    try {
+      await this.client.send(
+        new PutObjectTaggingCommand({
+          Bucket: bucket ?? this.bucket,
+          Key: key,
+          Tagging: { TagSet: [{ Key: 'committed', Value: 'true' }] },
+        }),
+      );
+    } catch (err) {
+      this.logger.error({ err, key }, 'S3 commit tag failed');
+      throw new InternalServerErrorException('Storage commit failed');
+    }
+  }
+
+  async readRange(key: string, byteCount: number, bucket?: string): Promise<Buffer> {
+    try {
+      const res = await this.client.send(
+        new GetObjectCommand({
+          Bucket: bucket ?? this.bucket,
+          Key: key,
+          Range: `bytes=0-${Math.max(0, byteCount - 1)}`,
+        }),
+      );
+      const body = res.Body as { transformToByteArray?: () => Promise<Uint8Array> } | undefined;
+      if (!body?.transformToByteArray) {
+        throw new Error('S3 GetObject returned no readable body');
+      }
+      const bytes = await body.transformToByteArray();
+      return Buffer.from(bytes);
+    } catch (err) {
+      this.logger.error({ err, key, byteCount }, 'S3 readRange failed');
+      throw new InternalServerErrorException('Storage readRange failed');
     }
   }
 }

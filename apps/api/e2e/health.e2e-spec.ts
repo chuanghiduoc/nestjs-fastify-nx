@@ -117,14 +117,7 @@ describe('Health & Metrics E2E', () => {
     });
   });
 
-  describe('POST /api/v1/upload/presign', () => {
-    it('returns 401 with Problem Details when the cookie is missing', async () => {
-      // BetterAuthGuard is the global APP_GUARD; unauthenticated calls are 401.
-      const res = await request(ctx.app.getHttpServer()).post('/api/v1/upload/presign').expect(401);
-
-      expect(res.headers['content-type']).toMatch(/application\/problem\+json/);
-      expect(res.body.status).toBe(401);
-      expect(res.body.code).toBe('unauthorized');
-    });
-  });
+  // Upload endpoint coverage lives in upload.e2e-spec.ts (presign success +
+  // adversarial MIME / key-regex / 404 cases). Auth-guard smoke for /upload
+  // is asserted there too.
 });

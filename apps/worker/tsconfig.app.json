@@ -25,13 +25,16 @@
   ],
   "references": [
     {
+      "path": "../../libs/infra/observability/tsconfig.lib.json"
+    },
+    {
       "path": "../../libs/shared/tsconfig.lib.json"
     },
     {
-      "path": "../../libs/infra/redis/tsconfig.lib.json"
+      "path": "../../libs/infra/storage/tsconfig.lib.json"
     },
     {
-      "path": "../../libs/infra/observability/tsconfig.lib.json"
+      "path": "../../libs/infra/redis/tsconfig.lib.json"
     }
   ]
 }
