@@ -18,12 +18,15 @@ import { setupSwagger } from './common/swagger/swagger.config';
 import { createBullBoardPlugin } from './common/bull-board/create-bull-board-plugin';
 import type { EnvConfig } from './config/env.validation';
 
+// Sentry init runs at module-load time, BEFORE NestFactory creates the
+// ConfigService that would normally validate env. We therefore read
+// process.env directly with conservative fallbacks; values get re-validated
+// (and rejected on bad inputs) once env.validation.ts runs at bootstrap.
 const sentryDsn = process.env['SENTRY_DSN'];
 if (sentryDsn) {
   const isProduction = process.env['NODE_ENV'] === 'production';
-  // Cap sampling rates in production to limit Sentry quota burn. The env vars
-  // allow per-deployment tuning; the Math.min ensures the cap is never exceeded
-  // even if someone sets SENTRY_TRACES_SAMPLE_RATE=1 in prod.
+  // Hard cap sample rates in prod so a stray `SAMPLE_RATE=1` setting cannot
+  // burn through the Sentry quota.
   const sampleRateCap = isProduction ? 0.1 : 1;
   const tracesSampleRate = Math.min(
     Number(process.env['SENTRY_TRACES_SAMPLE_RATE'] ?? 0.1),
@@ -37,10 +40,11 @@ if (sentryDsn) {
     tracesSampleRate,
     profilesSampleRate,
     integrations: [nodeProfilingIntegration()],
-    // Never send PII (cookies, auth headers, request bodies) to Sentry.
     sendDefaultPii: false,
+    // Scrub PII Sentry auto-captures (cookies, auth headers, bodies) plus any
+    // sensitive keys leaked via breadcrumbs / extra contexts. Aligns with the
+    // pino redact list (libs/shared/src/lib/logger-redact.ts).
     beforeSend(event) {
-      // Strip request-level PII that Sentry may capture automatically.
       if (event.request) {
         delete event.request.cookies;
         delete event.request.data;
@@ -51,8 +55,6 @@ if (sentryDsn) {
         }
       }
 
-      // Scrub PII that may leak into extra/contexts via service-level breadcrumbs.
-      // Aligns with the pino redact list (*.password, *.token, *.secret, *.cookie).
       const sensitiveKeys = /password|token|secret|cookie/i;
       const scrubObject = (obj: Record<string, unknown>): void => {
         for (const key of Object.keys(obj)) {
@@ -240,7 +242,7 @@ async function bootstrap() {
   const STRICT_AUTH_PATHS = [
     '/api/auth/sign-in/email',
     '/api/auth/sign-up/email',
-    '/api/auth/forget-password',
+    '/api/auth/request-password-reset',
     '/api/auth/reset-password',
   ] as const;
   const authSessionRateLimitMax = config.get('AUTH_SESSION_RATE_LIMIT_MAX', { infer: true });

@@ -16,16 +16,11 @@ export interface TestAppContext {
   cleaner: DatabaseCleaner;
 }
 
-// Bootstraps a NestFastifyApplication that mirrors main.ts: same global prefix
-// (with /metrics excluded), the same ProblemDetailsValidationPipe, and the
-// Better Auth handler mounted at /api/auth/*. We deliberately skip helmet/
-// swagger/sentry/bull-board which are irrelevant for e2e, and we do NOT call
-// useGlobalFilters — AppModule already provides GlobalExceptionFilter via
-// APP_FILTER; registering it twice would wrap every response twice.
-//
-// Containers are started once by global-setup.ts (Vitest globalSetup) and
-// their connection details written to E2E_DATABASE_URL / E2E_REDIS_HOST /
-// E2E_REDIS_PORT. Each spec calls cleaner.truncateAll() in beforeEach.
+// Mirrors main.ts (prefix, ProblemDetailsValidationPipe, Better Auth mount)
+// minus helmet/swagger/sentry/bull-board. Do NOT call useGlobalFilters here —
+// AppModule's APP_FILTER would wrap responses twice. Postgres + Redis are
+// spun up once by global-setup.ts and the connection info is read from the
+// E2E_DATABASE_URL / E2E_REDIS_HOST / E2E_REDIS_PORT env vars below.
 export async function createTestApp(): Promise<TestAppContext> {
   const dbUrl = process.env['E2E_DATABASE_URL'];
   const redisHost = process.env['E2E_REDIS_HOST'];
@@ -131,7 +126,7 @@ export async function createTestApp(): Promise<TestAppContext> {
   const STRICT_AUTH_PATHS = [
     '/api/auth/sign-in/email',
     '/api/auth/sign-up/email',
-    '/api/auth/forget-password',
+    '/api/auth/request-password-reset',
     '/api/auth/reset-password',
   ] as const;
 

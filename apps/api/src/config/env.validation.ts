@@ -28,6 +28,11 @@ const envSchema = z
     // a stable secret is required in production for cross-restart session validity).
     BETTER_AUTH_SECRET: z.string().trim().min(32).optional(),
     BETTER_AUTH_URL: z.string().url().optional(),
+    // Public URL of the frontend SPA that owns the password-reset, verify-email,
+    // and account-deletion confirmation pages. Better Auth embeds this as the
+    // base of the tokenized link sent by email. Defaults to BETTER_AUTH_URL so
+    // dev works out of the box without configuring a separate SPA host.
+    FRONTEND_BASE_URL: z.string().url().optional(),
 
     // Storage (S3 / MinIO)
     STORAGE_ENDPOINT: z.string().default('http://localhost:9000'),
