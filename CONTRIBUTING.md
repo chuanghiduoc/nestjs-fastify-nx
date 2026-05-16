@@ -23,11 +23,13 @@ open http://localhost:3000/api/docs
 ```
 
 Check the logs in another terminal:
+
 ```bash
 docker compose logs -f api
 ```
 
 Stop the stack:
+
 ```bash
 ./scripts/teardown.sh
 ```
@@ -47,45 +49,54 @@ See [docs/architecture.md](./docs/architecture.md) for the full diagram.
 ## Adding a New Module (the Canonical Path)
 
 ### 1. Scaffold via generator
+
 ```bash
 pnpm nx g @nestjs-fastify-nx/tools-generators:module --name=payments --directory=modules
 ```
 
 ### 2. Implement domain logic
+
 - Aggregate roots in `domain/entities/`
 - Domain events in `domain/events/`
 - Repository interfaces in `domain/ports/`
 
 ### 3. Add CQRS handlers
+
 - Commands in `application/commands/`
 - Queries in `application/queries/`
 
 ### 4. Implement repositories
+
 - Prisma adapters in `infrastructure/repositories/`
 
 ### 5. Wire controllers
+
 - REST endpoints in `presentation/controllers/`
 
 ### 6. Export public API
+
 - In `index.ts`, export only what consumers need
 
 ### 7. Add to AppModule
+
 ```typescript
 import { PaymentsModule } from '@nestjs-fastify-nx/modules-payments';
 
 @Module({
   imports: [PaymentsModule],
 })
-export class AppModule { }
+export class AppModule {}
 ```
 
 ### 8. Add Prisma model (if needed)
+
 ```bash
 # Edit prisma/schema.prisma
 pnpm prisma migrate dev --name "add payments table"
 ```
 
 ### 9. Write tests
+
 ```bash
 pnpm nx test modules-payments
 ```
@@ -93,6 +104,7 @@ pnpm nx test modules-payments
 Integration tests use real Postgres via Testcontainers (no mocks).
 
 ### 10. Verify boundaries
+
 ```bash
 pnpm nx affected -t lint --base=main
 ```
@@ -101,25 +113,26 @@ Full walkthrough: [docs/creating-a-module.md](./docs/creating-a-module.md)
 
 ## Daily Commands
 
-| Task | Command |
-|------|---------|
-| Start dev server | `pnpm nx serve api` |
-| Watch + rebuild | `pnpm nx watch -p api -- pnpm nx run api:build` |
-| Run tests for module | `pnpm nx test modules-payments` |
-| Run all tests | `pnpm nx affected -t test --base=main` |
-| Check lint | `pnpm nx affected -t lint --base=main` |
-| Create migration | `pnpm prisma migrate dev --name add_field` |
-| View DB | `pnpm prisma studio` |
-| Codegen OpenAPI | `pnpm codegen:full` |
-| Inspect workspace | `pnpm nx graph` |
-| Clean cache | `pnpm nx reset` |
-| Health check | `./scripts/doctor.sh` |
+| Task                 | Command                                         |
+| -------------------- | ----------------------------------------------- |
+| Start dev server     | `pnpm nx serve api`                             |
+| Watch + rebuild      | `pnpm nx watch -p api -- pnpm nx run api:build` |
+| Run tests for module | `pnpm nx test modules-payments`                 |
+| Run all tests        | `pnpm nx affected -t test --base=main`          |
+| Check lint           | `pnpm nx affected -t lint --base=main`          |
+| Create migration     | `pnpm prisma migrate dev --name add_field`      |
+| View DB              | `pnpm prisma studio`                            |
+| Codegen OpenAPI      | `pnpm codegen:full`                             |
+| Inspect workspace    | `pnpm nx graph`                                 |
+| Clean cache          | `pnpm nx reset`                                 |
+| Health check         | `./scripts/doctor.sh`                           |
 
 ## Code Standards
 
 Must follow: [docs/code-standards.md](./docs/code-standards.md)
 
 Highlights:
+
 - **Logging**: Use NestJS Logger via DI (Pino-backed)
 - **No console.log** — structured JSON logs only
 - **Error handling**: `BusinessRuleException` for domain violations; framework handles validation → RFC 9457
@@ -144,14 +157,14 @@ Enforced by ESLint + Lefthook + CI.
 
 ## Troubleshooting
 
-| Issue | Solution |
-|-------|----------|
-| Container won't start | `./scripts/doctor.sh` — check Docker, ports, env vars |
-| Tests timeout | `pnpm nx reset && pnpm install && pnpm nx test` |
-| Module not found | `pnpm nx reset && pnpm nx sync` |
-| Stale Nx cache | `pnpm nx reset` |
-| Migration fails | `pnpm prisma migrate resolve --rolled-back <name>` |
-| Outbox stuck | See [docs/runbook.md](./docs/runbook.md#1-outbox-stuck) |
+| Issue                 | Solution                                                |
+| --------------------- | ------------------------------------------------------- |
+| Container won't start | `./scripts/doctor.sh` — check Docker, ports, env vars   |
+| Tests timeout         | `pnpm nx reset && pnpm install && pnpm nx test`         |
+| Module not found      | `pnpm nx reset && pnpm nx sync`                         |
+| Stale Nx cache        | `pnpm nx reset`                                         |
+| Migration fails       | `pnpm prisma migrate resolve --rolled-back <name>`      |
+| Outbox stuck          | See [docs/runbook.md](./docs/runbook.md#1-outbox-stuck) |
 
 ## Getting Help
 
@@ -166,6 +179,7 @@ Enforced by ESLint + Lefthook + CI.
 ## Releasing
 
 Push to `main`, tag with `v*.*.*`, GitHub Actions:
+
 - Builds multi-platform images
 - Signs with Cosign + SBOM
 - Deploys via Coolify webhook
