@@ -11,7 +11,14 @@ import * as path from 'path';
 import type { ModuleGeneratorSchema } from './schema';
 
 export async function moduleGenerator(tree: Tree, options: ModuleGeneratorSchema): Promise<void> {
-  const { name, directory = 'libs/modules', withCqrs = true } = options;
+  const { name, withCqrs = true } = options;
+  // Map shorthand enums to full paths for backward compat with raw full paths.
+  const directoryMap: Record<string, string> = {
+    modules: 'libs/modules',
+    composition: 'libs/composition',
+  };
+  const rawDir = options.directory ?? 'modules';
+  const directory = directoryMap[rawDir] ?? rawDir;
   const moduleNames = names(name);
   const projectRoot = `${directory}/${moduleNames.fileName}`;
   const offset = offsetFromRoot(projectRoot);
@@ -24,7 +31,7 @@ export async function moduleGenerator(tree: Tree, options: ModuleGeneratorSchema
     root: projectRoot,
     projectType: 'library',
     sourceRoot: `${projectRoot}/src`,
-    tags: [`scope:modules`, `module:${moduleNames.fileName}`],
+    tags: [`scope:modules`, `type:feature`],
     targets: {
       test: {
         executor: '@nx/vitest:test',

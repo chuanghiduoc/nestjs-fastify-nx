@@ -1,25 +1,23 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotImplementedException } from '@nestjs/common';
 import { PrismaService } from '@nestjs-fastify-nx/infra-database';
 import { <%= className %> } from '../../domain';
 import type { <%= className %>RepositoryPort } from '../../domain';
 
+// Skeleton aggregate repository — implement each method once the Prisma model
+// for this bounded context is defined and migrated.
 @Injectable()
 export class Prisma<%= className %>Repository implements <%= className %>RepositoryPort {
   constructor(private readonly prisma: PrismaService) {}
 
-  async findById(id: string): Promise<<%= className %> | null> {
-    // TODO: replace with actual Prisma model query once schema is defined
-    void id;
-    return null;
+  async findById(_id: string): Promise<<%= className %> | null> {
+    throw new NotImplementedException('Prisma<%= className %>Repository.findById');
   }
 
-  async save(entity: <%= className %>): Promise<void> {
-    // TODO: replace with actual Prisma upsert once schema is defined
-    void entity;
+  async save(_entity: <%= className %>): Promise<void> {
+    throw new NotImplementedException('Prisma<%= className %>Repository.save');
   }
 
-  async delete(id: string): Promise<void> {
-    // TODO: replace with actual Prisma delete once schema is defined
-    void id;
+  async delete(_id: string): Promise<void> {
+    throw new NotImplementedException('Prisma<%= className %>Repository.delete');
   }
 }

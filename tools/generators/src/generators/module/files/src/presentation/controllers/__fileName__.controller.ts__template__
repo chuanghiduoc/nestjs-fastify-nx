@@ -1,11 +1,13 @@
 import { Controller, Get, Param, HttpCode, HttpStatus } from '@nestjs/common';
+import { ApiTags } from '@nestjs/swagger';
+import { ApiCommonErrors } from '@nestjs-fastify-nx/contracts';
 
-// Route segment defaults to the module name as-is. Adjust to the conventional
-// REST plural ("/users", "/orders") once you have decided on the URL contract.
+@ApiTags('<%= fileName %>')
 @Controller('<%= fileName %>')
 export class <%= className %>Controller {
   @Get(':id')
   @HttpCode(HttpStatus.OK)
+  @ApiCommonErrors({ auth: false, validation: false })
   findOne(@Param('id') id: string): { id: string } {
     return { id };
   }

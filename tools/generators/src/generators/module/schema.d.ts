@@ -1,5 +1,5 @@
 export interface ModuleGeneratorSchema {
   name: string;
-  directory: string;
+  directory: 'modules' | 'composition';
   withCqrs: boolean;
 }

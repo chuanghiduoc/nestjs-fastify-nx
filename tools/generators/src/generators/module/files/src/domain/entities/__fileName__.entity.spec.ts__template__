@@ -1,0 +1,17 @@
+import { describe, it, expect } from 'vitest';
+import { <%= className %> } from './<%= fileName %>.entity';
+
+describe('<%= className %> entity', () => {
+  it('creates with a generated id', () => {
+    const entity = <%= className %>.create();
+    expect(entity.id).toBeDefined();
+    expect(typeof entity.id).toBe('string');
+  });
+
+  it('reconstitutes from persistence snapshot', () => {
+    const now = new Date();
+    const entity = <%= className %>.reconstitute({ id: 'test-id', createdAt: now, updatedAt: now });
+    expect(entity.id).toBe('test-id');
+    expect(entity.createdAt).toBe(now);
+  });
+});
