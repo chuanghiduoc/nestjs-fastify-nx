@@ -74,7 +74,9 @@ apps/
     src/common/ filters, interceptors, swagger, throttler, health
   worker/       BullMQ consumer
   scheduler/    cron jobs (@nestjs/schedule)
-  migration/    one-shot `prisma migrate deploy` + optional seed
+  migration/    one-shot `prisma migrate deploy` + optional seed (Docker CMD bypasses
+                main.ts; the file exists only so Nx sees an entry point. Gated by orchestrator
+                via `depends_on: service_completed_successfully` before api/worker/scheduler boot)
 
 libs/
   modules/      bounded contexts (DDD per module — see below)
@@ -178,6 +180,7 @@ pnpm nx g @nestjs-fastify-nx/tools-generators:module --name=my-feature --directo
 - **pnpm overrides** in `package.json` pin transitive vulnerable versions (fastify, picomatch, brace-expansion, …). Trivy may still flag declared ranges in transitive `package.json` files — that's a scanner artifact; runtime resolves to the override.
 - **Migration app** (`apps/migration`) has an empty allow-list for module boundaries on purpose. Do **not** import domain code there — schema rollouts must stay decoupled from runtime business logic.
 - **TypeScript 6 tsconfig rules**: `baseUrl` is removed (deprecated); path aliases still work via `tsconfig.base.json` `paths`. Do not re-add `baseUrl`. Default inheritance is `ES2022` / `NodeNext` / `NodeNext` from `tsconfig.base.json`. Apps override `module: "CommonJS"` + `moduleResolution: "Node10"` only because Webpack 5 requires CommonJS output — this is a bundler constraint, not a TS 6 issue. Libs inherit all settings from base; do not duplicate `strict*`, `target`, `module`, or `moduleResolution` in `tsconfig.lib.json`. The `ignoreDeprecations: "6.0"` grace period ends at TS 7 — no further suppressions will be possible.
+- **VS Code "Invalid value for '--ignoreDeprecations'"**: VS Code's bundled TypeScript (often older) flags `"6.0"` as invalid. Force the workspace TS via `.vscode/settings.json` → `"typescript.tsdk": "node_modules/typescript/lib"` (committed). If still red after pull: Command Palette → "TypeScript: Select TypeScript Version" → "Use Workspace Version".
 - **Auth rate-limit + body/multipart caps**: Fastify hook `fastify-rate-limit` guards `/api/auth/*` (AUTH_RATE_LIMIT_MAX=5, AUTH_RATE_LIMIT_WINDOW_MS=900000). Multipart upload + raw body limits set via HTTP_BODY_LIMIT_BYTES (1 MB) and UPLOAD_MAX_FILE_BYTES (10 MB) env vars. Validate these before going live.
 - **Outbox interactive tx timeout**: domain mutations trigger Postgres `sql_outbox` inserts; outbox relay publishes within same tx with OUTBOX_TX_TIMEOUT_MS (default 30s). If events hang, increase timeout or reduce batch size in `libs/infra/messaging`.
 - **Health readiness BullMQ probe**: `/health/ready` now includes a `BullMqHealthIndicator` that pings the email-notification queue (2s timeout). If queue is not bootstrapped before probe, readiness fails.
