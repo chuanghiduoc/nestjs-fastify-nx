@@ -18,7 +18,7 @@ export class MetricsIpAllowGuard implements CanActivate {
   private readonly allowedCidrs: string[];
 
   constructor(private readonly config: ConfigService<EnvConfig, true>) {
-    const raw = process.env['METRICS_ALLOW_CIDRS'] ?? '';
+    const raw = config.get('METRICS_ALLOW_CIDRS', { infer: true }) ?? '';
     this.allowedCidrs = raw
       .split(',')
       .map((s) => s.trim())
@@ -43,8 +43,12 @@ export class MetricsIpAllowGuard implements CanActivate {
   }
 
   private extractIp(request: FastifyRequest): string {
-    // Fastify populates req.ip respecting the trustProxy setting from main.ts.
-    return request.ip ?? '';
+    // Use the TCP socket's remote address rather than req.ip. With trustProxy: 1
+    // set in main.ts, Fastify resolves req.ip from X-Forwarded-For — an attacker
+    // reaching a misconfigured ingress that does not strip XFF can forge any IP
+    // and bypass this allowlist. socket.remoteAddress is always the direct peer
+    // and cannot be spoofed from application-layer headers.
+    return request.socket?.remoteAddress ?? '';
   }
 
   private ipMatchesCidr(ip: string, cidr: string): boolean {

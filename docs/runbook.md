@@ -259,3 +259,34 @@ DELETE FROM _prisma_migrations WHERE migration_name = '20260516_failing_migratio
 - Test migrations against a production-sized DB snapshot in staging before merging.
 
 **Escalation:** If the schema is in an unknown state and the DB cannot be brought back online, restore from the last snapshot taken before the migration run. Engage the DBA team and document the incident timeline.
+
+---
+
+## 6. Metrics endpoint unreachable or leaking
+
+**Symptom:** Prometheus scrape jobs return 403 or connection refused. Or, conversely, `/metrics` is accidentally reachable from the public internet.
+
+**Diagnostic:**
+
+```bash
+# Confirm ENABLE_METRICS=true in the running container
+docker compose exec api env | grep METRICS
+
+# Check what IP the Prometheus pod sees as the source
+# (must match a CIDR in METRICS_ALLOW_CIDRS or loopback)
+curl -v http://<api-host>:3000/metrics 2>&1 | grep "< HTTP"
+```
+
+**IP allow-list gotcha:** The guard uses `socket.remoteAddress` (the TCP peer), **not** `X-Forwarded-For`. With `trustProxy: 1` set, `req.ip` would resolve from XFF and could be forged by a client that reaches a misconfigured ingress. Configure `METRICS_ALLOW_CIDRS` with the direct peer IPs reaching the API process:
+
+- In Kubernetes: the Prometheus pod CIDR (e.g. `10.244.0.0/16`), not the node external IP.
+- Behind an internal load balancer: the LB's internal IP range.
+- If the metrics port is the same as the public API port, ensure the edge proxy strips or blocks `X-Forwarded-For` before forwarding to `/metrics`.
+
+**Action:**
+
+1. Set `METRICS_ALLOW_CIDRS` to the Prometheus scraper's pod CIDR or IP.
+2. Preferred: bind `/metrics` on a separate internal port via reverse proxy (nginx `location /metrics { deny all; }` on the public vhost, separate internal vhost for Prometheus).
+3. Restart the API container for env changes to take effect.
+
+**Escalation:** If metrics are confirmed reachable from the public internet, treat as a security incident — Prometheus metrics expose internal labels, queue depths, and memory usage that aid attackers in profiling the system. Rotate any secrets that may appear in metric labels, restrict access immediately, and review ingress firewall rules.

@@ -1,9 +1,10 @@
 {
   "$schema": "./node_modules/nx/schemas/nx-schema.json",
   "defaultBase": "main",
-  // TODO: replace with your org's Nx Cloud ID (get it from cloud.nx.app after
-  // connecting the workspace). CI cache hits require either nxCloudId here or
-  // NX_CLOUD_AUTH_TOKEN set in GitHub Actions secrets (already wired in ci.yml).
+  // Set this OR NX_CLOUD_AUTH_TOKEN env var (already wired in ci.yml) to enable
+  // remote caching via Nx Cloud (cloud.nx.app). Without either, every CI run is
+  // a cold cache — all affected tasks re-execute from scratch even when inputs
+  // haven't changed. Local development continues to use local cache regardless.
   // "nxCloudId": "YOUR_NX_CLOUD_ID_HERE",
   "namedInputs": {
     "default": ["{projectRoot}/**/*", "sharedGlobals"],

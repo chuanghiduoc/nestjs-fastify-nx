@@ -49,6 +49,35 @@ if (sentryDsn) {
           delete event.request.headers['set-cookie'];
         }
       }
+
+      // Scrub PII that may leak into extra/contexts via service-level breadcrumbs.
+      // Aligns with the pino redact list (*.password, *.token, *.secret, *.cookie).
+      const sensitiveKeys = /password|token|secret|cookie/i;
+      const scrubObject = (obj: Record<string, unknown>): void => {
+        for (const key of Object.keys(obj)) {
+          if (sensitiveKeys.test(key)) {
+            obj[key] = '[Filtered]';
+          }
+        }
+      };
+
+      if (event.extra) scrubObject(event.extra as Record<string, unknown>);
+      if (event.contexts) {
+        for (const ctx of Object.values(event.contexts)) {
+          if (ctx && typeof ctx === 'object') scrubObject(ctx as Record<string, unknown>);
+        }
+      }
+      // event.breadcrumbs typing varies by SDK version; cast to avoid type drift.
+      const breadcrumbList = (event.breadcrumbs as { values?: unknown[] } | undefined)?.values;
+      if (Array.isArray(breadcrumbList)) {
+        for (const crumb of breadcrumbList) {
+          const data = (crumb as { data?: unknown })?.data;
+          if (data && typeof data === 'object') {
+            scrubObject(data as Record<string, unknown>);
+          }
+        }
+      }
+
       return event;
     },
   });

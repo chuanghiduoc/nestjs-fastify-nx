@@ -5,12 +5,13 @@ import { PrismaService } from '@nestjs-fastify-nx/infra-database';
 const PROBE_TIMEOUT_MS = 2_000;
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
-  return Promise.race([
-    promise,
-    new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error(`Health probe timed out after ${ms}ms`)), ms),
-    ),
-  ]);
+  // Clear the timer whether the probe wins or loses — without this the reject
+  // closure keeps a reference alive until the timer fires, blocking clean shutdown.
+  let timer: NodeJS.Timeout | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`Health probe timed out after ${ms}ms`)), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
 
 @Injectable()

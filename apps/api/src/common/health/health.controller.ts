@@ -7,6 +7,7 @@ import { ApiCommonErrors } from '@nestjs-fastify-nx/contracts';
 import { Public } from '@nestjs-fastify-nx/infra-auth';
 import { PrismaHealthIndicator } from './prisma-health.indicator';
 import { RedisCacheHealthIndicator, RedisQueueHealthIndicator } from './redis.health';
+import { BullMqHealthIndicator } from './bullmq-health.indicator';
 
 const INDICATOR_STATUS_SCHEMA: SchemaObject = {
   type: 'object',
@@ -69,6 +70,7 @@ export class HealthController {
     private readonly memory: MemoryHealthIndicator,
     private readonly redisCache: RedisCacheHealthIndicator,
     private readonly redisQueue: RedisQueueHealthIndicator,
+    private readonly bullmq: BullMqHealthIndicator,
   ) {}
 
   @Get()
@@ -99,7 +101,7 @@ export class HealthController {
   @Get('ready')
   @HealthCheck()
   @ApiOperation({
-    summary: 'Readiness probe (DB + Redis cache + Redis queue).',
+    summary: 'Readiness probe (DB + Redis cache + Redis queue + BullMQ).',
     description:
       'Use as the Kubernetes readiness probe. Returns 503 when any critical dependency is unreachable so the orchestrator removes the pod from the load balancer.',
   })
@@ -120,6 +122,7 @@ export class HealthController {
       () => this.prismaIndicator.isHealthy('database'),
       () => this.redisCache.isHealthy('redis_cache'),
       () => this.redisQueue.isHealthy('redis_queue'),
+      () => this.bullmq.isHealthy('bullmq'),
     ]);
   }
 
