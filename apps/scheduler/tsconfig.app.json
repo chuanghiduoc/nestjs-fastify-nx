@@ -34,7 +34,7 @@
       "path": "../../libs/modules/users/tsconfig.lib.json"
     },
     {
-      "path": "../../libs/shared/tsconfig.lib.json"
+      "path": "../../libs/infra/observability/tsconfig.lib.json"
     },
     {
       "path": "../../libs/infra/messaging/tsconfig.lib.json"

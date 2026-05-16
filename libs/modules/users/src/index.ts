@@ -10,6 +10,9 @@ export type {
   FindAllResult,
 } from './domain/ports/user-repository.port';
 
+export { GetUserProfileHandler } from './application/queries/get-user-profile/get-user-profile.handler';
+export { GetUserProfileQuery } from './application/queries/get-user-profile/get-user-profile.query';
+export type { UserProfileResult } from './application/queries/get-user-profile/get-user-profile.handler';
 export { ListUsersHandler } from './application/queries/list-users/list-users.handler';
 export { ListUsersQuery } from './application/queries/list-users/list-users.query';
 export type { UserListItemDto } from './application/dtos/user-list-item.dto';

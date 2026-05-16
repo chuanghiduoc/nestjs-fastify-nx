@@ -1,7 +1,10 @@
 import { betterAuth } from 'better-auth';
 import { prismaAdapter } from 'better-auth/adapters/prisma';
 import { openAPI } from 'better-auth/plugins';
+import { Logger } from '@nestjs/common';
 import type { PrismaClient } from '@prisma/client';
+
+const logger = new Logger('BetterAuth');
 
 /**
  * Side-effect hooks fired after Better Auth completes a database operation.
@@ -72,7 +75,10 @@ export function createBetterAuth(prisma: PrismaClient, hooks: BetterAuthHooks = 
               // Signup is already committed; swallow + log so the API still
               // returns success. Downstream side-effects (welcome email) are
               // recoverable via outbox replay or operator intervention.
-              console.error('[better-auth] onUserCreated hook failed', err);
+              logger.error(
+                'onUserCreated hook failed',
+                err instanceof Error ? err.stack : String(err),
+              );
             }
           },
         },

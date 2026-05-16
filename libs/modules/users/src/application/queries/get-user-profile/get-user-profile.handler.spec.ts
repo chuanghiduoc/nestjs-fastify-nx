@@ -15,7 +15,7 @@ describe('GetUserProfileHandler', () => {
     handler = new GetUserProfileHandler(userRepo);
   });
 
-  it('returns a UserProfileDto for an existing user', async () => {
+  it('returns a UserProfileResult for an existing user', async () => {
     const user = UserFactory.create({ email: 'profile@example.com' });
     await userRepo.save(user);
 
@@ -33,7 +33,7 @@ describe('GetUserProfileHandler', () => {
     );
   });
 
-  it('returns a DTO with the correct shape (id, email, role, createdAt)', async () => {
+  it('returns a DTO with the correct shape (id, email, name, role, status, createdAt, updatedAt)', async () => {
     const user = UserFactory.create({ email: 'shape@example.com', role: UserRole.ADMIN });
     await userRepo.save(user);
 
@@ -42,8 +42,11 @@ describe('GetUserProfileHandler', () => {
     expect(result).toMatchObject({
       id: expect.any(String),
       email: expect.any(String),
+      name: expect.any(String),
       role: expect.any(String),
+      status: expect.any(String),
       createdAt: expect.any(Date),
+      updatedAt: expect.any(Date),
     });
   });
 
@@ -63,6 +66,14 @@ describe('GetUserProfileHandler', () => {
     const result = await handler.execute(new GetUserProfileQuery(user.id));
 
     expect(result).not.toHaveProperty('passwordHash');
-    expect(Object.keys(result).sort()).toEqual(['createdAt', 'email', 'id', 'role']);
+    expect(Object.keys(result).sort()).toEqual([
+      'createdAt',
+      'email',
+      'id',
+      'name',
+      'role',
+      'status',
+      'updatedAt',
+    ]);
   });
 });
