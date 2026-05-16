@@ -83,6 +83,10 @@ const envSchema = z
       .string()
       .default('false')
       .transform((v) => v === 'true'),
+    // Comma-separated CIDRs (or exact IPs) allowed to scrape /metrics.
+    // Loopback is always allowed. Empty string = loopback-only (fail closed).
+    // Example for Kubernetes pod CIDR: "10.244.0.0/16"
+    METRICS_ALLOW_CIDRS: z.string().default(''),
 
     // OpenTelemetry
     OTEL_ENABLED: z

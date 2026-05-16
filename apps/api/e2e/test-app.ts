@@ -1,4 +1,3 @@
-import { execSync } from 'child_process';
 import { Test } from '@nestjs/testing';
 import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify';
 import { toNodeHandler } from 'better-auth/node';
@@ -6,18 +5,13 @@ import fastifyRateLimit from '@fastify/rate-limit';
 import fastifyMultipart from '@fastify/multipart';
 import { BETTER_AUTH_INSTANCE, type BetterAuthInstance } from '@nestjs-fastify-nx/infra-auth';
 import { PrismaService } from '@nestjs-fastify-nx/infra-database';
-import {
-  createTestContainers,
-  DatabaseCleaner,
-  type TestContainers,
-} from '@nestjs-fastify-nx/testing';
+import { DatabaseCleaner } from '@nestjs-fastify-nx/testing';
 import { AppModule } from '../src/app/app.module';
 import { applyFastifyErrorHandler } from '../src/common/filters/fastify-error-handler';
 import { ProblemDetailsValidationPipe } from '../src/common/pipes';
 
 export interface TestAppContext {
   app: NestFastifyApplication;
-  containers: TestContainers;
   cleaner: DatabaseCleaner;
 }
 
@@ -27,11 +21,20 @@ export interface TestAppContext {
 // swagger/sentry/bull-board which are irrelevant for e2e, and we do NOT call
 // useGlobalFilters — AppModule already provides GlobalExceptionFilter via
 // APP_FILTER; registering it twice would wrap every response twice.
+//
+// Containers are started once by global-setup.ts (Vitest globalSetup) and
+// their connection details written to E2E_DATABASE_URL / E2E_REDIS_HOST /
+// E2E_REDIS_PORT. Each spec calls cleaner.truncateAll() in beforeEach.
 export async function createTestApp(): Promise<TestAppContext> {
-  const containers = await createTestContainers();
-  const dbUrl = containers.postgres.getConnectionUri();
-  const redisHost = containers.redis.getHost();
-  const redisPort = String(containers.redis.getFirstMappedPort());
+  const dbUrl = process.env['E2E_DATABASE_URL'];
+  const redisHost = process.env['E2E_REDIS_HOST'];
+  const redisPort = process.env['E2E_REDIS_PORT'];
+
+  if (!dbUrl || !redisHost || !redisPort) {
+    throw new Error(
+      'E2E container env vars not set. Ensure global-setup.ts ran via Vitest globalSetup.',
+    );
+  }
 
   process.env['DATABASE_URL'] = dbUrl;
   process.env['REDIS_CACHE_HOST'] = redisHost;
@@ -39,12 +42,6 @@ export async function createTestApp(): Promise<TestAppContext> {
   process.env['REDIS_QUEUE_HOST'] = redisHost;
   process.env['REDIS_QUEUE_PORT'] = redisPort;
   process.env['BETTER_AUTH_SECRET'] = 'e2e-better-auth-secret-must-be-32-chars-long';
-
-  execSync('pnpm prisma migrate deploy', {
-    cwd: process.cwd(),
-    env: { ...process.env, DATABASE_URL: dbUrl },
-    stdio: 'inherit',
-  });
 
   // Use a low rate-limit max in tests so the 429 test doesn't need many requests.
   process.env['AUTH_RATE_LIMIT_MAX'] = '3';
@@ -137,7 +134,7 @@ export async function createTestApp(): Promise<TestAppContext> {
   await fastify.ready();
 
   const cleaner = new DatabaseCleaner(app.get(PrismaService).db);
-  return { app, containers, cleaner };
+  return { app, cleaner };
 }
 
 // Joins multiple Set-Cookie values into one Cookie request header. Better Auth

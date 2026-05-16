@@ -8,11 +8,10 @@ describe('Users E2E', () => {
 
   beforeAll(async () => {
     ctx = await createTestApp();
-  }, 180_000);
+  }, 60_000);
 
   afterAll(async () => {
     await ctx.app.close();
-    await ctx.containers.teardown();
   });
 
   beforeEach(async () => {

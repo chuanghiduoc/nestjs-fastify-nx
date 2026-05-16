@@ -4,9 +4,20 @@ import { HealthCheckError, HealthIndicator, HealthIndicatorResult } from '@nestj
 import Redis from 'ioredis';
 import type { EnvConfig } from '../../config/env.validation';
 
+const PROBE_TIMEOUT_MS = 2_000;
+
 interface RedisTarget {
   readonly host: string;
   readonly port: number;
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error(`Health probe timed out after ${ms}ms`)), ms),
+    ),
+  ]);
 }
 
 abstract class BaseRedisHealthIndicator extends HealthIndicator implements OnModuleDestroy {
@@ -18,7 +29,7 @@ abstract class BaseRedisHealthIndicator extends HealthIndicator implements OnMod
       host: target.host,
       port: target.port,
       lazyConnect: true,
-      connectTimeout: 3000,
+      connectTimeout: PROBE_TIMEOUT_MS,
       maxRetriesPerRequest: 1,
       retryStrategy: () => null,
     });
@@ -33,7 +44,7 @@ abstract class BaseRedisHealthIndicator extends HealthIndicator implements OnMod
 
   async isHealthy(key: string): Promise<HealthIndicatorResult> {
     try {
-      const result = await this.redis.ping();
+      const result = await withTimeout(this.redis.ping(), PROBE_TIMEOUT_MS);
       const ok = result === 'PONG';
       const status = this.getStatus(key, ok);
       if (!ok) {

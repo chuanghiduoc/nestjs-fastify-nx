@@ -19,11 +19,38 @@ import type { EnvConfig } from './config/env.validation';
 
 const sentryDsn = process.env['SENTRY_DSN'];
 if (sentryDsn) {
+  const isProduction = process.env['NODE_ENV'] === 'production';
+  // Cap sampling rates in production to limit Sentry quota burn. The env vars
+  // allow per-deployment tuning; the Math.min ensures the cap is never exceeded
+  // even if someone sets SENTRY_TRACES_SAMPLE_RATE=1 in prod.
+  const sampleRateCap = isProduction ? 0.1 : 1;
+  const tracesSampleRate = Math.min(
+    Number(process.env['SENTRY_TRACES_SAMPLE_RATE'] ?? 0.1),
+    sampleRateCap,
+  );
+  const profilesSampleRate = Math.min(0.1, sampleRateCap);
+
   Sentry.init({
     dsn: sentryDsn,
     environment: process.env['SENTRY_ENVIRONMENT'] ?? 'development',
-    tracesSampleRate: Number(process.env['SENTRY_TRACES_SAMPLE_RATE'] ?? 0.1),
+    tracesSampleRate,
+    profilesSampleRate,
     integrations: [nodeProfilingIntegration()],
+    // Never send PII (cookies, auth headers, request bodies) to Sentry.
+    sendDefaultPii: false,
+    beforeSend(event) {
+      // Strip request-level PII that Sentry may capture automatically.
+      if (event.request) {
+        delete event.request.cookies;
+        delete event.request.data;
+        if (event.request.headers) {
+          delete event.request.headers['authorization'];
+          delete event.request.headers['cookie'];
+          delete event.request.headers['set-cookie'];
+        }
+      }
+      return event;
+    },
   });
 }
 
