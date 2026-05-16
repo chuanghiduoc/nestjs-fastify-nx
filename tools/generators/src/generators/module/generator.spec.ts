@@ -167,4 +167,38 @@ describe('module generator', () => {
     expect(config.tags).toContain('scope:modules');
     expect(config.tags).not.toContain('scope:composition');
   });
+
+  describe('directory normalization — backward compat full paths', () => {
+    it('accepts "libs/modules" as equivalent to "modules"', async () => {
+      await moduleGenerator(tree, { name: 'payments', directory: 'libs/modules', withCqrs: false });
+
+      const config = readProjectConfiguration(tree, 'modules-payments');
+      expect(config.root).toBe('libs/modules/payments');
+      expect(config.tags).toContain('scope:modules');
+    });
+
+    it('accepts "libs/composition" as equivalent to "composition"', async () => {
+      await moduleGenerator(tree, {
+        name: 'reports',
+        directory: 'libs/composition',
+        withCqrs: false,
+      });
+
+      const config = readProjectConfiguration(tree, 'composition-reports');
+      expect(config.root).toBe('libs/composition/reports');
+      expect(config.tags).toContain('scope:composition');
+    });
+
+    it('throws for an unrecognized directory value', async () => {
+      await expect(
+        moduleGenerator(tree, { name: 'bad', directory: 'libs/other', withCqrs: false }),
+      ).rejects.toThrow(/Invalid --directory/);
+    });
+
+    it('throws for a raw path with slashes that does not match known scopes', async () => {
+      await expect(
+        moduleGenerator(tree, { name: 'bad', directory: 'src/something', withCqrs: false }),
+      ).rejects.toThrow(/Invalid --directory/);
+    });
+  });
 });
