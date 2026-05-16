@@ -17,7 +17,7 @@ export class ProblemDetailsDto {
   @ApiProperty({
     description:
       'A URI reference identifying the problem type. SHOULD resolve to human-readable docs.',
-    example: 'https://api.example.com/errors/not-found',
+    example: '/errors/not-found',
     format: 'uri',
   })
   type!: string;

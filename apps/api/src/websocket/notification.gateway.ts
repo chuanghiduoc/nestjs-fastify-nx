@@ -18,6 +18,12 @@ import { BETTER_AUTH_INSTANCE } from '@nestjs-fastify-nx/infra-auth';
 import type { BetterAuthInstance } from '@nestjs-fastify-nx/infra-auth';
 import { createWsAuthMiddleware } from './ws-auth.adapter';
 
+interface WsRedisEnv {
+  REDIS_CACHE_HOST: string;
+  REDIS_CACHE_PORT: number;
+  REDIS_PUBSUB_DB: number;
+}
+
 // Origin allowlist is read at module-load time from CORS_ORIGINS so the
 // @WebSocketGateway decorator (evaluated synchronously at class definition)
 // can hand a CORS function to socket.io. In production, an empty allowlist
@@ -61,7 +67,7 @@ export class NotificationGateway
   private subClient!: Redis;
 
   constructor(
-    private readonly config: ConfigService,
+    private readonly config: ConfigService<WsRedisEnv, true>,
     @Inject(BETTER_AUTH_INSTANCE) private readonly auth: BetterAuthInstance,
   ) {}
 
@@ -69,9 +75,9 @@ export class NotificationGateway
     const retryStrategy = (times: number) => Math.min(times * 100, 3000);
 
     this.pubClient = new Redis({
-      host: this.config.get<string>('REDIS_CACHE_HOST', 'localhost'),
-      port: this.config.get<number>('REDIS_CACHE_PORT', 6379),
-      db: this.config.get<number>('REDIS_PUBSUB_DB', 2),
+      host: this.config.get('REDIS_CACHE_HOST', { infer: true }),
+      port: this.config.get('REDIS_CACHE_PORT', { infer: true }),
+      db: this.config.get('REDIS_PUBSUB_DB', { infer: true }),
       retryStrategy,
     });
     this.subClient = this.pubClient.duplicate();
