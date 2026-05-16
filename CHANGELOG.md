@@ -31,6 +31,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Shared Testcontainers setup — global-setup/teardown with SIGINT handler for clean container teardown on CI cancel
 - docs/code-standards.md — enforcement of logging (pino-only), error handling (BusinessRuleException), DTOs (1 per shape), module boundaries, testing ratios
 - docs/runbook.md — 6 sections for ops troubleshooting (health, metrics, outbox, BullMQ, performance, security)
+- **Phase 6** — Module generator overhaul: `pnpm nx g @nestjs-fastify-nx/tools-generators:module --name=foo --directory=modules` scaffolds full DDD layout (domain/application/infrastructure/presentation) with zero TODOs, kebab-case validation, correct `scope:*` tag scheme
+- **Phase 7** — Ops tooling: `scripts/doctor.sh` (preflight check: Docker, Node, pnpm, ports, env vars), `scripts/teardown.sh` (clean compose stack wrapper), `scripts/build-dev.sh --with-obs` flag, `docker/compose.observability.yml` (opt-in Prometheus + Grafana + Jaeger + OTel collector), MinIO bucket auto-provision + healthcheck
+- **Phase 8** — Documentation polish: CLAUDE.md updated (honest HMR comment, .env.example guidance, post-clone sanity check, Better Auth body parser gotcha, generator invocation hints, runbook/code-standards links), new CONTRIBUTING.md (human dev onboarding, 5-minute quick start, daily commands table, PR checklist, troubleshooting table)
 
 ### Fixed
 

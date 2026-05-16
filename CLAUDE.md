@@ -124,10 +124,15 @@ index.ts           public barrel — re-export only what consumers need
 ```bash
 # Bootstrap (after clone)
 cp .env.example .env && pnpm install
+# .env.example documents all required keys; .env is gitignored.
+# Run ./scripts/doctor.sh to verify prerequisites + required env vars are set.
 ./scripts/build-dev.sh             # builds + boots full dev stack
 
+# Verify clean state (optional but recommended after first install)
+pnpm nx affected -t lint test build --base=main
+
 # Inner loop
-pnpm nx serve api                  # build once then spawn Node (@nx/js:node, no HMR)
+pnpm nx serve api                  # build once then spawn Node; no file watching. For HMR: pnpm nx watch -p api -- pnpm nx run api:build
 pnpm nx test <project>             # vitest
 pnpm nx affected -t lint test build
 pnpm nx run api:e2e                # Testcontainers — Docker required
@@ -144,6 +149,12 @@ pnpm codegen:full                  # spec → orval → libs/api-client
 # Sync after creating libs / moving files
 pnpm nx sync
 pnpm nx reset                      # if daemon caches go stale
+
+# Scaffolding a new bounded context (DDD layout)
+pnpm nx g @nestjs-fastify-nx/tools-generators:module --name=my-feature --directory=modules
+# For cross-context composition lib (e.g. admin, billing-report):
+pnpm nx g @nestjs-fastify-nx/tools-generators:module --name=my-feature --directory=composition
+# Reference: docs/creating-a-module.md for full DDD walkthrough
 ```
 
 ## Conventions agents must respect
@@ -163,13 +174,14 @@ pnpm nx reset                      # if daemon caches go stale
 - **`nx show project` over `cat project.json`** — `project.json` is partial; the resolved config (with inferred targets from plugins) only appears via `nx show project <name> --json`.
 - **Nx daemon caching**: after creating a new lib, run `pnpm nx reset` if `nx show projects` doesn't see it.
 - **Better Auth + Socket.io**: WebSocket upgrades validate the same `better-auth.session_token` cookie via `createWsAuthMiddleware` (in `apps/api/src/websocket/ws-auth.adapter.ts`).
-- **Swagger codegen**: `apps/api/src/common/swagger/codegen-app.module.ts` is an HTTP-only module used by `export-spec.ts` for spec generation — keep it in sync when adding feature modules to `AppModule`. It deliberately drops Socket.io/GraphQL/Sentry/Metrics to avoid side-effects during spec export.
+- **Swagger codegen**: `apps/api/src/common/swagger/codegen-app.module.ts` is an HTTP-only module used by `export-spec.ts` for spec generation — keep it in sync when adding feature modules to `AppModule`. It deliberately drops Socket.io/GraphQL/Sentry/Metrics because provider init (DB connections, Sentry client init, BullMQ workers) would leak resources or fail in CI. Spec export only needs the HTTP layer.
 - **pnpm overrides** in `package.json` pin transitive vulnerable versions (fastify, picomatch, brace-expansion, …). Trivy may still flag declared ranges in transitive `package.json` files — that's a scanner artifact; runtime resolves to the override.
 - **Migration app** (`apps/migration`) has an empty allow-list for module boundaries on purpose. Do **not** import domain code there — schema rollouts must stay decoupled from runtime business logic.
 - **Auth rate-limit + body/multipart caps**: Fastify hook `fastify-rate-limit` guards `/api/auth/*` (AUTH_RATE_LIMIT_MAX=5, AUTH_RATE_LIMIT_WINDOW_MS=900000). Multipart upload + raw body limits set via HTTP_BODY_LIMIT_BYTES (1 MB) and UPLOAD_MAX_FILE_BYTES (10 MB) env vars. Validate these before going live.
 - **Outbox interactive tx timeout**: domain mutations trigger Postgres `sql_outbox` inserts; outbox relay publishes within same tx with OUTBOX_TX_TIMEOUT_MS (default 30s). If events hang, increase timeout or reduce batch size in `libs/infra/messaging`.
 - **Health readiness BullMQ probe**: `/health/ready` now includes a `BullMqHealthIndicator` that pings the email-notification queue (2s timeout). If queue is not bootstrapped before probe, readiness fails.
 - **Metrics endpoint IP allowlist**: `MetricsIpAllowGuard` reads `METRICS_ALLOW_CIDRS` (comma-separated CIDR ranges) and uses `socket.remoteAddress` (not `req.ip`, which is spoofable via X-Forwarded-For). Empty list fails closed (no metrics). Kubernetes typically needs `127.0.0.1/32` or pod CIDR.
+- **Better Auth body parser collision**: NestJS global `ProblemDetailsValidationPipe` would consume the request body before Better Auth can read it. Solved via `reply.hijack()` in `main.ts`. If adding new `/api/auth/*` endpoints, bypass the NestJS pipeline the same way.
 
 ## Documentation map
 
@@ -181,3 +193,6 @@ pnpm nx reset                      # if daemon caches go stale
 - `docs/deployment.md` — Docker, GHCR, Cosign, Coolify
 - `docs/security.md` — five-layer scan pipeline (Gitleaks, OSV, Semgrep, Trivy, Cosign)
 - `docs/troubleshooting.md` — known failure modes
+- `docs/runbook.md` — ops runbook (outbox stuck, DLQ full, stuck queue workers, performance)
+- `docs/code-standards.md` — coding conventions enforced (logging, error handling, DTOs, boundaries)
+- `CONTRIBUTING.md` — human dev onboarding (5-minute quick start, PR checklist)
