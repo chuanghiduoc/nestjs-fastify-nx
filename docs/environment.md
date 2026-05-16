@@ -67,12 +67,12 @@ scrypt-hashed via `better-auth/crypto`).
 
 ## Rate Limiting & Request Body Limits
 
-| Variable                          | Default    | Required | Description                                                      |
-| --------------------------------- | ---------- | -------- | ---------------------------------------------------------------- |
-| `AUTH_RATE_LIMIT_MAX`             | `5`        | No       | Max requests per window on `/api/auth/*`                          |
-| `AUTH_RATE_LIMIT_WINDOW_MS`       | `900000`   | No       | Rate-limit window in milliseconds (15 min default)                |
-| `HTTP_BODY_LIMIT_BYTES`           | `1048576`  | No       | Max raw request body size (1 MB default)                          |
-| `UPLOAD_MAX_FILE_BYTES`           | `10485760` | No       | Max multipart file size (10 MB default)                           |
+| Variable                    | Default    | Required | Description                                        |
+| --------------------------- | ---------- | -------- | -------------------------------------------------- |
+| `AUTH_RATE_LIMIT_MAX`       | `5`        | No       | Max requests per window on `/api/auth/*`           |
+| `AUTH_RATE_LIMIT_WINDOW_MS` | `900000`   | No       | Rate-limit window in milliseconds (15 min default) |
+| `HTTP_BODY_LIMIT_BYTES`     | `1048576`  | No       | Max raw request body size (1 MB default)           |
+| `UPLOAD_MAX_FILE_BYTES`     | `10485760` | No       | Max multipart file size (10 MB default)            |
 
 ## Error documentation
 
@@ -122,27 +122,27 @@ scrypt-hashed via `better-auth/crypto`).
 
 ## Observability
 
-| Variable                      | Default                 | Required | Description                                                      |
-| ----------------------------- | ----------------------- | -------- | ---------------------------------------------------------------- |
-| `LOG_LEVEL`                   | `info`                  | No       | pino log level: `trace`, `debug`, `info`, `warn`, `error`        |
-| `ENABLE_METRICS`              | `false`                 | No       | Expose `/metrics` for Prometheus (excluded from `api/v1` prefix) |
+| Variable                      | Default                 | Required | Description                                                          |
+| ----------------------------- | ----------------------- | -------- | -------------------------------------------------------------------- |
+| `LOG_LEVEL`                   | `info`                  | No       | pino log level: `trace`, `debug`, `info`, `warn`, `error`            |
+| `ENABLE_METRICS`              | `false`                 | No       | Expose `/metrics` for Prometheus (excluded from `api/v1` prefix)     |
 | `METRICS_ALLOW_CIDRS`         | —                       | No       | Comma-separated CIDR ranges allowed to hit `/metrics` (empty=closed) |
-| `OTEL_ENABLED`                | `false`                 | No       | Bootstrap the OpenTelemetry SDK                                  |
-| `OTEL_SERVICE_NAME`           | `nestjs-fastify-api`    | No       | Reported service name                                            |
-| `OTEL_SERVICE_NAMESPACE`      | `app`                   | No       | Reported service namespace                                       |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://localhost:4318` | No       | OTLP/HTTP collector endpoint                                     |
-| `OTEL_EXPORTER_OTLP_HEADERS`  | —                       | No       | Optional collector auth headers                                  |
-| `OTEL_TRACES_SAMPLER_RATIO`   | `1`                     | No       | Trace sampling ratio                                             |
-| `OTEL_DEBUG`                  | `false`                 | No       | Verbose SDK logging                                              |
-| `SENTRY_DSN`                  | —                       | No       | Sentry DSN; leave empty to disable                               |
-| `SENTRY_TRACES_SAMPLE_RATE`   | `0.1`                   | No       | Sentry tracing sample rate                                       |
-| `SENTRY_ENVIRONMENT`          | `development`           | No       | Reported Sentry environment tag                                  |
+| `OTEL_ENABLED`                | `false`                 | No       | Bootstrap the OpenTelemetry SDK                                      |
+| `OTEL_SERVICE_NAME`           | `nestjs-fastify-api`    | No       | Reported service name                                                |
+| `OTEL_SERVICE_NAMESPACE`      | `app`                   | No       | Reported service namespace                                           |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://localhost:4318` | No       | OTLP/HTTP collector endpoint                                         |
+| `OTEL_EXPORTER_OTLP_HEADERS`  | —                       | No       | Optional collector auth headers                                      |
+| `OTEL_TRACES_SAMPLER_RATIO`   | `1`                     | No       | Trace sampling ratio                                                 |
+| `OTEL_DEBUG`                  | `false`                 | No       | Verbose SDK logging                                                  |
+| `SENTRY_DSN`                  | —                       | No       | Sentry DSN; leave empty to disable                                   |
+| `SENTRY_TRACES_SAMPLE_RATE`   | `0.1`                   | No       | Sentry tracing sample rate                                           |
+| `SENTRY_ENVIRONMENT`          | `development`           | No       | Reported Sentry environment tag                                      |
 
 ## CI / Nx Cloud
 
-| Variable                 | Default | Required | Description                                         |
-| ------------------------ | ------- | -------- | --------------------------------------------------- |
-| `NX_CLOUD_AUTH_TOKEN`    | —       | No       | Auth token for Nx Cloud remote caching              |
+| Variable              | Default | Required | Description                            |
+| --------------------- | ------- | -------- | -------------------------------------- |
+| `NX_CLOUD_AUTH_TOKEN` | —       | No       | Auth token for Nx Cloud remote caching |
 
 ## Docker images
 

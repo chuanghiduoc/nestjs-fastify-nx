@@ -83,7 +83,7 @@ export { CreateUserCommand } from './application/commands/create-user.command';
 export class AdminUsersController {
   constructor(
     private readonly usersModule: UsersModule,
-    private readonly auditModule: AuditLogModule
+    private readonly auditModule: AuditLogModule,
   ) {}
 }
 
@@ -133,15 +133,15 @@ describe('CreateUserHandler', () => {
 
 ## Conventions
 
-| Convention        | Style        | Example                        |
-| ----------------- | ------------ | ------------------------------ |
-| File names        | kebab-case   | `create-user.handler.ts`       |
-| Class names       | PascalCase   | `CreateUserHandler`            |
-| Function names    | camelCase    | `publishUserRegistered()`       |
-| JSON keys         | camelCase    | `{ userId: '...', email: '...' }` |
-| Error `code`      | snake_case   | `duplicate_email`, `not_found` |
-| HTTP headers      | kebab-case   | `X-Request-Id`, `Content-Type` |
-| Env vars          | UPPER_SNAKE  | `AUTH_RATE_LIMIT_MAX`          |
+| Convention     | Style       | Example                           |
+| -------------- | ----------- | --------------------------------- |
+| File names     | kebab-case  | `create-user.handler.ts`          |
+| Class names    | PascalCase  | `CreateUserHandler`               |
+| Function names | camelCase   | `publishUserRegistered()`         |
+| JSON keys      | camelCase   | `{ userId: '...', email: '...' }` |
+| Error `code`   | snake_case  | `duplicate_email`, `not_found`    |
+| HTTP headers   | kebab-case  | `X-Request-Id`, `Content-Type`    |
+| Env vars       | UPPER_SNAKE | `AUTH_RATE_LIMIT_MAX`             |
 
 ## Comments
 
@@ -150,7 +150,8 @@ describe('CreateUserHandler', () => {
 ```typescript
 // DO: Why
 // Retry only transient errors; permanent constraint violations must fail immediately
-if (error.code === 'P2002') { // Unique constraint
+if (error.code === 'P2002') {
+  // Unique constraint
   throw error;
 }
 
