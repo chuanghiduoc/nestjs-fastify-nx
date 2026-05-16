@@ -60,7 +60,9 @@ export class MetricsIpAllowGuard implements CanActivate {
     const [network, prefixStr] = cidr.split('/');
     const prefix = parseInt(prefixStr, 10);
 
-    if (isNaN(prefix) || !network) return false;
+    // Reject non-integer, out-of-range, or non-numeric prefix strings before
+    // the bitwise shift — shift behaviour is undefined for prefix > 32 in JS.
+    if (!Number.isInteger(prefix) || prefix < 0 || prefix > 32 || !network) return false;
 
     // IPv4 only — IPv6 CIDR matching is out of scope; use exact IP for IPv6 peers.
     const ipNum = this.ipv4ToNumber(ip.replace('::ffff:', ''));
