@@ -69,7 +69,7 @@ jobs:
       # are populated. Without this, nx falls back to `defaultBase: "main"`
       # which doesn't exist as a local ref in PR checkouts.
       - name: Set NX base and head
-        uses: nrwl/nx-set-shas@v4
+        uses: nrwl/nx-set-shas@v5
 
       - name: Format check
         run: pnpm nx format:check --base=$NX_BASE --head=$NX_HEAD
