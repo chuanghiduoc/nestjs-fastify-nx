@@ -147,7 +147,8 @@
       "@babel/plugin-transform-modules-systemjs": ">=7.29.4",
       "axios": ">=1.16.0",
       "kysely": ">=0.28.17",
-      "protobufjs": ">=8.0.2"
+      "protobufjs": ">=8.0.2",
+      "webpack-dev-server": ">=5.2.4"
     },
     "onlyBuiltDependencies": [
       "@prisma/engines",
