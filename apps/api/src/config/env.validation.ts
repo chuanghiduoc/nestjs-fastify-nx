@@ -84,6 +84,20 @@ const envSchema = z
               .filter(Boolean)
           : [],
       ),
+    // Number of reverse-proxy hops Fastify will trust X-Forwarded-* from.
+    // `1` is correct behind a single proxy (nginx, ALB). Behind Cloudflare +
+    // ingress = 2. Wrong value → attacker spoofs req.ip → rate-limit bypass.
+    TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(10).default(1),
+    // Max concurrent WebSocket connections per source IP. Defends against a
+    // single client opening thousands of sockets to OOM the gateway.
+    WS_CONNECTION_LIMIT_PER_IP: z.coerce.number().int().min(1).default(50),
+    // When Redis throttler storage is unreachable, allow requests through
+    // instead of failing them. Trade-off: brief unbounded request rate vs
+    // cascading 500s across every guarded route.
+    THROTTLER_FAIL_OPEN: z
+      .string()
+      .default('true')
+      .transform((v) => v === 'true'),
     ENABLE_METRICS: z
       .string()
       .default('false')
@@ -109,10 +123,6 @@ const envSchema = z
     OUTBOX_POLL_INTERVAL_MS: z.coerce.number().int().min(50).default(1_000),
     OUTBOX_BATCH_SIZE: z.coerce.number().int().min(1).max(1_000).default(50),
     OUTBOX_MAX_ATTEMPTS: z.coerce.number().int().min(1).max(1_000).default(10),
-    // Prisma interactive-transaction timeout. Default 5000 ms is too short when
-    // batchSize rows trigger sync DB writes inside listeners (e.g. audit-log).
-    // P2028 on expiry rolls back processedAt → duplicate re-publish next tick.
-    OUTBOX_TX_TIMEOUT_MS: z.coerce.number().int().min(1000).default(30_000),
 
     // Audit log retention — number of monthly partitions kept. Cleanup task
     // drops anything older on the 1st of each month. Lower bound = 1 to
@@ -140,9 +150,11 @@ const envSchema = z
     BULL_BOARD_USER: z.string().default('admin'),
     BULL_BOARD_PASSWORD: z.string().default('admin'),
 
-    // Sentry
+    // Sentry. Default 0.01 (1%) — at 1k RPS sustained, 0.1 burns 26M traces/day
+    // which exceeds most Business-plan quotas inside hours. Raise per-route via
+    // tracesSampler if specific endpoints need finer-grained sampling.
     SENTRY_DSN: z.string().optional().default(''),
-    SENTRY_TRACES_SAMPLE_RATE: z.coerce.number().min(0).max(1).default(0.1),
+    SENTRY_TRACES_SAMPLE_RATE: z.coerce.number().min(0).max(1).default(0.01),
     SENTRY_ENVIRONMENT: z.string().default('development'),
   })
   .superRefine((data, ctx) => {
