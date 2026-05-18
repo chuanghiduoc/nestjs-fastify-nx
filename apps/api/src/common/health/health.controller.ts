@@ -8,6 +8,22 @@ import { PrismaHealthIndicator } from './prisma-health.indicator';
 import { RedisCacheHealthIndicator, RedisQueueHealthIndicator } from './redis.health';
 import { BullMqHealthIndicator } from './bullmq-health.indicator';
 
+// V8 heap is a fraction of container memory (default ~80% on cgroups v2).
+// Threshold at 80% of total container memory keeps headroom for GC pauses
+// without false-positive restarts under steady-state load. Falls back to 1 GiB
+// when the cgroup limit cannot be detected (older kernels / non-Linux dev).
+function resolveHeapThreshold(): number {
+  const max = (
+    process as NodeJS.Process & { constrainedMemory?: () => number }
+  ).constrainedMemory?.();
+  if (typeof max === 'number' && max > 0) {
+    return Math.floor(max * 0.8);
+  }
+  return 1024 * 1024 * 1024;
+}
+
+const HEAP_THRESHOLD_BYTES = resolveHeapThreshold();
+
 // @nestjs/swagger 11.4.3+ blocks deep imports via the `exports` field and does not publicly
 // re-export SchemaObject. Redeclare the minimal shape we need so dep bumps don't break us.
 type IndicatorSchema = {
@@ -99,7 +115,7 @@ export class HealthController {
   check() {
     return this.health.check([
       () => this.prismaIndicator.isHealthy('database'),
-      () => this.memory.checkHeap('memory_heap', 300 * 1024 * 1024),
+      () => this.memory.checkHeap('memory_heap', HEAP_THRESHOLD_BYTES),
       () => this.redisCache.isHealthy('redis_cache'),
       () => this.redisQueue.isHealthy('redis_queue'),
     ]);

@@ -160,7 +160,7 @@ LABEL org.opencontainers.image.title="nestjs-fastify-nx-api" \
       org.opencontainers.image.vendor="nestjs-fastify-nx"
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
-  CMD node -e "require('http').get('http://127.0.0.1:3000/api/v1/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"
+  CMD node -e "require('http').get('http://127.0.0.1:3000/api/v1/health/live',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"
 
 STOPSIGNAL SIGTERM
 ENTRYPOINT ["/sbin/tini", "--"]
