@@ -209,7 +209,17 @@ pnpm nx g @nestjs-fastify-nx/tools-generators:module --name=my-feature --directo
 
   The API has NO server-rendered HTML for these flows. `FRONTEND_BASE_URL` is REQUIRED in production — `resolveFrontendBase()` throws on boot if missing. In dev it falls back to `BETTER_AUTH_URL` with a runtime warning so smoke tests can still verify the dispatch path, but the link itself will 404 in a real browser. When adding a new auth-side email, mirror the dispatcher pattern — never call `nodemailer` from the API process.
 
-- **Outbox interactive tx timeout**: domain mutations trigger Postgres `sql_outbox` inserts; outbox relay publishes within same tx with OUTBOX_TX_TIMEOUT_MS (default 30s). If events hang, increase timeout or reduce batch size in `libs/infra/messaging`.
+- **Outbox has TWO write paths — neither is `eventEmitter.emit()` in a command handler.** All domain events land in `outbox_events`; `OutboxRelayService` drains it (poll interval `OUTBOX_POLL_INTERVAL_MS`, batch `OUTBOX_BATCH_SIZE`, listener tx budget `OUTBOX_TX_TIMEOUT_MS` default 30s). The two producer paths:
+  1. **Postgres AFTER INSERT/DELETE triggers** (`prisma/migrations/20260501000000_init/migration.sql:131-217`) — used for the three Better Auth-driven events (`users.registered`, `users.logged_in`, `users.logged_out`). Reason: Better Auth commits its writes outside the NestJS request pipeline, so a Nest-side hook would race the commit and could lose events on crash. The trigger fires inside the same tx as the source row — both commit or neither. Payload shape mirrors `OutboxPublisher.serializePayload()` so the relay rebuilds the in-memory event without a special path.
+  2. **`OutboxPublisher.publishAll(events)`** (`libs/infra/messaging/src/lib/outbox-publisher.service.ts`) — the app-level adapter for `EventPublisherPort`. MUST be called from inside a `prisma.$transaction()` interactive tx alongside aggregate writes, so the outbox row commits atomically with the state change. No producer currently consumes this path — it is the intended channel for any new domain event that originates from a CQRS command handler.
+
+  Rules when adding a new domain event:
+  - Mutation comes from Better Auth or another tool that bypasses Nest → write a new trigger in a fresh migration (path 1).
+  - Mutation comes from a Nest command handler → inject `EventPublisherPort` and call `publishAll(...)` inside the same `$transaction` (path 2).
+  - Never call `eventEmitter.emit()` or `queue.add(...)` directly from a command handler — events are lost on tx rollback. Fire-and-forget side-effects (cache invalidation, magic-byte verification, transactional emails fired after a successful commit) belong in `application/listeners/`, not in the handler.
+
+  If events hang: check `OutboxRelayService` liveness, raise `OUTBOX_TX_TIMEOUT_MS` or shrink `OUTBOX_BATCH_SIZE` in `libs/infra/messaging`.
+
 - **Health readiness BullMQ probe**: `/health/ready` now includes a `BullMqHealthIndicator` that pings the email-notification queue (2s timeout). If queue is not bootstrapped before probe, readiness fails.
 - **Metrics endpoint IP allowlist**: `MetricsIpAllowGuard` reads `METRICS_ALLOW_CIDRS` (comma-separated CIDR ranges) and uses `socket.remoteAddress` (not `req.ip`, which is spoofable via X-Forwarded-For). Empty list fails closed (no metrics). Kubernetes typically needs `127.0.0.1/32` or pod CIDR.
 - **Better Auth body parser collision**: NestJS global `ProblemDetailsValidationPipe` would consume the request body before Better Auth can read it. Solved via `reply.hijack()` in `main.ts`. If adding new `/api/auth/*` endpoints, bypass the NestJS pipeline the same way.
