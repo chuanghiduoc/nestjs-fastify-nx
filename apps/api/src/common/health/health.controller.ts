@@ -2,14 +2,21 @@ import { Controller, Get, HttpStatus } from '@nestjs/common';
 import { HealthCheck, HealthCheckService, MemoryHealthIndicator } from '@nestjs/terminus';
 import { SkipThrottle } from '@nestjs/throttler';
 import { ApiOkResponse, ApiOperation, ApiProperty, ApiResponse, ApiTags } from '@nestjs/swagger';
-import type { SchemaObject } from '@nestjs/swagger/dist/interfaces/open-api-spec.interface';
 import { ApiCommonErrors } from '@nestjs-fastify-nx/contracts';
 import { Public } from '@nestjs-fastify-nx/infra-auth';
 import { PrismaHealthIndicator } from './prisma-health.indicator';
 import { RedisCacheHealthIndicator, RedisQueueHealthIndicator } from './redis.health';
 import { BullMqHealthIndicator } from './bullmq-health.indicator';
 
-const INDICATOR_STATUS_SCHEMA: SchemaObject = {
+// @nestjs/swagger 11.4.3+ blocks deep imports via the `exports` field and does not publicly
+// re-export SchemaObject. Redeclare the minimal shape we need so dep bumps don't break us.
+type IndicatorSchema = {
+  type: 'object';
+  required: string[];
+  properties: Record<string, { type: 'string'; enum: string[] }>;
+};
+
+const INDICATOR_STATUS_SCHEMA: IndicatorSchema = {
   type: 'object',
   required: ['status'],
   properties: { status: { type: 'string', enum: ['up', 'down'] } },
