@@ -139,6 +139,7 @@ export class HealthController {
     description: 'Use as the Kubernetes liveness probe. Does not check dependencies.',
   })
   @ApiOkResponse({ type: LivenessResponseDto, description: 'Process is alive.' })
+  @ApiCommonErrors({ auth: false, forbidden: false, validation: false })
   liveness(): LivenessResponseDto {
     return { status: 'ok', timestamp: new Date().toISOString() };
   }
