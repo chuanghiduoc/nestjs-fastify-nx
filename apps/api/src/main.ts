@@ -9,8 +9,10 @@ import { Logger } from 'nestjs-pino';
 import { fastifyHelmet } from '@fastify/helmet';
 import fastifyRateLimit from '@fastify/rate-limit';
 import fastifyMultipart from '@fastify/multipart';
+import { Redis } from 'ioredis';
 import { toNodeHandler } from 'better-auth/node';
 import { BETTER_AUTH_INSTANCE, type BetterAuthInstance } from '@nestjs-fastify-nx/infra-auth';
+import { positiveIntEnv } from '@nestjs-fastify-nx/shared';
 import { AppModule } from './app/app.module';
 import { applyFastifyErrorHandler } from './common/filters/fastify-error-handler';
 import { ProblemDetailsValidationPipe } from './common/pipes';
@@ -86,25 +88,18 @@ if (sentryDsn) {
   });
 }
 
-/**
- * Safe env integer reader for values consumed before ConfigService is
- * available. Falls back to `defaultValue` when the env var is absent,
- * empty, or parses to NaN / a non-positive number.
- */
-function parseIntEnv(value: string | undefined, defaultValue: number): number {
-  if (value === undefined || value.trim() === '') return defaultValue;
-  const n = Number.parseInt(value, 10);
-  return Number.isFinite(n) && n > 0 ? n : defaultValue;
-}
-
 async function bootstrap() {
-  // Read body limit from env early — before the adapter is created — so the
-  // Fastify http parser enforces it before any route handler fires.
-  const bodyLimitBytes = parseIntEnv(process.env['HTTP_BODY_LIMIT_BYTES'], 1_048_576);
+  // Read body limit + trustProxy from env early — before the adapter is created —
+  // so the Fastify http parser enforces it before any route handler fires.
+  // trustProxy MUST match the actual reverse-proxy depth (single nginx = 1,
+  // CDN + ingress = 2). Wrong value lets an attacker spoof X-Forwarded-For and
+  // bypass the IP-keyed auth rate limit.
+  const bodyLimitBytes = positiveIntEnv('HTTP_BODY_LIMIT_BYTES', 1_048_576);
+  const trustProxyHops = positiveIntEnv('TRUST_PROXY_HOPS', 1);
 
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
-    new FastifyAdapter({ trustProxy: 1, bodyLimit: bodyLimitBytes }),
+    new FastifyAdapter({ trustProxy: trustProxyHops, bodyLimit: bodyLimitBytes }),
     { bufferLogs: true },
   );
 
@@ -163,7 +158,7 @@ async function bootstrap() {
 
   // Multipart plugin scoped to upload endpoints. Limits prevent DoS via
   // oversized file uploads independent of the JSON bodyLimit above.
-  const uploadMaxBytes = parseIntEnv(process.env['UPLOAD_MAX_FILE_BYTES'], 10_485_760);
+  const uploadMaxBytes = positiveIntEnv('UPLOAD_MAX_FILE_BYTES', 10_485_760);
   await fastify.register(fastifyMultipart, {
     limits: {
       fileSize: uploadMaxBytes,
@@ -179,10 +174,31 @@ async function bootstrap() {
   const authRateLimitMax = config.get('AUTH_RATE_LIMIT_MAX', { infer: true });
   const authRateLimitWindowMs = config.get('AUTH_RATE_LIMIT_WINDOW_MS', { infer: true });
 
+  // Redis-backed rate-limit store so the bucket is shared across API replicas.
+  // In-memory (default) means a 3-replica deploy gives attackers 3× the budget.
+  // db=4 keeps this isolated from cache (0) / queue / pubsub (2) / throttler (1).
+  const rateLimitRedis = new Redis({
+    host: config.get('REDIS_CACHE_HOST', { infer: true }),
+    port: config.get('REDIS_CACHE_PORT', { infer: true }),
+    db: 4,
+    maxRetriesPerRequest: 1,
+    retryStrategy: (times: number) => (times >= 10 ? null : Math.min(times * 200, 3000)),
+    enableOfflineQueue: false,
+  });
+  rateLimitRedis.on('error', (err: Error) => {
+    app.get(Logger).warn(`Rate-limit Redis error: ${err.message}`);
+  });
+  // Close Redis on shutdown so the process can exit cleanly. The Nest shutdown
+  // hook above only tears down providers; this connection is owned by main.ts.
+  process.once('SIGTERM', () => {
+    void rateLimitRedis.quit().catch(() => rateLimitRedis.disconnect());
+  });
+
   await fastify.register(fastifyRateLimit, {
     // Global rate-limit disabled — we apply it only on the auth prefix below.
     // This registration just wires the plugin; per-route limits override it.
     global: false,
+    redis: rateLimitRedis,
     // preHandler runs after body parsing, so req.body is populated when
     // keyGenerator fires. The default 'onRequest' hook fires before parsing —
     // req.body would always be undefined and the email branch would be dead.
@@ -324,9 +340,22 @@ async function bootstrap() {
     );
   }
 
+  // CORS never reflects arbitrary origins with credentials:true — that combo
+  // lets a malicious site issue authenticated requests on the user's behalf.
+  // env.validation forces CORS_ORIGINS to be non-empty in production; in dev we
+  // fall back to an explicit localhost allowlist instead of `origin: true`.
   const corsOrigins = config.get('CORS_ORIGINS', { infer: true });
+  const DEV_ALLOWED_ORIGINS = [
+    'http://localhost:3000',
+    'http://localhost:4200',
+    'http://localhost:5173',
+    'http://localhost:8080',
+    'http://127.0.0.1:3000',
+    'http://127.0.0.1:4200',
+    'http://127.0.0.1:5173',
+  ];
   app.enableCors({
-    origin: corsOrigins.length > 0 ? corsOrigins : !isProduction,
+    origin: corsOrigins.length > 0 ? corsOrigins : isProduction ? [] : DEV_ALLOWED_ORIGINS,
     credentials: true,
     methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Authorization', 'Content-Type', 'X-Request-Id', 'X-Correlation-Id'],
