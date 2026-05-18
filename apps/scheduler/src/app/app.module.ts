@@ -8,6 +8,7 @@ import { buildPinoLoggerConfig } from '@nestjs-fastify-nx/infra-observability';
 import { UsersListenersModule } from '@nestjs-fastify-nx/modules-users';
 import { AuditLogModule } from '@nestjs-fastify-nx/modules-audit-log';
 import { CleanupTask } from './tasks/cleanup.task';
+import { DlqMonitorTask } from './tasks/dlq-monitor.task';
 import { HeartbeatTask } from './tasks/heartbeat.task';
 import { SchedulerHealthService } from './health/scheduler-health.service';
 
@@ -26,6 +27,6 @@ import { SchedulerHealthService } from './health/scheduler-health.service';
     UsersListenersModule,
     AuditLogModule,
   ],
-  providers: [CleanupTask, HeartbeatTask, SchedulerHealthService],
+  providers: [CleanupTask, DlqMonitorTask, HeartbeatTask, SchedulerHealthService],
 })
 export class AppModule {}
