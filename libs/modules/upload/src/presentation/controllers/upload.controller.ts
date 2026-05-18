@@ -32,7 +32,16 @@ import {
   StoredFile,
 } from '@nestjs-fastify-nx/infra-storage';
 import { BetterAuthGuard } from '@nestjs-fastify-nx/infra-auth';
-import { ALLOWED_MIME_TYPES, generateId } from '@nestjs-fastify-nx/shared';
+import {
+  ALLOWED_MIME_TYPES,
+  detectFileType,
+  generateId,
+  positiveIntEnv,
+} from '@nestjs-fastify-nx/shared';
+
+// Magic-byte signatures (PNG, JPEG, GIF, WEBP, PDF) all fit inside 16 bytes.
+// Reading more than this on /confirm just inflates S3 egress without helping.
+const MAGIC_BYTES_TO_READ = 16;
 
 const DEFAULT_MAX_FILE_SIZE = 10 * 1024 * 1024;
 const PRESIGN_EXPIRES_SECONDS = 5 * 60;
@@ -158,9 +167,7 @@ export class UploadController {
     @Inject(STORAGE_PORT) private readonly storage: StoragePort,
     @InjectQueue(QUEUE_NAMES.UPLOAD_VERIFICATION) private readonly verifyQueue: Queue,
   ) {
-    const raw = process.env['UPLOAD_MAX_FILE_BYTES'];
-    const parsed = raw ? Number.parseInt(raw, 10) : Number.NaN;
-    this.maxFileSize = Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_MAX_FILE_SIZE;
+    this.maxFileSize = positiveIntEnv('UPLOAD_MAX_FILE_BYTES', DEFAULT_MAX_FILE_SIZE);
   }
 
   @Post('presign')
@@ -219,6 +226,23 @@ export class UploadController {
       );
     }
 
+    // Inline magic-byte verification. Previously the check was async via
+    // BullMQ — but if the queue was unreachable the catch() swallowed the
+    // failure and a tampered upload would survive. Reading 16 bytes from S3
+    // adds ~50 ms but guarantees a forged Content-Type cannot bypass the
+    // allow-list. The async queue is still kicked off for deeper structural
+    // inspection (full-file scan, EXIF strip) when needed.
+    const head = await this.storage.readRange(dto.key, MAGIC_BYTES_TO_READ, meta.bucket);
+    const detected = detectFileType(head);
+    if (!detected || detected.mimeType !== meta.contentType) {
+      await this.storage.delete(dto.key).catch(() => undefined);
+      throw new BadRequestException(
+        detected
+          ? `Magic bytes indicate "${detected.mimeType}" but Content-Type is "${meta.contentType}"`
+          : `Object at "${dto.key}" has no recognized binary signature`,
+      );
+    }
+
     // Tag the object so the S3 lifecycle rule preserves it. Untagged orphans
     // (presigned but never confirmed) auto-expire — see docs/runbook.md.
     await this.storage.commit(dto.key).catch((err) => {
@@ -228,17 +252,16 @@ export class UploadController {
       );
     });
 
-    // Async magic-byte audit. We accept the upload now (HEAD already proved
-    // declared MIME + size), but the worker re-reads the first 16 bytes and
-    // deletes the object if the binary signature contradicts the declared
-    // type. Non-blocking so the user gets their response immediately.
+    // Async deep verification — currently a redundancy check, kept so future
+    // scanning (virus, EXIF strip, perceptual hash) can plug in without
+    // changing the controller. Best-effort: queue down is non-fatal because
+    // the inline magic-byte check above already enforces correctness.
     await this.verifyQueue
       .add(
         'verify-magic-bytes',
         { key: dto.key, declaredContentType: meta.contentType, bucket: meta.bucket },
         {
-          // Strip '/' from the key for the jobId — BullMQ uses ':' internally
-          // and '/' is fine, but normalizing to '_' keeps jobId portable.
+          // BullMQ rejects ':' in custom jobIds; normalize '/' to '_'.
           jobId: `verify__${dto.key.replace(/\//g, '_')}`,
           attempts: 3,
           backoff: { type: 'exponential', delay: 5_000 },
@@ -247,7 +270,7 @@ export class UploadController {
         },
       )
       .catch((err) => {
-        this.logger.error({ err, key: dto.key }, 'enqueue verify-magic-bytes failed');
+        this.logger.warn({ err, key: dto.key }, 'enqueue verify-magic-bytes failed');
       });
 
     const url = await this.storage.getSignedUrl(dto.key);
