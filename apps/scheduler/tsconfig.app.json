@@ -25,6 +25,12 @@
   ],
   "references": [
     {
+      "path": "../../libs/infra/redis/tsconfig.lib.json"
+    },
+    {
+      "path": "../../libs/shared/tsconfig.lib.json"
+    },
+    {
       "path": "../../libs/modules/audit-log/tsconfig.lib.json"
     },
     {

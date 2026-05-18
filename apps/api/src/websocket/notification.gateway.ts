@@ -22,6 +22,7 @@ interface WsRedisEnv {
   REDIS_CACHE_HOST: string;
   REDIS_CACHE_PORT: number;
   REDIS_PUBSUB_DB: number;
+  WS_CONNECTION_LIMIT_PER_IP: number;
 }
 
 // Origin allowlist is read at module-load time from CORS_ORIGINS so the
@@ -65,6 +66,7 @@ export class NotificationGateway
 
   private pubClient!: Redis;
   private subClient!: Redis;
+  private rateLimitClient!: Redis;
 
   constructor(
     private readonly config: ConfigService<WsRedisEnv, true>,
@@ -73,14 +75,27 @@ export class NotificationGateway
 
   afterInit(server: Server): void {
     const retryStrategy = (times: number) => Math.min(times * 100, 3000);
+    const host = this.config.get('REDIS_CACHE_HOST', { infer: true });
+    const port = this.config.get('REDIS_CACHE_PORT', { infer: true });
 
     this.pubClient = new Redis({
-      host: this.config.get('REDIS_CACHE_HOST', { infer: true }),
-      port: this.config.get('REDIS_CACHE_PORT', { infer: true }),
+      host,
+      port,
       db: this.config.get('REDIS_PUBSUB_DB', { infer: true }),
       retryStrategy,
     });
     this.subClient = this.pubClient.duplicate();
+
+    // Separate connection for per-IP connection-cap counters. Reuses
+    // REDIS_PUBSUB_DB so the counter keys live next to the adapter channels —
+    // counters are short-lived (10 min TTL) so the keyspace stays small.
+    this.rateLimitClient = new Redis({
+      host,
+      port,
+      db: this.config.get('REDIS_PUBSUB_DB', { infer: true }),
+      retryStrategy,
+      enableOfflineQueue: false,
+    });
 
     this.pubClient.on('error', (err: Error) =>
       this.logger.error({ err }, 'Socket.io Redis pub error'),
@@ -88,15 +103,23 @@ export class NotificationGateway
     this.subClient.on('error', (err: Error) =>
       this.logger.error({ err }, 'Socket.io Redis sub error'),
     );
+    this.rateLimitClient.on('error', (err: Error) =>
+      this.logger.warn({ err }, 'Socket.io Redis rate-limit error (fail-open)'),
+    );
 
     server.adapter(createAdapter(this.pubClient, this.subClient));
-    server.use(createWsAuthMiddleware(this.auth));
+    server.use(
+      createWsAuthMiddleware(this.auth, {
+        redis: this.rateLimitClient,
+        maxConcurrentPerIp: this.config.get('WS_CONNECTION_LIMIT_PER_IP', { infer: true }),
+      }),
+    );
 
     this.logger.log('NotificationGateway initialized with Redis adapter');
   }
 
   async onApplicationShutdown(): Promise<void> {
-    await Promise.all([this.pubClient.quit(), this.subClient.quit()]);
+    await Promise.all([this.pubClient.quit(), this.subClient.quit(), this.rateLimitClient.quit()]);
   }
 
   handleConnection(socket: Socket): void {

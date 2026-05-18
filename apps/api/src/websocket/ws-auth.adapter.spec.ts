@@ -53,8 +53,15 @@ describe('createWsAuthMiddleware', () => {
   });
 
   it('calls next with error when user is inactive', async () => {
+    // Better Auth's getSession returns `{ user, session }` — fixtures must
+    // include both keys so the middleware's structural checks engage.
     const session = {
       user: { id: 'u1', email: 'a@b.com', role: 'USER', status: 'INACTIVE' },
+      session: {
+        id: 's1',
+        token: 't1',
+        expiresAt: new Date(Date.now() + 3_600_000),
+      },
     };
     const auth = makeAuth(session);
     const middleware = createWsAuthMiddleware(auth);
@@ -71,6 +78,11 @@ describe('createWsAuthMiddleware', () => {
   it('attaches user data and calls next() without error for valid session', async () => {
     const session = {
       user: { id: 'u1', email: 'a@b.com', role: 'USER', status: 'ACTIVE' },
+      session: {
+        id: 's1',
+        token: 't1',
+        expiresAt: new Date(Date.now() + 3_600_000),
+      },
     };
     const auth = makeAuth(session);
     const middleware = createWsAuthMiddleware(auth);
@@ -81,5 +93,26 @@ describe('createWsAuthMiddleware', () => {
 
     expect(next).toHaveBeenCalledWith();
     expect(socket.data['user']).toMatchObject({ userId: 'u1', email: 'a@b.com' });
+  });
+
+  it('rejects an expired session even when user is otherwise valid', async () => {
+    const session = {
+      user: { id: 'u1', email: 'a@b.com', role: 'USER', status: 'ACTIVE' },
+      session: {
+        id: 's1',
+        token: 't1',
+        expiresAt: new Date(Date.now() - 1_000),
+      },
+    };
+    const auth = makeAuth(session);
+    const middleware = createWsAuthMiddleware(auth);
+    const socket = makeSocket({ auth: { token: 'expired-token' } });
+    const next = vi.fn();
+
+    await middleware(socket as unknown as Socket, next);
+
+    expect(next).toHaveBeenCalledWith(
+      expect.objectContaining({ message: expect.stringContaining('expired') }),
+    );
   });
 });
