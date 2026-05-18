@@ -96,7 +96,7 @@ jobs:
       - name: Run database migrations
         run: pnpm prisma migrate deploy
 
-      - uses: nrwl/nx-set-shas@v4
+      - uses: nrwl/nx-set-shas@v5
 
       - name: Integration tests
         run: pnpm nx affected --target=test --base=$NX_BASE --head=$NX_HEAD --testPathPattern=integration --parallel=1
