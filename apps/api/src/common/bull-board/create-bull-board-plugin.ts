@@ -3,7 +3,24 @@ import { BullMQAdapter } from '@bull-board/api/bullMQAdapter';
 import { FastifyAdapter } from '@bull-board/fastify';
 import type { FastifyInstance } from 'fastify';
 import { Queue } from 'bullmq';
+import { timingSafeEqual } from 'node:crypto';
 import { QUEUE_NAMES } from '../../app/constants/queue.constants';
+
+// Constant-time string comparison. `===` short-circuits on the first byte
+// mismatch — a remote attacker can measure the response delay to recover
+// the secret one character at a time.
+function safeEqual(a: string, b: string): boolean {
+  // Buffer length differs ⇒ trivially unequal; comparing the longer buffer
+  // against itself still constant-time eliminates a length-leak side channel.
+  const bufA = Buffer.from(a);
+  const bufB = Buffer.from(b);
+  if (bufA.length !== bufB.length) {
+    // Run a dummy compare so timing stays uniform across length mismatches.
+    timingSafeEqual(bufA, bufA);
+    return false;
+  }
+  return timingSafeEqual(bufA, bufB);
+}
 
 export interface BullBoardOptions {
   user: string;
@@ -45,7 +62,11 @@ export function createBullBoardPlugin(opts: BullBoardOptions) {
       const colonIdx = decoded.indexOf(':');
       const user = decoded.slice(0, colonIdx);
       const password = colonIdx === -1 ? '' : decoded.slice(colonIdx + 1);
-      if (user !== opts.user || password !== opts.password) {
+      // Both checks must run regardless of the first result so the combined
+      // operation stays constant-time across user/password mismatch branches.
+      const userOk = safeEqual(user, opts.user);
+      const passOk = safeEqual(password, opts.password);
+      if (!userOk || !passOk) {
         reply.header('WWW-Authenticate', 'Basic realm="Bull Board"');
         reply.status(401).send('Unauthorized');
         return;
