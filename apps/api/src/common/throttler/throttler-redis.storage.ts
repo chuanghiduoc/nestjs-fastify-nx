@@ -1,27 +1,85 @@
 import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { ThrottlerStorageRedisService } from '@nest-lab/throttler-storage-redis';
+import {
+  ThrottlerStorageRedisService,
+  type ThrottlerStorageRedis,
+} from '@nest-lab/throttler-storage-redis';
+import type { ThrottlerStorage } from '@nestjs/throttler';
 import Redis from 'ioredis';
 import type { EnvConfig } from '../../config/env.validation';
 
+/**
+ * Wraps the upstream Redis-backed throttler storage with an explicit fail-open
+ * policy. When Redis is unreachable, every guarded route would otherwise return
+ * 500 because the throttler cannot make a decision — that turns a Redis outage
+ * into a full API outage (worse than the rate-limit bypass it would prevent).
+ *
+ * Trade-off: during an outage, a single client can briefly exceed the budget.
+ * Acceptable because the auth-credential paths have a separate Fastify-level
+ * limiter with its own Redis (db=4) and the upstream blast radius is bounded
+ * by the connection limit on the load balancer.
+ *
+ * Toggle via THROTTLER_FAIL_OPEN env (default true). Set to false in highly
+ * regulated environments where any rate-limit lapse is unacceptable.
+ */
 @Injectable()
 export class ThrottlerRedisStorage implements OnModuleDestroy {
   private readonly logger = new Logger('ThrottlerRedis');
   private readonly redis: Redis;
-  readonly storage: ThrottlerStorageRedisService;
+  private readonly inner: ThrottlerStorageRedis;
+  private readonly failOpen: boolean;
+  readonly storage: ThrottlerStorage;
 
   constructor(config: ConfigService<EnvConfig, true>) {
+    this.failOpen = config.get('THROTTLER_FAIL_OPEN', { infer: true });
     this.redis = new Redis({
       host: config.get('REDIS_CACHE_HOST', { infer: true }),
       port: config.get('REDIS_CACHE_PORT', { infer: true }),
       db: 1,
       maxRetriesPerRequest: 1,
       retryStrategy: (times: number) => (times >= 10 ? null : Math.min(times * 200, 3000)),
+      enableOfflineQueue: false,
     });
     this.redis.on('error', (err: Error) => {
       this.logger.error(`ioredis error: ${err.message}`);
     });
-    this.storage = new ThrottlerStorageRedisService(this.redis);
+    this.inner = new ThrottlerStorageRedisService(this.redis);
+
+    this.storage = this.failOpen ? this.wrapFailOpen(this.inner) : this.inner;
+
+    if (this.failOpen) {
+      this.logger.log('Throttler storage fail-open enabled');
+    }
+  }
+
+  private wrapFailOpen(inner: ThrottlerStorageRedis): ThrottlerStorage {
+    const logger = this.logger;
+    return {
+      increment: async (
+        key: string,
+        ttl: number,
+        limit: number,
+        blockDuration: number,
+        throttlerName: string,
+      ) => {
+        try {
+          return await inner.increment(key, ttl, limit, blockDuration, throttlerName);
+        } catch (err) {
+          logger.warn(
+            `Storage increment failed for "${key}" — failing open (${(err as Error).message})`,
+          );
+          // Pretend the bucket is empty so the request proceeds. We return
+          // limit-1 remaining hits so the response headers stay coherent and
+          // clients don't infinitely retry assuming a stale value.
+          return {
+            totalHits: 0,
+            timeToExpire: Math.ceil(ttl / 1000),
+            isBlocked: false,
+            timeToBlockExpire: 0,
+          };
+        }
+      },
+    };
   }
 
   async onModuleDestroy(): Promise<void> {
