@@ -1,6 +1,7 @@
 import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
+import { intEnv } from '@nestjs-fastify-nx/shared';
 
 /**
  * Extract the transaction client type from the interactive-transaction overload
@@ -15,13 +16,6 @@ type TransactionClient = Parameters<PrismaClient['$transaction']>[0] extends (
 ) => Promise<unknown>
   ? TX
   : never;
-
-function intEnv(name: string, fallback: number): number {
-  const raw = process.env[name];
-  if (raw === undefined || raw === '') return fallback;
-  const parsed = Number.parseInt(raw, 10);
-  return Number.isFinite(parsed) ? parsed : fallback;
-}
 
 /**
  * Wraps PrismaClient with NestJS lifecycle hooks.

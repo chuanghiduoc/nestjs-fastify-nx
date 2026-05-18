@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '@nestjs-fastify-nx/infra-database';
+import { positiveIntEnv } from '@nestjs-fastify-nx/shared';
 import { UserStatus } from '@nestjs-fastify-nx/modules-users';
 
 const PURGE_BATCH_SIZE = 500;
@@ -11,17 +12,10 @@ const PURGE_MAX_BATCHES = 200;
 // rogue table sharing the `audit_logs_*` prefix can't be dropped accidentally.
 const AUDIT_PARTITION_NAME = /^audit_logs_(\d{4})_(\d{2})$/;
 
-function intEnv(name: string, fallback: number): number {
-  const raw = process.env[name];
-  if (raw === undefined || raw === '') return fallback;
-  const parsed = Number.parseInt(raw, 10);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
-}
-
 @Injectable()
 export class CleanupTask {
   private readonly logger = new Logger(CleanupTask.name);
-  private readonly auditRetentionMonths = intEnv('AUDIT_LOG_RETENTION_MONTHS', 12);
+  private readonly auditRetentionMonths = positiveIntEnv('AUDIT_LOG_RETENTION_MONTHS', 12);
 
   constructor(private readonly prisma: PrismaService) {}
 
