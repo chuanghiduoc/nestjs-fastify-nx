@@ -19,7 +19,9 @@ model User {
   sessions      Session[]
   accounts      Account[]
 
-  @@index([email])
+  // The @unique on email already creates a B-tree — a separate @@index([email])
+  // would just duplicate writes for zero query benefit, so it is intentionally
+  // omitted here.
   @@index([role])
   @@index([status])
   @@index([createdAt])
@@ -84,7 +86,12 @@ model OutboxEvent {
   lastError   String?
   createdAt   DateTime  @default(now())
 
+  // Relay scan path — must come first because (processedAt, createdAt) is the
+  // leftmost prefix `WHERE processedAt IS NULL ORDER BY createdAt` uses.
   @@index([processedAt, createdAt])
+  // Ops debugging path — "show me all undelivered users.registered events".
+  // Without this, the only access path is a full scan of outbox_events.
+  @@index([eventType, processedAt])
   @@map("outbox_events")
 }
 
@@ -108,5 +115,8 @@ model AuditLog {
   @@index([userId, createdAt])
   @@index([action, createdAt])
   @@index([createdAt])
+  // Compliance query path — "every admin action on resource X in window Y".
+  // Two-column index with createdAt last so it remains useful for range scans.
+  @@index([resource, createdAt])
   @@map("audit_logs")
 }
