@@ -12,35 +12,35 @@ interface OutboxRow {
 }
 
 /**
- * Builds a fake PrismaService that executes the transaction callback with a
- * fake tx client. The fake tx exposes:
- *   - $queryRawUnsafe → returns the rows produced by `opts.claim`
- *   - $executeRawUnsafe → records every call for assertion
+ * Builds a fake PrismaService modelling the three-stage dispatch:
+ *  - claim:    inside `transaction(...)` via tx.$queryRawUnsafe
+ *  - mark/err: outside tx via prisma.db.$executeRawUnsafe (per row)
+ *  - stuck:    outside tx via prisma.db.$queryRawUnsafe (count)
  */
 function buildPrisma(opts: { claim: (limit: number) => OutboxRow[] }): {
   prisma: PrismaService;
-  txExecuteCalls: Array<{ sql: string; args: unknown[] }>;
+  dbExecuteCalls: Array<{ sql: string; args: unknown[] }>;
 } {
-  const txExecuteCalls: Array<{ sql: string; args: unknown[] }> = [];
+  const dbExecuteCalls: Array<{ sql: string; args: unknown[] }> = [];
 
   const transaction = vi.fn(async <T>(fn: (tx: unknown) => Promise<T>) =>
     fn({
       $queryRawUnsafe: vi.fn(async (_sql: string, _maxAttempts: number, batch: number) =>
         opts.claim(batch),
       ),
-      $executeRawUnsafe: vi.fn(async (sql: string, ...args: unknown[]) => {
-        txExecuteCalls.push({ sql, args });
-      }),
     }),
   );
 
-  // Stub db.$queryRawUnsafe used by checkStuckRows — returns 0 stuck rows so
-  // the periodic check doesn't emit spurious warnings during unit tests.
-  const db = { $queryRawUnsafe: vi.fn(async () => [{ count: BigInt(0) }]) };
+  const db = {
+    $queryRawUnsafe: vi.fn(async () => [{ count: BigInt(0) }]),
+    $executeRawUnsafe: vi.fn(async (sql: string, ...args: unknown[]) => {
+      dbExecuteCalls.push({ sql, args });
+    }),
+  };
 
   return {
     prisma: { transaction, db } as unknown as PrismaService,
-    txExecuteCalls,
+    dbExecuteCalls,
   };
 }
 
@@ -70,28 +70,26 @@ describe('OutboxRelayService', () => {
     process.env['OUTBOX_POLL_INTERVAL_MS'] = '60000';
     process.env['OUTBOX_BATCH_SIZE'] = '10';
     process.env['OUTBOX_MAX_ATTEMPTS'] = '5';
-    process.env['OUTBOX_TX_TIMEOUT_MS'] = '30000';
   });
 
   afterEach(() => {
     delete process.env['OUTBOX_POLL_INTERVAL_MS'];
     delete process.env['OUTBOX_BATCH_SIZE'];
     delete process.env['OUTBOX_MAX_ATTEMPTS'];
-    delete process.env['OUTBOX_TX_TIMEOUT_MS'];
   });
 
   it('returns 0 when there is nothing to dispatch', async () => {
-    const { prisma, txExecuteCalls } = buildPrisma({ claim: () => [] });
+    const { prisma, dbExecuteCalls } = buildPrisma({ claim: () => [] });
     const bus = buildBus();
     const relay = new OutboxRelayService(prisma, bus);
 
     expect(await relay.tick()).toBe(0);
     expect(bus.publish).not.toHaveBeenCalled();
-    expect(txExecuteCalls).toHaveLength(0);
+    expect(dbExecuteCalls).toHaveLength(0);
   });
 
-  it('publishes claimed rows and marks them processed inside the same transaction', async () => {
-    const { prisma, txExecuteCalls } = buildPrisma({ claim: () => [buildRow()] });
+  it('publishes claimed rows and marks them processed outside the claim transaction', async () => {
+    const { prisma, dbExecuteCalls } = buildPrisma({ claim: () => [buildRow()] });
     const bus = buildBus();
     const relay = new OutboxRelayService(prisma, bus);
 
@@ -104,15 +102,16 @@ describe('OutboxRelayService', () => {
       payload: { email: 'a@b.c' },
     });
 
-    // processedAt UPDATE must go through tx, not a separate prisma.db call
-    expect(txExecuteCalls).toHaveLength(1);
-    expect(txExecuteCalls[0].sql).toMatch(/processedAt/);
-    expect(txExecuteCalls[0].args[0]).toBeInstanceOf(Date);
-    expect(txExecuteCalls[0].args[1]).toBe('row-1');
+    // processedAt UPDATE runs outside the claim tx — keep this lookup tight
+    // so a long-running listener can't ripple back into row-lock contention.
+    expect(dbExecuteCalls).toHaveLength(1);
+    expect(dbExecuteCalls[0].sql).toMatch(/processedAt/);
+    expect(dbExecuteCalls[0].args[0]).toBeInstanceOf(Date);
+    expect(dbExecuteCalls[0].args[1]).toBe('row-1');
   });
 
-  it('records lastError via tx.$executeRawUnsafe without marking processed when the bus throws', async () => {
-    const { prisma, txExecuteCalls } = buildPrisma({
+  it('records lastError on prisma.db without marking processed when the bus throws', async () => {
+    const { prisma, dbExecuteCalls } = buildPrisma({
       claim: () => [buildRow({ attempts: 2 })],
     });
     const bus = buildBus();
@@ -121,51 +120,54 @@ describe('OutboxRelayService', () => {
 
     expect(await relay.tick()).toBe(0);
 
-    // One lastError UPDATE, zero processedAt UPDATE
-    expect(txExecuteCalls).toHaveLength(1);
-    expect(txExecuteCalls[0].sql).toMatch(/lastError/);
-    expect(txExecuteCalls[0].args[0]).toContain('listener failed');
-    expect(txExecuteCalls[0].sql).not.toMatch(/processedAt/);
+    expect(dbExecuteCalls).toHaveLength(1);
+    expect(dbExecuteCalls[0].sql).toMatch(/lastError/);
+    expect(dbExecuteCalls[0].args[0]).toContain('listener failed');
+    expect(dbExecuteCalls[0].sql).not.toMatch(/processedAt/);
   });
 
-  it('skips rows whose attempts already exceed maxAttempts and logs a warning', async () => {
-    // maxAttempts is 5 (set in beforeEach); claim a row at attempts=6 (already over limit)
-    const { prisma, txExecuteCalls } = buildPrisma({
-      claim: () => [buildRow({ attempts: 6 })],
+  it('does not hold the claim transaction across the publish call', async () => {
+    // Build prisma where the tx callback resolves before publish is awaited.
+    // We assert ordering by recording the sequence in which the two side
+    // effects ran — tx must have committed BEFORE bus.publish.
+    const order: string[] = [];
+    const row = buildRow();
+
+    const transaction = vi.fn(async <T>(fn: (tx: unknown) => Promise<T>) => {
+      const result = await fn({
+        $queryRawUnsafe: vi.fn(async () => [row]),
+      });
+      order.push('tx-commit');
+      return result;
     });
-    const bus = buildBus();
-    const relay = new OutboxRelayService(prisma, bus);
 
-    expect(await relay.tick()).toBe(0);
-    expect(bus.publish).not.toHaveBeenCalled();
-    expect(txExecuteCalls).toHaveLength(0);
-  });
+    const prisma = {
+      transaction,
+      db: {
+        $queryRawUnsafe: vi.fn(async () => [{ count: BigInt(0) }]),
+        $executeRawUnsafe: vi.fn(async () => undefined),
+      },
+    } as unknown as PrismaService;
 
-  it('passes timeout options to prisma.transaction to prevent P2028 rollback on large batches', async () => {
-    const { prisma } = buildPrisma({ claim: () => [buildRow()] });
     const bus = buildBus();
+    bus.publish.mockImplementationOnce(async () => {
+      order.push('publish');
+    });
     const relay = new OutboxRelayService(prisma, bus);
 
     await relay.tick();
 
-    // Verify transaction was called with { timeout, maxWait } so the relay
-    // does not default to Prisma's 5000 ms limit (which causes P2028 under load).
-    expect(prisma.transaction).toHaveBeenCalledWith(
-      expect.any(Function),
-      expect.objectContaining({ timeout: 30_000, maxWait: 5_000 }),
-    );
+    expect(order).toEqual(['tx-commit', 'publish']);
   });
 
   it('logs a warning when stuck rows exist (attempts >= maxAttempts, processedAt IS NULL)', async () => {
     const { prisma } = buildPrisma({ claim: () => [] });
-    // Override db stub to return 2 stuck rows.
     (prisma.db.$queryRawUnsafe as ReturnType<typeof vi.fn>).mockResolvedValueOnce([
       { count: BigInt(2) },
     ]);
     const bus = buildBus();
     const relay = new OutboxRelayService(prisma, bus);
 
-    // Spy on the private logger to assert the warn is emitted.
     const warnSpy = vi.spyOn(
       (relay as unknown as { logger: { warn: (m: string) => void } }).logger,
       'warn',
