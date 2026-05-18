@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "code-review-graph": {
+      "command": "uvx",
+      "args": ["code-review-graph", "serve", "--auto-watch"],
+      "cwd": "D:\\nestjs-fastify-nx",
+      "type": "stdio"
+    }
+  }
+}

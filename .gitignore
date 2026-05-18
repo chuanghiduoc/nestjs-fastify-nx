@@ -60,3 +60,6 @@ vitest.config.*.timestamp*
 .claude/settings.local.json
 /generated/prisma
 .test-tmp/
+.code-review-graph/
+.claude/settings.json.bak
+plans/
