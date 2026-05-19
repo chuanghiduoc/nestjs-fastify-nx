@@ -3,7 +3,7 @@
 Transaction-mode connection pooler as a compose overlay. Use this when your
 connection count exceeds Postgres `max_connections`:
 
-```
+```text
 (API_REPLICAS + 1 scheduler) × DATABASE_POOL_MAX > max_connections
 ```
 
@@ -103,7 +103,7 @@ DATABASE_DIRECT_URL=postgresql://postgres:postgres@localhost:5432/nestjs_db
 
 ## Pool sizing formula
 
-```
+```text
 required_server_conns = (API_REPLICAS + 1) × DATABASE_POOL_MAX
 ```
 
@@ -114,13 +114,13 @@ and replication slots).
 
 Example for `API_REPLICAS=5`, `DATABASE_POOL_MAX=5`:
 
-```
+```text
 required = (5 + 1) × 5 = 30   ← fits within default_pool_size=30
 ```
 
 Example for `API_REPLICAS=10`, `DATABASE_POOL_MAX=5`:
 
-```
+```text
 required = (10 + 1) × 5 = 55   ← raise PGBOUNCER_POOL_SIZE=55 or lower DATABASE_POOL_MAX
 ```
 

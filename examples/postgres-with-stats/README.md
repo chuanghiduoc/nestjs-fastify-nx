@@ -48,12 +48,12 @@ If the container was already running, `up -d postgres` restarts only the
 Connect to Postgres and confirm the extension is registered:
 
 ```bash
-docker compose exec postgres psql -U postgres -d app -c '\dx pg_stat_statements'
+docker compose exec postgres psql -U postgres -d nestjs_db -c '\dx pg_stat_statements'
 ```
 
-Expected output:
+Expected output (column widths and version may vary):
 
-```
+```text
                           List of installed extensions
        Name        | Version | Schema |             Description
 -------------------+---------+--------+-------------------------------------

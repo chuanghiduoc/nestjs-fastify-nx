@@ -335,7 +335,7 @@ mc ilm rule add --expire-days 1 --tags "committed=false" myminio/<your-bucket>
 
 ---
 
-## 9. Outbox cleanup (retention purge)
+## 8. Outbox cleanup (retention purge)
 
 **Symptom:** `outbox_events` table keeps growing even though events are being processed normally. `processedAt IS NOT NULL` row count climbs unbounded.
 
@@ -354,8 +354,11 @@ WHERE "processedAt" IS NOT NULL
 SELECT count(*)
 FROM outbox_events
 WHERE "processedAt" IS NULL;
+```
 
--- Check if the purge cron ran recently
+Check if the purge cron ran recently:
+
+```bash
 docker compose logs scheduler --tail=500 | grep -i "outbox purge"
 ```
 
@@ -411,7 +414,7 @@ If `ENABLE_METRICS=true`, the `outbox_lag_seconds` gauge reflects the age of the
 
 **Escalation:** If processed rows accumulate despite the purge running successfully (i.e. the cron completes but `count(*)` still climbs), the event volume exceeds `OUTBOX_PURGE_MAX_BATCHES × OUTBOX_PURGE_BATCH_SIZE`. Calculate the required cap:
 
-```
+```text
 required_max_batches = ceil(daily_event_volume / OUTBOX_PURGE_BATCH_SIZE)
 ```
 
@@ -419,7 +422,7 @@ Set `OUTBOX_PURGE_MAX_BATCHES` to at least that value and redeploy.
 
 ---
 
-## 8. Tampered upload (declared MIME ≠ actual binary)
+## 9. Tampered upload (declared MIME ≠ actual binary)
 
 **Symptom:** Worker log entry like `verify-magic-bytes: MIME mismatch — deleting tampered upload`. The object disappears without a `/confirm` follow-through visible to the client.
 

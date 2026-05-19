@@ -73,7 +73,9 @@ export class ListResponseDto<T = unknown> {
 
 /**
  * Cursor pagination query params (preferred). `limit` is the soft page size;
- * `startingAfter`/`endingBefore` are mutually exclusive item IDs.
+ * `startingAfter` / `endingBefore` are mutually exclusive opaque cursors
+ * (base64url(`sortField.toISOString():id`)) copied verbatim from a previous
+ * response's `lastCursor`. Clients MUST NOT construct or decode them.
  */
 export class CursorPaginationDto {
   @ApiPropertyOptional({

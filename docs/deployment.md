@@ -161,7 +161,7 @@ Worker and scheduler use file-based liveness probes (`/tmp/worker-alive`, `/tmp/
 Place any L7 reverse proxy in front of the api service that forwards `X-Forwarded-For` and proxies WebSocket upgrades. Set `TRUST_PROXY_HOPS` to the number of proxy hops between the edge and the api container so Fastify resolves `req.ip` correctly; the WS per-IP cap and the metrics guard both use the raw TCP socket address (`socket.conn.remoteAddress` / `socket.remoteAddress`) and are not affected by this value.
 
 > **Important**: Throttler limits (`THROTTLER_LIMIT`, `AUTH_RATE_LIMIT_MAX`) are cluster-wide counters backed by Redis shared state — set them for **total** expected traffic, not per-replica. With `API_REPLICAS=5` and `THROTTLER_LIMIT=100`, each IP is limited to 100 req/min total, not 500.
-
+>
 > **Connection pool budget**: `(API_REPLICAS + 1) × DATABASE_POOL_MAX` must stay below your Postgres `max_connections` (typically 80–100 for a default installation). The worker contributes 0 database connections. If replicas × pool would exceed the budget, add PgBouncer in transaction mode in front of Postgres — see [Connection Pooling](#connection-pooling) below.
 
 - **Scheduler**: Run as a **single instance** only. Multiple scheduler instances will duplicate cron jobs. The `deploy.update_config.order: stop-first` in `compose.prod.yml` ensures the old scheduler stops before the new one starts during rolling updates — a brief cron gap is preferable to a double-fire window.
@@ -170,7 +170,7 @@ Place any L7 reverse proxy in front of the api service that forwards `X-Forwarde
 
 ### When you need a pooler
 
-```
+```text
 (API_REPLICAS + 1 scheduler) × DATABASE_POOL_MAX > Postgres max_connections
 ```
 
@@ -180,7 +180,7 @@ has `max_connections=100`. With `DATABASE_POOL_MAX=20` you hit the limit at
 
 ### Sizing formula
 
-```
+```text
 required_server_conns = (API_REPLICAS + 1) × DATABASE_POOL_MAX
 
 pgbouncer default_pool_size  ≥ required_server_conns
@@ -192,7 +192,7 @@ Postgres max_connections must be:
 
 Example — `API_REPLICAS=10`, `DATABASE_POOL_MAX=5`:
 
-```
+```text
 required = (10 + 1) × 5 = 55
 → set PGBOUNCER_POOL_SIZE=55, Postgres max_connections ≥ 65
 ```
@@ -235,8 +235,8 @@ the full walkthrough, failover verification steps, and production secrets patter
 ```bash
 docker compose --env-file .env \
   -f docker/compose.yml \
-  -f docker/compose.dev.yml \
-  -f examples/pgbouncer/compose.pgbouncer.yml \
+  -f docker/compose.prod.yml \
+  -f examples/pgbouncer/compose.pgbouncer.prod.yml \
   -f examples/pgbouncer-ha/compose.pgbouncer-ha.yml \
   up -d
 ```

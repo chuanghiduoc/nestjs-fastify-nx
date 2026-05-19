@@ -149,7 +149,7 @@ regardless of dataset size because it drives a B-tree seek directly to the conti
 
 ### Cursor encoding
 
-```
+```text
 cursor = base64url("${createdAt.toISOString()}:${id}")
 ```
 
@@ -386,7 +386,7 @@ The app does not hard-wire a pooler — boilerplate consumers pick the option
 that matches their infra. Four options are enumerated below in order of
 operational complexity.
 
-```
+```text
 ┌──────────────────── Option A: direct (boilerplate default) ────────────────────┐
 │  api / scheduler ──────────────────────────────────▶ postgres:5432             │
 │  DATABASE_URL = postgresql://...@postgres:5432/...                             │
@@ -421,7 +421,7 @@ operational complexity.
 
 Add a pooler when:
 
-```
+```text
 (API_REPLICAS + 1 scheduler) × DATABASE_POOL_MAX > Postgres max_connections
 ```
 
@@ -435,7 +435,7 @@ When uptime SLO ≥ 99.9 %, the single pgbouncer becomes the weakest link — a
 crash takes down every API replica simultaneously. The HA overlay addresses this
 by adding a second pgbouncer instance and placing HAProxy in front of both:
 
-```
+```text
                    ┌──────────────────────────┐
                    │   api  /  scheduler       │
                    └────────────┬─────────────┘
@@ -500,7 +500,7 @@ pgbouncer setting enables Prisma's prepared-statement cache in transaction mode
 
 `PrismaService` maintains two separate `PrismaClient` instances:
 
-```
+```text
 PrismaService
   ├── db      (write client) ── DATABASE_URL           ── primary / pgbouncer nestjs_db
   └── dbRead  (read client)  ── DATABASE_REPLICA_URL   ── replica / pgbouncer nestjs_db_read

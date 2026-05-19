@@ -9,7 +9,7 @@ For simpler setups (uptime SLO < 99.9 %) the single-instance overlay at
 
 ## Architecture
 
-```
+```text
                    ┌──────────────────────────┐
                    │   api  /  scheduler       │
                    └────────────┬─────────────┘
