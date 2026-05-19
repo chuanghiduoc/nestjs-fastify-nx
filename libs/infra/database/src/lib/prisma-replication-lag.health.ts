@@ -26,7 +26,8 @@ export class PrismaReplicationLagHealthIndicator extends HealthIndicator {
   private readonly logger = new Logger(PrismaReplicationLagHealthIndicator.name);
   // Resolved once at construction; env reload requires process restart, which
   // matches every other env-driven knob in the codebase.
-  private readonly lagThresholdSeconds = positiveIntEnv('DB_REPLICATION_LAG_THRESHOLD_MS', 30_000) / 1_000;
+  private readonly lagThresholdSeconds =
+    positiveIntEnv('DB_REPLICATION_LAG_THRESHOLD_MS', 30_000) / 1_000;
 
   constructor(private readonly prisma: PrismaService) {
     super();
