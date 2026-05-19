@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { BullMqMetricsListener } from './bullmq-metrics.listener';
+import {
+  EmailNotificationMetricsListener,
+  UploadVerificationMetricsListener,
+} from './bullmq-metrics.listener';
 import type { MetricsService } from './metrics.service';
 
 function makeMockMetrics(): MetricsService {
@@ -9,13 +12,13 @@ function makeMockMetrics(): MetricsService {
   } as unknown as MetricsService;
 }
 
-describe('BullMqMetricsListener', () => {
-  let listener: BullMqMetricsListener;
+describe('EmailNotificationMetricsListener', () => {
+  let listener: EmailNotificationMetricsListener;
   let metrics: MetricsService;
 
   beforeEach(() => {
     metrics = makeMockMetrics();
-    listener = new BullMqMetricsListener(metrics);
+    listener = new EmailNotificationMetricsListener(metrics);
   });
 
   describe('job counter increments', () => {
@@ -110,5 +113,32 @@ describe('BullMqMetricsListener', () => {
       });
       expect(metrics.bullmqJobDurationSeconds.observe).not.toHaveBeenCalled();
     });
+  });
+});
+
+describe('UploadVerificationMetricsListener', () => {
+  let listener: UploadVerificationMetricsListener;
+  let metrics: MetricsService;
+
+  beforeEach(() => {
+    metrics = makeMockMetrics();
+    listener = new UploadVerificationMetricsListener(metrics);
+  });
+
+  it('tags counters with upload-verification queue label', () => {
+    listener.onCompleted({ jobId: 'u1', returnvalue: '', prev: 'active' });
+    expect(metrics.bullmqJobsTotal.inc).toHaveBeenCalledWith({
+      queue: 'upload-verification',
+      status: 'completed',
+    });
+  });
+
+  it('tags duration histogram with upload-verification queue label', () => {
+    listener.onActive({ jobId: 'u2' });
+    listener.onCompleted({ jobId: 'u2', returnvalue: '', prev: 'active' });
+    expect(metrics.bullmqJobDurationSeconds.observe).toHaveBeenCalledWith(
+      { queue: 'upload-verification', status: 'completed' },
+      expect.any(Number),
+    );
   });
 });

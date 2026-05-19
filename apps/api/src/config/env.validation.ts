@@ -13,6 +13,12 @@ const envSchema = z
     // to db — zero-overhead fallback, behaviour identical to single-node.
     DATABASE_REPLICA_URL: z.string().trim().min(1).optional(),
     DATABASE_REPLICA_POOL_MAX: z.coerce.number().int().min(1).max(1000).default(10),
+    // Threshold above which the replication-lag health indicator flips
+    // /health/ready to 503. 30s is the safe default for synchronous-async
+    // streaming replication; tighten to 5–10s if read-your-writes correctness
+    // matters more than tolerance, loosen to 60s+ for geographically distant
+    // replicas where transient spikes are expected.
+    DB_REPLICATION_LAG_THRESHOLD_MS: z.coerce.number().int().min(1_000).default(30_000),
     DATABASE_POOL_MAX: z.coerce.number().int().min(1).max(1000).default(20),
     DATABASE_POOL_MIN: z.coerce.number().int().min(0).max(1000).default(0),
     DATABASE_IDLE_TIMEOUT_MS: z.coerce.number().int().min(0).default(10_000),

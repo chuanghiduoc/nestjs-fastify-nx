@@ -7,7 +7,10 @@ import { QUEUE_NAMES } from '@nestjs-fastify-nx/shared';
 import { MetricsController } from './metrics.controller';
 import { MetricsService } from './metrics.service';
 import { HttpMetricsHook } from './http-metrics.hook';
-import { BullMqMetricsListener } from './bullmq-metrics.listener';
+import {
+  EmailNotificationMetricsListener,
+  UploadVerificationMetricsListener,
+} from './bullmq-metrics.listener';
 import { MetricsIpAllowGuard } from './metrics-ip-allow.guard';
 import { QueueDepthCollector } from './queue-depth.collector';
 import { OutboxLagCollector } from './outbox-lag.collector';
@@ -26,7 +29,8 @@ import { OutboxLagCollector } from './outbox-lag.collector';
   providers: [
     MetricsService,
     HttpMetricsHook,
-    BullMqMetricsListener,
+    EmailNotificationMetricsListener,
+    UploadVerificationMetricsListener,
     MetricsIpAllowGuard,
     QueueDepthCollector,
     OutboxLagCollector,
