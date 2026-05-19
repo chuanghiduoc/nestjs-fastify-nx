@@ -151,6 +151,147 @@ Worker and scheduler use file-based liveness probes (`/tmp/worker-alive`, `/tmp/
 
 ## Scaling
 
-- **API**: Stateless — scale horizontally behind a load balancer. Sessions are stored in Postgres via Better Auth, so any instance can validate the `better-auth.session_token` cookie.
-- **Worker**: Scale horizontally — BullMQ distributes jobs across all worker instances automatically.
-- **Scheduler**: Run as a **single instance** only. Multiple scheduler instances will duplicate cron jobs.
+| Env var                     | Default | Effect                                                                                                                        |
+| --------------------------- | ------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `API_REPLICAS`              | `1`     | Number of api containers. Front with any L7 reverse proxy that supports keep-alive + WS upgrade (nginx, Traefik, Caddy, ALB). |
+| `WORKER_REPLICAS`           | `1`     | Number of worker containers. BullMQ distributes jobs automatically across all replicas via atomic Redis locks.                |
+| `WORKER_EMAIL_CONCURRENCY`  | `5`     | Per-queue parallelism inside each worker replica for email jobs. Effective throughput = concurrency × replicas.               |
+| `WORKER_UPLOAD_CONCURRENCY` | `5`     | Per-queue parallelism inside each worker replica for upload-verification jobs.                                                |
+
+Place any L7 reverse proxy in front of the api service that forwards `X-Forwarded-For` and proxies WebSocket upgrades. Set `TRUST_PROXY_HOPS` to the number of proxy hops between the edge and the api container so Fastify resolves `req.ip` correctly; the WS per-IP cap and the metrics guard both use the raw TCP socket address (`socket.conn.remoteAddress` / `socket.remoteAddress`) and are not affected by this value.
+
+> **Important**: Throttler limits (`THROTTLER_LIMIT`, `AUTH_RATE_LIMIT_MAX`) are cluster-wide counters backed by Redis shared state — set them for **total** expected traffic, not per-replica. With `API_REPLICAS=5` and `THROTTLER_LIMIT=100`, each IP is limited to 100 req/min total, not 500.
+
+> **Connection pool budget**: `(API_REPLICAS + 1) × DATABASE_POOL_MAX` must stay below your Postgres `max_connections` (typically 80–100 for a default installation). The worker contributes 0 database connections. If replicas × pool would exceed the budget, add PgBouncer in transaction mode in front of Postgres — see [Connection Pooling](#connection-pooling) below.
+
+- **Scheduler**: Run as a **single instance** only. Multiple scheduler instances will duplicate cron jobs. The `deploy.update_config.order: stop-first` in `compose.prod.yml` ensures the old scheduler stops before the new one starts during rolling updates — a brief cron gap is preferable to a double-fire window.
+
+## Connection Pooling
+
+### When you need a pooler
+
+```
+(API_REPLICAS + 1 scheduler) × DATABASE_POOL_MAX > Postgres max_connections
+```
+
+The worker contributes **zero** database connections. A default Postgres install
+has `max_connections=100`. With `DATABASE_POOL_MAX=20` you hit the limit at
+5 API replicas; with `DATABASE_POOL_MAX=5` you have room for 19 replicas.
+
+### Sizing formula
+
+```
+required_server_conns = (API_REPLICAS + 1) × DATABASE_POOL_MAX
+
+pgbouncer default_pool_size  ≥ required_server_conns
+pgbouncer reserve_pool_size   = 5   (burst buffer)
+
+Postgres max_connections must be:
+  ≥ default_pool_size + reserve_pool_size + 5  (admin headroom)
+```
+
+Example — `API_REPLICAS=10`, `DATABASE_POOL_MAX=5`:
+
+```
+required = (10 + 1) × 5 = 55
+→ set PGBOUNCER_POOL_SIZE=55, Postgres max_connections ≥ 65
+```
+
+### Option A — Direct connection (boilerplate default)
+
+No extra service. Set only `DATABASE_URL`. Works until the formula above
+exceeds `max_connections`.
+
+### Option B — Self-hosted pgbouncer (opt-in overlay)
+
+```bash
+docker compose --env-file .env \
+  -f docker/compose.yml \
+  -f docker/compose.prod.yml \
+  -f examples/pgbouncer/compose.pgbouncer.prod.yml \
+  up -d
+```
+
+See [`examples/pgbouncer/`](../examples/pgbouncer/) for the full walkthrough,
+pool-sizing guide, and Docker secrets pattern for production credentials.
+
+Set these in `.env` when the overlay is active:
+
+```bash
+# App traffic → pooler
+DATABASE_URL=postgresql://user:pass@pgbouncer:6432/nestjs_db
+# Prisma CLI + migration container → direct Postgres (bypasses pooler for DDL)
+DATABASE_DIRECT_URL=postgresql://user:pass@postgres:5432/nestjs_db
+PGBOUNCER_POOL_SIZE=30          # server-side connections to Postgres
+PGBOUNCER_MAX_CLIENT_CONN=500   # client-side cap
+```
+
+### Option C — HA pgbouncer (2× + HAProxy)
+
+Two pgbouncer instances behind HAProxy eliminates the pooler as a SPOF.
+Required for 99.9 %+ uptime SLO. See [`examples/pgbouncer-ha/`](../examples/pgbouncer-ha/) for
+the full walkthrough, failover verification steps, and production secrets pattern.
+
+```bash
+docker compose --env-file .env \
+  -f docker/compose.yml \
+  -f docker/compose.dev.yml \
+  -f examples/pgbouncer/compose.pgbouncer.yml \
+  -f examples/pgbouncer-ha/compose.pgbouncer-ha.yml \
+  up -d
+```
+
+Set `DATABASE_URL` to route through HAProxy:
+
+```bash
+DATABASE_URL=postgresql://user:pass@haproxy:6432/nestjs_db
+DATABASE_DIRECT_URL=postgresql://user:pass@postgres:5432/nestjs_db
+```
+
+> **Note**: this option addresses pooler availability, NOT Postgres availability.
+> For HA Postgres use Patroni, Stolon, or a managed service (RDS Multi-AZ, Cloud SQL HA).
+
+### Option D — Managed pooler (RDS Proxy, Supavisor, AlloyDB)
+
+Point `DATABASE_URL` at the managed pooler endpoint and `DATABASE_DIRECT_URL`
+at the direct instance endpoint. No extra compose service needed.
+
+```bash
+DATABASE_URL=postgresql://user:pass@proxy.rds.amazonaws.com:5432/nestjs_db
+DATABASE_DIRECT_URL=postgresql://user:pass@db.rds.amazonaws.com:5432/nestjs_db
+```
+
+The migration container and Prisma CLI automatically use `DATABASE_DIRECT_URL`
+when set — no code changes required.
+
+### Managed Postgres providers
+
+Providers like AWS RDS, Cloud SQL, AlloyDB, Supabase, and Neon typically pre-enable
+`pg_stat_statements`. The migration at `prisma/migrations/20260601100000_pg_stat_statements/`
+runs `CREATE EXTENSION IF NOT EXISTS` and handles registration automatically — no extra
+ops step is required.
+
+For self-hosted Postgres, see [`examples/postgres-with-stats/`](../examples/postgres-with-stats/)
+for the opt-in compose overlay that enables `shared_preload_libraries` + slow query log.
+
+## High-availability pooling
+
+Choose the topology that matches your uptime SLO and operational budget:
+
+| Topology                       | Uptime expectation | Memory cost | When to use                           |
+| ------------------------------ | ------------------ | ----------- | ------------------------------------- |
+| Direct to Postgres (no pooler) | ~99 %              | 0           | Single replica, dev, very low traffic |
+| Single pgbouncer               | ~99.5 %            | ~50 MB      | Most production deployments           |
+| 2× pgbouncer + HAProxy         | 99.9 %+            | ~150 MB     | Production with strict SLO            |
+| Managed (RDS Proxy, Supavisor) | Provider SLO       | $$          | Hosted on the same cloud              |
+
+The single pgbouncer option (`examples/pgbouncer/`) is a SPOF: if the pooler
+container crashes, every API replica loses its database connection simultaneously.
+The HA overlay (`examples/pgbouncer-ha/`) adds a second pgbouncer and an HAProxy
+TCP load-balancer in front of both. HAProxy detects a failed backend within 4-6 s
+and drains it from the rotation — apps see a brief connection reset, then
+pgbouncer-2 takes over with no operator intervention.
+
+See [`examples/pgbouncer-ha/README.md`](../examples/pgbouncer-ha/README.md) for
+setup steps, failover verification, Docker secrets pattern, and guidance on
+eliminating HAProxy as the remaining SPOF (app-node sidecar, cloud NLB, Keepalived).

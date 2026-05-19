@@ -128,11 +128,51 @@ GET /api/v1/users/me → UsersController.getProfile (BetterAuthGuard)
 
 GET /api/v1/admin/users → AdminUsersController.list (BetterAuthGuard + RolesGuard)
   → guards reject non-ADMIN sessions with 403
-  → ListUsersHandler runs paginated query
+  → ListUsersCursorHandler runs cursor-paginated query
 ```
 
 Protected REST and GraphQL endpoints rely on `BetterAuthGuard` and
 `RolesGuard`, both wired globally as `APP_GUARD` providers in `AppModule`.
+
+## Pagination Strategy
+
+**Cursor pagination is the standard for large-table list endpoints** in this codebase.
+
+### Why cursor, not offset
+
+Offset pagination (`LIMIT n OFFSET k`) costs increase linearly with page depth — at page 500
+the DB scans and discards 500 × pageSize rows before returning results. `COUNT(*)` on a
+filtered table forces a full index scan that no connection pool can amortise.
+
+Cursor pagination (`WHERE (createdAt, id) < ($cursor_ts, $cursor_id) LIMIT n`) is `O(1)`
+regardless of dataset size because it drives a B-tree seek directly to the continuation point.
+
+### Cursor encoding
+
+```
+cursor = base64url("${createdAt.toISOString()}:${id}")
+```
+
+`createdAt` is the primary sort field (B-tree index exists). `id` (UUIDv7) is the
+monotonic tie-breaker — two rows with identical `createdAt` still produce distinct cursors
+because UUIDv7 encodes millisecond time in its prefix.
+
+Helpers: `encodeCursor` / `decodeCursor` in `@nestjs-fastify-nx/shared`.
+
+### Response shape (Stripe-style)
+
+```json
+{ "object": "list", "url": "/api/v1/admin/users", "data": [...], "hasMore": true }
+```
+
+`totalCount`, `page`, and `pageSize` are **omitted** — `COUNT(*)` on large tables is a
+hot-path bottleneck. Clients navigate via `hasMore` + the encoded cursor from the last item.
+
+### When to use offset instead
+
+Offset pagination is acceptable only for genuinely small tables (e.g. per-user settings,
+a handful of org members) where the scan cost is negligible. Add it on demand per endpoint;
+do not make it the default.
 
 ### Tokenized email flows (password reset, email verify, account delete)
 
@@ -339,3 +379,172 @@ pnpm codegen:full
   → orval consumes the spec
   → emits typed REST client into libs/api-client
 ```
+
+## Connection Pooling
+
+The app does not hard-wire a pooler — boilerplate consumers pick the option
+that matches their infra. Four options are enumerated below in order of
+operational complexity.
+
+```
+┌──────────────────── Option A: direct (boilerplate default) ────────────────────┐
+│  api / scheduler ──────────────────────────────────▶ postgres:5432             │
+│  DATABASE_URL = postgresql://...@postgres:5432/...                             │
+│  Constraint: (API_REPLICAS + 1) × DATABASE_POOL_MAX ≤ max_connections (≈100)  │
+└────────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────── Option B: single pgbouncer (opt-in overlay) ───────────────┐
+│  api / scheduler ──▶ pgbouncer:6432 (tx mode) ─────▶ postgres:5432            │
+│  migration ─────────────────────────────────────────▶ postgres:5432 (direct)  │
+│  DATABASE_URL = postgresql://...@pgbouncer:6432/...                            │
+│  DATABASE_DIRECT_URL = postgresql://...@postgres:5432/...                      │
+│  See: examples/pgbouncer/                                                      │
+└────────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────── Option C: HA pgbouncer (2× + HAProxy) ────────────────────┐
+│  api / scheduler ──▶ haproxy:6432 ──┬──▶ pgbouncer-1 ──┐                     │
+│                                     └──▶ pgbouncer-2 ──┴──▶ postgres:5432    │
+│  Eliminates pooler as SPOF. HAProxy detects failure in 4-6 s (fall=3×2s).   │
+│  DATABASE_URL = postgresql://...@haproxy:6432/...                             │
+│  See: examples/pgbouncer-ha/                                                  │
+└────────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────── Option D: managed pooler ──────────────────────────────────┐
+│  AWS RDS Proxy, GCP AlloyDB, Supabase Supavisor, Neon serverless pooler       │
+│  DATABASE_URL = pooler endpoint                                                │
+│  DATABASE_DIRECT_URL = direct RDS / instance endpoint                         │
+│  No extra compose service needed — provider manages the pooler.               │
+└────────────────────────────────────────────────────────────────────────────────┘
+```
+
+### When to add a pooler
+
+Add a pooler when:
+
+```
+(API_REPLICAS + 1 scheduler) × DATABASE_POOL_MAX > Postgres max_connections
+```
+
+The worker contributes **zero** database connections and is excluded from this
+formula. With a default Postgres install (`max_connections=100`) and
+`DATABASE_POOL_MAX=20`, you hit the limit at 5 API replicas.
+
+### HA topology detail (Option C)
+
+When uptime SLO ≥ 99.9 %, the single pgbouncer becomes the weakest link — a
+crash takes down every API replica simultaneously. The HA overlay addresses this
+by adding a second pgbouncer instance and placing HAProxy in front of both:
+
+```
+                   ┌──────────────────────────┐
+                   │   api  /  scheduler       │
+                   └────────────┬─────────────┘
+                                │ @haproxy:6432
+                                ▼
+                   ┌──────────────────────────┐
+                   │         HAProxy           │
+                   │  TCP mode · leastconn     │
+                   │  pgsql-aware healthcheck  │
+                   └──────┬───────────┬────────┘
+                          │           │
+               ┌──────────┘           └──────────┐
+               ▼                                  ▼
+  ┌────────────────────┐             ┌────────────────────┐
+  │    pgbouncer-1      │             │    pgbouncer-2      │
+  │  (transaction mode) │             │  (transaction mode) │
+  └──────────┬─────────┘             └──────────┬─────────┘
+             └─────────────┬─────────────────────┘
+                           ▼
+                  ┌─────────────────┐
+                  │    Postgres      │
+                  └─────────────────┘
+```
+
+Failover timing: `fall=3 × inter=2s = 6 s` to mark a backend DOWN; `rise=2 ×
+inter=2s = 4 s` to bring it back UP. Existing connections to a downed backend are
+closed; Prisma re-establishes on the next query (brief connection-setup latency
+spike expected, no data loss).
+
+HAProxy itself is the remaining SPOF in this template. For multi-host production
+deployments, run one HAProxy per app node (sidecar) or front two HAProxy containers
+with a cloud TCP load-balancer. See
+[`examples/pgbouncer-ha/README.md`](../examples/pgbouncer-ha/README.md) for options.
+
+> This overlay addresses **pooler availability only** — not Postgres availability.
+> For HA Postgres, use Patroni, Stolon, or a managed service.
+
+### How app code interacts with poolers
+
+- `DATABASE_URL` — runtime connection string for api, scheduler, worker. Points
+  at the pooler when one is configured.
+- `DATABASE_DIRECT_URL` — bypasses the pooler. Used by:
+  - `prisma.config.ts` — Prisma CLI (`migrate dev`, `generate`, `format`).
+  - `apps/migration/Dockerfile` CMD wrapper — `prisma migrate deploy`.
+  - `PgBouncerHealthIndicator` — uses `DATABASE_URL` to probe the pooler; the
+    indicator is a no-op (returns `skipped`) when `DATABASE_DIRECT_URL` is unset.
+
+### Transaction-mode restrictions
+
+pgbouncer in transaction mode is **incompatible** with:
+
+- `pg_advisory_lock` / `pg_advisory_unlock` — locks are session-scoped.
+- `LISTEN` / `NOTIFY` — subscription is session-scoped.
+- `SET LOCAL` / `SET` (session parameters) — lost between statements.
+- Temporary tables — dropped when the server connection is returned.
+
+None of these are used in this codebase. The `max_prepared_statements=200`
+pgbouncer setting enables Prisma's prepared-statement cache in transaction mode
+(requires pgbouncer ≥ 1.21).
+
+## Database Topology — Write/Read Split
+
+`PrismaService` maintains two separate `PrismaClient` instances:
+
+```
+PrismaService
+  ├── db      (write client) ── DATABASE_URL           ── primary / pgbouncer nestjs_db
+  └── dbRead  (read client)  ── DATABASE_REPLICA_URL   ── replica / pgbouncer nestjs_db_read
+                                (aliases to db when DATABASE_REPLICA_URL is unset)
+```
+
+### What always uses `db` (primary)
+
+| Consumer                                    | Reason                                                                                                                                                    |
+| ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Better Auth (`prismaAdapter`)               | `getSession` does a read immediately after sign-in — replication lag would produce a 401. Both reads and writes must stay on the same primary connection. |
+| Outbox relay (`OutboxRelayService`)         | Claim + publish + mark-processed runs inside a single interactive transaction.                                                                            |
+| Command handlers (`prisma.transaction(fn)`) | Aggregate write + outbox row must commit atomically on the primary.                                                                                       |
+| `findByEmailFresh`                          | Post-signup read-your-writes: reading a user row on the replica immediately after sign-up risks seeing a stale result. Use only for auth-flow reads.      |
+
+### What uses `dbRead` (replica, falls back to primary)
+
+| Consumer                             | Notes                                                                                                           |
+| ------------------------------------ | --------------------------------------------------------------------------------------------------------------- |
+| `PrismaUserRepository.findAllCursor` | Admin user-list — stale by a few ms is acceptable.                                                              |
+| `PrismaUserRepository.findByEmail`   | Profile look-ups outside the sign-up critical path.                                                             |
+| `PrismaUserRepository.findById`      | Single-user reads from query handlers.                                                                          |
+| `PrismaUserRepository.exists`        | Pre-check before write; a false-negative on lag is safe — the unique constraint on the DB enforces correctness. |
+
+### Read-your-writes pattern
+
+When a caller must read immediately after a write on the same request (e.g. an
+auth flow that creates a user and then fetches it), use the dedicated
+`findByEmailFresh` method which routes to `db` (primary). All other `findBy*`
+reads use `dbRead` because eventual consistency (10–50 ms typical lag) is
+acceptable for non-auth reads.
+
+### Zero-overhead single-node default
+
+When `DATABASE_REPLICA_URL` is not set, `dbRead` is the same object reference as
+`db` — no second connection pool is created, no behaviour changes. Setting the
+variable is the only action needed to enable replica routing.
+
+### Health monitoring
+
+`PrismaReplicationLagHealthIndicator` is wired into `/health/ready`. When
+`DATABASE_REPLICA_URL` is set it queries `pg_last_xact_replay_timestamp()` on
+the replica and reports:
+
+- `lag_seconds` in the response body.
+- 503 if lag > 30 s, replica is unreachable, or the node is no longer in
+  recovery (e.g. after a failover promotion).

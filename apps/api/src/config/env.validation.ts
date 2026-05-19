@@ -4,6 +4,15 @@ const envSchema = z
   .object({
     // Database
     DATABASE_URL: z.string().trim().min(1),
+    // Set when app processes connect through a transaction-mode pooler (pgbouncer,
+    // RDS Proxy, Supavisor). Prisma CLI uses this URL to bypass the pooler for
+    // migrations (DDL needs session-scoped state). When unset, CLI falls back to
+    // DATABASE_URL — same behaviour as before pooler was introduced.
+    DATABASE_DIRECT_URL: z.string().trim().min(1).optional(),
+    // Optional physical replica for read-only queries. When unset, dbRead aliases
+    // to db — zero-overhead fallback, behaviour identical to single-node.
+    DATABASE_REPLICA_URL: z.string().trim().min(1).optional(),
+    DATABASE_REPLICA_POOL_MAX: z.coerce.number().int().min(1).max(1000).default(10),
     DATABASE_POOL_MAX: z.coerce.number().int().min(1).max(1000).default(20),
     DATABASE_POOL_MIN: z.coerce.number().int().min(0).max(1000).default(0),
     DATABASE_IDLE_TIMEOUT_MS: z.coerce.number().int().min(0).default(10_000),
@@ -129,6 +138,12 @@ const envSchema = z
     // avoid zero-retention misconfiguration purging the active partition.
     AUDIT_LOG_RETENTION_MONTHS: z.coerce.number().int().min(1).max(120).default(12),
 
+    // Outbox event retention — hard-deletes processed rows older than this.
+    // Unprocessed rows are never touched (they retry until OUTBOX_MAX_ATTEMPTS).
+    OUTBOX_RETENTION_DAYS: z.coerce.number().int().min(1).max(365).default(7),
+    OUTBOX_PURGE_BATCH_SIZE: z.coerce.number().int().min(100).max(10000).default(1000),
+    OUTBOX_PURGE_MAX_BATCHES: z.coerce.number().int().min(1).max(10000).default(200),
+
     // Two-tier auth rate limit (NestJS ThrottlerGuard bypassed by reply.hijack).
     // STRICT for credential endpoints, LOOSE for session ops — see main.ts.
     AUTH_RATE_LIMIT_MAX: z.coerce.number().int().min(1).default(5),
@@ -149,6 +164,12 @@ const envSchema = z
       .transform((v) => v === 'true'),
     BULL_BOARD_USER: z.string().default('admin'),
     BULL_BOARD_PASSWORD: z.string().default('admin'),
+
+    // Worker queue concurrency knobs — validated here for .env.example parity and
+    // early misconfiguration detection (API reads them only at doc/config check time;
+    // the worker process is the runtime consumer).
+    WORKER_EMAIL_CONCURRENCY: z.coerce.number().int().min(1).max(500).default(5),
+    WORKER_UPLOAD_CONCURRENCY: z.coerce.number().int().min(1).max(500).default(5),
 
     // Sentry. Default 0.01 (1%) — at 1k RPS sustained, 0.1 burns 26M traces/day
     // which exceeds most Business-plan quotas inside hours. Raise per-route via

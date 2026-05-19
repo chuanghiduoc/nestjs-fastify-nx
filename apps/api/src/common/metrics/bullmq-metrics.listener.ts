@@ -4,8 +4,14 @@ import { MetricsService } from './metrics.service';
 
 const QUEUE_NAME = 'email-notification';
 
+interface ActiveEvent {
+  jobId: string;
+  prev?: string;
+}
+
 interface CompletedEvent {
   jobId: string;
+  returnvalue: string;
   prev?: string;
 }
 
@@ -15,32 +21,28 @@ interface FailedEvent {
   prev?: string;
 }
 
-interface ActiveEvent {
-  jobId: string;
-  prev?: string;
-}
-
-interface DelayedEvent {
-  jobId: string;
-}
-
-interface StalledEvent {
-  jobId: string;
-}
-
 /**
- * Listens to BullMQ QueueEvents from the API process so that metrics are
- * captured even when the worker container scales independently. BullMQ
- * dispatches these events through Redis pub/sub, so any client connected to
- * the queue can observe them.
+ * Listens to BullMQ QueueEvents from the API process so that job-state counters
+ * and duration histograms are captured regardless of which worker replica
+ * processes a job. QueueEvents is built on a Redis stream with fan-out
+ * semantics — every QueueEvents subscriber receives every event.
  *
- * We track active timestamps in-memory to compute job duration when an event
- * lacks the `processedOn`/`finishedOn` fields directly.
+ * Duration is measured via an in-process Map: `active` records `Date.now()`,
+ * `completed`/`failed` compute the delta and clear the entry.
+ *
+ * Caveat under horizontal scaling: when `API_REPLICAS > 1`, every replica
+ * receives every event, so `bullmqJobsTotal` and `bullmqJobDurationSeconds`
+ * sample counts are multiplied by the replica count. Rates and totals
+ * derived from these series must be divided by the replica count in
+ * dashboards, or the listener should be hoisted to a single leader-elected
+ * collector before relying on them for SLOs. Duration mean/percentiles
+ * remain accurate because each individual sample is correct.
  */
 @QueueEventsListener(QUEUE_NAME)
 @Injectable()
 export class BullMqMetricsListener extends QueueEventsHost {
-  private readonly activeTimestamps = new Map<string, number>();
+  /** jobId → unix ms when the active event arrived on this replica. */
+  private readonly activeAt = new Map<string, number>();
 
   constructor(private readonly metrics: MetricsService) {
     super();
@@ -48,7 +50,7 @@ export class BullMqMetricsListener extends QueueEventsHost {
 
   @OnQueueEvent('active')
   onActive(args: ActiveEvent): void {
-    this.activeTimestamps.set(args.jobId, Date.now());
+    this.activeAt.set(args.jobId, Date.now());
   }
 
   @OnQueueEvent('completed')
@@ -64,22 +66,24 @@ export class BullMqMetricsListener extends QueueEventsHost {
   }
 
   @OnQueueEvent('stalled')
-  onStalled(args: StalledEvent): void {
+  onStalled(): void {
     this.metrics.bullmqJobsTotal.inc({ queue: QUEUE_NAME, status: 'stalled' });
-    this.activeTimestamps.delete(args.jobId);
   }
 
   @OnQueueEvent('delayed')
-  onDelayed(args: DelayedEvent): void {
+  onDelayed(): void {
     this.metrics.bullmqJobsTotal.inc({ queue: QUEUE_NAME, status: 'delayed' });
-    this.activeTimestamps.delete(args.jobId);
   }
 
   private observeDuration(jobId: string, status: 'completed' | 'failed'): void {
-    const startedAt = this.activeTimestamps.get(jobId);
-    if (typeof startedAt !== 'number') return;
-    const seconds = (Date.now() - startedAt) / 1000;
-    this.metrics.bullmqJobDurationSeconds.observe({ queue: QUEUE_NAME, status }, seconds);
-    this.activeTimestamps.delete(jobId);
+    const startedAt = this.activeAt.get(jobId);
+    if (startedAt === undefined) {
+      // No active entry on this replica — job was activated by a different
+      // API replica. Skip rather than emit a NaN sample.
+      return;
+    }
+    this.activeAt.delete(jobId);
+    const durationSeconds = (Date.now() - startedAt) / 1000;
+    this.metrics.bullmqJobDurationSeconds.observe({ queue: QUEUE_NAME, status }, durationSeconds);
   }
 }

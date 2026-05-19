@@ -38,10 +38,18 @@ export class ListResponseDto<T = unknown> {
 
   @ApiProperty({
     description:
-      "True when more items follow the last element. Use the last element's `id` as `startingAfter` to fetch the next page.",
+      'True when more items follow the last element. Use `lastCursor` as `startingAfter` to fetch the next page on cursor-paginated endpoints.',
     example: true,
   })
   hasMore!: boolean;
+
+  @ApiPropertyOptional({
+    description:
+      'Opaque cursor pointing at the last item in `data` — pass back as `startingAfter` to fetch the next page. Present only on cursor-paginated endpoints; null when the result set is empty. Format is `base64url(sortField.toISOString():id)` — clients MUST treat it as opaque.',
+    example: 'MjAyNi0wNS0xOVQwMzowNTowMC4wMDBaOjAxOTczMmRiLTYwMTAtN2Y3Zi1iNDY0LTBkMjBjNWUzYThmOQ',
+    nullable: true,
+  })
+  lastCursor?: string | null;
 
   @ApiPropertyOptional({
     description:
@@ -82,22 +90,23 @@ export class CursorPaginationDto {
   limit = 20;
 
   @ApiPropertyOptional({
-    description: "Cursor for the next page — pass the last item's `id` from the previous response.",
-    example: 'usr_01HXY7K3MN8P2RZ4QW9TB6FH3D',
+    description:
+      "Opaque cursor for the next page — pass the previous response's `lastCursor` value verbatim. The encoded format is `base64url(sortField.toISOString():id)` and clients MUST NOT construct it manually.",
+    example: 'MjAyNi0wNS0xOVQwMzowNTowMC4wMDBaOjAxOTczMmRiLTYwMTAtN2Y3Zi1iNDY0LTBkMjBjNWUzYThmOQ',
   })
   @IsOptional()
   @IsString()
-  @MaxLength(100)
+  @MaxLength(200)
   startingAfter?: string;
 
   @ApiPropertyOptional({
     description:
-      "Cursor for the previous page — pass the first item's `id` from the current response.",
-    example: 'usr_01HXY1A3MN8P2RZ4QW9TB6FH3D',
+      "Opaque cursor for the previous page — pass the first item's cursor from the current response. Same opaque format as `startingAfter`.",
+    example: 'MjAyNi0wNS0xOVQwMzowMDowMC4wMDBaOjAxOTczMmRiLTYwMTAtN2Y3Zi1iNDY0LTBkMjBjNWUzYThmOQ',
   })
   @IsOptional()
   @IsString()
-  @MaxLength(100)
+  @MaxLength(200)
   endingBefore?: string;
 }
 
@@ -138,10 +147,13 @@ export function toCursorListResponse<T>(args: {
   url: string;
   items: readonly T[];
   hasMore: boolean;
+  /** Opaque continuation cursor — handler should pass `encodeCursor(sortField, id)` of the last item, or null when the page is empty. */
+  lastCursor: string | null;
 }): ListResponseDto<T> {
   const response = new ListResponseDto<T>();
   response.url = args.url;
   response.data = [...args.items];
   response.hasMore = args.hasMore;
+  response.lastCursor = args.lastCursor;
   return response;
 }

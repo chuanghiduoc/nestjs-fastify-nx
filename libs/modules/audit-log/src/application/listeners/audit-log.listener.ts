@@ -31,6 +31,10 @@ export class AuditLogListener {
     const { ip, userAgent, ...metadata } = payload;
 
     const entry = AuditLog.create({
+      // Derive the entity id from the outbox eventId so outbox redelivery of
+      // the same event produces the same primary key. The repository catches
+      // P2002 on duplicate INSERT and treats it as a no-op.
+      id: event.eventId,
       userId: event.aggregateId,
       action: event.eventType,
       resource: 'user',

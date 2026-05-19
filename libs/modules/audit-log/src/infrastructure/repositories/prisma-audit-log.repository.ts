@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '@nestjs-fastify-nx/infra-database';
-import type { Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import type { AuditLogRepositoryPort } from '../../domain/ports/audit-log-repository.port';
 import type { AuditLog } from '../../domain/entities/audit-log.entity';
 
@@ -25,13 +25,19 @@ export class PrismaAuditLogRepository implements AuditLogRepositoryPort {
         },
       });
     } catch (err) {
-      // Audit failures must never break the request that triggered the
-      // event. Log and swallow — we still preserve in-flight observability
-      // via Pino, and pollination of failure metrics is handled elsewhere.
-      this.logger.error(
-        `Failed to persist audit entry id=${entry.id} action=${entry.action}`,
-        err instanceof Error ? err.stack : String(err),
-      );
+      // P2002 = unique/PK constraint violation. When the outbox relay redelivers
+      // the same event, AuditLog.id (== eventId) collides with the existing row —
+      // this is the expected idempotency signal, not a real error.
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        this.logger.debug(
+          `audit_logs duplicate id=${entry.id} action=${entry.action} — outbox redelivery, ignoring`,
+        );
+        return;
+      }
+      // All other failures are real errors (DB down, schema mismatch, etc.) and
+      // must propagate so the outbox relay records lastError instead of marking
+      // the event processed.
+      throw err;
     }
   }
 }

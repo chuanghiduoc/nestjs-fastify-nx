@@ -1,6 +1,7 @@
+import { decodeCursor } from '@nestjs-fastify-nx/shared';
 import type {
-  FindAllOptions,
-  FindAllResult,
+  FindAllCursorOptions,
+  FindAllCursorResult,
   UserRepositoryPort,
 } from '../domain/ports/user-repository.port';
 import type { User } from '../domain/entities/user.entity';
@@ -16,9 +17,15 @@ export class MockUserRepository implements UserRepositoryPort {
     return [...this.store.values()].find((u) => u.email.toString() === email) ?? null;
   }
 
-  async findAll(options: FindAllOptions): Promise<FindAllResult> {
-    const { page, pageSize, role, status, search } = options;
+  async findByEmailFresh(email: string): Promise<User | null> {
+    // Mock has no replica concept — delegates to the same in-memory store.
+    return this.findByEmail(email);
+  }
+
+  async findAllCursor(options: FindAllCursorOptions): Promise<FindAllCursorResult> {
+    const { startingAfter, limit, role, status, search } = options;
     let rows = [...this.store.values()];
+
     if (role) rows = rows.filter((u) => u.role === role);
     if (status) rows = rows.filter((u) => u.status === status);
     if (search) {
@@ -29,10 +36,29 @@ export class MockUserRepository implements UserRepositoryPort {
           u.name.toLowerCase().includes(needle),
       );
     }
-    rows.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
-    const total = rows.length;
-    const items = rows.slice((page - 1) * pageSize, (page - 1) * pageSize + pageSize);
-    return { items, total };
+
+    // Mimic DB ordering: createdAt DESC, id DESC
+    rows.sort((a, b) => {
+      const tDiff = b.createdAt.getTime() - a.createdAt.getTime();
+      if (tDiff !== 0) return tDiff;
+      return b.id < a.id ? -1 : 1;
+    });
+
+    if (startingAfter) {
+      const decoded = decodeCursor(startingAfter);
+      if (decoded) {
+        rows = rows.filter((u) => {
+          const tDiff = u.createdAt.getTime() - decoded.createdAt.getTime();
+          if (tDiff < 0) return true;
+          if (tDiff === 0) return u.id < decoded.id;
+          return false;
+        });
+      }
+    }
+
+    const hasMore = rows.length > limit;
+    const items = hasMore ? rows.slice(0, limit) : rows;
+    return { items, hasMore };
   }
 
   async save(user: User): Promise<void> {

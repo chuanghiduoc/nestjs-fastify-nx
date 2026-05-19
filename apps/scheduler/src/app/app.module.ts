@@ -10,6 +10,7 @@ import { AuditLogModule } from '@nestjs-fastify-nx/modules-audit-log';
 import { CleanupTask } from './tasks/cleanup.task';
 import { DlqMonitorTask } from './tasks/dlq-monitor.task';
 import { HeartbeatTask } from './tasks/heartbeat.task';
+import { OutboxCleanupTask } from './tasks/outbox-cleanup.task';
 import { SchedulerHealthService } from './health/scheduler-health.service';
 
 @Module({
@@ -27,6 +28,12 @@ import { SchedulerHealthService } from './health/scheduler-health.service';
     UsersListenersModule,
     AuditLogModule,
   ],
-  providers: [CleanupTask, DlqMonitorTask, HeartbeatTask, SchedulerHealthService],
+  providers: [
+    CleanupTask,
+    DlqMonitorTask,
+    HeartbeatTask,
+    OutboxCleanupTask,
+    SchedulerHealthService,
+  ],
 })
 export class AppModule {}

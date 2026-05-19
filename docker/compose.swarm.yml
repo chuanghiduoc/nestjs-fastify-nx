@@ -46,10 +46,11 @@
 # ─── Migration ───────────────────────────────────────────────────────────────
 #
 # The `migration` service runs once per `stack deploy` with
-# `restart_policy.condition: none` + `replicas: 1`. `prisma migrate deploy`
-# is idempotent, so re-deploys reapply nothing. Swarm ignores
-# `depends_on.condition`, so apps retry their DB connection during cold start
-# rather than relying on ordering.
+# `restart_policy.condition: on-failure` (bounded: 20 attempts, 5s delay) +
+# `replicas: 1`. `prisma migrate deploy` is idempotent, so re-deploys reapply
+# nothing. Swarm ignores `depends_on.condition`, so the migration task may
+# start before Postgres accepts connections — the bounded retry rides out a
+# cold boot without spinning forever on a real misconfiguration.
 #
 # ─── Hardening notes ────────────────────────────────────────────────────────
 #
@@ -141,11 +142,16 @@ services:
     networks: [app-net]
     deploy:
       replicas: 1
+      # Swarm ignores depends_on.condition, so the task may start before
+      # Postgres is reachable. Bounded retry handles cold boot without
+      # spinning forever on a real misconfiguration.
       restart_policy:
-        condition: none
+        condition: on-failure
+        delay: 5s
+        max_attempts: 20
+        window: 60s
       placement:
-        # Co-locate with postgres to avoid an unnecessary network round-trip
-        # during apply; not strictly required, just faster.
+        # Co-locate with postgres to skip a network hop during apply.
         constraints: [node.labels.role.db == true]
 
   # ── Stateless app tier ────────────────────────────────────────────────────

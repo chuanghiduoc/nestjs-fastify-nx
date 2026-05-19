@@ -1,0 +1,38 @@
+# Overlay compose that enables pg_stat_statements and slow query logging.
+#
+# Usage (dev):
+#   docker compose --env-file .env \
+#     -f docker/compose.yml \
+#     -f docker/compose.dev.yml \
+#     -f examples/postgres-with-stats/compose.postgres-stats.yml \
+#     up -d postgres
+#
+# Usage (prod — swap compose.dev.yml → compose.prod.yml):
+#   docker compose --env-file .env \
+#     -f docker/compose.yml \
+#     -f docker/compose.prod.yml \
+#     -f examples/postgres-with-stats/compose.postgres-stats.yml \
+#     up -d postgres
+#
+# compose.yml is a fragment; compose.dev.yml / compose.prod.yml must be
+# layered in so api/worker/scheduler/migration have image or build directives.
+# Postgres must restart for shared_preload_libraries to take effect.
+# See examples/postgres-with-stats/README.md for the inspection queries.
+#
+# For managed Postgres (RDS, Cloud SQL, Supabase, Neon): skip this overlay.
+# The extension is usually pre-enabled; the migration in this repo handles
+# registration automatically via CREATE EXTENSION IF NOT EXISTS.
+services:
+  postgres:
+    command:
+      - 'postgres'
+      - '-c'
+      - 'shared_preload_libraries=pg_stat_statements'
+      - '-c'
+      - 'pg_stat_statements.max=10000'
+      - '-c'
+      - 'pg_stat_statements.track=all'
+      - '-c'
+      - 'track_io_timing=on'
+      - '-c'
+      - 'log_min_duration_statement=500'

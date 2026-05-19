@@ -1,5 +1,5 @@
 import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
-import { Counter, Histogram, Registry, collectDefaultMetrics } from 'prom-client';
+import { Counter, Gauge, Histogram, Registry, collectDefaultMetrics } from 'prom-client';
 
 /**
  * Buckets in seconds — sized for HTTP API latencies. Anything slower than 5s
@@ -43,6 +43,28 @@ export class MetricsService implements OnModuleInit, OnModuleDestroy {
     help: 'BullMQ job processing duration in seconds (active → completed/failed)',
     labelNames: ['queue', 'status'] as const,
     buckets: JOB_DURATION_BUCKETS,
+    registers: [this.registry],
+  });
+
+  /**
+   * Polled every 30s by QueueDepthCollector. Tells the operator whether
+   * workers are keeping up — rising `waiting` count means under-provisioned.
+   */
+  readonly bullmqQueueDepth = new Gauge({
+    name: 'bullmq_queue_depth',
+    help: 'Number of jobs per queue per state',
+    labelNames: ['queue', 'state'] as const,
+    registers: [this.registry],
+  });
+
+  /**
+   * Polled every 30s by OutboxLagCollector. Age of the oldest unprocessed
+   * outbox event — the signal to extract the relay into its own process if
+   * sustained saturation is observed.
+   */
+  readonly outboxLagSeconds = new Gauge({
+    name: 'outbox_lag_seconds',
+    help: 'Age of the oldest unprocessed outbox event in seconds',
     registers: [this.registry],
   });
 

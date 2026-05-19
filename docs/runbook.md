@@ -335,6 +335,90 @@ mc ilm rule add --expire-days 1 --tags "committed=false" myminio/<your-bucket>
 
 ---
 
+## 9. Outbox cleanup (retention purge)
+
+**Symptom:** `outbox_events` table keeps growing even though events are being processed normally. `processedAt IS NOT NULL` row count climbs unbounded.
+
+**Root cause:** The outbox relay sets `processedAt` but never deletes rows. The daily purge cron (`OutboxCleanupTask`, 03:15 UTC) removes processed rows older than `OUTBOX_RETENTION_DAYS` (default 7). If the scheduler is down or the cron keeps erroring, rows accumulate.
+
+**Diagnostic:**
+
+```sql
+-- How many processed rows are older than the retention window?
+SELECT count(*)
+FROM outbox_events
+WHERE "processedAt" IS NOT NULL
+  AND "createdAt" < NOW() - INTERVAL '7 days';
+
+-- How many unprocessed rows exist? (these are NEVER deleted by the purge cron)
+SELECT count(*)
+FROM outbox_events
+WHERE "processedAt" IS NULL;
+
+-- Check if the purge cron ran recently
+docker compose logs scheduler --tail=500 | grep -i "outbox purge"
+```
+
+**Manually trigger a purge run** (without restarting the container):
+
+```bash
+# Connect a psql session and run the equivalent batched DELETE directly
+docker compose exec postgres psql -U postgres -d nestjs_db <<'SQL'
+DO $$
+DECLARE
+  deleted int;
+  total   int := 0;
+BEGIN
+  LOOP
+    DELETE FROM outbox_events
+      WHERE id IN (
+        SELECT id FROM outbox_events
+         WHERE "processedAt" IS NOT NULL
+           AND "createdAt" < NOW() - INTERVAL '7 days'
+         LIMIT 1000
+      );
+    GET DIAGNOSTICS deleted = ROW_COUNT;
+    EXIT WHEN deleted = 0;
+    total := total + deleted;
+  END LOOP;
+  RAISE NOTICE 'Purged % row(s)', total;
+END;
+$$;
+SQL
+```
+
+**Action:**
+
+1. Confirm the scheduler container is running: `docker compose ps scheduler`.
+2. Check logs for purge errors: `docker compose logs scheduler --tail=200 | grep -E "purge|error"`.
+3. If the cron has been silently failing (e.g. Prisma `$executeRawUnsafe` auth error), fix the root cause and redeploy the scheduler.
+4. If the backlog is very large (millions of rows), raise `OUTBOX_PURGE_MAX_BATCHES` temporarily — the default cap of `200 × 1000 = 200k rows/run` may not drain the backlog in a single nightly run. Set `OUTBOX_PURGE_MAX_BATCHES=5000` and redeploy the scheduler, then revert after the backlog is clear.
+
+**Monitoring:**
+
+```sql
+-- Daily trend: rows purged vs rows inserted (proxy for event rate)
+SELECT date_trunc('day', "createdAt") AS day,
+       count(*) FILTER (WHERE "processedAt" IS NOT NULL) AS processed,
+       count(*) FILTER (WHERE "processedAt" IS NULL)     AS pending
+FROM outbox_events
+GROUP BY 1
+ORDER BY 1 DESC
+LIMIT 14;
+```
+
+If `ENABLE_METRICS=true`, the `outbox_lag_seconds` gauge reflects the age of the oldest unprocessed event in real time — alert when it trends upward after the relay is healthy.
+
+**Escalation:** If processed rows accumulate despite the purge running successfully (i.e. the cron completes but `count(*)` still climbs), the event volume exceeds `OUTBOX_PURGE_MAX_BATCHES × OUTBOX_PURGE_BATCH_SIZE`. Calculate the required cap:
+
+```
+required_max_batches = ceil(daily_event_volume / OUTBOX_PURGE_BATCH_SIZE)
+```
+
+Set `OUTBOX_PURGE_MAX_BATCHES` to at least that value and redeploy.
+
+---
+
 ## 8. Tampered upload (declared MIME ≠ actual binary)
 
 **Symptom:** Worker log entry like `verify-magic-bytes: MIME mismatch — deleting tampered upload`. The object disappears without a `/confirm` follow-through visible to the client.

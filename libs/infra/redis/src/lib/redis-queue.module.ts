@@ -1,11 +1,51 @@
-import { Module } from '@nestjs/common';
+import { Injectable, Module, OnModuleDestroy } from '@nestjs/common';
 import { BullModule } from '@nestjs/bullmq';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import Redis from 'ioredis';
+
+/**
+ * DI token for the shared ioredis client connected to the BullMQ Redis
+ * instance. Injecting this avoids opening a second connection for
+ * idempotency guards (e.g. SETNX email dedup key) that live in processors.
+ *
+ * Consumers inject `Redis` directly — the wrapper class is an implementation
+ * detail; the token still resolves to the underlying ioredis instance.
+ */
+export const REDIS_QUEUE_CLIENT = 'REDIS_QUEUE_CLIENT';
 
 interface RedisQueueEnv {
   REDIS_QUEUE_HOST: string;
   REDIS_QUEUE_PORT: number;
   REDIS_QUEUE_PREFIX: string;
+}
+
+/**
+ * Wraps the ioredis client used by processors for idempotency guards.
+ * Registered as the `REDIS_QUEUE_CLIENT` token so consumers see `Redis`
+ * directly; the wrapper exists solely to hook `OnModuleDestroy` and close
+ * the socket on SIGTERM / test teardown — preventing fd leaks on rolling
+ * deploys where the raw-factory pattern has no shutdown path.
+ */
+@Injectable()
+export class RedisQueueClientProvider implements OnModuleDestroy {
+  readonly client: Redis;
+
+  constructor(config: ConfigService<RedisQueueEnv, true>) {
+    this.client = new Redis({
+      host: config.get('REDIS_QUEUE_HOST', { infer: true }),
+      port: config.get('REDIS_QUEUE_PORT', { infer: true }),
+      maxRetriesPerRequest: null,
+      retryStrategy: (times: number): number | null =>
+        times >= 10 ? null : Math.min(times * 200, 3000),
+      // lazyConnect prevents opening a socket until the first command —
+      // importers that never call redis (e.g. health checks) pay no fd cost.
+      lazyConnect: true,
+    });
+  }
+
+  async onModuleDestroy(): Promise<void> {
+    await this.client.quit().catch(() => undefined);
+  }
 }
 
 @Module({
@@ -35,6 +75,14 @@ interface RedisQueueEnv {
       }),
     }),
   ],
-  exports: [BullModule],
+  providers: [
+    RedisQueueClientProvider,
+    {
+      provide: REDIS_QUEUE_CLIENT,
+      inject: [RedisQueueClientProvider],
+      useFactory: (wrapper: RedisQueueClientProvider): Redis => wrapper.client,
+    },
+  ],
+  exports: [BullModule, REDIS_QUEUE_CLIENT],
 })
 export class RedisQueueModule {}

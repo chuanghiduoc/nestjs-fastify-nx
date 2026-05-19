@@ -1,15 +1,15 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsEnum, IsOptional, IsString, MaxLength } from 'class-validator';
-import { PaginationDto } from '@nestjs-fastify-nx/contracts';
+import { CursorPaginationDto } from '@nestjs-fastify-nx/contracts';
 import { UserRole, UserStatus } from '../../domain/entities/user.entity';
 
-export class ListUsersFilterDto extends PaginationDto {
+export class ListUsersCursorFilterDto extends CursorPaginationDto {
   @ApiPropertyOptional({ enum: UserRole, description: 'Filter by role' })
   @IsOptional()
   @IsEnum(UserRole)
   role?: UserRole;
 
-  @ApiPropertyOptional({ enum: UserStatus, description: 'Filter by status' })
+  @ApiPropertyOptional({ enum: UserStatus, description: 'Filter by account status' })
   @IsOptional()
   @IsEnum(UserStatus)
   status?: UserStatus;

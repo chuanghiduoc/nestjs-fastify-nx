@@ -7,19 +7,19 @@ import {
   type AuthenticatedSession,
 } from '@nestjs-fastify-nx/infra-auth';
 import {
-  ListUsersHandler,
-  ListUsersQuery,
+  ListUsersCursorHandler,
+  ListUsersCursorQuery,
   GetUserProfileHandler,
   GetUserProfileQuery,
 } from '@nestjs-fastify-nx/modules-users';
 import { UserType } from '../types/user.type';
-import { UserPageType } from '../types/user-page.type';
-import { ListUsersArgs } from '../dto/list-users.args';
+import { UserCursorPageType } from '../types/user-cursor-page.type';
+import { ListUsersCursorArgs } from '../dto/list-users-cursor.args';
 
 @Resolver(() => UserType)
 export class UserResolver {
   constructor(
-    private readonly listUsersHandler: ListUsersHandler,
+    private readonly listUsersCursorHandler: ListUsersCursorHandler,
     private readonly getProfileHandler: GetUserProfileHandler,
   ) {}
 
@@ -37,12 +37,12 @@ export class UserResolver {
     }
   }
 
-  @Query(() => UserPageType, { name: 'users' })
+  @Query(() => UserCursorPageType, { name: 'users' })
   @UseGuards(BetterAuthGuard, RolesGuard)
   @Roles('ADMIN')
-  async users(@Args() args: ListUsersArgs): Promise<UserPageType> {
-    const result = await this.listUsersHandler.execute(
-      new ListUsersQuery(args.page, args.pageSize, args.role, args.status, args.search),
+  async users(@Args() args: ListUsersCursorArgs): Promise<UserCursorPageType> {
+    const result = await this.listUsersCursorHandler.execute(
+      new ListUsersCursorQuery(args.limit, args.startingAfter, args.role, args.status, args.search),
     );
     return {
       data: result.data.map((u) => ({
@@ -54,7 +54,8 @@ export class UserResolver {
         createdAt: u.createdAt,
         updatedAt: u.updatedAt,
       })),
-      meta: result.meta,
+      hasMore: result.hasMore,
+      lastCursor: result.lastCursor,
     };
   }
 }

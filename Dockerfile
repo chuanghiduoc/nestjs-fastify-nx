@@ -1,15 +1,13 @@
 # syntax=docker/dockerfile:1.7
 #
-# Unified workspace Dockerfile for api / worker / scheduler.
+# Unified workspace Dockerfile for api / worker / scheduler / migration.
 # A single `workspace` stage runs `pnpm install`, copies the source, and runs
 # `prisma generate` + `nx sync` once — every per-service builder branches off
-# that stage so BuildKit reuses the heavy layers across all three images.
-# Migration keeps its own Dockerfile (apps/migration/Dockerfile) because it
-# installs only `--prod` deps + prisma client, not the full workspace.
+# that stage so BuildKit reuses the heavy layers across all four images.
 #
 # Build targets:
-#   api-dev / worker-dev / scheduler-dev  → docker/compose.dev.yml
-#   api / worker / scheduler              → docker/compose.prod.yml
+#   api-dev / worker-dev / scheduler-dev       → docker/compose.dev.yml
+#   api / worker / scheduler / migration       → docker/compose.prod.yml
 #
 # Override at build time:
 #   docker buildx build --target api-dev -f Dockerfile .
@@ -89,23 +87,33 @@ FROM workspace AS api-builder
 ENV NODE_ENV=production
 RUN --mount=type=cache,id=webpack-cache-api,target=/app/.cache/webpack \
     --mount=type=cache,id=nx-cache,target=/app/.nx/cache \
-    pnpm nx build api --configuration=production
+    pnpm nx build api --configuration=production \
+    && node scripts/strip-generated-overrides.mjs dist/apps/api
 
 FROM workspace AS worker-builder
 ENV NODE_ENV=production
 RUN --mount=type=cache,id=webpack-cache-worker,target=/app/.cache/webpack \
     --mount=type=cache,id=nx-cache,target=/app/.nx/cache \
-    pnpm nx build worker --configuration=production
+    pnpm nx build worker --configuration=production \
+    && node scripts/strip-generated-overrides.mjs dist/apps/worker
 
 FROM workspace AS scheduler-builder
 ENV NODE_ENV=production
 RUN --mount=type=cache,id=webpack-cache-scheduler,target=/app/.cache/webpack \
     --mount=type=cache,id=nx-cache,target=/app/.nx/cache \
-    pnpm nx build scheduler --configuration=production
+    pnpm nx build scheduler --configuration=production \
+    && node scripts/strip-generated-overrides.mjs dist/apps/scheduler
+
+FROM workspace AS migration-builder
+ENV NODE_ENV=production
+RUN --mount=type=cache,id=webpack-cache-migration,target=/app/.cache/webpack \
+    --mount=type=cache,id=nx-cache,target=/app/.nx/cache \
+    pnpm nx build migration --configuration=production \
+    && node scripts/strip-generated-overrides.mjs dist/apps/migration
 
 # ---------------------------------------------------------------------------
-# Production deps stages — pruned, --prod only. Mirror the original per-app
-# Dockerfile behavior (api + scheduler ship prisma client, worker does not).
+# Production deps — pruned, --prod only. api + scheduler ship prisma client;
+# worker has no DB; migration ships prisma CLI but skips client generate.
 # ---------------------------------------------------------------------------
 FROM base AS api-deps
 ENV NODE_ENV=production
@@ -133,6 +141,18 @@ RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
     pnpm config set store-dir /pnpm/store \
     && pnpm install --prod --frozen-lockfile \
     && pnpm prisma generate \
+    && pnpm store prune
+
+FROM base AS migration-deps
+ENV NODE_ENV=production
+COPY --from=migration-builder /app/dist/apps/migration/package.json /app/dist/apps/migration/pnpm-lock.yaml ./
+COPY prisma ./prisma
+COPY prisma.config.ts ./prisma.config.ts
+# Migration runs `prisma migrate deploy` which uses the migration engine
+# directly — no `@prisma/client` generation needed.
+RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
+    pnpm config set store-dir /pnpm/store \
+    && pnpm install --prod --frozen-lockfile \
     && pnpm store prune
 
 # ===========================================================================
@@ -215,3 +235,30 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
 STOPSIGNAL SIGTERM
 ENTRYPOINT ["/sbin/tini", "--"]
 CMD ["node", "dist/main.js"]
+
+
+FROM node:${NODE_VERSION}@${NODE_DIGEST} AS migration
+ENV NODE_ENV=production
+RUN apk add --no-cache tini tzdata libc6-compat \
+    && rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx \
+    && addgroup --system --gid 1001 appgroup \
+    && adduser --system --uid 1001 --ingroup appgroup appuser
+WORKDIR /app
+COPY --from=migration-deps    --chown=appuser:appgroup /app/node_modules ./node_modules
+COPY --from=migration-builder --chown=appuser:appgroup /app/dist/apps/migration ./dist
+COPY --from=migration-builder --chown=appuser:appgroup /app/prisma ./prisma
+COPY --from=migration-builder --chown=appuser:appgroup /app/prisma.config.ts ./prisma.config.ts
+COPY --chown=appuser:appgroup package.json ./package.json
+USER appuser
+
+LABEL org.opencontainers.image.title="nestjs-fastify-nx-migration" \
+      org.opencontainers.image.description="One-shot Prisma migrate + optional admin seed." \
+      org.opencontainers.image.licenses="MIT" \
+      org.opencontainers.image.vendor="nestjs-fastify-nx"
+
+# Prisma migrate deploy needs a direct Postgres connection (DDL is session-
+# scoped). When a transaction-mode pooler fronts the DB, DATABASE_DIRECT_URL
+# bypasses it. Falls back to DATABASE_URL when no pooler is in use.
+STOPSIGNAL SIGTERM
+ENTRYPOINT ["/sbin/tini", "--"]
+CMD ["sh", "-c", "DATABASE_URL=\"${DATABASE_DIRECT_URL:-$DATABASE_URL}\" node dist/main.js"]

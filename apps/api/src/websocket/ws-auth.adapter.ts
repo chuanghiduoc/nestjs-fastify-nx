@@ -81,7 +81,12 @@ export function createWsAuthMiddleware(auth: BetterAuthInstance, options: WsAuth
 
       // Per-IP connection cap (best-effort; Redis errors fail open so an
       // outage doesn't take down realtime entirely).
-      const ip = socket.handshake.address;
+      // `socket.handshake.address` honours X-Forwarded-For when trustProxy is
+      // set — an attacker can spoof XFF to rotate fake IPs and bypass the
+      // per-IP cap. `socket.conn.remoteAddress` is the raw TCP peer and cannot
+      // be forged from application-layer headers, mirroring the pattern used in
+      // apps/api/src/common/metrics/metrics-ip-allow.guard.ts.
+      const ip = socket.conn.remoteAddress;
       if (redis && ip) {
         try {
           const key = `${WS_CONN_KEY_PREFIX}${ip}`;

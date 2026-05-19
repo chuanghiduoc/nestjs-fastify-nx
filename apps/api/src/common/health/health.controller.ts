@@ -4,9 +4,11 @@ import { SkipThrottle } from '@nestjs/throttler';
 import { ApiOkResponse, ApiOperation, ApiProperty, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { ApiCommonErrors } from '@nestjs-fastify-nx/contracts';
 import { Public } from '@nestjs-fastify-nx/infra-auth';
+import { PrismaReplicationLagHealthIndicator } from '@nestjs-fastify-nx/infra-database';
 import { PrismaHealthIndicator } from './prisma-health.indicator';
 import { RedisCacheHealthIndicator, RedisQueueHealthIndicator } from './redis.health';
 import { BullMqHealthIndicator } from './bullmq-health.indicator';
+import { PgBouncerHealthIndicator } from './pgbouncer-health.indicator';
 
 // V8 heap is a fraction of container memory (default ~80% on cgroups v2).
 // Threshold at 80% of total container memory keeps headroom for GC pauses
@@ -94,6 +96,8 @@ export class HealthController {
     private readonly redisCache: RedisCacheHealthIndicator,
     private readonly redisQueue: RedisQueueHealthIndicator,
     private readonly bullmq: BullMqHealthIndicator,
+    private readonly pgbouncer: PgBouncerHealthIndicator,
+    private readonly replicationLag: PrismaReplicationLagHealthIndicator,
   ) {}
 
   @Get()
@@ -146,6 +150,14 @@ export class HealthController {
       () => this.redisCache.isHealthy('redis_cache'),
       () => this.redisQueue.isHealthy('redis_queue'),
       () => this.bullmq.isHealthy('bullmq'),
+      // No-ops when DATABASE_DIRECT_URL is unset (boilerplate default).
+      // Flips to 503 when a configured pooler becomes unreachable so the
+      // load balancer drains the replica before connections pile up.
+      () => this.pgbouncer.isHealthy('pgbouncer'),
+      // No-op when DATABASE_REPLICA_URL is unset. Flips to 503 when replica
+      // lag exceeds 30 s or the replica is unreachable, signalling the operator
+      // before stale reads surface as application errors.
+      () => this.replicationLag.isHealthy('replication_lag'),
     ]);
   }
 

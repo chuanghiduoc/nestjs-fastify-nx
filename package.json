@@ -140,7 +140,7 @@
       "yaml": ">=2.8.3",
       "follow-redirects": ">=1.16.0",
       "picomatch": ">=4.0.4",
-      "uuid": ">=11.1.0",
+      "uuid": "^14.0.0",
       "fast-uri": ">=3.1.2",
       "fast-xml-builder": ">=1.2.0",
       "hono": ">=4.12.18",
@@ -148,7 +148,8 @@
       "axios": ">=1.16.0",
       "kysely": ">=0.28.17",
       "protobufjs": ">=8.0.2",
-      "webpack-dev-server": ">=5.2.4"
+      "webpack-dev-server": ">=5.2.4",
+      "ws": ">=8.20.1"
     },
     "onlyBuiltDependencies": [
       "@prisma/engines",

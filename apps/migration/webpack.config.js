@@ -19,6 +19,9 @@ module.exports = {
       optimization: false,
       outputHashing: 'none',
       generatePackageJson: true,
+      // `execSync('prisma migrate deploy')` is invisible to webpack's static
+      // analysis; declare prisma explicitly so the pruned package.json lists it.
+      runtimeDependencies: ['prisma'],
       sourceMap: true,
     }),
   ],
