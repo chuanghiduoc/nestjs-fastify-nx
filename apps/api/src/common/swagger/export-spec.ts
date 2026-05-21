@@ -4,7 +4,6 @@ function setIfMissing(key: string, value: string): void {
   if (!process.env[key]) process.env[key] = value;
 }
 
-// Stub env before AppModule import — config validators read process.env at module load.
 setIfMissing('NODE_ENV', 'development');
 setIfMissing('DATABASE_URL', 'postgresql://codegen:codegen@localhost:5432/codegen');
 setIfMissing('BETTER_AUTH_SECRET', 'codegen-placeholder-secret-min-32-characters-ok');

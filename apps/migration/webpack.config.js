@@ -19,6 +19,8 @@ module.exports = {
       optimization: false,
       outputHashing: 'none',
       generatePackageJson: true,
+      // prisma is invoked via execSync — webpack's static analysis can't see it.
+      runtimeDependencies: ['prisma'],
       sourceMap: true,
     }),
   ],

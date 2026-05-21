@@ -1,0 +1,112 @@
+# PgBouncer HA overlay — 2× pgbouncer + HAProxy
+#
+# Layers on TOP of examples/pgbouncer/compose.pgbouncer.yml.
+# Disables the single pgbouncer instance and replaces it with two identical
+# instances behind an HAProxy TCP load-balancer, eliminating the pooler as a SPOF.
+#
+# Usage:
+#   docker compose --env-file .env \
+#     -f docker/compose.yml \
+#     -f docker/compose.dev.yml \
+#     -f examples/pgbouncer/compose.pgbouncer.yml \
+#     -f examples/pgbouncer-ha/compose.pgbouncer-ha.yml \
+#     up -d
+#
+# IMPORTANT: app services must connect to haproxy:6432, NOT pgbouncer:6432.
+#   DATABASE_URL=postgresql://user:pass@haproxy:6432/nestjs_db
+#
+# See examples/pgbouncer-ha/README.md for the full walkthrough.
+
+services:
+  # Signal that the single pgbouncer from compose.pgbouncer.yml is superseded.
+  # deploy.replicas=0 is a Swarm directive; in plain `docker compose` (non-swarm)
+  # the container still starts but receives no traffic because api and scheduler
+  # now connect to haproxy:6432 instead of pgbouncer:6432. The service is kept
+  # to satisfy depends_on references already wired by the base P3 overlay.
+  pgbouncer:
+    deploy:
+      replicas: 0
+
+  pgbouncer-1: &pgbouncer
+    image: edoburu/pgbouncer:1.23.1
+    restart: unless-stopped
+    hostname: pgbouncer-1
+    environment:
+      # edoburu/pgbouncer generates a SCRAM-SHA-256 hashed userlist.txt at startup
+      # from these env vars — the plaintext password is unset after hashing.
+      # NEVER use these defaults in production; use DB_PASSWORD_FILE + docker secrets.
+      DB_USER: ${POSTGRES_USER:-postgres}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${POSTGRES_DB:-nestjs_db}
+      AUTH_TYPE: scram-sha-256
+      POOL_MODE: transaction
+      DEFAULT_POOL_SIZE: ${PGBOUNCER_POOL_SIZE:-30}
+      RESERVE_POOL_SIZE: 5
+      RESERVE_POOL_TIMEOUT: 3
+      MAX_CLIENT_CONN: ${PGBOUNCER_MAX_CLIENT_CONN:-500}
+      MAX_PREPARED_STATEMENTS: 200
+      IDLE_TRANSACTION_TIMEOUT: 30
+      SERVER_IDLE_TIMEOUT: 600
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      # pg_isready talks to the pgbouncer listen port — confirms the pooler
+      # accepted a connection without routing it to Postgres.
+      test: ['CMD-SHELL', 'pg_isready -h 127.0.0.1 -p 6432']
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+  pgbouncer-2:
+    <<: *pgbouncer
+    hostname: pgbouncer-2
+
+  haproxy:
+    image: haproxy:2.9-alpine
+    restart: unless-stopped
+    # ${PWD} resolves at compose invocation time to wherever the operator runs the
+    # command from. Compose resolves ./ against the first -f file's directory
+    # (docker/), not this overlay's directory, so a relative path would look for
+    # docker/haproxy.cfg which does not exist. Run all compose commands from the
+    # repository root so ${PWD} == <repo-root>.
+    volumes:
+      - ${PWD}/examples/pgbouncer-ha/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    ports:
+      - '6432:6432'
+    depends_on:
+      pgbouncer-1:
+        condition: service_healthy
+      pgbouncer-2:
+        condition: service_healthy
+    healthcheck:
+      # Validates haproxy.cfg is syntactically correct — does not test backend connectivity.
+      test: ['CMD', 'haproxy', '-c', '-f', '/usr/local/etc/haproxy/haproxy.cfg']
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  # Override api and scheduler to connect through haproxy instead of the
+  # single pgbouncer that the base P3 overlay wired up.
+  api:
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@haproxy:6432/${POSTGRES_DB:-nestjs_db}
+      DATABASE_DIRECT_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-nestjs_db}
+    depends_on:
+      pgbouncer:
+        condition: service_started
+      haproxy:
+        condition: service_healthy
+
+  scheduler:
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@haproxy:6432/${POSTGRES_DB:-nestjs_db}
+      DATABASE_DIRECT_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-nestjs_db}
+    depends_on:
+      pgbouncer:
+        condition: service_started
+      haproxy:
+        condition: service_healthy

@@ -4,14 +4,13 @@ import { SkipThrottle } from '@nestjs/throttler';
 import { ApiOkResponse, ApiOperation, ApiProperty, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { ApiCommonErrors } from '@nestjs-fastify-nx/contracts';
 import { Public } from '@nestjs-fastify-nx/infra-auth';
+import { PrismaReplicationLagHealthIndicator } from '@nestjs-fastify-nx/infra-database';
 import { PrismaHealthIndicator } from './prisma-health.indicator';
 import { RedisCacheHealthIndicator, RedisQueueHealthIndicator } from './redis.health';
 import { BullMqHealthIndicator } from './bullmq-health.indicator';
+import { PgBouncerHealthIndicator } from './pgbouncer-health.indicator';
 
-// V8 heap is a fraction of container memory (default ~80% on cgroups v2).
-// Threshold at 80% of total container memory keeps headroom for GC pauses
-// without false-positive restarts under steady-state load. Falls back to 1 GiB
-// when the cgroup limit cannot be detected (older kernels / non-Linux dev).
+// 80% of cgroup limit — headroom for GC pauses; falls back to 1 GiB when cgroup is undetectable.
 function resolveHeapThreshold(): number {
   const max = (
     process as NodeJS.Process & { constrainedMemory?: () => number }
@@ -24,8 +23,7 @@ function resolveHeapThreshold(): number {
 
 const HEAP_THRESHOLD_BYTES = resolveHeapThreshold();
 
-// @nestjs/swagger 11.4.3+ blocks deep imports via the `exports` field and does not publicly
-// re-export SchemaObject. Redeclare the minimal shape we need so dep bumps don't break us.
+// @nestjs/swagger 11.4.3+ stopped re-exporting SchemaObject — redeclare minimal shape to stay bump-safe.
 type IndicatorSchema = {
   type: 'object';
   required: string[];
@@ -48,7 +46,7 @@ class HealthCheckResultDto {
 
   @ApiProperty({
     description:
-      'Per-indicator status. Keys: `database`, `memory_heap`, `redis_cache`, `redis_queue`.',
+      'Per-indicator status. Keys depend on the endpoint — `/health` reports `database`, `memory_heap`, `redis_cache`, `redis_queue`; `/health/ready` adds `bullmq`, `pgbouncer`, `replication_lag`.',
     type: 'object',
     additionalProperties: INDICATOR_STATUS_SCHEMA,
     example: { database: { status: 'up' }, memory_heap: { status: 'up' } },
@@ -94,6 +92,8 @@ export class HealthController {
     private readonly redisCache: RedisCacheHealthIndicator,
     private readonly redisQueue: RedisQueueHealthIndicator,
     private readonly bullmq: BullMqHealthIndicator,
+    private readonly pgbouncer: PgBouncerHealthIndicator,
+    private readonly replicationLag: PrismaReplicationLagHealthIndicator,
   ) {}
 
   @Get()
@@ -146,6 +146,10 @@ export class HealthController {
       () => this.redisCache.isHealthy('redis_cache'),
       () => this.redisQueue.isHealthy('redis_queue'),
       () => this.bullmq.isHealthy('bullmq'),
+      // no-op when DATABASE_DIRECT_URL unset
+      () => this.pgbouncer.isHealthy('pgbouncer'),
+      // no-op when DATABASE_REPLICA_URL unset
+      () => this.replicationLag.isHealthy('replication_lag'),
     ]);
   }
 

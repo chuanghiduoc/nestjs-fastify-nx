@@ -84,11 +84,11 @@ describe('Users E2E', () => {
       expect(res.body.code).toBe('forbidden');
     });
 
-    it('returns 200 + Stripe-style flat envelope when caller has ADMIN role', async () => {
+    it('returns 200 + Stripe-style cursor envelope when caller has ADMIN role', async () => {
       const adminCookie = await promoteAndReSignIn();
 
       const res = await request(ctx.app.getHttpServer())
-        .get('/api/v1/admin/users?page=1&pageSize=5')
+        .get('/api/v1/admin/users?limit=5')
         .set('Cookie', adminCookie)
         .expect(200);
 
@@ -96,17 +96,26 @@ describe('Users E2E', () => {
       expect(res.body.url).toBe('/api/v1/admin/users');
       expect(Array.isArray(res.body.data)).toBe(true);
       expect(res.body.data.length).toBeGreaterThan(0);
-      expect(res.body.page).toBe(1);
-      expect(res.body.pageSize).toBe(5);
-      expect(typeof res.body.totalCount).toBe('number');
       expect(typeof res.body.hasMore).toBe('boolean');
+      // Cursor envelope MUST carry an opaque continuation token (or null when empty)
+      // so clients can fetch the next page by passing it back as `startingAfter`.
+      expect(res.body).toHaveProperty('lastCursor');
+      expect(typeof res.body.lastCursor === 'string' || res.body.lastCursor === null).toBe(true);
+      if (typeof res.body.lastCursor === 'string') {
+        // Cursor is base64url(`${createdAt.toISOString()}:${id}`) — sanity-check the alphabet.
+        expect(res.body.lastCursor).toMatch(/^[A-Za-z0-9_-]+$/);
+      }
+      // Cursor envelope must NOT include offset fields
+      expect(res.body).not.toHaveProperty('page');
+      expect(res.body).not.toHaveProperty('pageSize');
+      expect(res.body).not.toHaveProperty('totalCount');
     });
 
-    it('rejects pageSize > 100 with 422 validation_failed (admin caller)', async () => {
+    it('rejects limit > 100 with 422 validation_failed (admin caller)', async () => {
       const adminCookie = await promoteAndReSignIn();
 
       const res = await request(ctx.app.getHttpServer())
-        .get('/api/v1/admin/users?page=1&pageSize=9999')
+        .get('/api/v1/admin/users?limit=9999')
         .set('Cookie', adminCookie)
         .expect(422);
 

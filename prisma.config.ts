@@ -8,6 +8,12 @@ export default defineConfig({
     path: 'prisma/migrations',
   },
   datasource: {
-    url: process.env['DATABASE_URL'] ?? '',
+    // Prefer DATABASE_DIRECT_URL when set to a non-empty value — migrations
+    // need a direct Postgres connection (DDL is session-scoped, breaks under
+    // transaction-mode poolers). Falls back to DATABASE_URL otherwise.
+    // `||` is intentional: ?? would let an empty `DATABASE_DIRECT_URL=` in
+    // .env short-circuit before the fallback.
+    // Do NOT add `directUrl` to schema.prisma — Prisma 7 deprecated it.
+    url: process.env['DATABASE_DIRECT_URL'] || process.env['DATABASE_URL'] || '',
   },
 });

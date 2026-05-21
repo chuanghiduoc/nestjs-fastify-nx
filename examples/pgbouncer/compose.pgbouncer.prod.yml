@@ -1,0 +1,94 @@
+# PgBouncer opt-in overlay — production (Docker secrets pattern)
+#
+# Usage:
+#   docker compose --env-file .env \
+#     -f docker/compose.yml \
+#     -f docker/compose.prod.yml \
+#     -f examples/pgbouncer/compose.pgbouncer.prod.yml \
+#     up -d
+#
+# Prerequisites:
+#   1. Create the secret before deploying:
+#        echo "your-strong-password" | docker secret create postgres_password -
+#   2. Set POSTGRES_USER, POSTGRES_DB, PGBOUNCER_POOL_SIZE, PGBOUNCER_MAX_CLIENT_CONN
+#      in your production .env (or swarm config). Do NOT set POSTGRES_PASSWORD in .env.
+#
+# Docker Swarm: add `deploy.replicas`, `deploy.update_config`, and `deploy.resources`
+# blocks as appropriate for your production sizing.
+#
+# Kubernetes: translate to a Deployment + a Secret mounted as a volume. Set
+#   DB_PASSWORD_FILE=/run/secrets/postgres_password in the container env.
+
+secrets:
+  postgres_password:
+    external: true
+
+services:
+  pgbouncer:
+    image: edoburu/pgbouncer:1.23.1
+    restart: unless-stopped
+    secrets:
+      - postgres_password
+    environment:
+      DB_USER: ${POSTGRES_USER:-postgres}
+      # edoburu/pgbouncer reads DB_PASSWORD_FILE and hashes it to SCRAM-SHA-256 at
+      # startup — the plaintext secret is never written to disk or visible via
+      # `docker inspect`. Use DB_PASSWORD_FILE, never DB_PASSWORD, in production.
+      DB_PASSWORD_FILE: /run/secrets/postgres_password
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${POSTGRES_DB:-nestjs_db}
+      AUTH_TYPE: scram-sha-256
+      POOL_MODE: transaction
+      DEFAULT_POOL_SIZE: ${PGBOUNCER_POOL_SIZE:-30}
+      RESERVE_POOL_SIZE: 5
+      RESERVE_POOL_TIMEOUT: 3
+      MAX_CLIENT_CONN: ${PGBOUNCER_MAX_CLIENT_CONN:-500}
+      MAX_PREPARED_STATEMENTS: 200
+      IDLE_TRANSACTION_TIMEOUT: 30
+      SERVER_IDLE_TIMEOUT: 600
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -h 127.0.0.1 -p 6432']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  migration:
+    secrets:
+      - postgres_password
+    environment:
+      # Migration bypasses pgbouncer — DDL requires a session-mode direct connection.
+      # The connection string is published without a password segment; the bootstrap
+      # in apps/migration/src/main.ts reads DB_PASSWORD_FILE and rewrites it into
+      # the URL before invoking `prisma migrate deploy`.
+      DATABASE_DIRECT_URL: postgresql://${POSTGRES_USER:-postgres}@postgres:5432/${POSTGRES_DB:-nestjs_db}
+      DB_PASSWORD_FILE: /run/secrets/postgres_password
+
+  api:
+    secrets:
+      - postgres_password
+    environment:
+      # App traffic routes through pgbouncer. URLs are published without a
+      # password segment; PrismaService reads DB_PASSWORD_FILE at boot and
+      # rewrites both DATABASE_URL and DATABASE_DIRECT_URL via the same path.
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}@pgbouncer:6432/${POSTGRES_DB:-nestjs_db}
+      DATABASE_DIRECT_URL: postgresql://${POSTGRES_USER:-postgres}@postgres:5432/${POSTGRES_DB:-nestjs_db}
+      DB_PASSWORD_FILE: /run/secrets/postgres_password
+    depends_on:
+      pgbouncer:
+        condition: service_healthy
+
+  scheduler:
+    secrets:
+      - postgres_password
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}@pgbouncer:6432/${POSTGRES_DB:-nestjs_db}
+      DATABASE_DIRECT_URL: postgresql://${POSTGRES_USER:-postgres}@postgres:5432/${POSTGRES_DB:-nestjs_db}
+      DB_PASSWORD_FILE: /run/secrets/postgres_password
+    depends_on:
+      pgbouncer:
+        condition: service_healthy

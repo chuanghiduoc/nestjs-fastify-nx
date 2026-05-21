@@ -6,14 +6,8 @@ import { MetricsService } from './metrics.service';
 const ROUTE_UNKNOWN = 'unmatched';
 const REQUEST_START_KEY = '__metricsStartedAt';
 
-/**
- * Records HTTP request metrics via Fastify's `onResponse` hook. We deliberately
- * use a Fastify hook instead of a NestInterceptor so that the recorded status
- * code reflects the **final** response — including codes set by global
- * exception filters. We capture the matched route template
- * (`request.routeOptions.url`) instead of the raw URL to keep label cardinality
- * bounded.
- */
+// Uses Fastify onResponse (not NestInterceptor) so the recorded status reflects
+// exception-filter rewrites. Route template keeps label cardinality bounded.
 @Injectable()
 export class HttpMetricsHook implements OnApplicationBootstrap {
   private readonly logger = new Logger(HttpMetricsHook.name);

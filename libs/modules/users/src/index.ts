@@ -5,17 +5,16 @@ export { UsersListenersModule } from './users-listeners.module';
 export { UserRole, UserStatus } from './domain/entities/user.entity';
 
 // Query handlers + queries exposed for DI injection in cross-cutting resolvers.
-// Removing these would require refactoring user.resolver.ts + admin controller
-// (> 5 production files) — deferred to Phase 4/5.
 export { GetUserProfileHandler } from './application/queries/get-user-profile/get-user-profile.handler';
 export { GetUserProfileQuery } from './application/queries/get-user-profile/get-user-profile.query';
 export type { UserProfileResult } from './application/queries/get-user-profile/get-user-profile.handler';
-export { ListUsersHandler } from './application/queries/list-users/list-users.handler';
-export { ListUsersQuery } from './application/queries/list-users/list-users.query';
+export { ListUsersCursorHandler } from './application/queries/list-users-cursor/list-users-cursor.handler';
+export type { ListUsersCursorResult } from './application/queries/list-users-cursor/list-users-cursor.handler';
+export { ListUsersCursorQuery } from './application/queries/list-users-cursor/list-users-cursor.query';
 export type { UserListItemDto } from './application/dtos/user-list-item.dto';
 
 // Public presentation types
-export { ListUsersFilterDto } from './presentation/dto/list-users-filter.dto';
+export { ListUsersCursorFilterDto } from './presentation/dto/list-users-cursor-filter.dto';
 export {
   UserListItemResponseDto,
   UserProfileResponseDto,

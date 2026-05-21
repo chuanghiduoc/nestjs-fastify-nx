@@ -33,22 +33,7 @@ export interface CommonErrorsOptions {
   payloadTooLarge?: boolean;
 }
 
-/**
- * Documents the canonical error responses for an endpoint as
- * `application/problem+json` Problem Details. Apply at controller-method level
- * (or controller-class level for blanket coverage) so Swagger / generated
- * clients know every shape the endpoint can return.
- *
- * Defaults assume an authenticated, validation-protected endpoint — adjust via
- * options. Always-present codes: 429 (rate limit), 500 (internal server error).
- *
- * @example
- * ```ts
- * @Post('orders')
- * @ApiCommonErrors({ auth: true, validation: true, conflict: true })
- * createOrder(@Body() dto: CreateOrderDto) { ... }
- * ```
- */
+// Documents Problem Details error responses (always 400, 429, 500 plus selected optional codes).
 export const ApiCommonErrors = (options: CommonErrorsOptions = {}) => {
   const auth = options.auth ?? true;
   const forbidden = options.forbidden ?? auth;

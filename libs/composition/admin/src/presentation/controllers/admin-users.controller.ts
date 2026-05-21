@@ -4,13 +4,13 @@ import {
   ApiCommonErrors,
   ApiPaginatedResponse,
   ListResponseDto,
-  toListResponse,
+  toCursorListResponse,
 } from '@nestjs-fastify-nx/contracts';
 import { BetterAuthGuard, Roles, RolesGuard } from '@nestjs-fastify-nx/infra-auth';
 import {
-  ListUsersFilterDto,
-  ListUsersHandler,
-  ListUsersQuery,
+  ListUsersCursorFilterDto,
+  ListUsersCursorHandler,
+  ListUsersCursorQuery,
   UserListItemResponseDto,
   type UserListItemDto,
 } from '@nestjs-fastify-nx/modules-users';
@@ -23,28 +23,33 @@ const ADMIN_USERS_PATH = '/api/v1/admin/users';
 @Roles('ADMIN')
 @ApiCookieAuth('session')
 export class AdminUsersController {
-  constructor(private readonly listUsersHandler: ListUsersHandler) {}
+  constructor(private readonly listUsersCursorHandler: ListUsersCursorHandler) {}
 
   @Get()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'List users (admin)',
     description:
-      'Returns a Stripe-style list envelope with offset pagination. Filterable by `role`, `status`, and `search` (case-insensitive across `email` and `name`). Requires the `ADMIN` role.',
+      'Returns a Stripe-style cursor-paginated list envelope. Pass `startingAfter` from the previous response to fetch the next page. Filterable by `role`, `status`, and `search` (case-insensitive across `email` and `name`). Requires the `ADMIN` role.',
   })
   @ApiCommonErrors({ auth: true, forbidden: true, validation: true })
-  @ApiPaginatedResponse(UserListItemResponseDto, { description: 'Paginated list of users.' })
-  async list(@Query() filter: ListUsersFilterDto): Promise<ListResponseDto<UserListItemDto>> {
-    const page = await this.listUsersHandler.execute(
-      new ListUsersQuery(filter.page, filter.pageSize, filter.role, filter.status, filter.search),
+  @ApiPaginatedResponse(UserListItemResponseDto, { description: 'Cursor-paginated list of users.' })
+  async list(@Query() filter: ListUsersCursorFilterDto): Promise<ListResponseDto<UserListItemDto>> {
+    const result = await this.listUsersCursorHandler.execute(
+      new ListUsersCursorQuery(
+        filter.limit,
+        filter.startingAfter,
+        filter.role,
+        filter.status,
+        filter.search,
+      ),
     );
 
-    return toListResponse({
+    return toCursorListResponse({
       url: ADMIN_USERS_PATH,
-      items: page.data,
-      page: page.meta.page,
-      pageSize: page.meta.pageSize,
-      total: page.meta.total,
+      items: result.data,
+      hasMore: result.hasMore,
+      lastCursor: result.lastCursor,
     });
   }
 }

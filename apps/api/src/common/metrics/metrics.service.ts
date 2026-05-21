@@ -1,15 +1,10 @@
 import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
-import { Counter, Histogram, Registry, collectDefaultMetrics } from 'prom-client';
+import { Counter, Gauge, Histogram, Registry, collectDefaultMetrics } from 'prom-client';
 
-/**
- * Buckets in seconds — sized for HTTP API latencies. Anything slower than 5s
- * lands in the +Inf bucket and triggers latency SLO alerts.
- */
+// Sized for HTTP API latencies; >5s lands in +Inf and triggers latency SLO alerts.
 const HTTP_DURATION_BUCKETS = [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5];
 
-/**
- * Buckets in seconds — sized for BullMQ jobs (typically 50ms..30s).
- */
+// Sized for BullMQ jobs (typically 50ms–30s).
 const JOB_DURATION_BUCKETS = [0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30];
 
 @Injectable()
@@ -43,6 +38,19 @@ export class MetricsService implements OnModuleInit, OnModuleDestroy {
     help: 'BullMQ job processing duration in seconds (active → completed/failed)',
     labelNames: ['queue', 'status'] as const,
     buckets: JOB_DURATION_BUCKETS,
+    registers: [this.registry],
+  });
+
+  readonly bullmqQueueDepth = new Gauge({
+    name: 'bullmq_queue_depth',
+    help: 'Number of jobs per queue per state',
+    labelNames: ['queue', 'state'] as const,
+    registers: [this.registry],
+  });
+
+  readonly outboxLagSeconds = new Gauge({
+    name: 'outbox_lag_seconds',
+    help: 'Age of the oldest unprocessed outbox event in seconds',
     registers: [this.registry],
   });
 

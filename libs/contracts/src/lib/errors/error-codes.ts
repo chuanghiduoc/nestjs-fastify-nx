@@ -1,6 +1,4 @@
-// Stable error codes for the Problem Details `code` field. Frontend uses
-// these as i18n keys and for switch-case logic — DO NOT rename existing
-// entries without a coordinated release; only add new ones.
+// DO NOT rename — frontend uses these as stable i18n keys.
 export const ERROR_CODES = {
   BAD_REQUEST: 'bad_request',
   UNAUTHORIZED: 'unauthorized',
@@ -22,12 +20,7 @@ export const ERROR_CODES = {
 
 export type ErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES];
 
-// RFC 9457 §3.1: the `type` field MAY be a relative URI. We default to the
-// relative path `/errors/<slug>` so responses never leak a placeholder domain
-// (the previous default was `api.example.com` which is not a real host).
-// Operators who publish error docs externally can set `ERROR_DOCS_BASE_URL`
-// to an absolute URL like `https://docs.example.com/errors` to get absolute
-// `type` URIs back. Read at call time so hot-reloaded env in dev applies.
+// RFC 9457 §3.1 type URI. Set ERROR_DOCS_BASE_URL for absolute URIs.
 export function errorTypeUrl(code: string): string {
   const base = process.env['ERROR_DOCS_BASE_URL']?.trim() || '/errors';
   return `${base.replace(/\/+$/, '')}/${code.replace(/_/g, '-')}`;

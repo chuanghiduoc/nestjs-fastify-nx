@@ -34,8 +34,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
   private readonly logger = new Logger(GlobalExceptionFilter.name);
 
   catch(exception: unknown, host: ArgumentsHost): void {
-    // GraphQL responses are formatted by Mercurius — we only log/report and
-    // re-throw so the error surfaces in the standard GraphQL error envelope.
+    // Mercurius owns GraphQL error formatting — re-throw into the GraphQL envelope.
     if (host.getType<GqlContextType>() === 'graphql') {
       const status =
         exception instanceof HttpException
@@ -133,7 +132,6 @@ function normalizeException(exception: unknown): NormalizedError {
   const title = typeof body.title === 'string' ? body.title : defaultTitle;
   const code = typeof body.code === 'string' ? body.code : defaultCode;
 
-  // Validation pipe surfaces { errors: ValidationErrorItemDto[] } — pass through.
   if (Array.isArray(body.errors) && body.errors.length > 0) {
     return {
       status,
@@ -144,9 +142,6 @@ function normalizeException(exception: unknown): NormalizedError {
     };
   }
 
-  // Built-in exceptions (NotFound, BadRequest, …) return { message, error, statusCode }.
-  // class-validator default returns { message: string[] } — flatten to plain detail; the
-  // custom validation pipe should be used for structured output.
   const detail = Array.isArray(body.message)
     ? body.message.join('; ')
     : typeof body.message === 'string'

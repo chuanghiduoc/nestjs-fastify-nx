@@ -1,7 +1,7 @@
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Inject, Logger } from '@nestjs/common';
 import type { Job } from 'bullmq';
-import { QUEUE_NAMES, detectFileType } from '@nestjs-fastify-nx/shared';
+import { QUEUE_NAMES, detectFileType, positiveIntEnv } from '@nestjs-fastify-nx/shared';
 import { STORAGE_PORT, type StoragePort } from '@nestjs-fastify-nx/infra-storage';
 
 export interface UploadVerificationPayload {
@@ -10,12 +10,10 @@ export interface UploadVerificationPayload {
   bucket: string;
 }
 
-// 16 bytes is enough for every signature in libs/shared/src/lib/file-signature.ts
-// (longest is PNG at 8 bytes). Reading less than the full object keeps S3
-// egress flat regardless of upload size.
-const MAGIC_BYTES_TO_READ = 16;
+const MAGIC_BYTES_TO_READ = 16; // covers all signatures in file-signature.ts
+const UPLOAD_CONCURRENCY = positiveIntEnv('WORKER_UPLOAD_CONCURRENCY', 5);
 
-@Processor(QUEUE_NAMES.UPLOAD_VERIFICATION, { concurrency: 5 })
+@Processor(QUEUE_NAMES.UPLOAD_VERIFICATION, { concurrency: UPLOAD_CONCURRENCY })
 export class UploadVerificationProcessor extends WorkerHost {
   private readonly logger = new Logger(UploadVerificationProcessor.name);
 

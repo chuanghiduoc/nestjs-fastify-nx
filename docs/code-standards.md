@@ -166,6 +166,38 @@ if (error.code === 'P2002') {
 
 Never reference task IDs, callers, or "added for X" — those belong in PR descriptions.
 
+## Email Job Idempotency
+
+`EmailNotificationProcessor` uses a Redis SETNX guard keyed on `job.id` with a 24 h TTL. Any BullMQ job that fires twice within that window (stalled-recovery, manual re-queue) sends the email exactly once.
+
+**Consequence for jobId design:** every email job whose `jobId` is reused within 24 h will be silently deduplicated. This is correct for stalled-recovery (same logical send), but wrong if the intent is a genuine re-send triggered by the user.
+
+Rules for producers that call `queue.add('email-notification', payload, { jobId: '...' })`:
+
+- **Single-fire flows** (welcome email, password-reset, verification): use `${purpose}__${event.eventId}` — the outbox eventId is unique per event, so no dedup window applies across separate sends.
+- **Resendable flows** (manual "resend verification", ops retrigger): include a timestamp or nonce — e.g. `${templateId}__${to}__${Date.now()}` — so each user-initiated resend produces a distinct jobId and bypasses the SETNX guard.
+- **Anti-pattern** (will silently drop resends within 24 h): `${userId}__${type}` with no timestamp. If a user requests two verification emails within 24 h only the first will be delivered.
+
+## Read Replica Routing
+
+`PrismaService` exposes two clients: `db` (primary write) and `dbRead` (replica
+or alias to `db` when `DATABASE_REPLICA_URL` is unset).
+
+**Rules:**
+
+- `findMany` / `count` / `aggregate` for list endpoints **MUST** use
+  `prisma.dbRead`. These reads tolerate the typical 10–50 ms replication lag.
+- Single-row PK/UK lookups (`findUnique`/`findFirst` by id or natural key)
+  **MUST** use `prisma.db`. A request that writes then reads the same row on
+  the same handler (post-signup → `/users/me`) is the rule, not the exception
+  — replica lag would surface as 404. Point-lookup cost on primary is
+  negligible.
+- `exists`-style pre-checks before a write may use `prisma.dbRead`: a
+  false-negative on lag is safe because the unique constraint enforces
+  correctness at write time.
+- Better Auth, outbox relay, and interactive transactions are permanently
+  bound to `prisma.db` — do not change these call sites.
+
 ## Production Quality
 
 - No half-finished code on main

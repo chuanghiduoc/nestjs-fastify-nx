@@ -4,6 +4,13 @@ const envSchema = z
   .object({
     // Database
     DATABASE_URL: z.string().trim().min(1),
+    // Prisma CLI uses this to bypass transaction-mode poolers (pgbouncer, RDS Proxy) for migrations.
+    DATABASE_DIRECT_URL: z.string().trim().min(1).optional(),
+    // Physical replica for read-only queries. When unset, dbRead aliases to db.
+    DATABASE_REPLICA_URL: z.string().trim().min(1).optional(),
+    DATABASE_REPLICA_POOL_MAX: z.coerce.number().int().min(1).max(1000).default(10),
+    // Flips /health/ready to 503 when exceeded. 30s suits most streaming replication topologies.
+    DB_REPLICATION_LAG_THRESHOLD_MS: z.coerce.number().int().min(1_000).default(30_000),
     DATABASE_POOL_MAX: z.coerce.number().int().min(1).max(1000).default(20),
     DATABASE_POOL_MIN: z.coerce.number().int().min(0).max(1000).default(0),
     DATABASE_IDLE_TIMEOUT_MS: z.coerce.number().int().min(0).default(10_000),
@@ -20,18 +27,13 @@ const envSchema = z
     REDIS_QUEUE_HOST: z.string().default('localhost'),
     REDIS_QUEUE_PORT: z.coerce.number().int().min(1).max(65535).default(6380),
     REDIS_QUEUE_PREFIX: z.string().default('bull'),
-    // Logical DB used by Socket.io Redis adapter (pub/sub channels). Keep separate
-    // from cache (db 0) and BullMQ to avoid keyspace-event noise in pub/sub.
+    // Separate from cache (db=0) and BullMQ to avoid keyspace-event noise in pub/sub.
     REDIS_PUBSUB_DB: z.coerce.number().int().min(0).max(15).default(2),
 
-    // Better Auth — session secret (Better Auth generates one internally if not set;
-    // a stable secret is required in production for cross-restart session validity).
+    // Without a stable secret, sessions reset on every restart.
     BETTER_AUTH_SECRET: z.string().trim().min(32).optional(),
     BETTER_AUTH_URL: z.string().url().optional(),
-    // Public URL of the frontend SPA that owns the password-reset, verify-email,
-    // and account-deletion confirmation pages. Better Auth embeds this as the
-    // base of the tokenized link sent by email. Defaults to BETTER_AUTH_URL so
-    // dev works out of the box without configuring a separate SPA host.
+    // SPA host that owns /reset, /verify-email, /delete-account pages. Required in production.
     FRONTEND_BASE_URL: z.string().url().optional(),
 
     // Storage (S3 / MinIO)
@@ -84,16 +86,11 @@ const envSchema = z
               .filter(Boolean)
           : [],
       ),
-    // Number of reverse-proxy hops Fastify will trust X-Forwarded-* from.
-    // `1` is correct behind a single proxy (nginx, ALB). Behind Cloudflare +
-    // ingress = 2. Wrong value → attacker spoofs req.ip → rate-limit bypass.
+    // Wrong value lets attacker spoof req.ip and bypass rate limits. 1=single proxy, 2=Cloudflare+ingress.
     TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(10).default(1),
-    // Max concurrent WebSocket connections per source IP. Defends against a
-    // single client opening thousands of sockets to OOM the gateway.
+    // Per-IP WebSocket cap — prevents a single client from OOMing the gateway.
     WS_CONNECTION_LIMIT_PER_IP: z.coerce.number().int().min(1).default(50),
-    // When Redis throttler storage is unreachable, allow requests through
-    // instead of failing them. Trade-off: brief unbounded request rate vs
-    // cascading 500s across every guarded route.
+    // Allow requests through when Redis is unreachable (brief unbounded rate) instead of cascading 500s.
     THROTTLER_FAIL_OPEN: z
       .string()
       .default('true')
@@ -102,9 +99,7 @@ const envSchema = z
       .string()
       .default('false')
       .transform((v) => v === 'true'),
-    // Comma-separated CIDRs (or exact IPs) allowed to scrape /metrics.
-    // Loopback is always allowed. Empty string = loopback-only (fail closed).
-    // Example for Kubernetes pod CIDR: "10.244.0.0/16"
+    // Comma-separated CIDRs/IPs allowed to scrape /metrics. Loopback always allowed. Empty = loopback-only.
     METRICS_ALLOW_CIDRS: z.string().default(''),
 
     // OpenTelemetry
@@ -124,21 +119,20 @@ const envSchema = z
     OUTBOX_BATCH_SIZE: z.coerce.number().int().min(1).max(1_000).default(50),
     OUTBOX_MAX_ATTEMPTS: z.coerce.number().int().min(1).max(1_000).default(10),
 
-    // Audit log retention — number of monthly partitions kept. Cleanup task
-    // drops anything older on the 1st of each month. Lower bound = 1 to
-    // avoid zero-retention misconfiguration purging the active partition.
+    // Monthly partitions kept; min=1 prevents zero-retention misconfiguration from purging the active partition.
     AUDIT_LOG_RETENTION_MONTHS: z.coerce.number().int().min(1).max(120).default(12),
 
-    // Two-tier auth rate limit (NestJS ThrottlerGuard bypassed by reply.hijack).
-    // STRICT for credential endpoints, LOOSE for session ops — see main.ts.
+    // Hard-deletes processed outbox rows older than this; unprocessed rows are never touched.
+    OUTBOX_RETENTION_DAYS: z.coerce.number().int().min(1).max(365).default(7),
+    OUTBOX_PURGE_BATCH_SIZE: z.coerce.number().int().min(100).max(10000).default(1000),
+    OUTBOX_PURGE_MAX_BATCHES: z.coerce.number().int().min(1).max(10000).default(200),
+
+    // Two-tier auth rate limit (bypasses NestJS ThrottlerGuard via reply.hijack). See main.ts.
     AUTH_RATE_LIMIT_MAX: z.coerce.number().int().min(1).default(5),
     AUTH_RATE_LIMIT_WINDOW_MS: z.coerce.number().int().min(1000).default(900_000),
     AUTH_SESSION_RATE_LIMIT_MAX: z.coerce.number().int().min(1).default(60),
     AUTH_SESSION_RATE_LIMIT_WINDOW_MS: z.coerce.number().int().min(1000).default(60_000),
 
-    // HTTP body size caps — enforced by Fastify's built-in body parser (JSON)
-    // and @fastify/multipart respectively. Both are read at bootstrap time so
-    // they apply before any route handler runs.
     HTTP_BODY_LIMIT_BYTES: z.coerce.number().int().min(1024).default(1_048_576),
     UPLOAD_MAX_FILE_BYTES: z.coerce.number().int().min(1024).default(10_485_760),
 
@@ -150,9 +144,11 @@ const envSchema = z
     BULL_BOARD_USER: z.string().default('admin'),
     BULL_BOARD_PASSWORD: z.string().default('admin'),
 
-    // Sentry. Default 0.01 (1%) — at 1k RPS sustained, 0.1 burns 26M traces/day
-    // which exceeds most Business-plan quotas inside hours. Raise per-route via
-    // tracesSampler if specific endpoints need finer-grained sampling.
+    // Validated here for .env.example parity; the worker process is the runtime consumer.
+    WORKER_EMAIL_CONCURRENCY: z.coerce.number().int().min(1).max(500).default(5),
+    WORKER_UPLOAD_CONCURRENCY: z.coerce.number().int().min(1).max(500).default(5),
+
+    // 0.01 (1%) default — 0.1 at 1k RPS burns 26M traces/day, exceeding most Business-plan quotas.
     SENTRY_DSN: z.string().optional().default(''),
     SENTRY_TRACES_SAMPLE_RATE: z.coerce.number().min(0).max(1).default(0.01),
     SENTRY_ENVIRONMENT: z.string().default('development'),
@@ -232,10 +228,8 @@ const envSchema = z
 
 export type EnvConfig = z.infer<typeof envSchema>;
 
-// dotenv loads `KEY=` as `""`, which is NOT `undefined` — so `.optional()` on
-// the schema would happily accept the empty string and skip `.min(32)`. Strip
-// empty strings so optional fields fall back to their defaults (or stay unset)
-// and required fields raise the expected validation error.
+// dotenv loads `KEY=` as `""` not `undefined`, so optional().min(32) would silently pass.
+// Stripping empty strings lets optional fields fall back to defaults and required fields fail loudly.
 function stripEmptyStrings(config: Record<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(config)) {

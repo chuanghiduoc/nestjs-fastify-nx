@@ -1,0 +1,65 @@
+import { z } from 'zod';
+
+const schedulerEnvSchema = z.object({
+  DATABASE_URL: z.string().trim().min(1),
+  DATABASE_DIRECT_URL: z.string().trim().min(1).optional(),
+  DATABASE_REPLICA_URL: z.string().trim().min(1).optional(),
+  DATABASE_REPLICA_POOL_MAX: z.coerce.number().int().min(1).max(1000).default(10),
+  DATABASE_POOL_MAX: z.coerce.number().int().min(1).max(1000).default(20),
+  DATABASE_POOL_MIN: z.coerce.number().int().min(0).max(1000).default(0),
+  DATABASE_IDLE_TIMEOUT_MS: z.coerce.number().int().min(0).default(10_000),
+  DATABASE_CONNECTION_TIMEOUT_MS: z.coerce.number().int().min(0).default(5_000),
+  DATABASE_STATEMENT_TIMEOUT_MS: z.coerce.number().int().min(0).default(30_000),
+  DATABASE_APPLICATION_NAME: z.string().default('nestjs-fastify-scheduler'),
+  DB_PASSWORD_FILE: z.string().trim().min(1).optional(),
+
+  REDIS_QUEUE_HOST: z.string().default('localhost'),
+  REDIS_QUEUE_PORT: z.coerce.number().int().min(1).max(65535).default(6380),
+  REDIS_QUEUE_PREFIX: z.string().default('bull'),
+
+  NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
+  LOG_LEVEL: z.string().default('info'),
+
+  AUDIT_LOG_RETENTION_MONTHS: z.coerce.number().int().min(1).max(120).default(12),
+  DLQ_ALERT_THRESHOLD: z.coerce.number().int().min(1).max(100_000).default(10),
+
+  OUTBOX_POLL_INTERVAL_MS: z.coerce.number().int().min(100).max(60_000).default(1_000),
+  OUTBOX_BATCH_SIZE: z.coerce.number().int().min(1).max(1_000).default(50),
+  OUTBOX_MAX_ATTEMPTS: z.coerce.number().int().min(1).max(100).default(10),
+
+  OUTBOX_RETENTION_DAYS: z.coerce.number().int().min(1).max(365).default(7),
+  OUTBOX_PURGE_BATCH_SIZE: z.coerce.number().int().min(100).max(10_000).default(1_000),
+  OUTBOX_PURGE_MAX_BATCHES: z.coerce.number().int().min(1).max(10_000).default(200),
+
+  EVENT_PUBLISHER_DRIVER: z.enum(['inprocess', 'outbox']).default('inprocess'),
+
+  SENTRY_DSN: z.string().optional().default(''),
+  SENTRY_TRACES_SAMPLE_RATE: z.coerce.number().min(0).max(1).default(0.01),
+  SENTRY_ENVIRONMENT: z.string().default('development'),
+});
+
+export type SchedulerEnvConfig = z.infer<typeof schedulerEnvSchema>;
+
+// dotenv emits `KEY=` as `""` which would fail `.min(1)`; coerce to undefined.
+function stripEmptyStrings(config: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(config)) {
+    out[key] = typeof value === 'string' && value.trim() === '' ? undefined : value;
+  }
+  return out;
+}
+
+export function validateSchedulerConfig(config: Record<string, unknown>): SchedulerEnvConfig {
+  const result = schedulerEnvSchema.safeParse(stripEmptyStrings(config));
+
+  if (!result.success) {
+    const formatted = result.error.issues
+      .map((issue) => `  - ${issue.path.join('.')}: ${issue.message}`)
+      .join('\n');
+    throw new Error(
+      `Scheduler environment validation failed. Fix the following variables:\n${formatted}`,
+    );
+  }
+
+  return result.data;
+}

@@ -18,29 +18,8 @@ interface OutboxRow {
   attempts: number;
 }
 
-/**
- * Reads unprocessed rows from the `outbox_events` table and dispatches them
- * through the in-process `EventBusService`. Designed to be hosted by exactly
- * one process (typically the scheduler app); concurrency safety relies on
- * Postgres `FOR UPDATE SKIP LOCKED` so additional replicas remain correct
- * even if the operator accidentally runs more than one instance.
- *
- * Three-stage dispatch (refactored from single-tx design):
- *   1. CLAIM tx: SELECT ... FOR UPDATE SKIP LOCKED + increment attempts. Lock
- *      released the moment this tx commits — other replicas can immediately
- *      claim the NEXT batch without waiting for our publish loop.
- *   2. PUBLISH (no tx): bus.publish() runs without holding any row lock. A
- *      slow listener cannot bottleneck the claim throughput.
- *   3. MARK tx: per-row UPDATE setting processedAt or lastError. Each row
- *      committed independently so a single poison-pill listener cannot roll
- *      back an entire batch.
- *
- * Configuration (env):
- *   OUTBOX_POLL_INTERVAL_MS  — milliseconds between polling cycles (default 1000)
- *   OUTBOX_BATCH_SIZE        — max rows fetched per cycle (default 50)
- *   OUTBOX_MAX_ATTEMPTS      — rows beyond this attempt count are skipped and
- *                              require manual inspection (default 10)
- */
+// Three-stage dispatch: CLAIM tx (FOR UPDATE SKIP LOCKED) → PUBLISH (no tx) → MARK tx (per-row).
+// Lock windows stay short and a poison-pill listener cannot roll back an entire batch.
 @Injectable()
 export class OutboxRelayService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(OutboxRelayService.name);
@@ -70,11 +49,6 @@ export class OutboxRelayService implements OnModuleInit, OnModuleDestroy {
     if (this.timer) clearInterval(this.timer);
   }
 
-  /**
-   * One polling cycle. Exposed so tests and operators can drive the relay
-   * deterministically. Skips its body if a previous cycle is still in flight
-   * (the polling timer is fire-and-forget; we don't want overlapping ticks).
-   */
   async tick(): Promise<number> {
     if (this.running || this.stopped) return 0;
     this.running = true;
@@ -91,8 +65,6 @@ export class OutboxRelayService implements OnModuleInit, OnModuleDestroy {
         if (ok) dispatched++;
       }
 
-      // Stuck-row monitoring kept outside the dispatch loop so a stuck event
-      // count check doesn't add latency to the publish path.
       await this.checkStuckRows();
       return dispatched;
     } finally {
@@ -113,17 +85,10 @@ export class OutboxRelayService implements OnModuleInit, OnModuleDestroy {
         );
       }
     } catch (err) {
-      // Non-fatal — stuck-row monitoring must not disrupt normal relay operation.
       this.logger.error(`Outbox stuck-row check failed: ${String(err)}`);
     }
   }
 
-  /**
-   * Stage 1: short-lived claim transaction. Locks N rows, increments attempts,
-   * commits. Lock released before publish so peer replicas can claim the next
-   * batch immediately. Rows whose attempts have already exceeded maxAttempts
-   * are excluded — they remain invisible until ops manually resets attempts.
-   */
   private async claimBatch(): Promise<OutboxRow[]> {
     return this.prisma.transaction(async (tx) => {
       return tx.$queryRawUnsafe<OutboxRow[]>(
@@ -146,11 +111,6 @@ export class OutboxRelayService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  /**
-   * Stage 2 + 3 for a single row: publish (no tx) → mark processed/error
-   * (per-row tx). Returns true when the event was delivered, false when the
-   * bus threw and lastError was recorded.
-   */
   private async dispatchOne(row: OutboxRow): Promise<boolean> {
     const event: DomainEvent = {
       eventId: row.payload.eventId,
@@ -175,10 +135,7 @@ export class OutboxRelayService implements OnModuleInit, OnModuleDestroy {
       await this.markProcessed(row.id);
       return true;
     } catch (err) {
-      // Mark-processed failure is dangerous: the listener ran, but we cannot
-      // persist that fact. Next tick will redeliver the event. Log loudly so
-      // ops know to expect duplicate side-effects and consider listener
-      // idempotency before they panic.
+      // Published but mark-processed failed — event WILL redeliver; listeners must be idempotent.
       this.logger.error(
         `Outbox row ${row.id} (${row.eventType}) was published but mark-processed failed — event WILL be redelivered. ${String(err)}`,
       );

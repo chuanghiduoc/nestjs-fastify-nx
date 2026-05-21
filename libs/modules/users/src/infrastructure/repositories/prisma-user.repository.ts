@@ -6,10 +6,11 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '@nestjs-fastify-nx/infra-database';
 import { Prisma } from '@prisma/client';
+import { decodeCursor } from '@nestjs-fastify-nx/shared';
 import { User, UserRole, UserStatus } from '../../domain/entities/user.entity';
 import type {
-  FindAllOptions,
-  FindAllResult,
+  FindAllCursorOptions,
+  FindAllCursorResult,
   UserRepositoryPort,
 } from '../../domain/ports/user-repository.port';
 
@@ -53,6 +54,7 @@ export class PrismaUserRepository implements UserRepositoryPort {
     throw new InternalServerErrorException('Database error');
   }
 
+  // Primary (not dbRead) — /users/me reads immediately after sign-up; replica lag would return null.
   async findById(id: string): Promise<User | null> {
     try {
       const raw = await this.prisma.db.user.findUnique({ where: { id } });
@@ -100,8 +102,8 @@ export class PrismaUserRepository implements UserRepositoryPort {
     }
   }
 
-  async findAll(options: FindAllOptions): Promise<FindAllResult> {
-    const { page, pageSize, role, status, search } = options;
+  async findAllCursor(options: FindAllCursorOptions): Promise<FindAllCursorResult> {
+    const { startingAfter, limit, role, status, search } = options;
     const where: Prisma.UserWhereInput = {};
     if (role) where.role = role;
     if (status) where.status = status;
@@ -111,25 +113,39 @@ export class PrismaUserRepository implements UserRepositoryPort {
         { name: { contains: search, mode: 'insensitive' } },
       ];
     }
+    if (startingAfter) {
+      const decoded = decodeCursor(startingAfter);
+      if (decoded) {
+        where.AND = [
+          {
+            OR: [
+              { createdAt: { lt: decoded.createdAt } },
+              { AND: [{ createdAt: decoded.createdAt }, { id: { lt: decoded.id } }] },
+            ],
+          },
+        ];
+      }
+      // Invalid cursor → first page; decodeCursor returns null silently.
+    }
     try {
-      const [rows, total] = await this.prisma.db.$transaction([
-        this.prisma.db.user.findMany({
-          where,
-          orderBy: { createdAt: 'desc' },
-          skip: (page - 1) * pageSize,
-          take: pageSize,
-        }),
-        this.prisma.db.user.count({ where }),
-      ]);
-      return { items: rows.map((row) => this.mapToEntity(row as UserRow)), total };
+      const rows = await this.prisma.dbRead.user.findMany({
+        where,
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        take: limit + 1,
+      });
+      const hasMore = rows.length > limit;
+      const items = (hasMore ? rows.slice(0, limit) : rows).map((row) =>
+        this.mapToEntity(row as UserRow),
+      );
+      return { items, hasMore };
     } catch (err) {
-      return this.handleError(err, 'findAll');
+      return this.handleError(err, 'findAllCursor');
     }
   }
 
   async exists(email: string): Promise<boolean> {
     try {
-      const count = await this.prisma.db.user.count({ where: { email } });
+      const count = await this.prisma.dbRead.user.count({ where: { email } });
       return count > 0;
     } catch (err) {
       return this.handleError(err, 'exists');

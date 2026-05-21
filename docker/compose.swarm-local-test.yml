@@ -1,0 +1,55 @@
+# Local-test overlay for prod-parity verification. DO NOT use in any real
+# deployment — `environment:` overrides the dev `.env` insecure defaults that
+# the production validator rejects (minioadmin, admin/admin, etc).
+# Adds mailpit so the worker's SMTP `verify()` at boot succeeds.
+
+services:
+  mailpit:
+    image: axllent/mailpit:v1.27.11
+    restart: unless-stopped
+    healthcheck:
+      test: ['CMD', '/mailpit', '--help']
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+  api:
+    environment:
+      NODE_ENV: production
+      STORAGE_ACCESS_KEY: localtest-access-key
+      STORAGE_SECRET_KEY: localtest-secret-key-min-16
+      STORAGE_ENDPOINT: http://minio:9000
+      STORAGE_BUCKET: uploads
+      BULL_BOARD_PASSWORD: localtest-bullboard-pwd
+      BULL_BOARD_USERNAME: admin
+      MAIL_HOST: mailpit
+      MAIL_PORT: '1025'
+      MAIL_DEFAULT_EMAIL: test@localtest.local
+      BETTER_AUTH_URL: http://localhost:3000
+      BETTER_AUTH_SECRET: localtest-better-auth-secret-min-32-chars
+      FRONTEND_BASE_URL: http://localhost:3000
+      CORS_ORIGINS: http://localhost:3000
+
+  worker:
+    environment:
+      NODE_ENV: production
+      STORAGE_ACCESS_KEY: localtest-access-key
+      STORAGE_SECRET_KEY: localtest-secret-key-min-16
+      STORAGE_ENDPOINT: http://minio:9000
+      STORAGE_BUCKET: uploads
+      MAIL_HOST: mailpit
+      MAIL_PORT: '1025'
+      MAIL_DEFAULT_EMAIL: test@localtest.local
+
+  scheduler:
+    environment:
+      NODE_ENV: production
+      STORAGE_ACCESS_KEY: localtest-access-key
+      STORAGE_SECRET_KEY: localtest-secret-key-min-16
+      STORAGE_ENDPOINT: http://minio:9000
+      STORAGE_BUCKET: uploads
+      BULL_BOARD_PASSWORD: localtest-bullboard-pwd
+      MAIL_HOST: mailpit
+      MAIL_PORT: '1025'
+      MAIL_DEFAULT_EMAIL: test@localtest.local

@@ -17,7 +17,7 @@ import { RolesGuard } from './roles.guard';
       useFactory: (prisma: PrismaService, emailQueue: Queue) => {
         const mailer: AuthMailDispatcher = {
           send: async ({ to, subject, body, templateId }) => {
-            // BullMQ rejects ':' in custom jobIds (reserved for internal keys).
+            // BullMQ rejects ':' in jobIds — use '__' as separator.
             const jobId = `auth-email__${templateId ?? 'generic'}__${to}__${Date.now()}`;
             await emailQueue.add(
               templateId ?? 'auth-email',

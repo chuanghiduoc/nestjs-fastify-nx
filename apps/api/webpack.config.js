@@ -19,9 +19,7 @@ module.exports = {
       optimization: false,
       outputHashing: 'none',
       generatePackageJson: true,
-      // tsc emits `require('tslib')` for importHelpers but webpack's source
-      // graph never sees the import — declare it explicitly so the pruned
-      // package.json lists it for `pnpm install --prod`.
+      // tslib import is invisible to webpack's source graph; declare so pruned package.json lists it.
       runtimeDependencies: ['tslib'],
       sourceMap: true,
     }),

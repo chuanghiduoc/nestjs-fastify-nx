@@ -13,12 +13,8 @@ export class UserRegisteredListener {
 
   @OnEvent('users.registered', { async: true })
   async handle(event: UserRegistered): Promise<void> {
-    // Idempotency: BullMQ deduplicates `add()` on jobId, so re-deliveries from
-    // the in-process emitter or the outbox relay never produce a second email.
-    // Tying the jobId to the immutable `event.eventId` keeps the dedupe stable
-    // across retries while remaining unique per registration attempt.
-    // BullMQ rejects ':' in custom jobIds (reserves it for internal keys) —
-    // use '__' as separator instead.
+    // BullMQ deduplicates on jobId — outbox redelivery never produces a second email.
+    // BullMQ rejects ':' in jobIds — use '__' as separator.
     const jobId = `welcome-email__${event.eventId}`;
     await this.emailQueue.add(
       'welcome-email',

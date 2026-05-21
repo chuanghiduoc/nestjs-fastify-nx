@@ -1,0 +1,76 @@
+# PgBouncer opt-in overlay — development / staging
+#
+# Usage:
+#   docker compose --env-file .env \
+#     -f docker/compose.yml \
+#     -f docker/compose.dev.yml \
+#     -f examples/pgbouncer/compose.pgbouncer.yml \
+#     up -d
+#
+# What this overlay does:
+#   1. Adds a pgbouncer service (transaction mode, SCRAM-SHA-256).
+#   2. Overrides DATABASE_URL on api and scheduler to route through pgbouncer.
+#   3. Sets DATABASE_DIRECT_URL on api, scheduler, and migration so Prisma CLI
+#      and the migration container bypass the pooler for DDL.
+#   4. Adds pgbouncer health dependency to api and scheduler.
+#
+# Worker is intentionally excluded — it has zero database connections.
+#
+# Production: use compose.pgbouncer.prod.yml instead (Docker secrets pattern).
+
+services:
+  pgbouncer:
+    image: edoburu/pgbouncer:1.23.1
+    restart: unless-stopped
+    environment:
+      # edoburu/pgbouncer generates a SCRAM-SHA-256 hashed userlist.txt at startup
+      # from these env vars — the plaintext password is unset after hashing.
+      # NEVER use these defaults in production; see compose.pgbouncer.prod.yml.
+      DB_USER: ${POSTGRES_USER:-postgres}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${POSTGRES_DB:-nestjs_db}
+      AUTH_TYPE: scram-sha-256
+      POOL_MODE: transaction
+      DEFAULT_POOL_SIZE: ${PGBOUNCER_POOL_SIZE:-30}
+      RESERVE_POOL_SIZE: 5
+      RESERVE_POOL_TIMEOUT: 3
+      MAX_CLIENT_CONN: ${PGBOUNCER_MAX_CLIENT_CONN:-500}
+      MAX_PREPARED_STATEMENTS: 200
+      IDLE_TRANSACTION_TIMEOUT: 30
+      SERVER_IDLE_TIMEOUT: 600
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      # pg_isready talks to the pgbouncer listen port — confirms the pooler
+      # accepted a connection without routing it to Postgres.
+      test: ['CMD-SHELL', 'pg_isready -h 127.0.0.1 -p 6432']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  migration:
+    environment:
+      # Migration container bypasses pgbouncer — DDL requires a direct connection.
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-nestjs_db}
+      DATABASE_DIRECT_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-nestjs_db}
+
+  api:
+    environment:
+      # App traffic routes through pgbouncer; Prisma CLI uses direct URL.
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@pgbouncer:6432/${POSTGRES_DB:-nestjs_db}
+      DATABASE_DIRECT_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-nestjs_db}
+    depends_on:
+      pgbouncer:
+        condition: service_healthy
+
+  scheduler:
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@pgbouncer:6432/${POSTGRES_DB:-nestjs_db}
+      DATABASE_DIRECT_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-nestjs_db}
+    depends_on:
+      pgbouncer:
+        condition: service_healthy

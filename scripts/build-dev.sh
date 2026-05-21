@@ -5,7 +5,7 @@
 #   ./scripts/build-dev.sh [SERVICE...] [--with-obs] [--help]
 #
 # Arguments:
-#   SERVICE...    One or more service names to build (default: api worker scheduler)
+#   SERVICE...    One or more service names to build (default: api worker scheduler migration)
 #   --with-obs    Include the observability overlay (Prometheus, Grafana, Jaeger, OTel)
 #
 # Env flags:
@@ -26,7 +26,7 @@ if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
   echo "Usage: ./scripts/build-dev.sh [SERVICE...] [--with-obs] [--help]"
   echo ""
   echo "Arguments:"
-  echo "  SERVICE...    Services to build (default: api worker scheduler)"
+  echo "  SERVICE...    Services to build (default: api worker scheduler migration)"
   echo "  --with-obs    Also start the observability stack (Prometheus/Grafana/Jaeger/OTel)"
   echo ""
   echo "Env flags:"
@@ -41,7 +41,11 @@ if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
   exit 0
 fi
 
-DEFAULT_SERVICES=(api worker scheduler)
+# `migration` is built alongside the long-running services so source changes
+# in prisma.config.ts / schema.prisma / prisma/migrations / apps/migration
+# always pick up — compose `up` reuses any pre-existing migration image silently,
+# so excluding it from the build list silently ships stale migration logic.
+DEFAULT_SERVICES=(api worker scheduler migration)
 WITH_OBS=0
 SERVICES=()
 
@@ -85,18 +89,48 @@ export BUILDX_NO_DEFAULT_ATTESTATIONS=1
 
 sec::log "Building dev images: ${SERVICES[*]}"
 BUILD_START=$(date +%s)
-# shellcheck disable=SC2086
-docker compose $COMPOSE_BASE build "${BUILD_FLAGS[@]}" "${SERVICES[@]}"
+# Serial per-service build — parallel buildx fans out tsc + webpack +
+# fork-ts-checker per service, which can OOM Docker Desktop's VM.
+# Override with BUILD_PARALLEL=1 if the host has enough headroom.
+if [[ "${BUILD_PARALLEL:-0}" = "1" ]]; then
+  # shellcheck disable=SC2086
+  docker compose $COMPOSE_BASE build "${BUILD_FLAGS[@]}" "${SERVICES[@]}"
+else
+  for svc in "${SERVICES[@]}"; do
+    sec::log "  → $svc"
+    # shellcheck disable=SC2086
+    docker compose $COMPOSE_BASE build "${BUILD_FLAGS[@]}" "$svc"
+  done
+fi
 BUILD_END=$(date +%s)
 BUILD_ELAPSED=$((BUILD_END - BUILD_START))
 
 echo ""
 sec::log "Starting / recreating: ${SERVICES[*]}"
-# `up -d <svc>` brings up listed services plus their depends_on chain
-# (postgres, redis-cache, redis-queue, migration). --force-recreate ensures
-# the just-rebuilt image actually replaces any running container.
+
+# Compose project name (used to build container names like `<project>-api-1`).
+# Mirrors compose CLI default — directory basename when COMPOSE_PROJECT_NAME unset.
+COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-$(basename "$(pwd)")}"
+export COMPOSE_PROJECT_NAME
+
+# Pre-clean orphans. Plain `up --force-recreate` fails with "container name
+# already in use" when a previous run left containers compose no longer tracks
+# (project renamed, label drift, crash mid-deploy). `rm -sf` is a no-op when
+# the service is unknown; `docker rm -f` covers the unlabelled-orphan case.
 # shellcheck disable=SC2086
-docker compose $COMPOSE_BASE up -d --force-recreate "${SERVICES[@]}"
+docker compose $COMPOSE_BASE rm -sf "${SERVICES[@]}" 2>/dev/null || true
+for svc in "${SERVICES[@]}"; do
+  # Match all replicas, not just -1, in case API_REPLICAS / WORKER_REPLICAS > 1.
+  stale=$(docker ps -aq --filter "name=^${COMPOSE_PROJECT_NAME}-${svc}-[0-9]\+$" 2>/dev/null || true)
+  [[ -n "$stale" ]] && docker rm -f $stale 2>/dev/null || true
+done
+
+# API_REPLICAS / WORKER_REPLICAS only take effect in Swarm (deploy.replicas is
+# ignored by plain `docker compose up`); the passthrough keeps them visible in
+# the process environment without changing dev behaviour.
+# shellcheck disable=SC2086
+API_REPLICAS="${API_REPLICAS:-1}" WORKER_REPLICAS="${WORKER_REPLICAS:-1}" \
+  docker compose $COMPOSE_BASE up -d --force-recreate --remove-orphans "${SERVICES[@]}"
 
 echo ""
 sec::log "Container status:"

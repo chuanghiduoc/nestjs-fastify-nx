@@ -29,10 +29,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # api/worker/scheduler share the root Dockerfile so BuildKit reuses
-        # the `workspace` stage (install + COPY + prisma generate + nx sync)
-        # across all three builds. Migration ships its own Dockerfile because
-        # it installs --prod only and never copies app source.
+        # All four apps share the root Dockerfile so BuildKit reuses the
+        # `workspace` stage (install + COPY + prisma generate + nx sync) across
+        # every image — one install round-trip instead of two.
         include:
           - app: api
             dockerfile: Dockerfile
@@ -44,8 +43,8 @@ jobs:
             dockerfile: Dockerfile
             target: scheduler
           - app: migration
-            dockerfile: apps/migration/Dockerfile
-            target: production
+            dockerfile: Dockerfile
+            target: migration
 
     steps:
       - uses: actions/checkout@v6

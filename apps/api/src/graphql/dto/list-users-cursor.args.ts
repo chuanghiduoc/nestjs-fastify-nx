@@ -3,17 +3,18 @@ import { IsEnum, IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-
 import { UserRole, UserStatus } from '../types/user-enums';
 
 @ArgsType()
-export class ListUsersArgs {
-  @Field(() => Int, { defaultValue: 1 })
-  @IsInt()
-  @Min(1)
-  page = 1;
-
+export class ListUsersCursorArgs {
   @Field(() => Int, { defaultValue: 20 })
   @IsInt()
   @Min(1)
   @Max(100)
-  pageSize = 20;
+  limit = 20;
+
+  @Field(() => String, { nullable: true })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  startingAfter?: string;
 
   @Field(() => UserRole, { nullable: true })
   @IsOptional()

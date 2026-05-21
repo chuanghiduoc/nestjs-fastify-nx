@@ -1,5 +1,4 @@
-// HTTP-only module for OpenAPI codegen — drops Socket.io/GraphQL/Sentry/Metrics
-// to avoid opening Redis sockets and side-effect listeners during spec export.
+// HTTP-only module for OpenAPI spec export — drops Socket.io/GraphQL/Sentry/Metrics to avoid opening sockets.
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_FILTER, APP_GUARD } from '@nestjs/core';

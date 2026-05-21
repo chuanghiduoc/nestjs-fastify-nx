@@ -5,31 +5,12 @@ import { ERROR_CODES, type ValidationErrorItemDto } from '@nestjs-fastify-nx/con
 const SENSITIVE_FIELD_PATTERN = /(password|secret|token|authorization|cookie|credit[_-]?card|ssn)/i;
 const REDACTED = '[REDACTED]';
 
-/**
- * Drop-in replacement for Nest's `ValidationPipe` that converts class-validator's
- * recursive `ValidationError` tree into a flat `ValidationErrorItemDto[]`
- * payload aligned with RFC 9457 Problem Details + the project-wide error model
- * in `apps/api/src/common/errors`.
- *
- * Behavioural contract:
- *  - Throws `UnprocessableEntityException` (HTTP 422) — RFC 9110 says 400 is for
- *    malformed syntax, 422 for "well-formed but semantically invalid".
- *  - The thrown response object carries `code: 'validation_failed'` and
- *    `errors: ValidationErrorItemDto[]`, which `GlobalExceptionFilter` passes
- *    straight through into the Problem Details body.
- *  - Each error item has a stable `code` (e.g. `too_short`, `out_of_range`,
- *    `not_an_email`) so the frontend can switch on it without parsing English.
- *  - `received` is included for diagnostics on non-sensitive fields; values for
- *    paths matching `password`, `token`, `secret`, etc. are redacted.
- */
 export class ProblemDetailsValidationPipe extends ValidationPipe {
   constructor(options: ValidationPipeOptions = {}) {
     super({
       whitelist: true,
       forbidNonWhitelisted: true,
       transform: true,
-      // class-validator's "stopAtFirstError: true" is tempting but produces a
-      // worse UX — frontends prefer surfacing every offending field at once.
       stopAtFirstError: false,
       errorHttpStatusCode: HttpStatus.UNPROCESSABLE_ENTITY,
       ...options,
@@ -77,19 +58,12 @@ function flattenValidationErrors(
   return flat;
 }
 
-// Object property → `parent.child`; numeric index → `parent[0]`. Using bracket
-// notation for arrays keeps the path unambiguous when a property name happens
-// to look like a number.
+// Numeric index uses bracket notation to avoid ambiguity with property names that look like numbers.
 function appendPath(parent: string, property: string): string {
   if (!parent) return property;
   return /^\d+$/.test(property) ? `${parent}[${property}]` : `${parent}.${property}`;
 }
 
-// class-validator stamps the constraint args onto a hidden `contexts` map only
-// when `@ValidatorConstraint` is used with `Validate(... , { context })`. For
-// the built-in decorators (`@Min`, `@MaxLength`, `@IsEnum`, …) the parameters
-// are baked into the message via `$constraint1` placeholders. We can't recover
-// the arg values reliably across versions, but we can surface what's there.
 function extractConstraintArgs(
   err: ValidationError,
   rule: string,
@@ -104,18 +78,13 @@ function extractConstraintArgs(
 function redactIfSensitive(path: string, value: unknown): unknown {
   if (value === undefined || value === null) return value;
   if (SENSITIVE_FIELD_PATTERN.test(path)) return REDACTED;
-  // Echoing back huge payloads (uploads, big arrays) inflates the error body.
-  // Cap echoed strings at a reasonable length so the response stays small.
   if (typeof value === 'string' && value.length > 200) {
     return `${value.slice(0, 200)}…`;
   }
   return value;
 }
 
-// class-validator decorator name → stable, language-agnostic error code.
-// Codes are deliberately coarse: the frontend should use them for branching
-// (e.g. show "email already taken" vs "format invalid"), while the human
-// `message` covers nuance.
+// class-validator decorator name → stable error code used by frontend for i18n branching.
 const VALIDATOR_TO_CODE: Record<string, string> = {
   isDefined: 'required',
   isNotEmpty: 'required',

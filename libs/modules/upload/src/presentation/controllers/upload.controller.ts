@@ -5,6 +5,7 @@ import {
   HttpCode,
   HttpStatus,
   Inject,
+  InternalServerErrorException,
   Logger,
   NotFoundException,
   Post,
@@ -39,17 +40,12 @@ import {
   positiveIntEnv,
 } from '@nestjs-fastify-nx/shared';
 
-// Magic-byte signatures (PNG, JPEG, GIF, WEBP, PDF) all fit inside 16 bytes.
-// Reading more than this on /confirm just inflates S3 egress without helping.
 const MAGIC_BYTES_TO_READ = 16;
 
 const DEFAULT_MAX_FILE_SIZE = 10 * 1024 * 1024;
 const PRESIGN_EXPIRES_SECONDS = 5 * 60;
 const ALLOWED_MIME_LIST = Array.from(ALLOWED_MIME_TYPES);
 
-// Per-route throttle on top of the global ThrottlerGuard. /presign is the
-// expensive side (mints S3 policy + creates an orphan key); /confirm is
-// cheaper but still rate-limited to defeat key-enumeration attempts.
 const PRESIGN_LIMIT = { default: { limit: 10, ttl: 60_000 } };
 const CONFIRM_LIMIT = { default: { limit: 30, ttl: 60_000 } };
 
@@ -159,8 +155,8 @@ class StoredFileDto implements StoredFile {
 @ApiCookieAuth('session')
 export class UploadController {
   private readonly logger = new Logger(UploadController.name);
-  // Mirrors the cap enforced by @fastify/multipart in main.ts so both the
-  // parser-level and policy-level rejections trigger at the same threshold.
+  // Must mirror @fastify/multipart cap in main.ts so parser and policy reject at the same threshold.
+  // Must mirror @fastify/multipart cap in main.ts so both layers reject at the same threshold.
   private readonly maxFileSize: number;
 
   constructor(
@@ -184,7 +180,6 @@ export class UploadController {
   async presign(@Body() dto: PresignUploadDto): Promise<PresignedUpload> {
     const extension = MIME_EXTENSIONS[dto.contentType];
     if (!extension) {
-      // Defence in depth — DTO already enforces the allow-list.
       throw new BadRequestException(`Mime type "${dto.contentType}" is not allowed`);
     }
 
@@ -214,7 +209,6 @@ export class UploadController {
     }
 
     if (!ALLOWED_MIME_TYPES.has(meta.contentType)) {
-      // Best-effort cleanup of the rogue object so it does not linger.
       await this.storage.delete(dto.key).catch(() => undefined);
       throw new BadRequestException(`Mime type "${meta.contentType}" is not allowed`);
     }
@@ -226,12 +220,7 @@ export class UploadController {
       );
     }
 
-    // Inline magic-byte verification. Previously the check was async via
-    // BullMQ — but if the queue was unreachable the catch() swallowed the
-    // failure and a tampered upload would survive. Reading 16 bytes from S3
-    // adds ~50 ms but guarantees a forged Content-Type cannot bypass the
-    // allow-list. The async queue is still kicked off for deeper structural
-    // inspection (full-file scan, EXIF strip) when needed.
+    // Inline check: if the queue is unreachable this still blocks tampered uploads.
     const head = await this.storage.readRange(dto.key, MAGIC_BYTES_TO_READ, meta.bucket);
     const detected = detectFileType(head);
     if (!detected || detected.mimeType !== meta.contentType) {
@@ -243,25 +232,21 @@ export class UploadController {
       );
     }
 
-    // Tag the object so the S3 lifecycle rule preserves it. Untagged orphans
-    // (presigned but never confirmed) auto-expire — see docs/runbook.md.
-    await this.storage.commit(dto.key).catch((err) => {
-      this.logger.warn(
-        { err, key: dto.key },
-        'commit tag failed (lifecycle may expire the object)',
-      );
-    });
+    // Untagged objects auto-expire in 24h — fail explicitly so the client retries.
+    try {
+      await this.storage.commit(dto.key);
+    } catch (err) {
+      this.logger.error({ err, key: dto.key }, 'commit tag failed — lifecycle will expire object');
+      throw new InternalServerErrorException('Failed to commit upload; please retry');
+    }
 
-    // Async deep verification — currently a redundancy check, kept so future
-    // scanning (virus, EXIF strip, perceptual hash) can plug in without
-    // changing the controller. Best-effort: queue down is non-fatal because
-    // the inline magic-byte check above already enforces correctness.
+    // Async deep verification (virus scan, EXIF strip) — best-effort; inline check already blocked tampering.
     await this.verifyQueue
       .add(
         'verify-magic-bytes',
         { key: dto.key, declaredContentType: meta.contentType, bucket: meta.bucket },
         {
-          // BullMQ rejects ':' in custom jobIds; normalize '/' to '_'.
+          // BullMQ rejects ':' in jobIds — '__' separator; '/' normalised to '_'.
           jobId: `verify__${dto.key.replace(/\//g, '_')}`,
           attempts: 3,
           backoff: { type: 'exponential', delay: 5_000 },
