@@ -479,7 +479,7 @@ with a cloud TCP load-balancer. See
   at the pooler when one is configured.
 - `DATABASE_DIRECT_URL` — bypasses the pooler. Used by:
   - `prisma.config.ts` — Prisma CLI (`migrate dev`, `generate`, `format`).
-  - `apps/migration/Dockerfile` CMD wrapper — `prisma migrate deploy`.
+  - `apps/migration/src/main.ts` (built into the `Dockerfile --target migration` image) — `prisma migrate deploy`.
   - `PgBouncerHealthIndicator` — uses `DATABASE_URL` to probe the pooler; the
     indicator is a no-op (returns `skipped`) when `DATABASE_DIRECT_URL` is unset.
 
@@ -509,29 +509,29 @@ PrismaService
 
 ### What always uses `db` (primary)
 
-| Consumer                                    | Reason                                                                                                                                                    |
-| ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Better Auth (`prismaAdapter`)               | `getSession` does a read immediately after sign-in — replication lag would produce a 401. Both reads and writes must stay on the same primary connection. |
-| Outbox relay (`OutboxRelayService`)         | Claim + publish + mark-processed runs inside a single interactive transaction.                                                                            |
-| Command handlers (`prisma.transaction(fn)`) | Aggregate write + outbox row must commit atomically on the primary.                                                                                       |
-| `findByEmailFresh`                          | Post-signup read-your-writes: reading a user row on the replica immediately after sign-up risks seeing a stale result. Use only for auth-flow reads.      |
+| Consumer                                    | Reason                                                                                                                                                                                                  |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Better Auth (`prismaAdapter`)               | `getSession` does a read immediately after sign-in — replication lag would produce a 401. Both reads and writes must stay on the same primary connection.                                               |
+| Outbox relay (`OutboxRelayService`)         | Claim + publish + mark-processed runs inside a single interactive transaction.                                                                                                                          |
+| Command handlers (`prisma.transaction(fn)`) | Aggregate write + outbox row must commit atomically on the primary.                                                                                                                                     |
+| `PrismaUserRepository.findById`             | Serves `/users/me` immediately after sign-up — routing to a replica would surface a 404 on any non-zero replication lag. Point-lookup cost on primary is negligible vs. the read-your-writes guarantee. |
+| `PrismaUserRepository.findByEmail`          | Same rationale as `findById` — UK point lookup that may follow a write on the same request.                                                                                                             |
 
 ### What uses `dbRead` (replica, falls back to primary)
 
 | Consumer                             | Notes                                                                                                           |
 | ------------------------------------ | --------------------------------------------------------------------------------------------------------------- |
 | `PrismaUserRepository.findAllCursor` | Admin user-list — stale by a few ms is acceptable.                                                              |
-| `PrismaUserRepository.findByEmail`   | Profile look-ups outside the sign-up critical path.                                                             |
-| `PrismaUserRepository.findById`      | Single-user reads from query handlers.                                                                          |
 | `PrismaUserRepository.exists`        | Pre-check before write; a false-negative on lag is safe — the unique constraint on the DB enforces correctness. |
 
 ### Read-your-writes pattern
 
-When a caller must read immediately after a write on the same request (e.g. an
-auth flow that creates a user and then fetches it), use the dedicated
-`findByEmailFresh` method which routes to `db` (primary). All other `findBy*`
-reads use `dbRead` because eventual consistency (10–50 ms typical lag) is
-acceptable for non-auth reads.
+Single-row PK/UK lookups (`findById`, `findByEmail`) stay on the primary so a
+caller reading immediately after a write on the same request always observes
+the latest row. List/aggregate queries (`findAllCursor`) and lag-tolerant
+pre-checks (`exists`) ride the replica. When introducing a new finder, ask
+"could a request write then read this row in the same handler?" — if yes, use
+`prisma.db`; if no, `prisma.dbRead`.
 
 ### Zero-overhead single-node default
 

@@ -201,9 +201,10 @@ Cause: the migration container is connecting through pgbouncer. Prisma migrate
 uses session-scoped DDL operations (advisory locks, `SET LOCAL`) that are
 incompatible with transaction mode.
 
-Resolution: set `DATABASE_DIRECT_URL` so the migration Dockerfile CMD wrapper
-re-exports `DATABASE_URL` to the direct Postgres address before invoking the
-bundle. When using the compose overlay this is already set — verify with:
+Resolution: set `DATABASE_DIRECT_URL` so the migration bootstrap
+(`apps/migration/src/main.ts`) re-exports `DATABASE_URL` to the direct Postgres
+address before invoking `prisma migrate deploy`. When using the compose overlay
+this is already set — verify with:
 
 ```bash
 docker compose config | grep -A5 'migration:'

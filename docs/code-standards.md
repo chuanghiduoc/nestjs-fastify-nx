@@ -185,17 +185,18 @@ or alias to `db` when `DATABASE_REPLICA_URL` is unset).
 
 **Rules:**
 
-- Any new `findMany`, `count`, or `aggregate` in `application/queries/` **MUST**
-  use `prisma.dbRead`. These reads tolerate the typical 10–50 ms replication lag.
-- Reads that are coupled to a preceding write on the **same request** (post-write
-  read-your-writes) **MUST** use `prisma.db`. Use `findByEmailFresh` as the model
-  — it routes to the primary for correctness and is named explicitly to make the
-  intent searchable.
-- Never call `prisma.db` for a read inside a command handler unless the read
-  occurs inside the same `prisma.transaction(fn)` block as a write; standalone
-  reads outside a transaction belong on `prisma.dbRead`.
-- Better Auth, outbox relay, and interactive transactions are permanently bound to
-  `prisma.db` — do not change these call sites.
+- `findMany` / `count` / `aggregate` for list endpoints **MUST** use
+  `prisma.dbRead`. These reads tolerate the typical 10–50 ms replication lag.
+- Single-row PK/UK lookups (`findUnique`/`findFirst` by id or natural key)
+  **MUST** use `prisma.db`. A request that writes then reads the same row on
+  the same handler (post-signup → `/users/me`) is the rule, not the exception
+  — replica lag would surface as 404. Point-lookup cost on primary is
+  negligible.
+- `exists`-style pre-checks before a write may use `prisma.dbRead`: a
+  false-negative on lag is safe because the unique constraint enforces
+  correctness at write time.
+- Better Auth, outbox relay, and interactive transactions are permanently
+  bound to `prisma.db` — do not change these call sites.
 
 ## Production Quality
 
