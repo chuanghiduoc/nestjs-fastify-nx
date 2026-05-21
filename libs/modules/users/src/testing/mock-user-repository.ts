@@ -17,11 +17,6 @@ export class MockUserRepository implements UserRepositoryPort {
     return [...this.store.values()].find((u) => u.email.toString() === email) ?? null;
   }
 
-  async findByEmailFresh(email: string): Promise<User | null> {
-    // Mock has no replica concept — delegates to the same in-memory store.
-    return this.findByEmail(email);
-  }
-
   async findAllCursor(options: FindAllCursorOptions): Promise<FindAllCursorResult> {
     const { startingAfter, limit, role, status, search } = options;
     let rows = [...this.store.values()];

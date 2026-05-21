@@ -54,9 +54,10 @@ export class PrismaUserRepository implements UserRepositoryPort {
     throw new InternalServerErrorException('Database error');
   }
 
+  // Primary (not dbRead) — /users/me reads immediately after sign-up; replica lag would return null.
   async findById(id: string): Promise<User | null> {
     try {
-      const raw = await this.prisma.dbRead.user.findUnique({ where: { id } });
+      const raw = await this.prisma.db.user.findUnique({ where: { id } });
       return raw ? this.mapToEntity(raw as UserRow) : null;
     } catch (err) {
       if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2025') {
@@ -68,24 +69,10 @@ export class PrismaUserRepository implements UserRepositoryPort {
 
   async findByEmail(email: string): Promise<User | null> {
     try {
-      const raw = await this.prisma.dbRead.user.findUnique({ where: { email } });
-      return raw ? this.mapToEntity(raw as UserRow) : null;
-    } catch (err) {
-      return this.handleError(err, 'findByEmail');
-    }
-  }
-
-  /**
-   * Read-your-writes variant: queries the primary so callers that read a user
-   * immediately after creating/updating it (sign-up → profile fetch) see the
-   * latest row regardless of replica lag.
-   */
-  async findByEmailFresh(email: string): Promise<User | null> {
-    try {
       const raw = await this.prisma.db.user.findUnique({ where: { email } });
       return raw ? this.mapToEntity(raw as UserRow) : null;
     } catch (err) {
-      return this.handleError(err, 'findByEmailFresh');
+      return this.handleError(err, 'findByEmail');
     }
   }
 
@@ -138,7 +125,7 @@ export class PrismaUserRepository implements UserRepositoryPort {
           },
         ];
       }
-      // Invalid cursor → treat as no cursor (first page); decodeCursor returns null silently.
+      // Invalid cursor → first page; decodeCursor returns null silently.
     }
     try {
       const rows = await this.prisma.dbRead.user.findMany({

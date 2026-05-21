@@ -18,11 +18,6 @@ export interface FindAllCursorResult {
 export interface UserRepositoryPort {
   findById(id: string): Promise<User | null>;
   findByEmail(email: string): Promise<User | null>;
-  /**
-   * Queries the primary so a caller reading immediately after a write sees the
-   * latest row regardless of replica lag. Use for auth-flow reads only.
-   */
-  findByEmailFresh(email: string): Promise<User | null>;
   findAllCursor(options: FindAllCursorOptions): Promise<FindAllCursorResult>;
   save(user: User): Promise<void>;
   exists(email: string): Promise<boolean>;
