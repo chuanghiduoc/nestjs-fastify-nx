@@ -39,7 +39,7 @@ describe('EmailNotificationMetricsListener', () => {
     });
 
     it('increments stalled counter on stalled event', () => {
-      listener.onStalled();
+      listener.onStalled({ jobId: 'stalled-1' });
       expect(metrics.bullmqJobsTotal.inc).toHaveBeenCalledWith({
         queue: 'email-notification',
         status: 'stalled',

@@ -107,11 +107,13 @@ export class NotificationGateway
   }
 
   async onApplicationShutdown(): Promise<void> {
-    await Promise.allSettled([
-      this.pubClient.quit().catch(() => this.pubClient.disconnect()),
-      this.subClient.quit().catch(() => this.subClient.disconnect()),
-      this.rateLimitClient.quit().catch(() => this.rateLimitClient.disconnect()),
-    ]);
+    // Guard the optional chaining — shutdown can fire before afterInit() ran.
+    const closes: Promise<unknown>[] = [];
+    if (this.pubClient) closes.push(this.pubClient.quit().catch(() => this.pubClient.disconnect()));
+    if (this.subClient) closes.push(this.subClient.quit().catch(() => this.subClient.disconnect()));
+    if (this.rateLimitClient)
+      closes.push(this.rateLimitClient.quit().catch(() => this.rateLimitClient.disconnect()));
+    await Promise.allSettled(closes);
   }
 
   handleConnection(socket: Socket): void {

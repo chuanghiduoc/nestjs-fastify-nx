@@ -46,7 +46,7 @@ class HealthCheckResultDto {
 
   @ApiProperty({
     description:
-      'Per-indicator status. Keys: `database`, `memory_heap`, `redis_cache`, `redis_queue`.',
+      'Per-indicator status. Keys depend on the endpoint — `/health` reports `database`, `memory_heap`, `redis_cache`, `redis_queue`; `/health/ready` adds `bullmq`, `pgbouncer`, `replication_lag`.',
     type: 'object',
     additionalProperties: INDICATOR_STATUS_SCHEMA,
     example: { database: { status: 'up' }, memory_heap: { status: 'up' } },

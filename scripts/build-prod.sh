@@ -27,6 +27,7 @@ if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
   echo "Env flags:"
   echo "  TRIVY_SCAN=0        Skip Trivy gate"
   echo "  TRIVY_EXIT_CODE=0   Demote Trivy failures to warnings"
+  echo "  ATTEST_SKIP=1       Skip SBOM + provenance attestations (faster local iteration)"
   echo "  IMAGE_NAMESPACE     Required for registry push; defaults to 'local' for smoke"
   echo ""
   echo "Examples:"

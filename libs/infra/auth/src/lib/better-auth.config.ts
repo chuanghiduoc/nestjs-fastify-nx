@@ -21,6 +21,11 @@ export function createBetterAuth(prisma: PrismaClient, mail: AuthMailDispatcher)
       .filter(Boolean) ?? [];
 
   if (!secret) {
+    // Defence in depth — env.validation already rejects an unset secret in prod,
+    // but throw here too so any bypass (overridden ConfigModule, tests) still fails loud.
+    if (process.env['NODE_ENV'] === 'production') {
+      throw new Error('BETTER_AUTH_SECRET must be set in production');
+    }
     logger.warn('BETTER_AUTH_SECRET unset — sessions reset on every restart');
   }
   if (trustedOrigins.length === 0) {

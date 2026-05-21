@@ -120,7 +120,9 @@ export COMPOSE_PROJECT_NAME
 # shellcheck disable=SC2086
 docker compose $COMPOSE_BASE rm -sf "${SERVICES[@]}" 2>/dev/null || true
 for svc in "${SERVICES[@]}"; do
-  docker rm -f "${COMPOSE_PROJECT_NAME}-${svc}-1" 2>/dev/null || true
+  # Match all replicas, not just -1, in case API_REPLICAS / WORKER_REPLICAS > 1.
+  stale=$(docker ps -aq --filter "name=^${COMPOSE_PROJECT_NAME}-${svc}-[0-9]\+$" 2>/dev/null || true)
+  [[ -n "$stale" ]] && docker rm -f $stale 2>/dev/null || true
 done
 
 # API_REPLICAS / WORKER_REPLICAS only take effect in Swarm (deploy.replicas is

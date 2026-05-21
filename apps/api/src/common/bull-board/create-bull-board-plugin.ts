@@ -11,7 +11,9 @@ function safeEqual(a: string, b: string): boolean {
   const bufA = Buffer.from(a);
   const bufB = Buffer.from(b);
   if (bufA.length !== bufB.length) {
-    timingSafeEqual(bufB, bufB); // Dummy compare so work factor is independent of attacker input.
+    // Dummy compare against attacker-controlled buffer — work factor scales with their input length,
+    // which they already know; using bufB here would leak the secret length via response time.
+    timingSafeEqual(bufA, bufA);
     return false;
   }
   return timingSafeEqual(bufA, bufB);
