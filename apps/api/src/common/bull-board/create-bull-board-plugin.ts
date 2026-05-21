@@ -6,17 +6,12 @@ import { Queue } from 'bullmq';
 import { timingSafeEqual } from 'node:crypto';
 import { QUEUE_NAMES } from '../../app/constants/queue.constants';
 
-// Constant-time string comparison. `===` short-circuits on the first byte
-// mismatch — a remote attacker can measure the response delay to recover
-// the secret one character at a time.
+// Constant-time compare — `===` leaks timing info via early exit.
 function safeEqual(a: string, b: string): boolean {
-  // Buffer length differs ⇒ trivially unequal; comparing the longer buffer
-  // against itself still constant-time eliminates a length-leak side channel.
   const bufA = Buffer.from(a);
   const bufB = Buffer.from(b);
   if (bufA.length !== bufB.length) {
-    // Run a dummy compare so timing stays uniform across length mismatches.
-    timingSafeEqual(bufA, bufA);
+    timingSafeEqual(bufB, bufB); // Dummy compare so work factor is independent of attacker input.
     return false;
   }
   return timingSafeEqual(bufA, bufB);
@@ -62,8 +57,7 @@ export function createBullBoardPlugin(opts: BullBoardOptions) {
       const colonIdx = decoded.indexOf(':');
       const user = decoded.slice(0, colonIdx);
       const password = colonIdx === -1 ? '' : decoded.slice(colonIdx + 1);
-      // Both checks must run regardless of the first result so the combined
-      // operation stays constant-time across user/password mismatch branches.
+      // Both checks must run regardless of first result to stay constant-time.
       const userOk = safeEqual(user, opts.user);
       const passOk = safeEqual(password, opts.password);
       if (!userOk || !passOk) {

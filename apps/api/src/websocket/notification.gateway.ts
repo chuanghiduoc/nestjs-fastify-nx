@@ -25,12 +25,8 @@ interface WsRedisEnv {
   WS_CONNECTION_LIMIT_PER_IP: number;
 }
 
-// Origin allowlist is read at module-load time from CORS_ORIGINS so the
-// @WebSocketGateway decorator (evaluated synchronously at class definition)
-// can hand a CORS function to socket.io. In production, an empty allowlist
-// means we reject all cross-origin upgrades — credential-bearing cookies
-// must never travel with `origin: true` (reflect-any), which would let any
-// site initiate authenticated socket sessions on behalf of the user.
+// Read at module-load time so the synchronous decorator can hand a CORS function to socket.io.
+// Empty allowlist in production rejects all cross-origin upgrades — never use origin: true with credentials.
 const wsOrigins = (process.env['CORS_ORIGINS'] ?? '')
   .split(',')
   .map((s) => s.trim())
@@ -42,14 +38,9 @@ const wsCorsOrigin: (
   origin: string | undefined,
   cb: (err: Error | null, allow?: boolean) => void,
 ) => void = (origin, cb) => {
-  // Same-origin / non-browser clients (curl, server-to-server) — allow.
-  if (!origin) return cb(null, true);
-  if (wsOrigins.length > 0) {
-    return cb(null, wsOrigins.includes(origin));
-  }
-  // Dev convenience: when no allowlist is configured, accept anything outside
-  // production. In production, require an explicit allowlist.
-  return cb(null, !isProd);
+  if (!origin) return cb(null, true); // same-origin / non-browser
+  if (wsOrigins.length > 0) return cb(null, wsOrigins.includes(origin));
+  return cb(null, !isProd); // dev: allow all; prod: require explicit allowlist
 };
 
 @WebSocketGateway({
@@ -86,9 +77,6 @@ export class NotificationGateway
     });
     this.subClient = this.pubClient.duplicate();
 
-    // Separate connection for per-IP connection-cap counters. Reuses
-    // REDIS_PUBSUB_DB so the counter keys live next to the adapter channels —
-    // counters are short-lived (10 min TTL) so the keyspace stays small.
     this.rateLimitClient = new Redis({
       host,
       port,
@@ -119,7 +107,11 @@ export class NotificationGateway
   }
 
   async onApplicationShutdown(): Promise<void> {
-    await Promise.all([this.pubClient.quit(), this.subClient.quit(), this.rateLimitClient.quit()]);
+    await Promise.allSettled([
+      this.pubClient.quit().catch(() => this.pubClient.disconnect()),
+      this.subClient.quit().catch(() => this.subClient.disconnect()),
+      this.rateLimitClient.quit().catch(() => this.rateLimitClient.disconnect()),
+    ]);
   }
 
   handleConnection(socket: Socket): void {

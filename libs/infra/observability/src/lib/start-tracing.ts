@@ -12,15 +12,10 @@ import {
 } from '@opentelemetry/semantic-conventions';
 import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
 
-// `deployment.environment.name` lives in the incubating spec which requires
-// `moduleResolution: nodenext`. Inline the literal so this lib stays portable.
+// Incubating OTel attr — inlined to avoid pulling in a package that requires moduleResolution: nodenext.
 const ATTR_DEPLOYMENT_ENVIRONMENT_NAME = 'deployment.environment.name';
 
 export interface StartTracingOptions {
-  /**
-   * Logical service name reported on every span.
-   * Falls back to `OTEL_SERVICE_NAME` env var, then to `'unknown_service'`.
-   */
   readonly serviceName?: string;
 }
 
@@ -44,12 +39,7 @@ function bool(value: string | undefined): boolean {
   return value === 'true';
 }
 
-/**
- * Bootstraps the OpenTelemetry NodeSDK. Call this **before** any other
- * import so the SDK can patch native modules (`http`, `fs`, `pg`, etc.)
- * before user code resolves them. The SDK is a no-op unless
- * `OTEL_ENABLED=true`.
- */
+// Call before any other import so the SDK patches native modules (http, pg, etc.) first.
 export function startTracing(options: StartTracingOptions = {}): NodeSDK | null {
   if (!bool(process.env['OTEL_ENABLED'])) return null;
 
@@ -95,15 +85,11 @@ export function startTracing(options: StartTracingOptions = {}): NodeSDK | null 
   sdk.start();
 
   const shutdown = (): void => {
-    sdk
-      .shutdown()
-      .catch((err) => {
-        // No DI container at SIGTERM/SIGINT — write directly to stderr.
-        process.stderr.write(
-          `[otel] shutdown failed: ${err instanceof Error ? err.stack : String(err)}\n`,
-        );
-      })
-      .finally(() => process.exit(0));
+    sdk.shutdown().catch((err) => {
+      process.stderr.write(
+        `[otel] shutdown failed: ${err instanceof Error ? err.stack : String(err)}\n`,
+      );
+    });
   };
 
   process.once('SIGTERM', shutdown);

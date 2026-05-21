@@ -6,26 +6,9 @@ import type Redis from 'ioredis';
 const WS_CONN_KEY_PREFIX = 'ws:conn:';
 const WS_CONN_TTL_SECONDS = 600;
 
-/**
- * Socket.io authentication middleware for Better Auth sessions.
- *
- * Browsers cannot read HttpOnly cookies, so a SPA cannot copy
- * `better-auth.session_token` into `socket.handshake.auth.token` — the
- * connection's only credential is the `Cookie` header the browser already
- * sends with the WebSocket upgrade request. We forward that header verbatim
- * to Better Auth's `getSession`.
- *
- * `socket.handshake.auth.token` is still accepted as a fallback for
- * non-browser clients (mobile apps, server-to-server, integration tests)
- * that don't have a cookie jar; it is wrapped into a synthetic cookie
- * header so the same Better Auth code path validates both cases.
- *
- * When `redis` is provided, the middleware additionally enforces a per-IP
- * concurrent-connection cap via an INCR counter. Without it, an attacker can
- * trivially OOM the gateway by opening thousands of authenticated sockets
- * from a single host. Counter is reset on `disconnect` and otherwise
- * expires after 10 minutes — half-open sockets self-clean.
- */
+// Browser SPAs forward the Cookie header directly; non-browser clients pass auth.token, which is
+// wrapped into a synthetic cookie so both code paths are identical.
+// Redis INCR cap prevents OOM from thousands of sockets per IP.
 export interface WsAuthOptions {
   redis?: Redis;
   maxConcurrentPerIp?: number;
@@ -59,9 +42,7 @@ export function createWsAuthMiddleware(auth: BetterAuthInstance, options: WsAuth
         return next(new Error('UNAUTHORIZED: Invalid session'));
       }
 
-      // Defence-in-depth: Better Auth rejects expired sessions, but a race
-      // window of a few ms can slip through on cache hits. An explicit check
-      // closes that window and makes the failure mode obvious to operators.
+      // Explicit expiry check closes the cache-hit race window where getSession() returns stale data.
       const expiresAt = session.session.expiresAt;
       const expired = expiresAt && new Date(expiresAt).getTime() < Date.now();
       if (expired) {
@@ -79,32 +60,23 @@ export function createWsAuthMiddleware(auth: BetterAuthInstance, options: WsAuth
         return next(new Error('UNAUTHORIZED: Account not active'));
       }
 
-      // Per-IP connection cap (best-effort; Redis errors fail open so an
-      // outage doesn't take down realtime entirely).
-      // `socket.handshake.address` honours X-Forwarded-For when trustProxy is
-      // set — an attacker can spoof XFF to rotate fake IPs and bypass the
-      // per-IP cap. `socket.conn.remoteAddress` is the raw TCP peer and cannot
-      // be forged from application-layer headers, mirroring the pattern used in
-      // apps/api/src/common/metrics/metrics-ip-allow.guard.ts.
+      // socket.conn.remoteAddress is raw TCP; handshake.address is XFF-spoofable.
       const ip = socket.conn.remoteAddress;
       if (redis && ip) {
         try {
           const key = `${WS_CONN_KEY_PREFIX}${ip}`;
+          // Unconditional EXPIRE after INCR: a crash between the two would leave the key TTL-less.
           const count = await redis.incr(key);
-          if (count === 1) {
-            await redis.expire(key, WS_CONN_TTL_SECONDS);
-          }
+          await redis.expire(key, WS_CONN_TTL_SECONDS);
           if (count > maxConcurrentPerIp) {
             await redis.decr(key);
             return next(new Error('TOO_MANY_CONNECTIONS: Per-IP limit exceeded'));
           }
-          // Schedule counter decrement on disconnect.
           socket.on('disconnect', () => {
             void redis.decr(key).catch(() => undefined);
           });
         } catch {
-          // Fail open on Redis errors. The session is already authenticated
-          // and IP rate limiting is a secondary defence.
+          // Fail open on Redis errors — session auth already passed; IP cap is secondary defence.
         }
       }
 
