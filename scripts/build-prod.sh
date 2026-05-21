@@ -56,9 +56,13 @@ PREFIX="${IMAGE_REGISTRY}/${IMAGE_NAMESPACE}"
 sec::log "Building production images under ${PREFIX}/*:${IMAGE_TAG}"
 
 # SBOM + max-mode provenance attestations let Scout/Trivy/registry policy engines
-# reason about the image without re-indexing the filesystem. Buildx ships them
-# behind a flag (default: minimal); enable explicitly here.
+# reason about the image without re-indexing the filesystem. Set ATTEST_SKIP=1
+# to disable when iterating locally — syft can flake on slow disks.
 ATTEST_ARGS=(--sbom=true --provenance=mode=max)
+if [[ "${ATTEST_SKIP:-0}" = "1" ]]; then
+  ATTEST_ARGS=()
+  sec::warn "Attestations disabled (ATTEST_SKIP=1)"
+fi
 
 build() {
   local app="$1" dockerfile="$2" target="${3:-}"

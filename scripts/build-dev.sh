@@ -89,8 +89,19 @@ export BUILDX_NO_DEFAULT_ATTESTATIONS=1
 
 sec::log "Building dev images: ${SERVICES[*]}"
 BUILD_START=$(date +%s)
-# shellcheck disable=SC2086
-docker compose $COMPOSE_BASE build "${BUILD_FLAGS[@]}" "${SERVICES[@]}"
+# Serial per-service build — parallel buildx fans out tsc + webpack +
+# fork-ts-checker per service, which can OOM Docker Desktop's VM.
+# Override with BUILD_PARALLEL=1 if the host has enough headroom.
+if [[ "${BUILD_PARALLEL:-0}" = "1" ]]; then
+  # shellcheck disable=SC2086
+  docker compose $COMPOSE_BASE build "${BUILD_FLAGS[@]}" "${SERVICES[@]}"
+else
+  for svc in "${SERVICES[@]}"; do
+    sec::log "  → $svc"
+    # shellcheck disable=SC2086
+    docker compose $COMPOSE_BASE build "${BUILD_FLAGS[@]}" "$svc"
+  done
+fi
 BUILD_END=$(date +%s)
 BUILD_ELAPSED=$((BUILD_END - BUILD_START))
 

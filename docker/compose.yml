@@ -12,6 +12,8 @@ services:
       TZ: ${TZ:-UTC}
       PGTZ: ${TZ:-UTC}
     volumes:
+      # Mount at the parent — Postgres 18+ official image recommends this layout
+      # so `pg_upgrade --link` works across major-version bumps.
       - postgres_data:/var/lib/postgresql
     ports:
       - '${POSTGRES_PORT:-5432}:5432'
