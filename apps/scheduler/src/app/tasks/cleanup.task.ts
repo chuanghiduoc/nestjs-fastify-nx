@@ -7,9 +7,7 @@ import { UserStatus } from '@nestjs-fastify-nx/modules-users';
 const PURGE_BATCH_SIZE = 500;
 const PURGE_MAX_BATCHES = 200;
 
-// Names emitted by `ensure_audit_log_partition` follow this exact shape; the
-// retention purge validates child names against it before issuing DROP, so a
-// rogue table sharing the `audit_logs_*` prefix can't be dropped accidentally.
+// Validated before DROP so a rogue table sharing the audit_logs_* prefix is never dropped accidentally.
 const AUDIT_PARTITION_NAME = /^audit_logs_(\d{4})_(\d{2})$/;
 
 @Injectable()
@@ -19,9 +17,6 @@ export class CleanupTask {
 
   constructor(private readonly prisma: PrismaService) {}
 
-  // Hard-deletes Users that have been INACTIVE for >90 days. Batched to avoid
-  // long-running transactions and lock contention with online traffic — relies
-  // on the (status, updatedAt) composite index for cheap range scans.
   @Cron(CronExpression.EVERY_DAY_AT_2AM)
   async purgeInactiveUsers(): Promise<void> {
     this.logger.log('Starting inactive-user purge (>90 days INACTIVE)');
@@ -62,8 +57,7 @@ export class CleanupTask {
     }
   }
 
-  // Runs every Sunday at 03:00 UTC — VACUUM ANALYZE for Postgres health.
-  @Cron('0 3 * * 0')
+  @Cron('0 3 * * 0') // Sunday 03:00 UTC
   async vacuumDatabase(): Promise<void> {
     this.logger.log('Running VACUUM ANALYZE');
 
@@ -75,9 +69,6 @@ export class CleanupTask {
     }
   }
 
-  // Roll the audit_logs partition window forward. `ensure_audit_log_partition`
-  // is idempotent (CREATE TABLE IF NOT EXISTS) so re-running every day is
-  // cheap and gives us slack against scheduler downtime around month boundaries.
   @Cron(CronExpression.EVERY_DAY_AT_4AM)
   async ensureAuditLogPartitions(): Promise<void> {
     try {
@@ -91,11 +82,7 @@ export class CleanupTask {
     }
   }
 
-  // Drop audit_logs partitions whose month falls before the retention cutoff.
-  // Partition drop is O(1) — much cheaper than a streaming DELETE — and
-  // reclaims disk immediately. Runs at 04:30 on the 1st of every month so
-  // it lines up with a fresh partition having been created the prior tick.
-  @Cron('30 4 1 * *')
+  @Cron('30 4 1 * *') // 1st of month 04:30 UTC — after partition ensure at 04:00; DROP is O(1) vs streaming DELETE
   async purgeAuditLogPartitions(): Promise<void> {
     const cutoff = new Date();
     cutoff.setUTCDate(1);
@@ -123,10 +110,7 @@ export class CleanupTask {
         const isOlder = year < cutoffYear || (year === cutoffYear && month < cutoffMonth);
         if (!isOlder) continue;
 
-        // `table_name` matched the strict YYYY_MM regex above, so direct
-        // identifier interpolation is safe — `$executeRawUnsafe` does not
-        // accept identifier parameters and `format(%I)` would require a
-        // wrapper procedure for what is otherwise a one-line DDL.
+        // Matched strict YYYY_MM regex — safe for identifier interpolation; $executeRawUnsafe doesn't support identifier params.
         await this.prisma.db.$executeRawUnsafe(`DROP TABLE IF EXISTS "${table_name}"`);
         dropped++;
       }

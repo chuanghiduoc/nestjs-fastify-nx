@@ -20,28 +20,9 @@ interface FailedEvent {
   prev?: string;
 }
 
-/**
- * Shared base class — one concrete subclass per queue carries the
- * `@QueueEventsListener(<queue>)` decorator (BullMQ requires a literal queue
- * name at decoration time, so a single listener cannot multiplex). Subclasses
- * pass their queue label to the base so all counters/histograms are tagged
- * with the producing queue.
- *
- * QueueEvents is built on a Redis stream with fan-out semantics — every
- * subscriber receives every event. Duration is measured via an in-process
- * Map: `active` records `Date.now()`, `completed`/`failed` compute the delta
- * and clear the entry.
- *
- * Caveat under horizontal scaling: when `API_REPLICAS > 1`, every replica
- * receives every event, so `bullmqJobsTotal` and `bullmqJobDurationSeconds`
- * sample counts are multiplied by the replica count. Rates and totals derived
- * from these series must be divided by the replica count in dashboards, or
- * the listener should be hoisted to a single leader-elected collector before
- * relying on them for SLOs. Duration mean/percentiles remain accurate because
- * each individual sample is correct.
- */
+// @QueueEventsListener requires a literal name — one subclass per queue.
+// At API_REPLICAS > 1 every replica receives each event; divide counters in dashboards.
 abstract class QueueMetricsListenerBase extends QueueEventsHost {
-  /** jobId → unix ms when the active event arrived on this replica. */
   private readonly activeAt = new Map<string, number>();
 
   constructor(
@@ -80,11 +61,8 @@ abstract class QueueMetricsListenerBase extends QueueEventsHost {
 
   private observeDuration(jobId: string, status: 'completed' | 'failed'): void {
     const startedAt = this.activeAt.get(jobId);
-    if (startedAt === undefined) {
-      // No active entry on this replica — job was activated by a different
-      // API replica. Skip rather than emit a NaN sample.
-      return;
-    }
+    // No active entry means the job was activated on a different replica; skip rather than emit NaN.
+    if (startedAt === undefined) return;
     this.activeAt.delete(jobId);
     const durationSeconds = (Date.now() - startedAt) / 1000;
     this.metrics.bullmqJobDurationSeconds.observe(

@@ -5,27 +5,12 @@ import { PrismaService } from './prisma.service';
 
 type LagRow = { lag_seconds: number | null; is_replica: boolean };
 
-// Readiness payload is publicly callable; raw Prisma/libpq errors leak
-// connection string segments and replica topology. Emit a stable marker
-// in the response and log the real cause for operators.
+// Sanitized marker — raw libpq errors leak connection string segments and topology.
 const SANITIZED_ERROR = 'probe_failed';
 
-/**
- * Terminus health indicator that queries pg_last_xact_replay_timestamp() on
- * the read replica. Reports lag_seconds as metadata and fails when:
- *   - the "replica" URL resolves to a primary (pg_is_in_recovery() = false), or
- *   - lag exceeds DB_REPLICATION_LAG_THRESHOLD_MS (default 30s), or
- *   - the replica is unreachable.
- *
- * When DATABASE_REPLICA_URL is unset the indicator is a no-op (returns healthy
- * with replicaConfigured: false) so it never flips /health/ready to 503 on
- * single-node deployments.
- */
 @Injectable()
 export class PrismaReplicationLagHealthIndicator extends HealthIndicator {
   private readonly logger = new Logger(PrismaReplicationLagHealthIndicator.name);
-  // Resolved once at construction; env reload requires process restart, which
-  // matches every other env-driven knob in the codebase.
   private readonly lagThresholdSeconds =
     positiveIntEnv('DB_REPLICATION_LAG_THRESHOLD_MS', 30_000) / 1_000;
 
@@ -53,9 +38,8 @@ export class PrismaReplicationLagHealthIndicator extends HealthIndicator {
       );
     }
 
-    // pg_is_in_recovery() = false after failover promotion — the node accepted
-    // writes and pg_last_xact_replay_timestamp() returns NULL, producing lag = 0.
-    // Surfacing this prevents silently routing reads to an ex-replica primary.
+    // pg_is_in_recovery() = false after failover promotion: node accepted writes, lag appears 0.
+    // Fail loudly to prevent silently routing reads to an ex-replica primary.
     if (!rows[0]?.is_replica) {
       throw new HealthCheckError(
         'DATABASE_REPLICA_URL points at a node that is no longer in recovery (promoted?)',

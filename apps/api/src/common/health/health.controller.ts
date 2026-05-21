@@ -10,10 +10,7 @@ import { RedisCacheHealthIndicator, RedisQueueHealthIndicator } from './redis.he
 import { BullMqHealthIndicator } from './bullmq-health.indicator';
 import { PgBouncerHealthIndicator } from './pgbouncer-health.indicator';
 
-// V8 heap is a fraction of container memory (default ~80% on cgroups v2).
-// Threshold at 80% of total container memory keeps headroom for GC pauses
-// without false-positive restarts under steady-state load. Falls back to 1 GiB
-// when the cgroup limit cannot be detected (older kernels / non-Linux dev).
+// 80% of cgroup limit — headroom for GC pauses; falls back to 1 GiB when cgroup is undetectable.
 function resolveHeapThreshold(): number {
   const max = (
     process as NodeJS.Process & { constrainedMemory?: () => number }
@@ -26,8 +23,7 @@ function resolveHeapThreshold(): number {
 
 const HEAP_THRESHOLD_BYTES = resolveHeapThreshold();
 
-// @nestjs/swagger 11.4.3+ blocks deep imports via the `exports` field and does not publicly
-// re-export SchemaObject. Redeclare the minimal shape we need so dep bumps don't break us.
+// @nestjs/swagger 11.4.3+ stopped re-exporting SchemaObject — redeclare minimal shape to stay bump-safe.
 type IndicatorSchema = {
   type: 'object';
   required: string[];
@@ -150,13 +146,9 @@ export class HealthController {
       () => this.redisCache.isHealthy('redis_cache'),
       () => this.redisQueue.isHealthy('redis_queue'),
       () => this.bullmq.isHealthy('bullmq'),
-      // No-ops when DATABASE_DIRECT_URL is unset (boilerplate default).
-      // Flips to 503 when a configured pooler becomes unreachable so the
-      // load balancer drains the replica before connections pile up.
+      // no-op when DATABASE_DIRECT_URL unset
       () => this.pgbouncer.isHealthy('pgbouncer'),
-      // No-op when DATABASE_REPLICA_URL is unset. Flips to 503 when replica
-      // lag exceeds 30 s or the replica is unreachable, signalling the operator
-      // before stale reads surface as application errors.
+      // no-op when DATABASE_REPLICA_URL unset
       () => this.replicationLag.isHealthy('replication_lag'),
     ]);
   }

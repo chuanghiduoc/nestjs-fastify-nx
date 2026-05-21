@@ -1,18 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
-/**
- * RFC 9457 Problem Details for HTTP APIs (https://www.rfc-editor.org/rfc/rfc9457).
- *
- * Wire `Content-Type: application/problem+json`. Field set follows the RFC core
- * (`type`, `title`, `status`, `detail`, `instance`) plus the extensions
- * `code`, `requestId`, `timestamp` adopted by Linear / Vercel / modern Stripe.
- *
- * Naming rationale:
- *  - JSON keys are camelCase to match the rest of the codebase.
- *  - The `code` STRING value is snake_case so it stands out from object keys
- *    and so frontends can use it as a stable i18n key.
- *  - The `instance` URI is the request path for log-grepping.
- */
+// RFC 9457 problem details with extensions: code (snake_case i18n key), requestId, timestamp.
 export class ProblemDetailsDto {
   @ApiProperty({
     description:

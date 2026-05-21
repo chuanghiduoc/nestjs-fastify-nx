@@ -18,27 +18,15 @@ export interface DeadLetterEnvelope {
   failedAt: string;
 }
 
-/**
- * DLQ never auto-purges by default — operators must triage manually before
- * dropping. Backoff doesn't apply because DLQ jobs are inert payloads.
- */
+// DLQ never auto-purges — operators must triage manually. No backoff; DLQ jobs are inert payloads.
 const DLQ_JOB_OPTIONS: JobsOptions = {
   attempts: 1,
   removeOnComplete: false,
   removeOnFail: false,
 };
 
-/**
- * Inspects a BullMQ `failed` queue event and, when the job has exhausted its
- * retry budget, routes a diagnostic envelope into a sibling DLQ queue.
- * Transient retry failures are intentionally ignored so the DLQ only
- * contains true dead-letters that operators must act on.
- *
- * Concurrency: all subscribers receive the same `failed` event via Redis
- * pub/sub. Idempotency comes from `jobId: dlq__<originalJobId>` — even if two
- * processes both observe the failure, BullMQ deduplicates on jobId so only
- * the first add() persists.
- */
+// Transient retries are ignored — DLQ only receives jobs that exhausted their retry budget.
+// Idempotency via jobId: dlq__<originalJobId>; BullMQ deduplicates concurrent adds from multiple replicas.
 export async function routeFailedJobToDlq(
   source: Queue,
   dlq: Queue,
@@ -64,8 +52,7 @@ export async function routeFailedJobToDlq(
 
     await dlq.add(job.name, envelope, {
       ...DLQ_JOB_OPTIONS,
-      // BullMQ rejects ':' in custom jobIds — use '__' separator.
-      jobId: `dlq__${envelope.originalJobId}`,
+      jobId: `dlq__${envelope.originalJobId}`, // BullMQ rejects ':' in jobIds — '__' separator.
     });
 
     logger.warn(
@@ -79,15 +66,7 @@ export async function routeFailedJobToDlq(
   }
 }
 
-/**
- * Builds a `@QueueEventsListener(sourceName)` Nest provider class bound to a
- * specific queue. The decorator must be applied at class-construction time;
- * we generate a fresh class per managed queue so multiple routers can
- * coexist in the same DI graph.
- *
- * The returned class receives the source `Queue` and the DLQ `Queue` via
- * constructor injection. Wiring is done by `DeadLetterModule.forFeature`.
- */
+// Generates a @QueueEventsListener class per queue so multiple routers coexist in the same DI graph.
 export function createDeadLetterRouterClass(sourceName: string): Type<QueueEventsHost> {
   @QueueEventsListener(sourceName)
   class DeadLetterRouter extends QueueEventsHost {

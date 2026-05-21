@@ -13,15 +13,7 @@ export class OutboxCleanupTask {
 
   constructor(private readonly prisma: PrismaService) {}
 
-  // Daily at 03:15 UTC — runs after vacuumDatabase (03:00 on Sundays) so that
-  // freed pages get reclaimed in the same maintenance window when they overlap.
-  // Only rows that have been fully processed (processedAt IS NOT NULL) AND
-  // whose createdAt is past the retention window are deleted. Unprocessed rows
-  // are never touched — they keep retrying until OUTBOX_MAX_ATTEMPTS.
-  //
-  // `timeZone: 'UTC'` pins the schedule regardless of host TZ — defence-in-depth
-  // on top of `TZ=UTC` env var, so DST or a future container retag never silently
-  // shifts the maintenance window into prime traffic hours.
+  // UTC-pinned to guard against host TZ drift; 03:15 runs after weekly VACUUM at 03:00 Sun.
   @Cron('15 3 * * *', { name: 'outbox-purge', timeZone: 'UTC' })
   async purgeOldOutboxEvents(): Promise<void> {
     const cutoffDays = this.retentionDays;

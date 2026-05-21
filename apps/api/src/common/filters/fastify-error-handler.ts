@@ -10,9 +10,6 @@ import {
   PROBLEM_CONTENT_TYPE,
 } from './problem-details.helper';
 
-// Fastify error codes that fire during parsing/validation phases — these
-// short-circuit the request lifecycle BEFORE the NestJS GlobalExceptionFilter
-// can run, so they would otherwise leak Fastify's default JSON error shape.
 const FASTIFY_CODE_TO_ERROR_CODE: Record<string, string> = {
   FST_ERR_CTP_INVALID_JSON_BODY: ERROR_CODES.BAD_REQUEST,
   FST_ERR_CTP_EMPTY_JSON_BODY: ERROR_CODES.BAD_REQUEST,
@@ -30,9 +27,7 @@ interface RawWithIds {
 
 export function applyFastifyErrorHandler(fastify: FastifyInstance): void {
   fastify.setErrorHandler((error: FastifyError, request: FastifyRequest, reply: FastifyReply) => {
-    // Routes that take over the response stream (e.g. the Better Auth handler
-    // calls `reply.hijack()`) must surface their own error responses — Fastify
-    // cannot send to a hijacked socket without throwing.
+    // Hijacked replies (Better Auth) own their response — cannot send after hijack.
     if (reply.sent || reply.raw.headersSent) {
       return;
     }
@@ -56,10 +51,7 @@ export function applyFastifyErrorHandler(fastify: FastifyInstance): void {
       reply.header('x-request-id', requestId);
     }
 
-    // Pass-through for errors already shaped as RFC 9457 (e.g. @fastify/rate-limit's
-    // errorResponseBuilder returns { type, title, status, detail, retryAfter }).
-    // Rebuilding via buildProblemDetails here would drop plugin-specific fields.
-    // Strict check: all three required fields present + status in HTTP error range.
+    // Pass through pre-shaped RFC 9457 bodies (@fastify/rate-limit) — rebuilding drops plugin-specific fields.
     if (isProblemDetailsShape(error)) {
       void reply.status(status).header('content-type', PROBLEM_CONTENT_TYPE).send(error);
       return;
@@ -102,9 +94,7 @@ function isProblemDetailsShape(error: unknown): error is ProblemDetailsLike {
 }
 
 function resolveStatus(error: FastifyError): number {
-  // RFC 9457 problem-details schema uses `status`; Fastify/Nest native errors
-  // use `statusCode`. @fastify/rate-limit's errorResponseBuilder returns the
-  // former — fall through to 500 here would mask 429 as Internal Server Error.
+  // Check both `status` (RFC 9457 / rate-limit shape) and `statusCode` (Fastify/Nest) to avoid masking 429 as 500.
   const candidates = [error.statusCode, (error as unknown as { status?: number }).status];
   for (const c of candidates) {
     if (typeof c === 'number' && c >= 400 && c < 600) return c;

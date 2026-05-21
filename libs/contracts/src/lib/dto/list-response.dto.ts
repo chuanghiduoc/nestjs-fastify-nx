@@ -2,19 +2,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
 
-/**
- * Stripe / Linear-style list envelope for collection endpoints.
- *
- * Cursor-based pagination is preferred (`startingAfter`, `endingBefore`) — it
- * is stable under concurrent inserts/deletes and avoids OFFSET scans. Offset
- * fields (`page`, `pageSize`, `totalCount`) are optional add-ons for admin /
- * dashboard endpoints that need "Page 5 / 127" UX. Only one paradigm should
- * be exposed per endpoint; mixing them confuses consumers.
- *
- * `data` is `unknown[]` here so the class can be `@ApiExtraModels`-registered
- * once. Endpoint-specific `@ApiPaginatedResponse(ItemDto)` overrides
- * `data: { type: 'array', items: $ref(ItemDto) }` in the generated schema.
- */
+// Stripe-style list envelope. data is unknown[] so @ApiExtraModels registration works once.
 export class ListResponseDto<T = unknown> {
   @ApiProperty({
     description: 'Discriminator value identifying this envelope as a list.',
@@ -71,12 +59,6 @@ export class ListResponseDto<T = unknown> {
   pageSize?: number;
 }
 
-/**
- * Cursor pagination query params (preferred). `limit` is the soft page size;
- * `startingAfter` / `endingBefore` are mutually exclusive opaque cursors
- * (base64url(`sortField.toISOString():id`)) copied verbatim from a previous
- * response's `lastCursor`. Clients MUST NOT construct or decode them.
- */
 export class CursorPaginationDto {
   @ApiPropertyOptional({
     type: Number,
@@ -112,18 +94,12 @@ export class CursorPaginationDto {
   endingBefore?: string;
 }
 
-/**
- * Build a Stripe-style list envelope from page-paginated handler output.
- * Use this at the controller boundary to translate domain `Page<T>` into the
- * public response shape.
- */
 export function toListResponse<T>(args: {
   url: string;
   items: readonly T[];
   page: number;
   pageSize: number;
   total: number;
-  /** Set true when client opted into the COUNT cost. Defaults to true to preserve current behavior. */
   includeTotal?: boolean;
 }): ListResponseDto<T> {
   const includeTotal = args.includeTotal ?? true;
@@ -140,16 +116,10 @@ export function toListResponse<T>(args: {
   return response;
 }
 
-/**
- * Build a Stripe-style list envelope from cursor-paginated handler output.
- * Handler should fetch `limit + 1` rows and pass `hasMore` based on whether
- * the extra row was returned.
- */
 export function toCursorListResponse<T>(args: {
   url: string;
   items: readonly T[];
   hasMore: boolean;
-  /** Opaque continuation cursor — handler should pass `encodeCursor(sortField, id)` of the last item, or null when the page is empty. */
   lastCursor: string | null;
 }): ListResponseDto<T> {
   const response = new ListResponseDto<T>();

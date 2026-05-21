@@ -64,9 +64,6 @@ export function buildSwaggerDocument(app: INestApplication): OpenAPIObject {
   return SwaggerModule.createDocument(app, config, {
     operationIdFactory: (controllerKey, methodKey) =>
       `${controllerKey.replace(/Controller$/, '')}_${methodKey}`,
-    // Globally register cross-cutting schemas so they appear in
-    // `components.schemas` even on services that don't reference them by class
-    // (Orval, openapi-typescript and friends emit them as named TS types).
     extraModels: [
       ProblemDetailsDto,
       ValidationProblemDetailsDto,

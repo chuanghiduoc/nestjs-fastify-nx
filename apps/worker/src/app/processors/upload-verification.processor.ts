@@ -10,13 +10,7 @@ export interface UploadVerificationPayload {
   bucket: string;
 }
 
-// 16 bytes is enough for every signature in libs/shared/src/lib/file-signature.ts
-// (longest is PNG at 8 bytes). Reading less than the full object keeps S3
-// egress flat regardless of upload size.
-const MAGIC_BYTES_TO_READ = 16;
-
-// Resolved once at module load — process.env is fully populated by the time
-// NestJS evaluates class decorators.
+const MAGIC_BYTES_TO_READ = 16; // covers all signatures in file-signature.ts
 const UPLOAD_CONCURRENCY = positiveIntEnv('WORKER_UPLOAD_CONCURRENCY', 5);
 
 @Processor(QUEUE_NAMES.UPLOAD_VERIFICATION, { concurrency: UPLOAD_CONCURRENCY })

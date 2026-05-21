@@ -1,13 +1,8 @@
 import { BusinessRuleException } from '@nestjs-fastify-nx/core';
 import { generateId } from '@nestjs-fastify-nx/shared';
 
-// Mirrors what the `@db.Uuid` Postgres column accepts: the canonical 8-4-4-4-12
-// hex layout, regardless of version/variant bits. Strictly enforcing version 1-7
-// would reject otherwise valid ids that Postgres still happily stores, so we
-// keep the regex aligned with the database parser rather than the IETF spec.
-// The goal here is to turn caller bugs (`'evt-x'`, empty strings, accidental
-// slugs) into a legible domain error instead of an opaque libpq parse error
-// at write time — not to gate on RFC 4122 compliance.
+// Mirrors what Postgres @db.Uuid accepts (8-4-4-4-12 hex, any version/variant).
+// Goal: turn caller bugs (empty string, slug) into a legible domain error instead of an opaque libpq parse error.
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export interface AuditLogProps {
@@ -22,7 +17,7 @@ export interface AuditLogProps {
 }
 
 export interface CreateAuditLogInput {
-  /** Deterministic id for idempotent writes (e.g. from outbox eventId). Defaults to generateId(). */
+  /** Deterministic id for idempotent writes (e.g. outbox eventId). Defaults to generateId(). */
   id?: string;
   userId?: string | null;
   action: string;
@@ -33,16 +28,10 @@ export interface CreateAuditLogInput {
   occurredAt?: Date;
 }
 
-/**
- * Append-only audit trail entry. Once created the entity is immutable —
- * the caller never mutates an existing log row, only appends new ones.
- */
 export class AuditLog {
   private constructor(private readonly props: AuditLogProps) {}
 
   static create(input: CreateAuditLogInput): AuditLog {
-    // Reject empty-string and non-UUID ids up front so callers see a domain
-    // error instead of a Prisma/libpq UUID parse error at write time.
     if (input.id !== undefined) {
       if (input.id.trim() === '') {
         throw new BusinessRuleException({

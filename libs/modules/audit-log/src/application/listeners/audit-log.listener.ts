@@ -14,11 +14,6 @@ function isAuditPayload(value: unknown): value is AuditPayload {
   return typeof value === 'object' && value !== null;
 }
 
-/**
- * Listens to all `users.*` domain events and persists an immutable audit
- * trail. Wildcard subscription is enabled by `wildcard: true` in
- * MessagingModule (`EventEmitterModule.forRoot`).
- */
 @Injectable()
 export class AuditLogListener {
   constructor(
@@ -31,9 +26,7 @@ export class AuditLogListener {
     const { ip, userAgent, ...metadata } = payload;
 
     const entry = AuditLog.create({
-      // Derive the entity id from the outbox eventId so outbox redelivery of
-      // the same event produces the same primary key. The repository catches
-      // P2002 on duplicate INSERT and treats it as a no-op.
+      // Derive id from eventId so outbox redelivery produces the same PK; repository treats P2002 as no-op.
       id: event.eventId,
       userId: event.aggregateId,
       action: event.eventType,
@@ -44,11 +37,7 @@ export class AuditLogListener {
       occurredAt: event.occurredAt,
     });
 
-    // Intentionally not catching: EventEmitter2 is configured with
-    // `ignoreErrors: false`, so a thrown error propagates back to the caller of
-    // `EventBusService.publish` (typically a CQRS command handler). Under the
-    // outbox driver, the relay additionally marks `lastError` on the outbox row;
-    // under the default in-process driver the rejection aborts the command handler.
+    // Errors propagate to EventBusService.publish; outbox relay marks lastError, in-process aborts the handler.
     await this.repository.append(entry);
   }
 }

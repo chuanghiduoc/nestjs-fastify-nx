@@ -10,22 +10,7 @@ interface OutboxPayload extends Prisma.InputJsonObject {
   payload: Prisma.InputJsonValue;
 }
 
-/**
- * Transactional-outbox adapter for `EventPublisherPort`.
- *
- * Persists each domain event into the `outbox_events` table inside the same
- * database connection as the surrounding command — application code is
- * expected to call `publishAll(...)` from within a Prisma interactive
- * transaction so the writes are atomic with the aggregate's state changes.
- *
- * A separate relay process (`OutboxRelayService`) is responsible for
- * delivering persisted events to in-process listeners or to an external
- * broker; this adapter intentionally does NOT emit anything itself.
- *
- * The payload column stores `{ eventId, occurredAt, payload }` so the relay
- * can reconstruct an in-memory event with the same shape consumers received
- * from the in-process emitter.
- */
+// Call publishAll() inside a Prisma $transaction to keep outbox writes atomic with aggregate state changes.
 @Injectable()
 export class OutboxPublisher implements EventPublisherPort {
   private readonly logger = new Logger(OutboxPublisher.name);
@@ -43,10 +28,7 @@ export class OutboxPublisher implements EventPublisherPort {
 
   private async persist(events: DomainEvent[]): Promise<void> {
     const rows = events.map((event) => ({
-      // App-stamped UUIDv7 — the producer needs the id inside the surrounding
-      // transaction to correlate aggregate writes with the outbox row, and v7
-      // ordering keeps PK locality aligned with event-occurred ordering.
-      id: generateId(),
+      id: generateId(), // UUIDv7 — PK locality aligns with event ordering.
       eventType: event.eventType,
       aggregateId: event.aggregateId,
       payload: this.serializePayload(event),

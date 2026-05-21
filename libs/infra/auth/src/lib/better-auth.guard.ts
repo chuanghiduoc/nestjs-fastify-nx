@@ -38,10 +38,8 @@ export class BetterAuthGuard implements CanActivate {
       throw new UnauthorizedException('Session not found or expired');
     }
 
-    // Defence-in-depth: Better Auth rejects expired sessions in `getSession()`,
-    // but the cookie cache can serve stale (encrypted) data for a few ms after
-    // the session row was revoked. An explicit expiresAt check closes that
-    // window — cheap because the value is already in memory.
+    // Explicit expiry check closes the cache-hit race window where getSession() serves stale data
+    // for a few ms after the session row was revoked — cheap because the value is already in memory.
     const expiresAt = session.session.expiresAt;
     if (expiresAt && new Date(expiresAt).getTime() < Date.now()) {
       throw new UnauthorizedException('Session expired');
