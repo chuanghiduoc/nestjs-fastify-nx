@@ -20,6 +20,9 @@
     },
     "codegen-build": {
       "executor": "nx:run-commands",
+      "dependsOn": ["^build"],
+      "inputs": ["production", "^production"],
+      "cache": true,
       "outputs": ["{workspaceRoot}/dist/apps/api-codegen"],
       "options": {
         "command": "webpack-cli build --config webpack.codegen.config.js --node-env=development",

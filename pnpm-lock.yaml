@@ -5,13 +5,13 @@ settings:
   excludeLinksFromLockfile: false
 
 overrides:
-  fastify: 5.8.5
+  fastify: '>=5.8.5'
   '@hono/node-server': '>=1.19.13'
   brace-expansion: '>=5.0.6'
   yaml: '>=2.8.3'
   follow-redirects: '>=1.16.0'
   picomatch: '>=4.0.4'
-  uuid: '>=11.1.0'
+  uuid: ^14.0.0
   fast-uri: '>=3.1.2'
   fast-xml-builder: '>=1.2.0'
   hono: '>=4.12.18'
@@ -19,7 +19,9 @@ overrides:
   axios: '>=1.16.0'
   kysely: '>=0.28.17'
   protobufjs: '>=8.0.2'
+  qs: '>=6.15.2'
   webpack-dev-server: '>=5.2.4'
+  ws: '>=8.20.1'
 
 importers:
 
@@ -173,7 +175,7 @@ importers:
         specifier: ^6.4.9
         version: 6.4.9
       fastify:
-        specifier: 5.8.5
+        specifier: '>=5.8.5'
         version: 5.8.5
       graphql:
         specifier: ^16.14.0
@@ -218,7 +220,7 @@ importers:
         specifier: ^2.8.0
         version: 2.8.1
       uuid:
-        specifier: '>=11.1.0'
+        specifier: ^14.0.0
         version: 14.0.0
       zod:
         specifier: ^4.4.3
@@ -2074,7 +2076,7 @@ packages:
       '@mercuriusjs/gateway': ^5.0.0
       '@nestjs/common': ^11.0.1
       '@nestjs/graphql': ^13.0.0
-      fastify: 5.8.5
+      fastify: '>=5.8.5'
       graphql: ^16.10.0
       mercurius: ^16.0.1
     peerDependenciesMeta:
@@ -5938,10 +5940,6 @@ packages:
     resolution: {integrity: sha512-9ZonPT4ZAK4a+1pUPVPZJapbi7O5qbbJPdYw/NOQWZZbVLdDTYM3A4R9z/DpAM08IDaFGsvPgiGZ82WEwUDWjg==}
     engines: {node: '>=14.16'}
 
-  find-my-way@9.5.0:
-    resolution: {integrity: sha512-VW2RfnmscZO5KgBY5XVyKREMW5nMZcxDy+buTOsL+zIPnBlbKm+00sgzoQzq1EVh4aALZLfKdwv6atBGcjvjrQ==}
-    engines: {node: '>=20'}
-
   find-my-way@9.6.0:
     resolution: {integrity: sha512-Zf4Xve4RymLl7NgaavNebZ01joJ8MfVerOG43wy7SHLO+r+K0C6d/SE0BiR7AV5V1VOCFlOP7ecdo+I4qmiHrQ==}
     engines: {node: '>=20'}
@@ -6186,7 +6184,7 @@ packages:
       '@fastify/websocket': ^10 || ^11
       crossws: ~0.3
       graphql: ^15.10.1 || ^16
-      ws: ^8
+      ws: '>=8.20.1'
     peerDependenciesMeta:
       '@fastify/websocket':
         optional: true
@@ -7996,14 +7994,6 @@ packages:
     resolution: {integrity: sha512-O+Wd1chXj5YE1DwmD+ae0bXiSLehmnS3czlC1R9FL/Nt/3q8uMS1bIHmg2lJfCoiimCxClWM8AAuJrF0EvNiog==}
     engines: {node: '>= 16'}
 
-  qs@6.14.2:
-    resolution: {integrity: sha512-V/yCWTTF7VJ9hIh18Ugr2zhJMP01MY7c5kh4J870L7imm6/DIzBsNLTXzMwUA3yZ5b/KBqLx8Kp3uRvd7xSe3Q==}
-    engines: {node: '>=0.6'}
-
-  qs@6.15.1:
-    resolution: {integrity: sha512-6YHEFRL9mfgcAvql/XhwTvf5jKcOiiupt2FiJxHkiX1z4j7WL8J/jRHYLluORvc1XxB5rV20KoeK00gVJamspg==}
-    engines: {node: '>=0.6'}
-
   qs@6.15.2:
     resolution: {integrity: sha512-Rzq0KEyX/w/tEybncDgdkZrJgVUsUMk3xjh3t5bv3S1HTAtg+uOYt72+ZfwiQwKdysThkTBdL/rTi6HDmX9Ddw==}
     engines: {node: '>=0.6'}
@@ -9327,32 +9317,8 @@ packages:
     resolution: {integrity: sha512-+QU2zd6OTD8XWIJCbffaiQeH9U73qIqafo1x6V1snCWYGJf6cVE0cDR4D8xRzcEnfI21IFrUPzPGtcPf8AC+Rw==}
     engines: {node: ^14.17.0 || ^16.13.0 || >=18.0.0}
 
-  ws@7.5.10:
-    resolution: {integrity: sha512-+dbF1tHwZpXcbOJdVOkzLDxZP1ailvSxM6ZweXTegylPny803bFhA+vqBYw4s31NSAk4S2Qz+AKXK9a4wkdjcQ==}
-    engines: {node: '>=8.3.0'}
-    peerDependencies:
-      bufferutil: ^4.0.1
-      utf-8-validate: ^5.0.2
-    peerDependenciesMeta:
-      bufferutil:
-        optional: true
-      utf-8-validate:
-        optional: true
-
-  ws@8.18.3:
-    resolution: {integrity: sha512-PEIGCY5tSlUt50cqyMXfCzX+oOPqN0vuGqWzbcJ2xvnkzkq46oOpz7dQaTDBdfICb4N14+GARUDw2XV2N4tvzg==}
-    engines: {node: '>=10.0.0'}
-    peerDependencies:
-      bufferutil: ^4.0.1
-      utf-8-validate: '>=5.0.2'
-    peerDependenciesMeta:
-      bufferutil:
-        optional: true
-      utf-8-validate:
-        optional: true
-
-  ws@8.20.0:
-    resolution: {integrity: sha512-sAt8BhgNbzCtgGbt2OxmpuryO63ZoDk/sqaB/znQm94T4fCEsy/yV+7CdC1kJhOU9lboAEU7R3kquuycDoibVA==}
+  ws@8.20.1:
+    resolution: {integrity: sha512-It4dO0K5v//JtTXuPkfEOaI3uUN87iYPnqo/ZzqCoG3g8uhA66QUMs/SrM0YK7/NAu+r4LMh/9dq2A7k+rHs+w==}
     engines: {node: '>=10.0.0'}
     peerDependencies:
       bufferutil: ^4.0.1
@@ -10974,7 +10940,7 @@ snapshots:
     dependencies:
       duplexify: 4.1.3
       fastify-plugin: 5.1.0
-      ws: 8.20.0
+      ws: 8.20.1
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
@@ -11522,13 +11488,13 @@ snapshots:
       fast-glob: 3.3.3
       graphql: 16.14.0
       graphql-tag: 2.12.6(graphql@16.14.0)
-      graphql-ws: 6.0.8(@fastify/websocket@11.2.0)(graphql@16.14.0)(ws@8.20.0)
+      graphql-ws: 6.0.8(@fastify/websocket@11.2.0)(graphql@16.14.0)(ws@8.20.1)
       lodash: 4.18.1
       normalize-path: 3.0.0
       reflect-metadata: 0.2.2
       subscriptions-transport-ws: 0.11.0(graphql@16.14.0)
       tslib: 2.8.1
-      ws: 8.20.0
+      ws: 8.20.1
     optionalDependencies:
       class-transformer: 0.5.1
       class-validator: 0.15.1
@@ -15705,7 +15671,7 @@ snapshots:
       cors: 2.8.6
       debug: 4.4.3(supports-color@7.2.0)
       engine.io-parser: 5.2.3
-      ws: 8.18.3
+      ws: 8.20.1
     transitivePeerDependencies:
       - bufferutil
       - supports-color
@@ -15958,7 +15924,7 @@ snapshots:
       parseurl: 1.3.3
       path-to-regexp: 0.1.13
       proxy-addr: 2.0.7
-      qs: 6.14.2
+      qs: 6.15.2
       range-parser: 1.2.1
       safe-buffer: 5.2.1
       send: 0.19.2
@@ -16085,14 +16051,14 @@ snapshots:
       abstract-logging: 2.0.1
       avvio: 9.2.0
       fast-json-stringify: 6.3.0
-      find-my-way: 9.5.0
+      find-my-way: 9.6.0
       light-my-request: 6.6.0
       pino: 10.3.1
       process-warning: 5.0.0
       rfdc: 1.4.1
       secure-json-parse: 4.1.0
-      semver: 7.7.4
-      toad-cache: 3.7.0
+      semver: 7.8.0
+      toad-cache: 3.7.1
 
   fastparallel@2.4.1:
     dependencies:
@@ -16173,12 +16139,6 @@ snapshots:
     dependencies:
       common-path-prefix: 3.0.0
       pkg-dir: 7.0.0
-
-  find-my-way@9.5.0:
-    dependencies:
-      fast-deep-equal: 3.1.3
-      fast-querystring: 1.1.2
-      safe-regex2: 5.1.1
 
   find-my-way@9.6.0:
     dependencies:
@@ -16440,12 +16400,12 @@ snapshots:
       graphql: 16.14.0
       tslib: 2.8.1
 
-  graphql-ws@6.0.8(@fastify/websocket@11.2.0)(graphql@16.14.0)(ws@8.20.0):
+  graphql-ws@6.0.8(@fastify/websocket@11.2.0)(graphql@16.14.0)(ws@8.20.1):
     dependencies:
       graphql: 16.14.0
     optionalDependencies:
       '@fastify/websocket': 11.2.0
-      ws: 8.20.0
+      ws: 8.20.1
 
   graphql@16.14.0: {}
 
@@ -17478,7 +17438,7 @@ snapshots:
       secure-json-parse: 4.1.0
       single-user-cache: 2.1.0
       tiny-lru: 11.4.7
-      ws: 8.20.0
+      ws: 8.20.1
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
@@ -18484,14 +18444,6 @@ snapshots:
 
   qlobber@8.0.1: {}
 
-  qs@6.14.2:
-    dependencies:
-      side-channel: 1.1.0
-
-  qs@6.15.1:
-    dependencies:
-      side-channel: 1.1.0
-
   qs@6.15.2:
     dependencies:
       side-channel: 1.1.0
@@ -19015,7 +18967,7 @@ snapshots:
   socket.io-adapter@2.5.6:
     dependencies:
       debug: 4.4.3(supports-color@7.2.0)
-      ws: 8.18.3
+      ws: 8.20.1
     transitivePeerDependencies:
       - bufferutil
       - supports-color
@@ -19232,7 +19184,7 @@ snapshots:
       graphql: 16.14.0
       iterall: 1.3.0
       symbol-observable: 1.2.0
-      ws: 7.5.10
+      ws: 8.20.1
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
@@ -19247,7 +19199,7 @@ snapshots:
       formidable: 3.5.4
       methods: 1.1.2
       mime: 2.6.0
-      qs: 6.15.1
+      qs: 6.15.2
     transitivePeerDependencies:
       - supports-color
 
@@ -19775,7 +19727,7 @@ snapshots:
       sockjs: 0.3.24
       spdy: 4.0.2
       webpack-dev-middleware: 7.4.5(tslib@2.8.1)(webpack@5.106.2)
-      ws: 8.20.0
+      ws: 8.20.1
     optionalDependencies:
       webpack: 5.106.2(@swc/core@1.15.33(@swc/helpers@0.5.21))(esbuild@0.27.7)(webpack-cli@5.1.4(webpack@5.106.2))
       webpack-cli: 5.1.4(webpack@5.106.2)
@@ -19894,11 +19846,7 @@ snapshots:
       imurmurhash: 0.1.4
       signal-exit: 4.1.0
 
-  ws@7.5.10: {}
-
-  ws@8.18.3: {}
-
-  ws@8.20.0: {}
+  ws@8.20.1: {}
 
   wsl-utils@0.1.0:
     dependencies:

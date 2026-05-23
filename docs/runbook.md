@@ -260,6 +260,41 @@ DELETE FROM _prisma_migrations WHERE migration_name = '20260516_failing_migratio
 
 **Escalation:** If the schema is in an unknown state and the DB cannot be brought back online, restore from the last snapshot taken before the migration run. Engage the DBA team and document the incident timeline.
 
+### 5a. Migration "drift detected" after pulling boilerplate updates
+
+**Symptom:** `prisma migrate deploy` aborts with `P3017 / drift detected` immediately after pulling a new release. The `_prisma_migrations` checksum for `20260501000000_init` no longer matches the on-disk migration file.
+
+**Root cause:** This boilerplate occasionally extends the `init` migration (e.g. squashing follow-up PR migrations into it) to keep first-boot deployments clean. Forks that already applied the previous shape of `init` will detect the checksum drift and refuse to proceed. The DB schema is fine — only the recorded checksum is stale.
+
+**Diagnostic:**
+
+```bash
+# Confirm the only drifted migration is the init folder
+docker compose exec postgres psql -U postgres -d nestjs_db \
+  -c "SELECT migration_name, checksum FROM _prisma_migrations
+      WHERE migration_name = '20260501000000_init';"
+```
+
+Compare the recorded checksum against `prisma migrate diff --from-empty --to-migrations prisma/migrations` to confirm the DDL is identical and only the file content shifted.
+
+**Action (only when the schema matches — verify with `prisma migrate status` first):**
+
+```bash
+# Recompute and store the current checksum without re-applying DDL
+docker compose exec postgres psql -U postgres -d nestjs_db <<'SQL'
+UPDATE _prisma_migrations
+   SET checksum = '<paste the value reported by `prisma migrate diff`>'
+ WHERE migration_name = '20260501000000_init';
+SQL
+
+# Re-run deploy — drift should clear, subsequent migrations apply normally.
+docker compose run --rm migration
+```
+
+Faster alternative for staging / sandbox: `prisma migrate resolve --applied 20260501000000_init` (requires Prisma CLI access). Production should prefer the explicit UPDATE so the change is reviewable.
+
+**Escalation:** If `prisma migrate diff` shows ACTUAL schema differences (not just metadata), treat as a real migration mismatch — restore from snapshot or manually apply the missing DDL before resolving the checksum. Never resolve drift on a DB whose schema you have not personally verified.
+
 ---
 
 ## 6. Metrics endpoint unreachable or leaking
@@ -290,6 +325,33 @@ curl -v http://<api-host>:3000/metrics 2>&1 | grep "< HTTP"
 3. Restart the API container for env changes to take effect.
 
 **Escalation:** If metrics are confirmed reachable from the public internet, treat as a security incident — Prometheus metrics expose internal labels, queue depths, and memory usage that aid attackers in profiling the system. Rotate any secrets that may appear in metric labels, restrict access immediately, and review ingress firewall rules.
+
+### 6a. BullMQ counters inflated by replica count
+
+**Symptom:** `rate(bullmq_jobs_total{status="failed"}[5m])` jumps to N× the rate observed in the worker logs, where N matches `API_REPLICAS`. SLO alerts on the counter fire even though the actual worker error rate is fine.
+
+**Root cause:** Every API replica subscribes to the same BullMQ `QueueEvents` Redis stream, so each terminal event (completed/failed/stalled/delayed) increments `bullmq_jobs_total` once per replica. The fan-out is intentional (it keeps the duration histogram observable per-replica) but the counter sample is multiplied by the replica count.
+
+**Recipe for dashboards / alerts:** divide by the live API instance count instead of hard-coding the replica number.
+
+```promql
+# Replica-corrected failure rate
+sum(rate(bullmq_jobs_total{status="failed"}[5m]))
+  /
+sum(up{job="api"})
+```
+
+Or, equivalently, average across instances:
+
+```promql
+avg by (queue, status) (rate(bullmq_jobs_total[5m]))
+```
+
+The `bullmq_job_duration_seconds` histogram is NOT inflated — each replica observes its own per-job samples — so quantile alerts on it work unmodified.
+
+**Action:** update dashboards / recording rules to apply the division pattern. If you later move metric collection onto a leader-elected collector (see comment in `bullmq-metrics.listener.ts`), drop the divisor.
+
+**Prevention:** when introducing a new BullMQ-derived counter, document its replica behaviour next to the metric definition in `metrics.service.ts` so dashboard authors are warned at definition time.
 
 ---
 
@@ -335,7 +397,94 @@ mc ilm rule add --expire-days 1 --tags "committed=false" myminio/<your-bucket>
 
 ---
 
-## 8. Tampered upload (declared MIME ≠ actual binary)
+## 8. Outbox cleanup (retention purge)
+
+**Symptom:** `outbox_events` table keeps growing even though events are being processed normally. `processedAt IS NOT NULL` row count climbs unbounded.
+
+**Root cause:** The outbox relay sets `processedAt` but never deletes rows. The daily purge cron (`OutboxCleanupTask`, 03:15 UTC) removes processed rows older than `OUTBOX_RETENTION_DAYS` (default 7). If the scheduler is down or the cron keeps erroring, rows accumulate.
+
+**Diagnostic:**
+
+```sql
+-- How many processed rows are older than the retention window?
+SELECT count(*)
+FROM outbox_events
+WHERE "processedAt" IS NOT NULL
+  AND "createdAt" < NOW() - INTERVAL '7 days';
+
+-- How many unprocessed rows exist? (these are NEVER deleted by the purge cron)
+SELECT count(*)
+FROM outbox_events
+WHERE "processedAt" IS NULL;
+```
+
+Check if the purge cron ran recently:
+
+```bash
+docker compose logs scheduler --tail=500 | grep -i "outbox purge"
+```
+
+**Manually trigger a purge run** (without restarting the container):
+
+```bash
+# Connect a psql session and run the equivalent batched DELETE directly
+docker compose exec postgres psql -U postgres -d nestjs_db <<'SQL'
+DO $$
+DECLARE
+  deleted int;
+  total   int := 0;
+BEGIN
+  LOOP
+    DELETE FROM outbox_events
+      WHERE id IN (
+        SELECT id FROM outbox_events
+         WHERE "processedAt" IS NOT NULL
+           AND "createdAt" < NOW() - INTERVAL '7 days'
+         LIMIT 1000
+      );
+    GET DIAGNOSTICS deleted = ROW_COUNT;
+    EXIT WHEN deleted = 0;
+    total := total + deleted;
+  END LOOP;
+  RAISE NOTICE 'Purged % row(s)', total;
+END;
+$$;
+SQL
+```
+
+**Action:**
+
+1. Confirm the scheduler container is running: `docker compose ps scheduler`.
+2. Check logs for purge errors: `docker compose logs scheduler --tail=200 | grep -E "purge|error"`.
+3. If the cron has been silently failing (e.g. Prisma `$executeRawUnsafe` auth error), fix the root cause and redeploy the scheduler.
+4. If the backlog is very large (millions of rows), raise `OUTBOX_PURGE_MAX_BATCHES` temporarily — the default cap of `200 × 1000 = 200k rows/run` may not drain the backlog in a single nightly run. Set `OUTBOX_PURGE_MAX_BATCHES=5000` and redeploy the scheduler, then revert after the backlog is clear.
+
+**Monitoring:**
+
+```sql
+-- Daily trend: rows purged vs rows inserted (proxy for event rate)
+SELECT date_trunc('day', "createdAt") AS day,
+       count(*) FILTER (WHERE "processedAt" IS NOT NULL) AS processed,
+       count(*) FILTER (WHERE "processedAt" IS NULL)     AS pending
+FROM outbox_events
+GROUP BY 1
+ORDER BY 1 DESC
+LIMIT 14;
+```
+
+If `ENABLE_METRICS=true`, the `outbox_lag_seconds` gauge reflects the age of the oldest unprocessed event in real time — alert when it trends upward after the relay is healthy.
+
+**Escalation:** If processed rows accumulate despite the purge running successfully (i.e. the cron completes but `count(*)` still climbs), the event volume exceeds `OUTBOX_PURGE_MAX_BATCHES × OUTBOX_PURGE_BATCH_SIZE`. Calculate the required cap:
+
+```text
+required_max_batches = ceil(daily_event_volume / OUTBOX_PURGE_BATCH_SIZE)
+```
+
+Set `OUTBOX_PURGE_MAX_BATCHES` to at least that value and redeploy.
+
+---
+
+## 9. Tampered upload (declared MIME ≠ actual binary)
 
 **Symptom:** Worker log entry like `verify-magic-bytes: MIME mismatch — deleting tampered upload`. The object disappears without a `/confirm` follow-through visible to the client.
 

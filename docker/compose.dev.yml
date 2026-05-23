@@ -22,10 +22,28 @@ services:
   migration:
     build:
       context: ..
-      dockerfile: apps/migration/Dockerfile
+      dockerfile: Dockerfile
+      target: migration
     env_file: ../.env
     environment:
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/nestjs_db
+
+  # Fake SMTP for dev/CI mail testing — UI at http://localhost:8025.
+  # Prod deployments terminate at real SMTP via MAIL_HOST in .env.
+  mailpit:
+    image: axllent/mailpit:v1.27.11
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ:-UTC}
+    ports:
+      - '${MAIL_PORT:-1025}:1025'
+      - '${MAILPIT_UI_PORT:-8025}:8025'
+    healthcheck:
+      test: ['CMD', '/mailpit', '--help']
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
 
   api:
     build:
@@ -98,7 +116,7 @@ services:
           'CMD',
           'sh',
           '-c',
-          'test -f /tmp/worker-alive && [ $(( $(date +%s) - $(date -r /tmp/worker-alive +%s) )) -lt 60 ]',
+          'test -f /tmp/worker-alive && [ $$(( $$(date +%s) - $$(date -r /tmp/worker-alive +%s) )) -lt 60 ]',
         ]
       interval: 30s
       timeout: 5s
@@ -141,7 +159,7 @@ services:
           'CMD',
           'sh',
           '-c',
-          'test -f /tmp/scheduler-alive && [ $(( $(date +%s) - $(date -r /tmp/scheduler-alive +%s) )) -lt 60 ]',
+          'test -f /tmp/scheduler-alive && [ $$(( $$(date +%s) - $$(date -r /tmp/scheduler-alive +%s) )) -lt 60 ]',
         ]
       interval: 30s
       timeout: 5s

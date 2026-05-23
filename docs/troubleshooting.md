@@ -156,6 +156,188 @@ Diagnostic: `docker exec <worker> stat /tmp/worker-alive` to see the last
 modify time. If it's old, exec into the container and check Redis
 connectivity (`redis-cli -h redis-queue -p 6380 ping`).
 
+## PgBouncer (connection pooler)
+
+### `prepared statement "..." does not exist`
+
+Symptom: Prisma queries fail with `ERROR: prepared statement "s0" does not exist`
+when routed through pgbouncer.
+
+Cause: pgbouncer is running in transaction mode without prepared-statement
+tracking. In transaction mode each statement may execute on a different server
+connection, so a statement prepared on connection A is not visible on connection B.
+
+Resolution:
+
+1. Verify you are running `edoburu/pgbouncer:1.23.1` or newer (≥ 1.21 required).
+2. Confirm `max_prepared_statements = 200` is set in `pgbouncer.ini`
+   (or `MAX_PREPARED_STATEMENTS=200` in the compose service env).
+3. Restart the pgbouncer container — the setting is only read at startup.
+
+### SCRAM hash mismatch — pgbouncer cannot authenticate to Postgres
+
+Symptom: pgbouncer logs `wrong password` or `SASL authentication failed` at
+startup, and all client connections immediately fail.
+
+Cause: `userlist.txt` was generated with the wrong password, or the password
+changed in Postgres without regenerating the hash.
+
+Resolution:
+
+1. Check `docker logs <pgbouncer-container>` for the hash-generation step.
+   `edoburu/pgbouncer` logs `Generating SCRAM-SHA-256 hash` at startup.
+2. If the password changed in Postgres, destroy and recreate the pgbouncer
+   container so the startup script regenerates `userlist.txt`.
+3. In production (Docker secrets pattern), verify the secret was created with
+   the correct password: `docker secret inspect postgres_password` (shows
+   metadata, not the value — recreate if in doubt).
+
+### Migration container hangs or `prisma migrate deploy` fails through pooler
+
+Symptom: the migration container exits with `prepared statement` errors or
+hangs indefinitely at startup.
+
+Cause: the migration container is connecting through pgbouncer. Prisma migrate
+uses session-scoped DDL operations (advisory locks, `SET LOCAL`) that are
+incompatible with transaction mode.
+
+Resolution: set `DATABASE_DIRECT_URL` so the migration bootstrap
+(`apps/migration/src/main.ts`) re-exports `DATABASE_URL` to the direct Postgres
+address before invoking `prisma migrate deploy`. When using the compose overlay
+this is already set — verify with:
+
+```bash
+docker compose config | grep -A5 'migration:'
+# Should show DATABASE_DIRECT_URL pointing at postgres:5432, not pgbouncer:6432
+```
+
+### `/health/ready` returns 503 — pgbouncer probe failing
+
+Symptom: `GET /api/v1/health/ready` returns 503 with `pgbouncer: { status: 'down' }`.
+
+Cause: pgbouncer is unreachable on `DATABASE_URL`. The `PgBouncerHealthIndicator`
+opens an ephemeral pg Client to the pooler endpoint and reports unhealthy on any
+connection error or 2-second timeout.
+
+Resolution:
+
+1. `docker compose ps pgbouncer` — confirm the container is healthy.
+2. Check pgbouncer logs: `docker logs <pgbouncer-container> --tail 50`.
+3. Confirm `DATABASE_URL` in the api service env points at `pgbouncer:6432`,
+   not `postgres:5432`.
+4. Confirm `DATABASE_DIRECT_URL` is also set — the indicator is a no-op when
+   it is absent (returns `skipped`), so if you see `down` the env var is set.
+
+### `remaining connection slots reserved for replication`
+
+Symptom: pgbouncer logs `ERROR: remaining connection slots are reserved for
+non-replication superuser connections` when acquiring a server connection.
+
+Cause: `default_pool_size` (or `reserve_pool_size`) combined with pgbouncer's
+admin connections are pushing total connections above Postgres `max_connections`.
+
+Resolution:
+
+1. Raise Postgres `max_connections` (restart required), or
+2. Lower `PGBOUNCER_POOL_SIZE` so total server connections fit within
+   `max_connections - 5` (leave headroom for superuser admin access), or
+3. Lower `DATABASE_POOL_MAX` on the app side to reduce the required pool size.
+
+## HA pgbouncer (2× + HAProxy)
+
+These failure modes apply only when using the `examples/pgbouncer-ha/` overlay.
+
+### HAProxy reports "no available backends"
+
+Symptom: all app queries fail with connection refused or timeout; HAProxy logs
+`backend pgbouncers has no server available`.
+
+Cause: both pgbouncer instances failed their healthchecks simultaneously.
+
+Diagnostic:
+
+```bash
+docker compose logs pgbouncer-1 pgbouncer-2 --tail 50
+docker compose ps pgbouncer-1 pgbouncer-2
+```
+
+Common sub-causes:
+
+- Both pgbouncer containers are unhealthy (SCRAM hash mismatch, Postgres down).
+  Resolve the underlying pgbouncer issue; HAProxy will re-admit backends once
+  `rise=2` consecutive healthchecks pass.
+- The `healthcheck_user` role is missing from Postgres. HAProxy's `pgsql-check`
+  fails authentication for both backends. Create the role (see
+  `examples/pgbouncer-ha/README.md`) or temporarily remove `option pgsql-check`
+  to fall back to plain TCP checks.
+- HAProxy config file is invalid. Run `docker compose exec haproxy haproxy -c -f
+/usr/local/etc/haproxy/haproxy.cfg` to validate.
+
+### Split-brain after Postgres failover
+
+Symptom: after a Postgres primary failover (Patroni promotion, RDS failover),
+queries succeed on some app replicas and fail on others.
+
+Cause: HAProxy routes traffic to whichever pgbouncer instances are healthy by
+TCP. Neither HAProxy nor pgbouncer tracks the Postgres primary endpoint
+automatically — both still point at the old `DB_HOST`.
+
+Resolution:
+
+1. Update `DB_HOST` (or `DATABASE_URL`) to the new Postgres primary address.
+2. Restart pgbouncer-1 and pgbouncer-2 so they reconnect to the new primary:
+   ```bash
+   docker compose restart pgbouncer-1 pgbouncer-2
+   ```
+3. Verify with `docker compose logs pgbouncer-1 pgbouncer-2` — look for
+   successful backend connections.
+
+For automated failover, use a managed pooler (Option D — RDS Proxy, Supavisor)
+that integrates with the underlying Postgres HA mechanism, or add a Patroni-aware
+sidecar that rotates `DB_HOST` and issues a `RELOAD` to pgbouncer via its admin
+console (`PGPASSWORD=... psql -h localhost -p 6432 -U pgbouncer pgbouncer -c RELOAD`).
+
+### Healthcheck flapping (backends oscillate between UP and DOWN)
+
+Symptom: HAProxy logs alternate between `Server pgbouncers/pgb1 is UP` and
+`Server pgbouncers/pgb1 is DOWN` within seconds; app sees intermittent errors.
+
+Cause: the `inter=2s` probe interval or `rise`/`fall` thresholds are too
+aggressive for the cluster's startup or network latency.
+
+Resolution: increase `inter`, raise `rise`, or lower `fall` in `haproxy.cfg`:
+
+```haproxy
+# Less sensitive — marks DOWN after 5 failures, UP after 3 successes
+server pgb1 pgbouncer-1:6432 check inter 3s rise 3 fall 5
+server pgb2 pgbouncer-2:6432 check inter 3s rise 3 fall 5
+```
+
+Rebuild haproxy after editing the config:
+
+```bash
+docker compose up -d --force-recreate haproxy
+```
+
+Also add `start_period` to the pgbouncer healthcheck in the compose overlay if
+containers are slow to initialize (the SCRAM hash-generation step takes ~1 s on
+first boot).
+
+### Stale connection surge after failover
+
+Symptom: immediately after pgbouncer-1 recovers and HAProxy re-admits it, the
+app sees a brief spike in connection-setup latency and a `connection reset`
+error rate.
+
+Cause: expected behaviour. HAProxy closes existing server-side connections to a
+backend when it is marked DOWN. Prisma's connection pool re-establishes on the
+next query. The surge lasts for one pool-fill cycle (~`DATABASE_POOL_MAX ×
+connect_timeout` ms) and self-resolves.
+
+No action required. If the surge causes unacceptable latency spikes, pre-warm
+the pool after restart by sending a low-cost query (e.g. `SELECT 1`) from a
+readiness probe before routing real traffic.
+
 ## Production deployment
 
 ### `compose.prod.yml` references resolve to `ghcr.io//api:latest`
@@ -232,3 +414,75 @@ and security hardening steps.
 specific events. If an action you expected to be audited is missing, check
 that the producing aggregate publishes an event registered in the listener's
 event map (see `libs/modules/audit-log/src/application/listeners/`).
+
+## Inspecting slow queries
+
+Requires `pg_stat_statements` to be loaded. For self-hosted Postgres, apply the
+opt-in compose overlay at `examples/postgres-with-stats/` (one restart needed).
+For managed Postgres (RDS, Cloud SQL, Supabase, Neon), the extension is usually
+pre-enabled; run `SELECT * FROM pg_extension WHERE extname = 'pg_stat_statements'`
+to confirm, then the queries below work immediately.
+
+**Note:** inspecting `pg_stat_statements` requires `pg_read_all_stats` role
+membership (or superuser) on the connecting account. Grant it to your ops user:
+
+```sql
+GRANT pg_read_all_stats TO <your_ops_user>;
+```
+
+### Top 10 slowest by total execution time
+
+Identifies the queries consuming the most cumulative DB time — the best
+candidates for indexing or read-replica offload.
+
+```sql
+SELECT
+  substring(query, 1, 120) AS query_snippet,
+  calls,
+  round(total_exec_time::numeric, 2)  AS total_ms,
+  round(mean_exec_time::numeric, 2)   AS mean_ms,
+  rows
+FROM pg_stat_statements
+ORDER BY total_exec_time DESC
+LIMIT 10;
+```
+
+### Top 10 by mean execution time (rare-but-slow queries)
+
+Catches outlier queries that run infrequently but take a long time each call.
+Filter `calls > 100` to exclude queries that have only run once or twice and
+whose high mean is statistical noise.
+
+```sql
+SELECT
+  substring(query, 1, 120) AS query_snippet,
+  calls,
+  round(total_exec_time::numeric, 2)  AS total_ms,
+  round(mean_exec_time::numeric, 2)   AS mean_ms,
+  rows
+FROM pg_stat_statements
+WHERE calls > 100
+ORDER BY mean_exec_time DESC
+LIMIT 10;
+```
+
+### Reset stats after a deploy
+
+Clear accumulated stats to get a clean baseline for a new code version:
+
+```sql
+SELECT pg_stat_statements_reset();
+```
+
+### Slow query log entries
+
+The compose overlay sets `log_min_duration_statement = 500` — any query over
+500 ms appears in the Postgres container log as a `duration: N ms` line. Filter
+with:
+
+```bash
+docker compose logs postgres | grep "duration:"
+```
+
+Adjust the threshold in the overlay YAML (`log_min_duration_statement=<ms>`) if
+you need to catch faster queries during a load test, then restore to 500 after.

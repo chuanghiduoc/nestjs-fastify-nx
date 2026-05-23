@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '@nestjs-fastify-nx/infra-database';
-import type { Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import type { AuditLogRepositoryPort } from '../../domain/ports/audit-log-repository.port';
 import type { AuditLog } from '../../domain/entities/audit-log.entity';
 
@@ -25,13 +25,15 @@ export class PrismaAuditLogRepository implements AuditLogRepositoryPort {
         },
       });
     } catch (err) {
-      // Audit failures must never break the request that triggered the
-      // event. Log and swallow — we still preserve in-flight observability
-      // via Pino, and pollination of failure metrics is handled elsewhere.
-      this.logger.error(
-        `Failed to persist audit entry id=${entry.id} action=${entry.action}`,
-        err instanceof Error ? err.stack : String(err),
-      );
+      // P2002 = PK collision on outbox redelivery — idempotency signal, not a real error.
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        this.logger.debug(
+          `audit_logs duplicate id=${entry.id} action=${entry.action} — outbox redelivery, ignoring`,
+        );
+        return;
+      }
+      // All other failures must propagate so the outbox relay records lastError.
+      throw err;
     }
   }
 }

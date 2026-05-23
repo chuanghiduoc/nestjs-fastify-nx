@@ -4,7 +4,6 @@ import { prismaAdapter } from 'better-auth/adapters/prisma';
 import { openAPI } from 'better-auth/plugins';
 import type { PrismaClient } from '@prisma/client';
 
-// Narrow contract so unit tests can swap a stub without dragging BullMQ in.
 export interface AuthMailDispatcher {
   send(opts: { to: string; subject: string; body: string; templateId?: string }): Promise<void>;
 }
@@ -20,6 +19,18 @@ export function createBetterAuth(prisma: PrismaClient, mail: AuthMailDispatcher)
       ?.split(',')
       .map((s) => s.trim())
       .filter(Boolean) ?? [];
+
+  if (!secret) {
+    // Defence in depth — env.validation already rejects an unset secret in prod,
+    // but throw here too so any bypass (overridden ConfigModule, tests) still fails loud.
+    if (process.env['NODE_ENV'] === 'production') {
+      throw new Error('BETTER_AUTH_SECRET must be set in production');
+    }
+    logger.warn('BETTER_AUTH_SECRET unset — sessions reset on every restart');
+  }
+  if (trustedOrigins.length === 0) {
+    logger.warn('CORS_ORIGINS empty — cross-origin session cookies will be rejected');
+  }
 
   return betterAuth({
     ...(secret ? { secret } : {}),
@@ -39,8 +50,7 @@ export function createBetterAuth(prisma: PrismaClient, mail: AuthMailDispatcher)
       },
     },
     emailVerification: {
-      // Intentionally NOT setting `requireEmailVerification: true` — that
-      // blocks sign-in for unverified users, which is a product decision.
+      // requireEmailVerification omitted — blocking unverified sign-in is a product decision.
       sendVerificationEmail: async ({ user, token }) => {
         const link = `${frontendBase}/verify-email?token=${encodeURIComponent(token)}`;
         await mail.send({
@@ -65,8 +75,7 @@ export function createBetterAuth(prisma: PrismaClient, mail: AuthMailDispatcher)
         status: { type: 'string', defaultValue: 'ACTIVE', input: false },
       },
       changeEmail: { enabled: true },
-      // Email confirmation is mandatory — without it a stolen cookie could
-      // nuke the account in one POST.
+      // Email confirmation required — without it a stolen cookie deletes the account in one POST.
       deleteUser: {
         enabled: true,
         sendDeleteAccountVerification: async ({ user, token }) => {
@@ -82,8 +91,7 @@ export function createBetterAuth(prisma: PrismaClient, mail: AuthMailDispatcher)
     },
     trustedOrigins,
     advanced: {
-      // DB owns primary keys via Postgres `uuidv7()` — sortable + B-tree friendly.
-      database: { generateId: false },
+      database: { generateId: false }, // Postgres owns PKs via uuidv7() — B-tree friendly.
     },
     plugins: [openAPI()],
   });
@@ -91,11 +99,7 @@ export function createBetterAuth(prisma: PrismaClient, mail: AuthMailDispatcher)
 
 export type BetterAuthInstance = ReturnType<typeof createBetterAuth>;
 
-// FRONTEND_BASE_URL is the SPA host that renders /reset, /verify-email and
-// /delete-account pages — the backend has no UI for these flows, so a stale
-// fallback to BETTER_AUTH_URL would silently produce broken email links.
-// Required in production; in dev we emit a warning and fall back to the API
-// origin so the smoke test can verify the link is dispatched at all.
+// FRONTEND_BASE_URL required in production — falling back to API origin means email links 404 in a browser.
 function resolveFrontendBase(): string {
   const raw = process.env['FRONTEND_BASE_URL']?.trim();
   if (raw) return raw.replace(/\/+$/, '');

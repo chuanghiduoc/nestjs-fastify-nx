@@ -7,7 +7,7 @@ import { QUEUE_NAMES } from '@nestjs-fastify-nx/shared';
 import { USER_REPOSITORY_PORT } from './domain/ports/user-repository.port';
 import { PrismaUserRepository } from './infrastructure/repositories/prisma-user.repository';
 import { GetUserProfileHandler } from './application/queries/get-user-profile/get-user-profile.handler';
-import { ListUsersHandler } from './application/queries/list-users/list-users.handler';
+import { ListUsersCursorHandler } from './application/queries/list-users-cursor/list-users-cursor.handler';
 import { UserRegisteredListener } from './application/listeners/user-registered.listener';
 import { UsersController } from './presentation/controllers/users.controller';
 
@@ -22,9 +22,9 @@ import { UsersController } from './presentation/controllers/users.controller';
   providers: [
     { provide: USER_REPOSITORY_PORT, useClass: PrismaUserRepository },
     GetUserProfileHandler,
-    ListUsersHandler,
+    ListUsersCursorHandler,
     UserRegisteredListener,
   ],
-  exports: [USER_REPOSITORY_PORT, ListUsersHandler, GetUserProfileHandler],
+  exports: [USER_REPOSITORY_PORT, ListUsersCursorHandler, GetUserProfileHandler],
 })
 export class UsersModule {}

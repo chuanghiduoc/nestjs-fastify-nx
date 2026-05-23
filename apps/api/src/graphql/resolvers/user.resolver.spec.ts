@@ -1,7 +1,10 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { NotFoundException } from '@nestjs/common';
 import { UserResolver } from './user.resolver';
-import type { ListUsersHandler, GetUserProfileHandler } from '@nestjs-fastify-nx/modules-users';
+import type {
+  ListUsersCursorHandler,
+  GetUserProfileHandler,
+} from '@nestjs-fastify-nx/modules-users';
 import type { AuthenticatedSession } from '@nestjs-fastify-nx/infra-auth';
 
 const mockProfileResult = {
@@ -26,7 +29,7 @@ const mockSession: AuthenticatedSession = {
 
 describe('UserResolver', () => {
   let resolver: UserResolver;
-  let mockListHandler: ListUsersHandler;
+  let mockListCursorHandler: ListUsersCursorHandler;
   let mockGetProfileHandler: GetUserProfileHandler;
 
   beforeEach(() => {
@@ -34,7 +37,7 @@ describe('UserResolver', () => {
       execute: vi.fn().mockResolvedValue(mockProfileResult),
     } as unknown as GetUserProfileHandler;
 
-    mockListHandler = {
+    mockListCursorHandler = {
       execute: vi.fn().mockResolvedValue({
         data: [
           {
@@ -47,18 +50,12 @@ describe('UserResolver', () => {
             updatedAt: new Date('2024-01-01'),
           },
         ],
-        meta: {
-          page: 1,
-          pageSize: 20,
-          total: 1,
-          totalPages: 1,
-          hasPrevPage: false,
-          hasNextPage: false,
-        },
+        hasMore: false,
+        lastCursor: 'dGVzdC1jdXJzb3I',
       }),
-    } as unknown as ListUsersHandler;
+    } as unknown as ListUsersCursorHandler;
 
-    resolver = new UserResolver(mockListHandler, mockGetProfileHandler);
+    resolver = new UserResolver(mockListCursorHandler, mockGetProfileHandler);
   });
 
   describe('me', () => {
@@ -88,12 +85,32 @@ describe('UserResolver', () => {
   });
 
   describe('users', () => {
-    it('returns paginated users page from handler', async () => {
-      const result = await resolver.users({ page: 1, pageSize: 20 });
+    it('returns cursor-paginated users from handler', async () => {
+      const result = await resolver.users({ limit: 20 });
       expect(result.data).toHaveLength(1);
       expect(result.data[0].id).toBe('u1');
-      expect(result.meta.total).toBe(1);
-      expect(mockListHandler.execute).toHaveBeenCalled();
+      expect(result.hasMore).toBe(false);
+      expect(result.lastCursor).toBe('dGVzdC1jdXJzb3I');
+      expect(mockListCursorHandler.execute).toHaveBeenCalled();
+    });
+
+    it('passes startingAfter to handler', async () => {
+      const cursor = 'some-cursor';
+      await resolver.users({ limit: 10, startingAfter: cursor });
+      expect(mockListCursorHandler.execute).toHaveBeenCalledWith(
+        expect.objectContaining({ startingAfter: cursor, limit: 10 }),
+      );
+    });
+
+    it('returns null lastCursor when result has no items', async () => {
+      vi.mocked(mockListCursorHandler.execute).mockResolvedValue({
+        data: [],
+        hasMore: false,
+        lastCursor: null,
+      });
+      const result = await resolver.users({ limit: 20 });
+      expect(result.lastCursor).toBeNull();
+      expect(result.data).toHaveLength(0);
     });
   });
 });

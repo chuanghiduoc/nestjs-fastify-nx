@@ -3,16 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import type { FastifyRequest } from 'fastify';
 import type { EnvConfig } from '../../config/env.validation';
 
-/**
- * Guards the /metrics endpoint so only requests from allowed CIDRs (or exact IPs)
- * pass through. Fails closed: if METRICS_ALLOW_CIDRS is not configured, all
- * non-loopback requests are rejected. Loopback (127.0.0.1, ::1) is always allowed
- * to support local healthcheck scrapers.
- *
- * METRICS_ALLOW_CIDRS: comma-separated list of CIDR prefixes or exact IPs.
- * Example: "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
- * For Kubernetes: set to the pod CIDR so only in-cluster Prometheus scrapes pass.
- */
+// Fails closed on empty METRICS_ALLOW_CIDRS — loopback always allowed; Kubernetes: set pod CIDR.
 @Injectable()
 export class MetricsIpAllowGuard implements CanActivate {
   private readonly allowedCidrs: string[];
@@ -29,12 +20,10 @@ export class MetricsIpAllowGuard implements CanActivate {
     const request = context.switchToHttp().getRequest<FastifyRequest>();
     const ip = this.extractIp(request);
 
-    // Always allow loopback — sidecar scrapers on localhost must not be blocked.
     if (ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1') {
       return true;
     }
 
-    // Fail closed: no allowlist configured → block all non-loopback requests.
     if (this.allowedCidrs.length === 0) {
       return false;
     }
@@ -43,16 +32,11 @@ export class MetricsIpAllowGuard implements CanActivate {
   }
 
   private extractIp(request: FastifyRequest): string {
-    // Use the TCP socket's remote address rather than req.ip. With trustProxy: 1
-    // set in main.ts, Fastify resolves req.ip from X-Forwarded-For — an attacker
-    // reaching a misconfigured ingress that does not strip XFF can forge any IP
-    // and bypass this allowlist. socket.remoteAddress is always the direct peer
-    // and cannot be spoofed from application-layer headers.
+    // socket.remoteAddress is direct TCP peer; req.ip is XFF-spoofable when trustProxy is set.
     return request.socket?.remoteAddress ?? '';
   }
 
   private ipMatchesCidr(ip: string, cidr: string): boolean {
-    // Exact IP match (no slash).
     if (!cidr.includes('/')) {
       return ip === cidr;
     }
@@ -60,16 +44,13 @@ export class MetricsIpAllowGuard implements CanActivate {
     const [network, prefixStr] = cidr.split('/');
     const prefix = parseInt(prefixStr, 10);
 
-    // Reject non-integer, out-of-range, or non-numeric prefix strings before
-    // the bitwise shift — shift behaviour is undefined for prefix > 32 in JS.
+    // JS bitwise shift is undefined for prefix > 32 — validate before shifting.
     if (!Number.isInteger(prefix) || prefix < 0 || prefix > 32 || !network) return false;
 
-    // IPv4 only — IPv6 CIDR matching is out of scope; use exact IP for IPv6 peers.
     const ipNum = this.ipv4ToNumber(ip.replace('::ffff:', ''));
     const netNum = this.ipv4ToNumber(network);
 
     if (ipNum === null || netNum === null) {
-      // Fall back to exact string comparison for non-IPv4 entries.
       return ip === network;
     }
 

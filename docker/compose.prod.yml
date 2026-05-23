@@ -32,7 +32,6 @@ x-app-security: &app-security
     nofile:
       soft: 65536
       hard: 65536
-  stop_grace_period: 30s
 
 x-app-logging: &app-logging
   logging:
@@ -43,9 +42,6 @@ x-app-logging: &app-logging
       labels: 'service'
 
 services:
-  mailpit:
-    profiles: ['dev-only']
-
   # docker-network hostnames (postgres / redis-cache / redis-queue) are
   # determined by compose itself, so we hardcode them here regardless of
   # what `.env` carries — operators only need to set credentials, not topology.
@@ -120,6 +116,10 @@ services:
       REDIS_QUEUE_PORT: '6380'
     ports:
       - '${API_PORT:-3000}:3000'
+    # Long-form gates plain-compose deploys on migration completion + dependency
+    # health so the api doesn't crash-loop on a fresh DB. compose.swarm.yml
+    # overrides back to short-form because `docker stack deploy` rejects the
+    # `condition:` key (apps retry DB/Redis connections at boot regardless).
     depends_on:
       postgres:
         condition: service_healthy
@@ -146,7 +146,18 @@ services:
       timeout: 10s
       retries: 3
       start_period: 20s
+    stop_grace_period: 30s
     deploy:
+      replicas: ${API_REPLICAS:-1}
+      update_config:
+        parallelism: 1
+        order: start-first
+        delay: 10s
+        monitor: 30s
+        failure_action: rollback
+      rollback_config:
+        parallelism: 1
+        order: stop-first
       resources:
         limits:
           memory: 1G
@@ -173,7 +184,22 @@ services:
       redis-queue:
         condition: service_healthy
     restart: unless-stopped
+    # stop_grace_period must exceed worst-case BullMQ job timeout + lock duration
+    # so in-flight jobs complete before SIGKILL. Email + S3 HEAD jobs are
+    # sub-second; 45s gives a comfortable buffer. Bump if longer-running handlers
+    # are introduced.
+    stop_grace_period: 45s
     deploy:
+      replicas: ${WORKER_REPLICAS:-1}
+      update_config:
+        parallelism: 1
+        order: start-first
+        delay: 10s
+        monitor: 30s
+        failure_action: rollback
+      rollback_config:
+        parallelism: 1
+        order: stop-first
       resources:
         limits:
           memory: 1G
@@ -195,8 +221,18 @@ services:
     # Scheduler MUST run as a single replica — multiple instances duplicate
     # cron firings. Enforced via deploy.replicas for swarm; under plain
     # compose, never run `--scale scheduler=N` with N>1.
+    # stop-first update order: old scheduler stops before new one starts.
+    # A brief cron gap is acceptable; a double-fire window (start-first) is not.
+    # 30s grace period: VACUUM and partition DDL jobs can run up to ~20s;
+    # the Docker default of 10s would SIGKILL them mid-operation.
+    stop_grace_period: 30s
     deploy:
       replicas: 1
+      update_config:
+        order: stop-first
+        parallelism: 1
+      placement:
+        max_replicas_per_node: 1
       resources:
         limits:
           memory: 512M

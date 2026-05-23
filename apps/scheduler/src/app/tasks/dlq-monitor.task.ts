@@ -11,18 +11,7 @@ interface DlqMonitorEnv {
   REDIS_QUEUE_PREFIX: string;
 }
 
-/**
- * Polls the per-queue DLQs every minute and emits a structured warn log when
- * any DLQ exceeds the configured threshold. Operators are expected to scrape
- * the log stream into their alerting system (Loki / Datadog / Sentry breadcrumb
- * → Slack notification) rather than have the scheduler hold credentials for a
- * third-party paging service.
- *
- * DLQ jobs are kept around forever by `DLQ_JOB_OPTIONS` so any breach indicates
- * a real failure mode that needs triage — usually a misconfigured downstream
- * (SMTP credentials rotated, S3 bucket missing, mail template invalid). The
- * Bull Board UI is the manual replay surface.
- */
+// Emits structured warn logs for alerting (Loki/Datadog). DLQ breach signals SMTP/S3/template failure.
 @Injectable()
 export class DlqMonitorTask {
   private readonly logger = new Logger(DlqMonitorTask.name);
@@ -36,10 +25,7 @@ export class DlqMonitorTask {
     };
     const prefix = config.get('REDIS_QUEUE_PREFIX', { infer: true });
 
-    // DLQ queues live in the same Redis instance as their source queues. We
-    // own these connections directly (instead of injecting BullModule) so
-    // the scheduler stays free of source-queue producers — adding the source
-    // queue here would force every scheduler boot to register a worker for it.
+    // Own connections directly (not via BullModule) to avoid registering a worker at boot.
     this.queues = Object.values(QUEUE_NAMES).map(
       (name) =>
         new Queue(dlqNameFor(name), {
@@ -53,9 +39,6 @@ export class DlqMonitorTask {
   async check(): Promise<void> {
     for (const queue of this.queues) {
       try {
-        // `waiting + failed` covers both newly-enqueued envelopes and ones the
-        // operator left in failed state after a manual retry — both signal a
-        // backlog. Active/completed/delayed are not interesting on a DLQ.
         const counts = await queue.getJobCounts('waiting', 'failed');
         const total = (counts.waiting ?? 0) + (counts.failed ?? 0);
         if (total >= this.threshold) {

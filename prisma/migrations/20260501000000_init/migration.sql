@@ -215,3 +215,50 @@ CREATE TRIGGER user_logged_out_outbox
 AFTER DELETE ON "sessions"
 FOR EACH ROW
 EXECUTE FUNCTION emit_user_logged_out_outbox();
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- pg_stat_statements (scaling readiness)
+--
+-- Requires shared_preload_libraries to load the extension at Postgres startup.
+-- CREATE EXTENSION registers it in this database when the library is loaded;
+-- silently no-ops with a NOTICE when not loaded (e.g. on managed Postgres
+-- providers that pre-enable it differently).
+-- ─────────────────────────────────────────────────────────────────────────────
+CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
+
+-- Reset stats on first install for a clean baseline. Wrapped in a DO block
+-- so the migration succeeds whether or not the library is pre-loaded:
+--   - Library loaded (self-hosted with overlay, or managed PG): reset executes normally.
+--   - Library not loaded (stock Postgres, no shared_preload_libraries flag):
+--     pg_stat_statements_reset() raises SQLSTATE 55000 (object_not_in_prerequisite_state).
+--     We catch ONLY that specific code so real failures (permission errors,
+--     missing functions on rolled-back installs, syntax issues) surface and
+--     fail the migration as intended. `WHEN OTHERS` would mask them.
+DO $$
+BEGIN
+  PERFORM pg_stat_statements_reset();
+EXCEPTION
+  WHEN SQLSTATE '55000' THEN
+    RAISE NOTICE 'pg_stat_statements not yet active (SQLSTATE: %) — extension registered but stats unavailable until Postgres restarts with shared_preload_libraries=pg_stat_statements configured.', SQLSTATE;
+END $$;
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Cursor pagination composite index on users
+--
+-- Repository query:
+--   ORDER BY "createdAt" DESC, "id" DESC
+--   WHERE ("createdAt", "id") < ($cursorCreatedAt, $cursorId)  -- row-comparison form
+--
+-- The single-column `users_createdAt_idx` (from the @@index above) covers the
+-- ORDER BY on a non-cursor first page but Postgres cannot use it to seek the
+-- (createdAt, id) compound predicate — it falls back to filter-after-scan as
+-- the table grows, which is exactly the pathology cursor pagination was
+-- introduced to avoid. The composite index below makes the seek O(log N) and
+-- lets Postgres satisfy the ORDER BY directly from the index without a
+-- separate sort step.
+--
+-- DESC matches the handler's ordering so reverse index scans aren't needed.
+-- Idempotent via IF NOT EXISTS so re-runs / branch overlaps are safe.
+-- ─────────────────────────────────────────────────────────────────────────────
+CREATE INDEX IF NOT EXISTS "users_createdAt_id_desc_idx"
+  ON "users" ("createdAt" DESC, "id" DESC);

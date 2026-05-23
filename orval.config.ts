@@ -6,14 +6,20 @@ export default defineConfig({
       target: './dist/swagger/openapi.json',
     },
     output: {
-      target: 'libs/api-client/src/generated/api.ts',
-      schemas: 'libs/api-client/src/generated/schemas',
+      // `workspace` is the base for `target` + `schemas` + auto-barrel.
+      // `clean: true` wipes stale files (prevents the duplicate-export
+      // accretion bug in orval #1875 and stale tag files after rename).
+      workspace: 'libs/api-client/src/generated/',
+      target: './api.ts',
+      schemas: './schemas',
       client: 'axios',
       mode: 'tags-split',
+      indexFiles: true,
+      clean: true,
       formatter: 'prettier',
       override: {
         mutator: {
-          path: 'libs/api-client/src/lib/axios-instance.ts',
+          path: '../lib/axios-instance.ts',
           name: 'customAxiosInstance',
         },
       },

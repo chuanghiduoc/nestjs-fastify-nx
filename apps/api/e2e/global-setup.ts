@@ -33,12 +33,20 @@ export async function setup(): Promise<void> {
   process.once('SIGTERM', handleSignal);
 
   const dbUrl = postgresContainer.getConnectionUri();
+  const redisHost = redisContainer.getHost();
+  const redisPort = String(redisContainer.getFirstMappedPort());
 
-  // Wire env early so prisma migrate deploy picks up the right DB.
+  // Forked workers inherit env from this process, so setting the real keys
+  // here means every module-init read (BullModule.forRootAsync, indicators,
+  // gateway) sees the testcontainer values before any default kicks in.
   process.env['DATABASE_URL'] = dbUrl;
   process.env['E2E_DATABASE_URL'] = dbUrl;
-  process.env['E2E_REDIS_HOST'] = redisContainer.getHost();
-  process.env['E2E_REDIS_PORT'] = String(redisContainer.getFirstMappedPort());
+  process.env['E2E_REDIS_HOST'] = redisHost;
+  process.env['E2E_REDIS_PORT'] = redisPort;
+  process.env['REDIS_CACHE_HOST'] = redisHost;
+  process.env['REDIS_CACHE_PORT'] = redisPort;
+  process.env['REDIS_QUEUE_HOST'] = redisHost;
+  process.env['REDIS_QUEUE_PORT'] = redisPort;
 
   // Run migrations once against the shared container. Any failure here means
   // every subsequent spec will time out against a broken schema — exit loud

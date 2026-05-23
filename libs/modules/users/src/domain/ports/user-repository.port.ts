@@ -2,23 +2,23 @@ import type { User, UserRole, UserStatus } from '../entities/user.entity';
 
 export const USER_REPOSITORY_PORT = Symbol('USER_REPOSITORY_PORT');
 
-export interface FindAllOptions {
-  page: number;
-  pageSize: number;
+export interface FindAllCursorOptions {
+  startingAfter?: string;
+  limit: number;
   role?: UserRole;
   status?: UserStatus;
   search?: string;
 }
 
-export interface FindAllResult {
+export interface FindAllCursorResult {
   items: User[];
-  total: number;
+  hasMore: boolean;
 }
 
 export interface UserRepositoryPort {
   findById(id: string): Promise<User | null>;
   findByEmail(email: string): Promise<User | null>;
-  findAll(options: FindAllOptions): Promise<FindAllResult>;
+  findAllCursor(options: FindAllCursorOptions): Promise<FindAllCursorResult>;
   save(user: User): Promise<void>;
   exists(email: string): Promise<boolean>;
 }

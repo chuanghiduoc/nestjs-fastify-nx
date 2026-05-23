@@ -6,10 +6,36 @@ import fastifyRateLimit from '@fastify/rate-limit';
 import fastifyMultipart from '@fastify/multipart';
 import { BETTER_AUTH_INSTANCE, type BetterAuthInstance } from '@nestjs-fastify-nx/infra-auth';
 import { PrismaService } from '@nestjs-fastify-nx/infra-database';
+import { STORAGE_PORT, type StoragePort } from '@nestjs-fastify-nx/infra-storage';
 import { DatabaseCleaner } from '@nestjs-fastify-nx/testing';
 import { AppModule } from '../src/app/app.module';
 import { applyFastifyErrorHandler } from '../src/common/filters/fastify-error-handler';
 import { ProblemDetailsValidationPipe } from '../src/common/pipes';
+
+// In-process stub — e2e covers controller logic, not the S3 wire format.
+// Real S3 paths are unit-tested in s3-storage.adapter.spec.ts.
+const e2eStorageStub: StoragePort = {
+  upload: async (key, body, options) => ({
+    key,
+    bucket: options?.bucket ?? 'uploads',
+    url: `http://e2e-stub/${key}`,
+    size: body.length,
+  }),
+  presignUpload: async (key, options) => ({
+    url: 'http://e2e-stub/uploads',
+    fields: { key, 'Content-Type': options.contentType },
+    key,
+    bucket: options.bucket ?? 'uploads',
+    expiresAt: new Date(Date.now() + 300_000).toISOString(),
+    maxBytes: options.maxBytes,
+  }),
+  // head() returns null for any key — confirm tests rely on this for the 404 path.
+  head: async () => null,
+  getSignedUrl: async (key) => `http://e2e-stub/signed/${key}`,
+  delete: async () => undefined,
+  commit: async () => undefined,
+  readRange: async () => Buffer.alloc(0),
+};
 
 export interface TestAppContext {
   app: NestFastifyApplication;
@@ -51,7 +77,12 @@ export async function createTestApp(): Promise<TestAppContext> {
 
   const moduleRef = await Test.createTestingModule({
     imports: [AppModule],
-  }).compile();
+  })
+    // Override S3 adapter — no minio container in e2e; controller-level tests
+    // only need head()=null / presign-roundtrip behaviour.
+    .overrideProvider(STORAGE_PORT)
+    .useValue(e2eStorageStub)
+    .compile();
 
   const app = moduleRef.createNestApplication<NestFastifyApplication>(
     new FastifyAdapter({ bodyLimit: 64 * 1024 }),

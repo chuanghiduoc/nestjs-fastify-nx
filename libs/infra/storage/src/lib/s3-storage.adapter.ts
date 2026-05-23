@@ -27,11 +27,7 @@ import type {
   UploadOptions,
 } from './storage.port';
 
-// `forcePathStyle: true` is needed for MinIO + most S3-compatible services
-// (Cloudflare R2, Backblaze B2); AWS S3 itself accepts both styles, so this
-// is safe as a global default. `url` returned from `upload()` is the plain
-// path-style URL (not pre-signed) — callers needing time-limited access
-// must call `getSignedUrl()` instead.
+// forcePathStyle required for MinIO and S3-compatible services (R2, B2); harmless on AWS S3.
 @Injectable()
 export class S3StorageAdapter implements StoragePort, OnModuleInit {
   private readonly logger = new Logger(S3StorageAdapter.name);
@@ -52,17 +48,11 @@ export class S3StorageAdapter implements StoragePort, OnModuleInit {
       region,
       credentials: { accessKeyId, secretAccessKey },
       forcePathStyle: true,
-      // AWS SDK v3 default is 3 retries.  Explicit here for visibility.
       maxAttempts: 3,
     });
   }
 
-  /**
-   * Bootstrap the configured bucket on startup. MinIO ships empty by default,
-   * so the very first upload would 500 with `NoSuchBucket`. In production we
-   * still attempt creation but only swallow the "already exists" cases —
-   * permission errors must surface so misconfigured IAM is caught early.
-   */
+  // Auto-create bucket on startup — MinIO ships empty and first upload would 500 otherwise.
   async onModuleInit(): Promise<void> {
     try {
       await this.client.send(new HeadBucketCommand({ Bucket: this.bucket }));
@@ -126,16 +116,12 @@ export class S3StorageAdapter implements StoragePort, OnModuleInit {
       throw new InternalServerErrorException('Storage upload failed');
     }
 
-    // Plain path-style URL — not signed, suitable for internal/public access.
-    // Callers that need time-limited access should use getSignedUrl().
     const url = `${this.endpoint}/${bucket}/${key}`;
 
     return { key, bucket, url, size: body.length };
   }
 
-  // Issues a short-lived POST policy so the browser uploads bytes directly to
-  // S3/MinIO. Conditions pin Content-Type and total size, so a client cannot
-  // smuggle in a different mime type or oversized payload.
+  // POST policy pins Content-Type and size — prevents mime-type smuggling or oversized payloads.
   async presignUpload(key: string, options: PresignUploadOptions): Promise<PresignedUpload> {
     const bucket = options.bucket ?? this.bucket;
     const expiresInSeconds = options.expiresInSeconds ?? 300;
@@ -160,8 +146,7 @@ export class S3StorageAdapter implements StoragePort, OnModuleInit {
     }
   }
 
-  // Returns null for missing objects so callers can distinguish "not yet
-  // uploaded" from a transport error without parsing AWS error shapes.
+  // Null = object missing (not yet uploaded); throws on transport errors.
   async head(key: string, bucket?: string): Promise<ObjectMetadata | null> {
     const targetBucket = bucket ?? this.bucket;
     try {
@@ -211,9 +196,7 @@ export class S3StorageAdapter implements StoragePort, OnModuleInit {
     }
   }
 
-  // Tag the object with `committed=true`. The bucket lifecycle rule keeps
-  // anything tagged committed; everything else (presigned-but-not-confirmed
-  // orphans) is auto-expired after 24h. See docs/runbook.md.
+  // Tag committed=true so the lifecycle rule expires untagged orphans after 24h.
   async commit(key: string, bucket?: string): Promise<void> {
     try {
       await this.client.send(

@@ -2,16 +2,6 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
 
-/**
- * Thin, type-safe wrapper around NestJS CacheManager.
- *
- * All methods accept an optional `namespace` prefix so that different features
- * can share the same Redis instance without key collisions.  The separator is
- * `::` which is the same separator used by @keyv/redis internally.
- *
- * Error handling strategy: errors are logged and re-thrown so the caller can
- * decide whether the failure is fatal (e.g., return stale data instead).
- */
 @Injectable()
 export class RedisCacheService {
   private readonly logger = new Logger(RedisCacheService.name);

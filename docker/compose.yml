@@ -1,4 +1,5 @@
-name: nestjs-fastify-nx
+# Project name comes from COMPOSE_PROJECT_NAME (.env) — `name:` at top-level
+# is rejected by `docker stack deploy`'s older parser.
 
 services:
   postgres:
@@ -11,6 +12,8 @@ services:
       TZ: ${TZ:-UTC}
       PGTZ: ${TZ:-UTC}
     volumes:
+      # Mount at the parent — Postgres 18+ official image recommends this layout
+      # so `pg_upgrade --link` works across major-version bumps.
       - postgres_data:/var/lib/postgresql
     ports:
       - '${POSTGRES_PORT:-5432}:5432'
@@ -67,34 +70,16 @@ services:
       retries: 5
       start_period: 10s
 
-  mailpit:
-    image: axllent/mailpit:v1.27.11
-    restart: unless-stopped
-    environment:
-      TZ: ${TZ:-UTC}
-    ports:
-      - '${MAIL_PORT:-1025}:1025'
-      - '${MAILPIT_UI_PORT:-8025}:8025'
-    # Mailpit ships a static binary on scratch (no shell/wget/curl). The
-    # `version` subcommand contacts GitHub for an update check and exits
-    # non-zero when the release-JSON parser hiccups (known upstream bug in
-    # ghru), so it can't be used as a readiness probe. Use the offline
-    # `help` subcommand — it exits 0 once the binary is loadable, and
-    # mailpit boots in well under start_period.
-    healthcheck:
-      test: ['CMD', '/mailpit', '--help']
-      interval: 10s
-      timeout: 3s
-      retries: 5
-      start_period: 5s
+  # Mailpit (fake SMTP) is defined in compose.dev.yml only.
 
   migration:
     restart: on-failure
     environment:
       TZ: ${TZ:-UTC}
+    # Short-form list — long-form `condition:` is rejected by `docker stack
+    # deploy`. compose.dev.yml layers the long-form variant for dev waits.
     depends_on:
-      postgres:
-        condition: service_healthy
+      - postgres
 
   worker:
     restart: unless-stopped
@@ -106,7 +91,7 @@ services:
           'CMD',
           'sh',
           '-c',
-          'test -f /tmp/worker-alive && [ $(( $(date +%s) - $(date -r /tmp/worker-alive +%s) )) -lt 60 ]',
+          'test -f /tmp/worker-alive && [ $$(( $$(date +%s) - $$(date -r /tmp/worker-alive +%s) )) -lt 60 ]',
         ]
       interval: 30s
       timeout: 5s
@@ -123,7 +108,7 @@ services:
           'CMD',
           'sh',
           '-c',
-          'test -f /tmp/scheduler-alive && [ $(( $(date +%s) - $(date -r /tmp/scheduler-alive +%s) )) -lt 60 ]',
+          'test -f /tmp/scheduler-alive && [ $$(( $$(date +%s) - $$(date -r /tmp/scheduler-alive +%s) )) -lt 60 ]',
         ]
       interval: 30s
       timeout: 5s

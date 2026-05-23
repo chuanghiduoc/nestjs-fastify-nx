@@ -46,10 +46,11 @@
 # ─── Migration ───────────────────────────────────────────────────────────────
 #
 # The `migration` service runs once per `stack deploy` with
-# `restart_policy.condition: none` + `replicas: 1`. `prisma migrate deploy`
-# is idempotent, so re-deploys reapply nothing. Swarm ignores
-# `depends_on.condition`, so apps retry their DB connection during cold start
-# rather than relying on ordering.
+# `restart_policy.condition: on-failure` (bounded: 20 attempts, 5s delay) +
+# `replicas: 1`. `prisma migrate deploy` is idempotent, so re-deploys reapply
+# nothing. Swarm ignores `depends_on.condition`, so the migration task may
+# start before Postgres accepts connections — the bounded retry rides out a
+# cold boot without spinning forever on a real misconfiguration.
 #
 # ─── Hardening notes ────────────────────────────────────────────────────────
 #
@@ -141,11 +142,16 @@ services:
     networks: [app-net]
     deploy:
       replicas: 1
+      # Swarm ignores depends_on.condition, so the task may start before
+      # Postgres is reachable. Bounded retry handles cold boot without
+      # spinning forever on a real misconfiguration.
       restart_policy:
-        condition: none
+        condition: on-failure
+        delay: 5s
+        max_attempts: 20
+        window: 60s
       placement:
-        # Co-locate with postgres to avoid an unnecessary network round-trip
-        # during apply; not strictly required, just faster.
+        # Co-locate with postgres to skip a network hop during apply.
         constraints: [node.labels.role.db == true]
 
   # ── Stateless app tier ────────────────────────────────────────────────────
@@ -159,6 +165,14 @@ services:
         published: ${API_PORT:-3000}
         protocol: tcp
         mode: ingress
+    # Swarm ignores depends_on.condition (and the older parser rejects the
+    # long-form). Strip back to short-form — bounded retry on migration +
+    # app-level connection retry covers the cold-boot race.
+    depends_on: !override
+      - postgres
+      - migration
+      - redis-cache
+      - redis-queue
     deploy:
       <<: [*deploy-restart, *deploy-update]
       replicas: ${API_REPLICAS:-2}
@@ -167,6 +181,10 @@ services:
 
   worker:
     networks: [app-net]
+    depends_on: !override
+      - postgres
+      - migration
+      - redis-queue
     deploy:
       <<: [*deploy-restart, *deploy-update]
       replicas: ${WORKER_REPLICAS:-2}
@@ -175,6 +193,11 @@ services:
 
   scheduler:
     networks: [app-net]
+    depends_on: !override
+      - postgres
+      - migration
+      - redis-cache
+      - redis-queue
     # MUST stay at exactly 1 replica — additional replicas duplicate every
     # cron firing. `max_replicas_per_node: 1` is belt-and-suspenders for
     # operators who later raise replicas without reading this comment.

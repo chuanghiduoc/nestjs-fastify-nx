@@ -27,6 +27,7 @@ if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
   echo "Env flags:"
   echo "  TRIVY_SCAN=0        Skip Trivy gate"
   echo "  TRIVY_EXIT_CODE=0   Demote Trivy failures to warnings"
+  echo "  ATTEST_SKIP=1       Skip SBOM + provenance attestations (faster local iteration)"
   echo "  IMAGE_NAMESPACE     Required for registry push; defaults to 'local' for smoke"
   echo ""
   echo "Examples:"
@@ -56,9 +57,13 @@ PREFIX="${IMAGE_REGISTRY}/${IMAGE_NAMESPACE}"
 sec::log "Building production images under ${PREFIX}/*:${IMAGE_TAG}"
 
 # SBOM + max-mode provenance attestations let Scout/Trivy/registry policy engines
-# reason about the image without re-indexing the filesystem. Buildx ships them
-# behind a flag (default: minimal); enable explicitly here.
+# reason about the image without re-indexing the filesystem. Set ATTEST_SKIP=1
+# to disable when iterating locally — syft can flake on slow disks.
 ATTEST_ARGS=(--sbom=true --provenance=mode=max)
+if [[ "${ATTEST_SKIP:-0}" = "1" ]]; then
+  ATTEST_ARGS=()
+  sec::warn "Attestations disabled (ATTEST_SKIP=1)"
+fi
 
 build() {
   local app="$1" dockerfile="$2" target="${3:-}"
@@ -70,14 +75,13 @@ build() {
     --load -t "${PREFIX}/${app}:${IMAGE_TAG}" .
 }
 
-# api/worker/scheduler share a single Dockerfile so BuildKit reuses the
-# `workspace` stage (install + COPY + prisma generate + nx sync) across all
-# three. Migration keeps its own Dockerfile — it installs --prod only and
-# never copies app source, so there is nothing to share.
-build api       Dockerfile                api
-build worker    Dockerfile                worker
-build scheduler Dockerfile                scheduler
-build migration apps/migration/Dockerfile
+# api/worker/scheduler/migration all share a single Dockerfile so BuildKit
+# reuses the `workspace` stage (install + COPY + prisma generate + nx sync)
+# across all four images — one install round-trip instead of two.
+build api       Dockerfile api
+build worker    Dockerfile worker
+build scheduler Dockerfile scheduler
+build migration Dockerfile migration
 
 echo ""
 sec::ok "All production images built:"

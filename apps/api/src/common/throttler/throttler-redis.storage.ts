@@ -8,20 +8,8 @@ import type { ThrottlerStorage } from '@nestjs/throttler';
 import Redis from 'ioredis';
 import type { EnvConfig } from '../../config/env.validation';
 
-/**
- * Wraps the upstream Redis-backed throttler storage with an explicit fail-open
- * policy. When Redis is unreachable, every guarded route would otherwise return
- * 500 because the throttler cannot make a decision — that turns a Redis outage
- * into a full API outage (worse than the rate-limit bypass it would prevent).
- *
- * Trade-off: during an outage, a single client can briefly exceed the budget.
- * Acceptable because the auth-credential paths have a separate Fastify-level
- * limiter with its own Redis (db=4) and the upstream blast radius is bounded
- * by the connection limit on the load balancer.
- *
- * Toggle via THROTTLER_FAIL_OPEN env (default true). Set to false in highly
- * regulated environments where any rate-limit lapse is unacceptable.
- */
+// Fail-open: Redis outage issues a permit rather than 500. Auth paths use a separate Fastify limiter (db=4).
+// Set THROTTLER_FAIL_OPEN=false where any lapse is unacceptable.
 @Injectable()
 export class ThrottlerRedisStorage implements OnModuleDestroy {
   private readonly logger = new Logger('ThrottlerRedis');
@@ -68,9 +56,6 @@ export class ThrottlerRedisStorage implements OnModuleDestroy {
           logger.warn(
             `Storage increment failed for "${key}" — failing open (${(err as Error).message})`,
           );
-          // Pretend the bucket is empty so the request proceeds. We return
-          // limit-1 remaining hits so the response headers stay coherent and
-          // clients don't infinitely retry assuming a stale value.
           return {
             totalHits: 0,
             timeToExpire: Math.ceil(ttl / 1000),
