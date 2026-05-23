@@ -1,14 +1,28 @@
 pre-commit:
-  parallel: true
+  # Run serially so lint-staged finishes auto-fixing files before nx-affected
+  # reads them — otherwise tsc/eslint can race the prettier writeback.
   commands:
     lint-staged:
+      priority: 1
       run: pnpm lint-staged
       glob: '*.{ts,json,yml}'
     # Secret scan staged hunks only — pre-push catches the full diff. Skips
     # silently if Docker isn't available so contributors without it aren't
     # blocked locally; CI still gates.
     gitleaks:
+      priority: 2
       run: bash scripts/security/scan-secrets.sh --staged
+      skip:
+        - merge
+        - rebase
+    # Mirror the gate CI applies (`nx affected -t typecheck lint build`) so a
+    # broken commit is rejected locally instead of failing the PR build.
+    # `--uncommitted` scopes to staged + working-tree changes; cache hits keep
+    # repeat commits cheap. Skips when only docs/yaml/sh files changed.
+    nx-affected:
+      priority: 3
+      glob: '*.{ts,tsx,json,js,cjs,mjs}'
+      run: pnpm nx affected -t typecheck lint build --uncommitted --parallel=3
       skip:
         - merge
         - rebase
