@@ -3,5 +3,32 @@
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
   "sourceRoot": "libs/api-client/src",
   "projectType": "library",
-  "tags": ["scope:client"]
+  "tags": ["scope:client"],
+  "implicitDependencies": ["api"],
+  "targets": {
+    "codegen": {
+      "executor": "nx:run-commands",
+      "dependsOn": [
+        {
+          "projects": ["api"],
+          "target": "codegen-export"
+        }
+      ],
+      "inputs": ["{workspaceRoot}/dist/swagger/openapi.json", "{workspaceRoot}/orval.config.ts"],
+      "outputs": ["{projectRoot}/src/generated"],
+      "options": {
+        "command": "pnpm codegen",
+        "cwd": "{workspaceRoot}"
+      }
+    },
+    "build": {
+      "dependsOn": ["codegen"]
+    },
+    "typecheck": {
+      "dependsOn": ["codegen"]
+    },
+    "lint": {
+      "dependsOn": ["codegen"]
+    }
+  }
 }
