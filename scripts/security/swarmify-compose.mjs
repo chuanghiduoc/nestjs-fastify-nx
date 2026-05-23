@@ -18,9 +18,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, '..', '..');
 // `yaml` is a transitive of multiple deps — load from a known pnpm store path. Search the pnpm dir for the actual version directory so a `pnpm update` doesn't break this script.
 const pnpmDir = path.join(repoRoot, 'node_modules', '.pnpm');
-const yamlEntry = fs
-  .readdirSync(pnpmDir)
-  .find((name) => name.startsWith('yaml@'));
+const yamlEntry = fs.readdirSync(pnpmDir).find((name) => name.startsWith('yaml@'));
 if (!yamlEntry) {
   console.error(`No yaml@* found in ${pnpmDir}; run pnpm install first.`);
   process.exit(1);
