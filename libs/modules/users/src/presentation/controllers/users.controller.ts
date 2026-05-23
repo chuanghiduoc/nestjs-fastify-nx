@@ -9,12 +9,12 @@ import type { FastifyRequest } from 'fastify';
 
 @ApiTags('users')
 @Controller('users')
+@UseGuards(BetterAuthGuard)
+@ApiCookieAuth('session')
 export class UsersController {
   constructor(private readonly getProfileHandler: GetUserProfileHandler) {}
 
   @Get('me')
-  @UseGuards(BetterAuthGuard)
-  @ApiCookieAuth('session')
   @ApiOperation({
     summary: 'Get the authenticated user profile',
     description:

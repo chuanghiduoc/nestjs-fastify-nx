@@ -1,0 +1,24 @@
+{
+  "password_reset": {
+    "subject": "Đặt lại mật khẩu của bạn",
+    "greeting": "Chào bạn,",
+    "greeting_named": "Chào {name},",
+    "lead": "Chúng tôi nhận được yêu cầu đặt lại mật khẩu cho tài khoản của bạn. Bấm vào liên kết dưới đây để chọn mật khẩu mới:",
+    "ignore": "Nếu bạn không yêu cầu hành động này, hãy bỏ qua email — mật khẩu của bạn vẫn được giữ nguyên. Liên kết sẽ hết hạn sau 1 giờ."
+  },
+  "email_verification": {
+    "subject": "Xác minh email của bạn",
+    "greeting": "Chào bạn,",
+    "greeting_named": "Chào {name},",
+    "lead": "Vui lòng xác nhận địa chỉ email bằng cách bấm vào liên kết dưới đây:",
+    "expiry": "Liên kết sẽ hết hạn sau 24 giờ."
+  },
+  "account_deletion": {
+    "subject": "Xác nhận xóa tài khoản",
+    "greeting": "Chào bạn,",
+    "greeting_named": "Chào {name},",
+    "warning": "Chúng tôi nhận được yêu cầu xóa tài khoản của bạn. Hành động này không thể hoàn tác.",
+    "confirm": "Nếu bạn thực sự muốn tiếp tục, vui lòng xác nhận qua liên kết:",
+    "not_you": "Nếu đây không phải bạn, hãy đổi mật khẩu ngay lập tức."
+  }
+}

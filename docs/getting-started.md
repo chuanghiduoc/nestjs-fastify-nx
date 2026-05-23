@@ -21,14 +21,14 @@ docker compose --env-file .env -f docker/compose.yml -f docker/compose.dev.yml u
 
 ## Services
 
-| Service       | URL                                                              | Credentials             |
-| ------------- | ---------------------------------------------------------------- | ----------------------- |
-| API           | [http://localhost:3000](http://localhost:3000)                   | —                       |
-| Swagger       | [http://localhost:3000/api/docs](http://localhost:3000/api/docs) | —                       |
-| MinIO Console | [http://localhost:9001](http://localhost:9001)                   | minioadmin / minioadmin |
-| PostgreSQL    | localhost:5432                                                   | postgres / postgres     |
-| Redis Cache   | localhost:6379                                                   | —                       |
-| Redis Queue   | localhost:6380                                                   | —                       |
+| Service       | URL                                                      | Credentials             |
+| ------------- | -------------------------------------------------------- | ----------------------- |
+| API           | [http://localhost:3000](http://localhost:3000)           | —                       |
+| API Docs      | [http://localhost:3000/docs](http://localhost:3000/docs) | Scalar (dev only)       |
+| MinIO Console | [http://localhost:9001](http://localhost:9001)           | minioadmin / minioadmin |
+| PostgreSQL    | localhost:5432                                           | postgres / postgres     |
+| Redis Cache   | localhost:6379                                           | —                       |
+| Redis Queue   | localhost:6380                                           | —                       |
 
 ## Verify Installation
 

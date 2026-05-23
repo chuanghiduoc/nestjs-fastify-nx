@@ -1,0 +1,12 @@
+{
+  "internal_server_error": "An unexpected error occurred.",
+  "not_found": "The requested resource was not found.",
+  "bad_request": "The request is malformed or missing required data.",
+  "unauthorized": "Authentication is required to access this resource.",
+  "forbidden": "You do not have permission to perform this action.",
+  "conflict": "The request conflicts with the current state of the resource.",
+  "too_many_requests": "Too many requests. Please slow down and try again later.",
+  "payload_too_large": "The request body is larger than the server accepts.",
+  "unsupported_media_type": "The request media type is not supported.",
+  "unprocessable_entity": "The request was understood but could not be processed."
+}

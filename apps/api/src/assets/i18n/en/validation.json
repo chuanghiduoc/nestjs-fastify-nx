@@ -1,0 +1,20 @@
+{
+  "failed_title": "Validation failed",
+  "failed_detail": "One or more fields did not pass validation.",
+  "required": "{path} is required.",
+  "wrong_type": "{path} has the wrong type.",
+  "invalid_enum_value": "{path} must be one of the allowed values.",
+  "invalid_email": "{path} must be a valid email address.",
+  "invalid_url": "{path} must be a valid URL.",
+  "invalid_uuid": "{path} must be a valid UUID.",
+  "invalid_phone": "{path} must be a valid phone number.",
+  "invalid_credit_card": "{path} must be a valid credit card number.",
+  "pattern_mismatch": "{path} does not match the required pattern.",
+  "out_of_range": "{path} is out of the allowed range.",
+  "too_short": "{path} is too short.",
+  "too_long": "{path} is too long.",
+  "wrong_length": "{path} has the wrong length.",
+  "forbidden_value": "{path} is not allowed to take that value.",
+  "unknown_field": "{path} is not a recognised field.",
+  "invalid_value": "{path} is invalid."
+}

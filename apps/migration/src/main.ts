@@ -20,6 +20,28 @@ function run(command: string, label: string): void {
   execSync(command, { stdio: 'inherit' });
 }
 
+// Postgres healthcheck can flip from `healthy` to "actually accepting queries"
+// with a 1–3s gap on cold boot. Compose / Swarm restart the container on
+// failure, but the scary P1001 in the log noise alarms operators — retry
+// in-process instead.
+function runWithRetry(command: string, label: string, attempts = 10, delayMs = 1500): void {
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      run(command, attempt === 1 ? label : `${label} (attempt ${attempt})`);
+      return;
+    } catch (err) {
+      if (attempt === attempts) throw err;
+      const msg = err instanceof Error ? err.message : String(err);
+      log(`${label} attempt ${attempt} failed — retrying in ${delayMs}ms: ${msg}`);
+      // Synchronous sleep so we keep execSync's straightforward error model.
+      const wait = Date.now() + delayMs;
+      while (Date.now() < wait) {
+        // busy-wait — acceptable in a one-shot CLI that only blocks here.
+      }
+    }
+  }
+}
+
 function injectDatabasePassword(
   url: string | undefined,
   passwordFile: string | undefined,
@@ -46,9 +68,9 @@ function bootstrap(): void {
   }
 
   try {
-    run('node_modules/.bin/prisma migrate deploy', 'prisma migrate deploy');
+    runWithRetry('node_modules/.bin/prisma migrate deploy', 'prisma migrate deploy');
   } catch (err) {
-    fail('prisma migrate deploy failed', err);
+    fail('prisma migrate deploy failed after retries', err);
   }
 
   // RUN_SEED gate keeps routine deploys from touching user data.

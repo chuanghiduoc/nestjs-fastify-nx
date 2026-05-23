@@ -1,0 +1,12 @@
+{
+  "internal_server_error": "Đã xảy ra lỗi không mong muốn.",
+  "not_found": "Không tìm thấy tài nguyên yêu cầu.",
+  "bad_request": "Yêu cầu không hợp lệ hoặc thiếu dữ liệu bắt buộc.",
+  "unauthorized": "Cần đăng nhập để truy cập tài nguyên này.",
+  "forbidden": "Bạn không có quyền thực hiện hành động này.",
+  "conflict": "Yêu cầu xung đột với trạng thái hiện tại của tài nguyên.",
+  "too_many_requests": "Quá nhiều yêu cầu. Vui lòng giảm tần suất và thử lại sau.",
+  "payload_too_large": "Dữ liệu gửi lên vượt quá giới hạn cho phép.",
+  "unsupported_media_type": "Định dạng nội dung không được hỗ trợ.",
+  "unprocessable_entity": "Yêu cầu hợp lệ nhưng không thể xử lý."
+}

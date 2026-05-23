@@ -2,17 +2,31 @@
 # deployment — `environment:` overrides the dev `.env` insecure defaults that
 # the production validator rejects (minioadmin, admin/admin, etc).
 # Adds mailpit so the worker's SMTP `verify()` at boot succeeds.
+#
+# Reused by `./scripts/build-prod.sh` for the compose-mode auto-boot path
+# (Swarm and plain compose both consume the same env shape).
 
 services:
   mailpit:
     image: axllent/mailpit:v1.27.11
     restart: unless-stopped
+    ports:
+      - '${MAILPIT_SMTP_PORT:-1025}:1025'
+      - '${MAILPIT_HTTP_PORT:-8025}:8025'
     healthcheck:
       test: ['CMD', '/mailpit', '--help']
       interval: 10s
       timeout: 3s
       retries: 5
       start_period: 5s
+
+  # Align MinIO root creds with STORAGE_ACCESS_KEY/SECRET_KEY below — base
+  # compose.yml falls back to `minioadmin` which the apps' overrides reject,
+  # producing a 403 on bucket-head. Both sides must match.
+  minio:
+    environment:
+      MINIO_ROOT_USER: localtest-access-key
+      MINIO_ROOT_PASSWORD: localtest-secret-key-min-16
 
   api:
     environment:

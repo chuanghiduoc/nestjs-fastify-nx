@@ -2,6 +2,7 @@ import {
   Injectable,
   CanActivate,
   ExecutionContext,
+  HttpStatus,
   UnauthorizedException,
   Inject,
 } from '@nestjs/common';
@@ -9,6 +10,7 @@ import { Reflector } from '@nestjs/core';
 import { GqlContextType, GqlExecutionContext } from '@nestjs/graphql';
 import { fromNodeHeaders } from 'better-auth/node';
 import type { FastifyRequest } from 'fastify';
+import { I18N_KEYS } from '@nestjs-fastify-nx/infra-i18n';
 import { BETTER_AUTH_INSTANCE } from './better-auth-instance.token';
 import type { BetterAuthInstance } from './better-auth.config';
 import type { AuthenticatedSession } from './better-auth.types';
@@ -35,14 +37,22 @@ export class BetterAuthGuard implements CanActivate {
     });
 
     if (!session || !session.user || !session.session) {
-      throw new UnauthorizedException('Session not found or expired');
+      throw new UnauthorizedException({
+        statusCode: HttpStatus.UNAUTHORIZED,
+        messageKey: I18N_KEYS.errors.auth.session_missing,
+        message: 'Session not found or expired',
+      });
     }
 
     // Explicit expiry check closes the cache-hit race window where getSession() serves stale data
     // for a few ms after the session row was revoked — cheap because the value is already in memory.
     const expiresAt = session.session.expiresAt;
     if (expiresAt && new Date(expiresAt).getTime() < Date.now()) {
-      throw new UnauthorizedException('Session expired');
+      throw new UnauthorizedException({
+        statusCode: HttpStatus.UNAUTHORIZED,
+        messageKey: I18N_KEYS.errors.auth.session_expired,
+        message: 'Session expired',
+      });
     }
 
     const user = session.user as unknown as {
@@ -54,7 +64,11 @@ export class BetterAuthGuard implements CanActivate {
     };
 
     if (user.status !== 'ACTIVE') {
-      throw new UnauthorizedException('Account is not active');
+      throw new UnauthorizedException({
+        statusCode: HttpStatus.UNAUTHORIZED,
+        messageKey: I18N_KEYS.errors.auth.account_inactive,
+        message: 'Account is not active',
+      });
     }
 
     const authenticatedSession: AuthenticatedSession = {

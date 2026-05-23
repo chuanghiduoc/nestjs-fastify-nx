@@ -2,8 +2,10 @@ import {
   Injectable,
   Logger,
   ConflictException,
+  HttpStatus,
   InternalServerErrorException,
 } from '@nestjs/common';
+import { I18N_KEYS } from '@nestjs-fastify-nx/infra-i18n';
 import { PrismaService } from '@nestjs-fastify-nx/infra-database';
 import { Prisma } from '@prisma/client';
 import { decodeCursor } from '@nestjs-fastify-nx/shared';
@@ -47,11 +49,19 @@ export class PrismaUserRepository implements UserRepositoryPort {
   private handleError(err: unknown, context: string): never {
     if (err instanceof Prisma.PrismaClientKnownRequestError) {
       if (err.code === 'P2002') {
-        throw new ConflictException('A record with this value already exists');
+        throw new ConflictException({
+          statusCode: HttpStatus.CONFLICT,
+          messageKey: I18N_KEYS.errors.users.already_exists,
+          message: 'A record with this value already exists',
+        });
       }
     }
     this.logger.error({ err, context }, 'Database operation failed');
-    throw new InternalServerErrorException('Database error');
+    throw new InternalServerErrorException({
+      statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+      messageKey: I18N_KEYS.errors.users.database_error,
+      message: 'Database error',
+    });
   }
 
   // Primary (not dbRead) — /users/me reads immediately after sign-up; replica lag would return null.

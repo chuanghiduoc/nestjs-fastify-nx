@@ -30,6 +30,7 @@
       "@nestjs-fastify-nx/infra-messaging": ["./libs/infra/messaging/src/index.ts"],
       "@nestjs-fastify-nx/infra-observability": ["./libs/infra/observability/src/index.ts"],
       "@nestjs-fastify-nx/infra-auth": ["./libs/infra/auth/src/index.ts"],
+      "@nestjs-fastify-nx/infra-i18n": ["./libs/infra/i18n/src/index.ts"],
       "@nestjs-fastify-nx/modules-users": ["./libs/modules/users/src/index.ts"],
       "@nestjs-fastify-nx/composition-admin": ["./libs/composition/admin/src/index.ts"],
       "@nestjs-fastify-nx/modules-upload": ["./libs/modules/upload/src/index.ts"],

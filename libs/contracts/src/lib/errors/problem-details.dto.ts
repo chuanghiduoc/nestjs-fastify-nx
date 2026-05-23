@@ -73,10 +73,18 @@ export class ValidationErrorItemDto {
   code!: string;
 
   @ApiProperty({
-    description: 'Default human-readable message (English). Use `code` for i18n keys.',
+    description:
+      'Human-readable message translated to the resolved locale (Accept-Language / ?lang / x-lang header). Falls back to English when the requested locale is unavailable.',
     example: 'Must be at least 1.',
   })
   message!: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Stable i18n key the server used to produce `message`. Echo it instead of the localized text when persisting violations for later replay.',
+    example: 'validation.out_of_range',
+  })
+  messageKey?: string;
 
   @ApiPropertyOptional({
     description: 'Underlying validator name (e.g. `min`, `isEmail`, `maxLength`).',

@@ -1,6 +1,11 @@
 import { HttpStatus, UnprocessableEntityException, ValidationPipe } from '@nestjs/common';
 import type { ValidationError, ValidationPipeOptions } from '@nestjs/common';
 import { ERROR_CODES, type ValidationErrorItemDto } from '@nestjs-fastify-nx/contracts';
+import {
+  I18N_KEYS,
+  mapConstraintToI18nKey,
+  VALIDATION_CONSTRAINT_KEYS,
+} from '@nestjs-fastify-nx/infra-i18n';
 
 const SENSITIVE_FIELD_PATTERN = /(password|secret|token|authorization|cookie|credit[_-]?card|ssn)/i;
 const REDACTED = '[REDACTED]';
@@ -19,8 +24,9 @@ export class ProblemDetailsValidationPipe extends ValidationPipe {
         return new UnprocessableEntityException({
           statusCode: HttpStatus.UNPROCESSABLE_ENTITY,
           code: ERROR_CODES.VALIDATION_FAILED,
-          title: 'Validation failed',
-          message: 'One or more fields did not pass validation.',
+          // GlobalExceptionFilter rewrites title/message from these keys based on the resolved locale.
+          title: I18N_KEYS.validation.failed_title,
+          message: I18N_KEYS.validation.failed_detail,
           errors,
         });
       },
@@ -42,7 +48,9 @@ function flattenValidationErrors(
         flat.push({
           path,
           code: mapValidatorToCode(rule),
+          // English message from class-validator — used as fallback when locale lookup misses.
           message,
+          messageKey: mapConstraintToI18nKey(rule),
           rule,
           constraint: extractConstraintArgs(err, rule),
           received: redactIfSensitive(path, err.value),
@@ -84,7 +92,8 @@ function redactIfSensitive(path: string, value: unknown): unknown {
   return value;
 }
 
-// class-validator decorator name → stable error code used by frontend for i18n branching.
+// class-validator decorator name → stable error code used by frontend for branching.
+// Mirrors VALIDATION_CONSTRAINT_KEYS in @nestjs-fastify-nx/infra-i18n — codes are short snake_case slugs, i18n keys are dotted paths.
 const VALIDATOR_TO_CODE: Record<string, string> = {
   isDefined: 'required',
   isNotEmpty: 'required',
@@ -134,3 +143,6 @@ const VALIDATOR_TO_CODE: Record<string, string> = {
 function mapValidatorToCode(rule: string): string {
   return VALIDATOR_TO_CODE[rule] ?? 'invalid_value';
 }
+
+// Re-export so callers don't need to import both modules.
+export { VALIDATION_CONSTRAINT_KEYS };

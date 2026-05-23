@@ -1,0 +1,24 @@
+{
+  "password_reset": {
+    "subject": "Reset your password",
+    "greeting": "Hi,",
+    "greeting_named": "Hi {name},",
+    "lead": "We received a request to reset your password. Click the link below to choose a new one:",
+    "ignore": "If you did not request this, you can safely ignore this email — your password will stay the same. The link expires in 1 hour."
+  },
+  "email_verification": {
+    "subject": "Verify your email",
+    "greeting": "Hi,",
+    "greeting_named": "Hi {name},",
+    "lead": "Please confirm your email address by clicking the link below:",
+    "expiry": "This link expires in 24 hours."
+  },
+  "account_deletion": {
+    "subject": "Confirm account deletion",
+    "greeting": "Hi,",
+    "greeting_named": "Hi {name},",
+    "warning": "We received a request to delete your account. This action is permanent.",
+    "confirm": "If you really want to proceed, confirm via this link:",
+    "not_you": "If this was not you, change your password immediately."
+  }
+}

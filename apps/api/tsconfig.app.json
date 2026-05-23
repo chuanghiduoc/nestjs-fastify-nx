@@ -64,6 +64,9 @@
       "path": "../../libs/infra/auth/tsconfig.lib.json"
     },
     {
+      "path": "../../libs/infra/i18n/tsconfig.lib.json"
+    },
+    {
       "path": "../../libs/infra/database/tsconfig.lib.json"
     }
   ]

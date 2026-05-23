@@ -234,7 +234,9 @@ for svc in "${SERVICES[@]}"; do
 done
 
 echo ""
-sec::ok "Swagger UI: http://localhost:3000/api/docs"
+sec::ok "API docs:   http://localhost:3000/docs        (Scalar UI, dev only)"
+sec::ok "OpenAPI:    http://localhost:3000/docs-json   (raw spec for Orval / Postman)"
+sec::ok "Auth docs:  http://localhost:3000/api/auth/reference"
 if [[ $WITH_OBS -eq 1 ]]; then
   sec::ok "Grafana:    http://localhost:3001  (admin / admin)"
   sec::ok "Jaeger:     http://localhost:16686"

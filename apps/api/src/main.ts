@@ -2,6 +2,7 @@ import './tracing';
 import * as Sentry from '@sentry/nestjs';
 import { nodeProfilingIntegration } from '@sentry/profiling-node';
 import { NestFactory } from '@nestjs/core';
+import { VersioningType } from '@nestjs/common';
 import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify';
 import type { FastifyReply, FastifyRequest, RouteShorthandOptions } from 'fastify';
 import { ConfigService } from '@nestjs/config';
@@ -95,7 +96,9 @@ async function bootstrap() {
 
   app.useLogger(app.get(Logger));
   app.enableShutdownHooks();
-  app.setGlobalPrefix('api/v1', { exclude: ['metrics'] });
+  // URI versioning keeps /api/v1/... compatible with existing clients while opening a clean path for v2 alongside v1.
+  app.setGlobalPrefix('api', { exclude: ['metrics'] });
+  app.enableVersioning({ type: VersioningType.URI, defaultVersion: '1' });
 
   const fastify = app.getHttpAdapter().getInstance();
   // CSP disabled in dev so Scalar/Bull Board can load CDN assets.
@@ -279,7 +282,7 @@ async function bootstrap() {
   fastify.all('/api/auth/*', looseAuthRouteConfig, authRouteHandler);
 
   if (config.get('BULL_BOARD_ENABLED', { infer: true })) {
-    // Fastify plugin — setGlobalPrefix('api/v1') does NOT apply to Fastify-registered plugins.
+    // Fastify plugin — setGlobalPrefix/enableVersioning does NOT apply to Fastify-registered plugins.
     await fastify.register(
       createBullBoardPlugin({
         user: config.get('BULL_BOARD_USER', { infer: true }),
@@ -315,7 +318,7 @@ async function bootstrap() {
   app.useGlobalPipes(new ProblemDetailsValidationPipe());
 
   if (!isProduction) {
-    setupSwagger(app);
+    await setupSwagger(app);
   }
 
   const port = config.get('PORT', { infer: true });

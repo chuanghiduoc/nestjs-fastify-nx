@@ -3,14 +3,23 @@ import { betterAuth } from 'better-auth';
 import { prismaAdapter } from 'better-auth/adapters/prisma';
 import { openAPI } from 'better-auth/plugins';
 import type { PrismaClient } from '@prisma/client';
-
+import { I18nService } from 'nestjs-i18n';
+import {
+  I18N_KEYS,
+  resolveRequestLocale,
+  translateOrFallback,
+} from '@nestjs-fastify-nx/infra-i18n';
 export interface AuthMailDispatcher {
   send(opts: { to: string; subject: string; body: string; templateId?: string }): Promise<void>;
 }
 
 const logger = new Logger('BetterAuth');
 
-export function createBetterAuth(prisma: PrismaClient, mail: AuthMailDispatcher) {
+export function createBetterAuth(
+  prisma: PrismaClient,
+  mail: AuthMailDispatcher,
+  i18n: I18nService,
+) {
   const secret = process.env['BETTER_AUTH_SECRET'];
   const baseURL = process.env['BETTER_AUTH_URL'];
   const frontendBase = resolveFrontendBase();
@@ -39,24 +48,36 @@ export function createBetterAuth(prisma: PrismaClient, mail: AuthMailDispatcher)
     emailAndPassword: {
       enabled: true,
       minPasswordLength: 8,
-      sendResetPassword: async ({ user, token }) => {
+      sendResetPassword: async ({ user, token }, request) => {
+        const lang = resolveRequestLocale(request);
         const link = `${frontendBase}/reset?token=${encodeURIComponent(token)}`;
+        const subject = await translateOrFallback(i18n, I18N_KEYS.emails.password_reset.subject, {
+          lang,
+        });
+        const body = await renderPasswordResetEmail(i18n, lang, { name: user.name, link });
         await mail.send({
           to: user.email,
-          subject: 'Reset your password',
-          body: passwordResetTemplate({ name: user.name, link }),
+          subject,
+          body,
           templateId: 'password-reset',
         });
       },
     },
     emailVerification: {
       // requireEmailVerification omitted — blocking unverified sign-in is a product decision.
-      sendVerificationEmail: async ({ user, token }) => {
+      sendVerificationEmail: async ({ user, token }, request) => {
+        const lang = resolveRequestLocale(request);
         const link = `${frontendBase}/verify-email?token=${encodeURIComponent(token)}`;
+        const subject = await translateOrFallback(
+          i18n,
+          I18N_KEYS.emails.email_verification.subject,
+          { lang },
+        );
+        const body = await renderEmailVerificationEmail(i18n, lang, { name: user.name, link });
         await mail.send({
           to: user.email,
-          subject: 'Verify your email',
-          body: emailVerificationTemplate({ name: user.name, link }),
+          subject,
+          body,
           templateId: 'email-verification',
         });
       },
@@ -78,12 +99,19 @@ export function createBetterAuth(prisma: PrismaClient, mail: AuthMailDispatcher)
       // Email confirmation required — without it a stolen cookie deletes the account in one POST.
       deleteUser: {
         enabled: true,
-        sendDeleteAccountVerification: async ({ user, token }) => {
+        sendDeleteAccountVerification: async ({ user, token }, request) => {
+          const lang = resolveRequestLocale(request);
           const link = `${frontendBase}/delete-account?token=${encodeURIComponent(token)}`;
+          const subject = await translateOrFallback(
+            i18n,
+            I18N_KEYS.emails.account_deletion.subject,
+            { lang },
+          );
+          const body = await renderAccountDeletionEmail(i18n, lang, { name: user.name, link });
           await mail.send({
             to: user.email,
-            subject: 'Confirm account deletion',
-            body: accountDeletionTemplate({ name: user.name, link }),
+            subject,
+            body,
             templateId: 'account-deletion',
           });
         },
@@ -120,34 +148,77 @@ function resolveFrontendBase(): string {
   return apiOrigin;
 }
 
-function passwordResetTemplate({ name, link }: { name?: string; link: string }): string {
-  const greeting = name ? `Hi ${escapeHtml(name)},` : 'Hi,';
+async function greeting(
+  i18n: I18nService,
+  lang: string,
+  namespaceKeys: { greeting: string; greeting_named: string },
+  name?: string,
+): Promise<string> {
+  if (name) {
+    return translateOrFallback(i18n, namespaceKeys.greeting_named, {
+      lang,
+      args: { name: escapeHtml(name) },
+    });
+  }
+  return translateOrFallback(i18n, namespaceKeys.greeting, { lang });
+}
+
+async function renderPasswordResetEmail(
+  i18n: I18nService,
+  lang: string,
+  ctx: { name?: string; link: string },
+): Promise<string> {
+  const keys = I18N_KEYS.emails.password_reset;
+  const [hello, lead, ignore] = await Promise.all([
+    greeting(i18n, lang, keys, ctx.name),
+    translateOrFallback(i18n, keys.lead, { lang }),
+    translateOrFallback(i18n, keys.ignore, { lang }),
+  ]);
   return `<!doctype html><html><body style="font-family:system-ui,sans-serif;line-height:1.5">
-<p>${greeting}</p>
-<p>We received a request to reset your password. Click the link below to choose a new one:</p>
-<p><a href="${link}">${link}</a></p>
-<p>If you did not request this, you can safely ignore this email — your password will stay the same. The link expires in 1 hour.</p>
+<p>${hello}</p>
+<p>${lead}</p>
+<p><a href="${ctx.link}">${ctx.link}</a></p>
+<p>${ignore}</p>
 </body></html>`;
 }
 
-function emailVerificationTemplate({ name, link }: { name?: string; link: string }): string {
-  const greeting = name ? `Hi ${escapeHtml(name)},` : 'Hi,';
+async function renderEmailVerificationEmail(
+  i18n: I18nService,
+  lang: string,
+  ctx: { name?: string; link: string },
+): Promise<string> {
+  const keys = I18N_KEYS.emails.email_verification;
+  const [hello, lead, expiry] = await Promise.all([
+    greeting(i18n, lang, keys, ctx.name),
+    translateOrFallback(i18n, keys.lead, { lang }),
+    translateOrFallback(i18n, keys.expiry, { lang }),
+  ]);
   return `<!doctype html><html><body style="font-family:system-ui,sans-serif;line-height:1.5">
-<p>${greeting}</p>
-<p>Please confirm your email address by clicking the link below:</p>
-<p><a href="${link}">${link}</a></p>
-<p>This link expires in 24 hours.</p>
+<p>${hello}</p>
+<p>${lead}</p>
+<p><a href="${ctx.link}">${ctx.link}</a></p>
+<p>${expiry}</p>
 </body></html>`;
 }
 
-function accountDeletionTemplate({ name, link }: { name?: string; link: string }): string {
-  const greeting = name ? `Hi ${escapeHtml(name)},` : 'Hi,';
+async function renderAccountDeletionEmail(
+  i18n: I18nService,
+  lang: string,
+  ctx: { name?: string; link: string },
+): Promise<string> {
+  const keys = I18N_KEYS.emails.account_deletion;
+  const [hello, warning, confirm, notYou] = await Promise.all([
+    greeting(i18n, lang, keys, ctx.name),
+    translateOrFallback(i18n, keys.warning, { lang }),
+    translateOrFallback(i18n, keys.confirm, { lang }),
+    translateOrFallback(i18n, keys.not_you, { lang }),
+  ]);
   return `<!doctype html><html><body style="font-family:system-ui,sans-serif;line-height:1.5">
-<p>${greeting}</p>
-<p>We received a request to delete your account. This action is permanent.</p>
-<p>If you really want to proceed, confirm via this link:</p>
-<p><a href="${link}">${link}</a></p>
-<p>If this was not you, change your password immediately.</p>
+<p>${hello}</p>
+<p>${warning}</p>
+<p>${confirm}</p>
+<p><a href="${ctx.link}">${ctx.link}</a></p>
+<p>${notYou}</p>
 </body></html>`;
 }
 

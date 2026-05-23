@@ -1,7 +1,14 @@
-import { Injectable, CanActivate, ExecutionContext, ForbiddenException } from '@nestjs/common';
+import {
+  Injectable,
+  CanActivate,
+  ExecutionContext,
+  ForbiddenException,
+  HttpStatus,
+} from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { GqlContextType, GqlExecutionContext } from '@nestjs/graphql';
 import type { FastifyRequest } from 'fastify';
+import { I18N_KEYS } from '@nestjs-fastify-nx/infra-i18n';
 import { ROLES_KEY } from './roles.decorator';
 import type { AuthenticatedSession } from './better-auth.types';
 
@@ -25,7 +32,11 @@ export class RolesGuard implements CanActivate {
     const user = request.user;
 
     if (!user || !requiredRoles.includes(user.role)) {
-      throw new ForbiddenException('Insufficient permissions');
+      throw new ForbiddenException({
+        statusCode: HttpStatus.FORBIDDEN,
+        messageKey: I18N_KEYS.errors.auth.insufficient_permissions,
+        message: 'Insufficient permissions',
+      });
     }
 
     return true;

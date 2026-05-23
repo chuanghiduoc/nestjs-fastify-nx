@@ -1,4 +1,5 @@
 import { Test } from '@nestjs/testing';
+import { VersioningType } from '@nestjs/common';
 import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify';
 import type { FastifyReply, FastifyRequest, RouteShorthandOptions } from 'fastify';
 import { toNodeHandler } from 'better-auth/node';
@@ -87,7 +88,8 @@ export async function createTestApp(): Promise<TestAppContext> {
   const app = moduleRef.createNestApplication<NestFastifyApplication>(
     new FastifyAdapter({ bodyLimit: 64 * 1024 }),
   );
-  app.setGlobalPrefix('api/v1', { exclude: ['metrics'] });
+  app.setGlobalPrefix('api', { exclude: ['metrics'] });
+  app.enableVersioning({ type: VersioningType.URI, defaultVersion: '1' });
   app.useGlobalPipes(new ProblemDetailsValidationPipe());
 
   // Mirror main.ts: mount Better Auth before init so its routes win against the

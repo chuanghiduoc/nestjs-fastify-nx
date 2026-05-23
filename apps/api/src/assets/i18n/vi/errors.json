@@ -1,0 +1,36 @@
+{
+  "audit_log": {
+    "title_invalid_id": "ID nhật ký kiểm toán không hợp lệ",
+    "invalid_id_empty": "id phải là chuỗi không rỗng khi được cung cấp",
+    "invalid_id_uuid": "id phải là UUID hợp lệ (cột audit_logs.id là kiểu UUID Postgres)"
+  },
+  "upload": {
+    "mime_not_allowed": "Định dạng \"{contentType}\" không được phép",
+    "object_not_found": "Không tìm thấy đối tượng tại \"{key}\"",
+    "size_out_of_range": "Kích thước {size} bytes nằm ngoài khoảng cho phép (1..{max})",
+    "magic_bytes_mismatch": "Magic bytes nhận diện là \"{detected}\" nhưng Content-Type khai báo là \"{declared}\"",
+    "magic_bytes_unknown": "Đối tượng tại \"{key}\" không có chữ ký nhị phân được nhận diện",
+    "commit_failed": "Không commit được upload; vui lòng thử lại"
+  },
+  "users": {
+    "not_found": "Không tìm thấy người dùng",
+    "already_exists": "Đã tồn tại bản ghi với giá trị này",
+    "database_error": "Lỗi cơ sở dữ liệu"
+  },
+  "auth": {
+    "session_missing": "Phiên làm việc không tồn tại hoặc đã hết hạn",
+    "session_expired": "Phiên làm việc đã hết hạn",
+    "account_inactive": "Tài khoản chưa được kích hoạt",
+    "insufficient_permissions": "Không đủ quyền"
+  },
+  "storage": {
+    "body_empty": "Upload bị từ chối — nội dung rỗng cho key \"{key}\"",
+    "upload_failed": "Upload thất bại",
+    "presign_failed": "Cấp presigned URL thất bại",
+    "head_failed": "Đọc metadata thất bại",
+    "signed_url_failed": "Tạo signed URL thất bại",
+    "delete_failed": "Xóa đối tượng thất bại",
+    "commit_failed": "Commit đối tượng thất bại",
+    "read_range_failed": "Đọc dải byte thất bại"
+  }
+}

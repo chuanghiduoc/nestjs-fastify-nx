@@ -1,0 +1,20 @@
+{
+  "failed_title": "Dữ liệu không hợp lệ",
+  "failed_detail": "Một hoặc nhiều trường không vượt qua kiểm tra.",
+  "required": "{path} là bắt buộc.",
+  "wrong_type": "{path} sai kiểu dữ liệu.",
+  "invalid_enum_value": "{path} phải là một trong các giá trị cho phép.",
+  "invalid_email": "{path} phải là địa chỉ email hợp lệ.",
+  "invalid_url": "{path} phải là URL hợp lệ.",
+  "invalid_uuid": "{path} phải là UUID hợp lệ.",
+  "invalid_phone": "{path} phải là số điện thoại hợp lệ.",
+  "invalid_credit_card": "{path} phải là số thẻ tín dụng hợp lệ.",
+  "pattern_mismatch": "{path} không khớp với định dạng yêu cầu.",
+  "out_of_range": "{path} nằm ngoài khoảng cho phép.",
+  "too_short": "{path} quá ngắn.",
+  "too_long": "{path} quá dài.",
+  "wrong_length": "{path} sai độ dài.",
+  "forbidden_value": "{path} không được phép có giá trị đó.",
+  "unknown_field": "{path} không phải là trường hợp lệ.",
+  "invalid_value": "{path} không hợp lệ."
+}

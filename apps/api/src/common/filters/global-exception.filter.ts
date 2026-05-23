@@ -10,8 +10,14 @@ import { GqlContextType } from '@nestjs/graphql';
 import * as Sentry from '@sentry/nestjs';
 import type { IncomingMessage } from 'http';
 import type { FastifyReply, FastifyRequest } from 'fastify';
+import { I18nService } from 'nestjs-i18n';
 import { BusinessRuleException } from '@nestjs-fastify-nx/core';
 import { ERROR_CODES, type ValidationErrorItemDto } from '@nestjs-fastify-nx/contracts';
+import {
+  I18N_KEYS,
+  resolveRequestLocale,
+  translateOrFallback,
+} from '@nestjs-fastify-nx/infra-i18n';
 import {
   buildProblemDetails,
   HTTP_STATUS_CODES,
@@ -26,14 +32,31 @@ interface NormalizedError {
   title: string;
   detail?: string;
   code: string;
+  args?: Record<string, unknown>;
   errors?: ValidationErrorItemDto[];
 }
+
+// Maps the HTTP status → i18n key used when a NestJS built-in exception ships only a raw English `message`.
+const HTTP_STATUS_TO_I18N_KEY: Record<number, string> = {
+  [HttpStatus.BAD_REQUEST]: I18N_KEYS.common.bad_request,
+  [HttpStatus.UNAUTHORIZED]: I18N_KEYS.common.unauthorized,
+  [HttpStatus.FORBIDDEN]: I18N_KEYS.common.forbidden,
+  [HttpStatus.NOT_FOUND]: I18N_KEYS.common.not_found,
+  [HttpStatus.CONFLICT]: I18N_KEYS.common.conflict,
+  [HttpStatus.PAYLOAD_TOO_LARGE]: I18N_KEYS.common.payload_too_large,
+  [HttpStatus.UNSUPPORTED_MEDIA_TYPE]: I18N_KEYS.common.unsupported_media_type,
+  [HttpStatus.UNPROCESSABLE_ENTITY]: I18N_KEYS.common.unprocessable_entity,
+  [HttpStatus.TOO_MANY_REQUESTS]: I18N_KEYS.common.too_many_requests,
+  [HttpStatus.INTERNAL_SERVER_ERROR]: I18N_KEYS.common.internal_server_error,
+};
 
 @Catch()
 export class GlobalExceptionFilter implements ExceptionFilter {
   private readonly logger = new Logger(GlobalExceptionFilter.name);
 
-  catch(exception: unknown, host: ArgumentsHost): void {
+  constructor(private readonly i18n: I18nService) {}
+
+  async catch(exception: unknown, host: ArgumentsHost): Promise<void> {
     // Mercurius owns GraphQL error formatting — re-throw into the GraphQL envelope.
     if (host.getType<GqlContextType>() === 'graphql') {
       const status =
@@ -51,8 +74,10 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     const reply = ctx.getResponse<FastifyReply>();
     const request = ctx.getRequest<FastifyRequest>();
     const raw = request.raw as RawWithIds;
+    const lang = resolveRequestLocale(request);
 
     const normalized = normalizeException(exception);
+    await this.translateNormalized(normalized, lang);
 
     if (normalized.status >= 500) {
       this.logger.error({ err: exception, url: request.url }, 'Unhandled exception');
@@ -82,6 +107,41 @@ export class GlobalExceptionFilter implements ExceptionFilter {
         }),
       );
   }
+
+  // Mutates the normalized payload in place — title, detail, and per-violation messages all get the locale-resolved text. The original key is kept on errors[].messageKey for client persistence.
+  private async translateNormalized(normalized: NormalizedError, lang: string): Promise<void> {
+    normalized.title = await this.maybeTranslate(normalized.title, lang, normalized.args);
+    if (normalized.detail) {
+      normalized.detail = await this.maybeTranslate(normalized.detail, lang, normalized.args);
+    } else {
+      const fallbackKey = HTTP_STATUS_TO_I18N_KEY[normalized.status];
+      if (fallbackKey) {
+        normalized.detail = await translateOrFallback(this.i18n, fallbackKey, { lang });
+      }
+    }
+
+    if (normalized.errors) {
+      for (const item of normalized.errors) {
+        if (item.messageKey) {
+          const translated = await translateOrFallback(this.i18n, item.messageKey, {
+            lang,
+            args: { path: item.path, ...(item.constraint ?? {}) },
+          });
+          item.message = translated;
+        }
+      }
+    }
+  }
+
+  // Treats any dotted string as a candidate i18n key; on miss the original literal flows through unchanged.
+  private async maybeTranslate(
+    value: string,
+    lang: string,
+    args?: Record<string, unknown>,
+  ): Promise<string> {
+    if (!value.includes('.')) return value;
+    return translateOrFallback(this.i18n, value, { lang, args });
+  }
 }
 
 interface HttpExceptionResponseObject {
@@ -90,6 +150,9 @@ interface HttpExceptionResponseObject {
   statusCode?: number;
   code?: string;
   title?: string;
+  messageKey?: string;
+  // Interpolation arguments for `messageKey` — keys here fill `{placeholder}` slots in the translated string.
+  args?: Record<string, unknown>;
   errors?: ValidationErrorItemDto[];
 }
 
@@ -98,9 +161,10 @@ function normalizeException(exception: unknown): NormalizedError {
     const body = exception.getResponse() as HttpExceptionResponseObject;
     return {
       status: exception.getStatus(),
-      title: body.title ?? 'Business rule violation',
-      detail: typeof body.message === 'string' ? body.message : undefined,
+      title: body.title ?? I18N_KEYS.common.unprocessable_entity,
+      detail: body.messageKey ?? (typeof body.message === 'string' ? body.message : undefined),
       code: exception.code,
+      args: body.args,
       errors: body.errors,
     };
   }
@@ -108,10 +172,10 @@ function normalizeException(exception: unknown): NormalizedError {
   if (!(exception instanceof HttpException)) {
     return {
       status: HttpStatus.INTERNAL_SERVER_ERROR,
-      title: 'Internal Server Error',
+      title: I18N_KEYS.common.internal_server_error,
       detail:
         process.env['NODE_ENV'] === 'production'
-          ? 'An unexpected error occurred.'
+          ? I18N_KEYS.common.internal_server_error
           : exception instanceof Error
             ? exception.message
             : 'Unknown error',
@@ -131,22 +195,25 @@ function normalizeException(exception: unknown): NormalizedError {
   const body = res as HttpExceptionResponseObject;
   const title = typeof body.title === 'string' ? body.title : defaultTitle;
   const code = typeof body.code === 'string' ? body.code : defaultCode;
+  // body.messageKey wins over message — domain code that throws with a key gets translated; raw NestJS exceptions fall back to their message string.
+  const detailSource = body.messageKey ?? body.message;
 
   if (Array.isArray(body.errors) && body.errors.length > 0) {
     return {
       status,
       title,
-      detail: typeof body.message === 'string' ? body.message : 'Validation failed.',
+      detail: typeof detailSource === 'string' ? detailSource : I18N_KEYS.validation.failed_detail,
       code: code === defaultCode ? ERROR_CODES.VALIDATION_FAILED : code,
+      args: body.args,
       errors: body.errors,
     };
   }
 
-  const detail = Array.isArray(body.message)
-    ? body.message.join('; ')
-    : typeof body.message === 'string'
-      ? body.message
+  const detail = Array.isArray(detailSource)
+    ? detailSource.join('; ')
+    : typeof detailSource === 'string'
+      ? detailSource
       : exception.message;
 
-  return { status, title, detail, code };
+  return { status, title, detail, code, args: body.args };
 }

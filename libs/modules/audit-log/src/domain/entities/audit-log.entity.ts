@@ -1,4 +1,5 @@
 import { BusinessRuleException } from '@nestjs-fastify-nx/core';
+import { I18N_KEYS } from '@nestjs-fastify-nx/infra-i18n';
 import { generateId } from '@nestjs-fastify-nx/shared';
 
 // Mirrors what Postgres @db.Uuid accepts (8-4-4-4-12 hex, any version/variant).
@@ -36,12 +37,13 @@ export class AuditLog {
       if (input.id.trim() === '') {
         throw new BusinessRuleException({
           code: 'invalid_audit_log_id',
-          title: 'Invalid AuditLog id',
+          title: I18N_KEYS.errors.audit_log.title_invalid_id,
           violations: [
             {
               path: 'id',
               code: 'empty_string',
               message: 'id must be a non-empty string when provided',
+              messageKey: I18N_KEYS.errors.audit_log.invalid_id_empty,
             },
           ],
         });
@@ -49,12 +51,13 @@ export class AuditLog {
       if (!UUID_PATTERN.test(input.id)) {
         throw new BusinessRuleException({
           code: 'invalid_audit_log_id',
-          title: 'Invalid AuditLog id',
+          title: I18N_KEYS.errors.audit_log.title_invalid_id,
           violations: [
             {
               path: 'id',
               code: 'not_a_uuid',
               message: 'id must be a valid UUID (audit_logs.id is a Postgres UUID column)',
+              messageKey: I18N_KEYS.errors.audit_log.invalid_id_uuid,
             },
           ],
         });

@@ -1,0 +1,36 @@
+{
+  "audit_log": {
+    "title_invalid_id": "Invalid AuditLog id",
+    "invalid_id_empty": "id must be a non-empty string when provided",
+    "invalid_id_uuid": "id must be a valid UUID (audit_logs.id is a Postgres UUID column)"
+  },
+  "upload": {
+    "mime_not_allowed": "Mime type \"{contentType}\" is not allowed",
+    "object_not_found": "No object stored at \"{key}\"",
+    "size_out_of_range": "Object size {size} bytes is outside the allowed range (1..{max})",
+    "magic_bytes_mismatch": "Magic bytes indicate \"{detected}\" but Content-Type is \"{declared}\"",
+    "magic_bytes_unknown": "Object at \"{key}\" has no recognized binary signature",
+    "commit_failed": "Failed to commit upload; please retry"
+  },
+  "users": {
+    "not_found": "User not found",
+    "already_exists": "A record with this value already exists",
+    "database_error": "Database error"
+  },
+  "auth": {
+    "session_missing": "Session not found or expired",
+    "session_expired": "Session expired",
+    "account_inactive": "Account is not active",
+    "insufficient_permissions": "Insufficient permissions"
+  },
+  "storage": {
+    "body_empty": "Upload rejected — body is empty for key \"{key}\"",
+    "upload_failed": "Storage upload failed",
+    "presign_failed": "Storage presign failed",
+    "head_failed": "Storage head failed",
+    "signed_url_failed": "Storage signed URL generation failed",
+    "delete_failed": "Storage delete failed",
+    "commit_failed": "Storage commit failed",
+    "read_range_failed": "Storage readRange failed"
+  }
+}

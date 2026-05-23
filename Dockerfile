@@ -116,7 +116,8 @@ COPY prisma ./prisma
 COPY prisma.config.ts ./prisma.config.ts
 RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
     pnpm config set store-dir /pnpm/store \
-    && pnpm install --prod --frozen-lockfile \
+    && pnpm install --prod --no-frozen-lockfile \
+    && pnpm prisma generate \
     && pnpm store prune
 
 # ===========================================================================

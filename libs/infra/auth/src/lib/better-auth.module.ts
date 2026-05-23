@@ -1,6 +1,7 @@
 import { Global, Module } from '@nestjs/common';
 import { BullModule, getQueueToken } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
+import { I18nService } from 'nestjs-i18n';
 import { PrismaService } from '@nestjs-fastify-nx/infra-database';
 import { QUEUE_NAMES } from '@nestjs-fastify-nx/shared';
 import { createBetterAuth, type AuthMailDispatcher } from './better-auth.config';
@@ -14,7 +15,7 @@ import { RolesGuard } from './roles.guard';
   providers: [
     {
       provide: BETTER_AUTH_INSTANCE,
-      useFactory: (prisma: PrismaService, emailQueue: Queue) => {
+      useFactory: (prisma: PrismaService, emailQueue: Queue, i18n: I18nService) => {
         const mailer: AuthMailDispatcher = {
           send: async ({ to, subject, body, templateId }) => {
             // BullMQ rejects ':' in jobIds — use '__' as separator.
@@ -32,9 +33,9 @@ import { RolesGuard } from './roles.guard';
             );
           },
         };
-        return createBetterAuth(prisma.db, mailer);
+        return createBetterAuth(prisma.db, mailer, i18n);
       },
-      inject: [PrismaService, getQueueToken(QUEUE_NAMES.EMAIL_NOTIFICATION)],
+      inject: [PrismaService, getQueueToken(QUEUE_NAMES.EMAIL_NOTIFICATION), I18nService],
     },
     BetterAuthGuard,
     RolesGuard,

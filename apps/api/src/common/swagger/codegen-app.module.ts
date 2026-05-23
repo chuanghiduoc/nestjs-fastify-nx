@@ -7,6 +7,7 @@ import { RedisCacheModule, RedisQueueModule } from '@nestjs-fastify-nx/infra-red
 import { MessagingModule } from '@nestjs-fastify-nx/infra-messaging';
 import { StorageModule } from '@nestjs-fastify-nx/infra-storage';
 import { BetterAuthModule, BetterAuthGuard, RolesGuard } from '@nestjs-fastify-nx/infra-auth';
+import { I18nInfraModule } from '@nestjs-fastify-nx/infra-i18n';
 import { UsersModule } from '@nestjs-fastify-nx/modules-users';
 import { AdminModule } from '@nestjs-fastify-nx/composition-admin';
 import { AuditLogModule } from '@nestjs-fastify-nx/modules-audit-log';
@@ -21,6 +22,7 @@ import { AppController } from '../../app/app.controller';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true, validate: validateConfig }),
+    I18nInfraModule.forRoot(),
     ThrottlerModule,
     LoggingModule,
     HealthModule,

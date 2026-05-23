@@ -186,7 +186,7 @@ Once the stack is up:
 | Service          | URL                                                                                |
 | ---------------- | ---------------------------------------------------------------------------------- |
 | API health       | [http://localhost:3000/api/v1/health](http://localhost:3000/api/v1/health)         |
-| Swagger UI       | [http://localhost:3000/api/docs](http://localhost:3000/api/docs)                   |
+| API Docs         | [http://localhost:3000/docs](http://localhost:3000/docs) (Scalar, dev only)        |
 | GraphQL endpoint | [http://localhost:3000/graphql](http://localhost:3000/graphql) (POST queries here) |
 | GraphiQL IDE     | [http://localhost:3000/graphiql](http://localhost:3000/graphiql) (dev only)        |
 | Bull Board       | [http://localhost:3000/api/admin/queues](http://localhost:3000/api/admin/queues)   |
@@ -327,7 +327,7 @@ Full flow: [docs/deployment.md](docs/deployment.md).
 - [Troubleshooting](docs/troubleshooting.md) — known issues, debug tips
 - [Runbook](docs/runbook.md) — ops runbook: health, metrics, outbox, BullMQ, performance
 - [Code Standards](docs/code-standards.md) — logging, error handling, DTOs, boundary rules
-- [API Reference](http://localhost:3000/api/docs) (Swagger UI, dev only)
+- [API Reference](http://localhost:3000/docs) (Scalar, dev only)
 
 ## Contributing
 

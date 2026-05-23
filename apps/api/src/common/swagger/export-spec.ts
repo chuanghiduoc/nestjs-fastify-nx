@@ -35,7 +35,7 @@ process.stderr.write = ((...args: StderrWriteArgs): boolean => {
 }) as typeof process.stderr.write;
 
 import { NestFactory } from '@nestjs/core';
-import { ValidationPipe } from '@nestjs/common';
+import { ValidationPipe, VersioningType } from '@nestjs/common';
 import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify';
 import { PrismaService } from '@nestjs-fastify-nx/infra-database';
 
@@ -54,14 +54,15 @@ async function exportSpec(): Promise<void> {
     new FastifyAdapter(),
     { logger: false, abortOnError: false },
   );
-  app.setGlobalPrefix('api/v1');
+  app.setGlobalPrefix('api');
+  app.enableVersioning({ type: VersioningType.URI, defaultVersion: '1' });
   app.useGlobalPipes(
     new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
   );
 
   await app.init();
 
-  const document = buildSwaggerDocument(app);
+  const document = await buildSwaggerDocument(app);
   const outputDir = path.join(process.cwd(), 'dist', 'swagger');
   fs.mkdirSync(outputDir, { recursive: true });
   fs.writeFileSync(path.join(outputDir, 'openapi.json'), JSON.stringify(document, null, 2));

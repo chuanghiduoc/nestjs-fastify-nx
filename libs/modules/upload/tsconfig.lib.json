@@ -24,10 +24,13 @@
   ],
   "references": [
     {
+      "path": "../../infra/auth/tsconfig.lib.json"
+    },
+    {
       "path": "../../infra/storage/tsconfig.lib.json"
     },
     {
-      "path": "../../infra/auth/tsconfig.lib.json"
+      "path": "../../infra/i18n/tsconfig.lib.json"
     },
     {
       "path": "../../contracts/tsconfig.lib.json"

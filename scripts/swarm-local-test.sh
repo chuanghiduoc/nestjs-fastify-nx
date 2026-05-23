@@ -26,10 +26,23 @@ export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-nestjs-fastify-nx}"
 export API_REPLICAS="${API_REPLICAS:-2}"
 export WORKER_REPLICAS="${WORKER_REPLICAS:-2}"
 
-# --resolve-image=never uses the local image store without contacting any registry.
-exec docker stack deploy --resolve-image=never \
-  -c docker/compose.yml \
-  -c docker/compose.prod.yml \
-  -c docker/compose.swarm.yml \
-  -c docker/compose.swarm-local-test.yml \
-  "$STACK"
+# Docker 29.x's stack deploy parser doesn't resolve the `!override`/`!reset` tags
+# our compose.swarm.yml relies on — produces `depends_on must be a list` on worker/scheduler.
+# Workaround: let `docker compose config` resolve the merge first, then pipe the
+# canonical YAML into stack deploy. `--resolve-image=never` keeps the local image store.
+# Compose → Swarm canonicalisation pipeline:
+#   1. `docker compose config` resolves overlays + interpolation
+#   2. swarmify-compose.mjs flattens depends_on map → list (Swarm only takes short-form;
+#      compose drops the `!override` tag during merge so we re-canonicalise here)
+#   3. sed re-quotes cpus (Swarm rejects unquoted numerics) and unquotes
+#      published ports (Swarm requires integer ports)
+SCRIPT_DIR_SLT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+docker compose \
+  -f docker/compose.yml \
+  -f docker/compose.prod.yml \
+  -f docker/compose.swarm.yml \
+  -f docker/compose.swarm-local-test.yml \
+  config \
+  | node "${SCRIPT_DIR_SLT}/security/swarmify-compose.mjs" \
+  | sed -E "s/^([[:space:]]*cpus:)[[:space:]]+([0-9.]+)[[:space:]]*\$/\1 '\2'/; s/^([[:space:]]*published:)[[:space:]]+\"([0-9]+)\"[[:space:]]*\$/\1 \2/" \
+  | docker stack deploy --resolve-image=never -c - "$STACK"
