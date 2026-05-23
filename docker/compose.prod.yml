@@ -116,14 +116,19 @@ services:
       REDIS_QUEUE_PORT: '6380'
     ports:
       - '${API_PORT:-3000}:3000'
-    # Short-form (plain list) — the only form `docker stack deploy` accepts.
-    # Apps retry DB/Redis connections on startup, so the lack of healthcheck
-    # gating only loosens the cold-boot wait.
+    # Long-form gates plain-compose deploys on migration completion + dependency
+    # health so the api doesn't crash-loop on a fresh DB. compose.swarm.yml
+    # overrides back to short-form because `docker stack deploy` rejects the
+    # `condition:` key (apps retry DB/Redis connections at boot regardless).
     depends_on:
-      - postgres
-      - migration
-      - redis-cache
-      - redis-queue
+      postgres:
+        condition: service_healthy
+      migration:
+        condition: service_completed_successfully
+      redis-cache:
+        condition: service_healthy
+      redis-queue:
+        condition: service_healthy
     restart: unless-stopped
     # Liveness probe — process is alive. Use /health/ready for K8s readiness;
     # /health (full) for ops dashboards. Docker should only kill on liveness fail.
@@ -172,9 +177,12 @@ services:
       REDIS_QUEUE_HOST: redis-queue
       REDIS_QUEUE_PORT: '6380'
     depends_on:
-      - postgres
-      - migration
-      - redis-queue
+      postgres:
+        condition: service_healthy
+      migration:
+        condition: service_completed_successfully
+      redis-queue:
+        condition: service_healthy
     restart: unless-stopped
     # stop_grace_period must exceed worst-case BullMQ job timeout + lock duration
     # so in-flight jobs complete before SIGKILL. Email + S3 HEAD jobs are
@@ -233,8 +241,12 @@ services:
           memory: 128M
           cpus: '0.25'
     depends_on:
-      - postgres
-      - migration
-      - redis-cache
-      - redis-queue
+      postgres:
+        condition: service_healthy
+      migration:
+        condition: service_completed_successfully
+      redis-cache:
+        condition: service_healthy
+      redis-queue:
+        condition: service_healthy
     restart: unless-stopped

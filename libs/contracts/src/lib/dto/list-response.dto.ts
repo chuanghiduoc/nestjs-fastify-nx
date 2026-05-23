@@ -33,7 +33,7 @@ export class ListResponseDto<T = unknown> {
 
   @ApiPropertyOptional({
     description:
-      'Opaque cursor pointing at the last item in `data` — pass back as `startingAfter` to fetch the next page. Present only on cursor-paginated endpoints; null when the result set is empty. Format is `base64url(sortField.toISOString():id)` — clients MUST treat it as opaque.',
+      'Opaque cursor pointing at the last item in `data` — pass back as `startingAfter` to fetch the next page. Present only on cursor-paginated endpoints; null when the result set is empty. Format is `base64url(sortField.toISOString():id)` — clients MUST treat it as opaque. The cursor encodes ONLY the sort position; it does NOT remember filter parameters (`role`, `status`, `search`, etc.). Changing any filter between page requests is equivalent to a fresh first-page query starting at the encoded position — clients changing filters mid-pagination should drop the cursor and restart.',
     example: 'MjAyNi0wNS0xOVQwMzowNTowMC4wMDBaOjAxOTczMmRiLTYwMTAtN2Y3Zi1iNDY0LTBkMjBjNWUzYThmOQ',
     nullable: true,
   })

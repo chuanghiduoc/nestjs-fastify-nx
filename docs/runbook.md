@@ -260,6 +260,41 @@ DELETE FROM _prisma_migrations WHERE migration_name = '20260516_failing_migratio
 
 **Escalation:** If the schema is in an unknown state and the DB cannot be brought back online, restore from the last snapshot taken before the migration run. Engage the DBA team and document the incident timeline.
 
+### 5a. Migration "drift detected" after pulling boilerplate updates
+
+**Symptom:** `prisma migrate deploy` aborts with `P3017 / drift detected` immediately after pulling a new release. The `_prisma_migrations` checksum for `20260501000000_init` no longer matches the on-disk migration file.
+
+**Root cause:** This boilerplate occasionally extends the `init` migration (e.g. squashing follow-up PR migrations into it) to keep first-boot deployments clean. Forks that already applied the previous shape of `init` will detect the checksum drift and refuse to proceed. The DB schema is fine — only the recorded checksum is stale.
+
+**Diagnostic:**
+
+```bash
+# Confirm the only drifted migration is the init folder
+docker compose exec postgres psql -U postgres -d nestjs_db \
+  -c "SELECT migration_name, checksum FROM _prisma_migrations
+      WHERE migration_name = '20260501000000_init';"
+```
+
+Compare the recorded checksum against `prisma migrate diff --from-empty --to-migrations prisma/migrations` to confirm the DDL is identical and only the file content shifted.
+
+**Action (only when the schema matches — verify with `prisma migrate status` first):**
+
+```bash
+# Recompute and store the current checksum without re-applying DDL
+docker compose exec postgres psql -U postgres -d nestjs_db <<'SQL'
+UPDATE _prisma_migrations
+   SET checksum = '<paste the value reported by `prisma migrate diff`>'
+ WHERE migration_name = '20260501000000_init';
+SQL
+
+# Re-run deploy — drift should clear, subsequent migrations apply normally.
+docker compose run --rm migration
+```
+
+Faster alternative for staging / sandbox: `prisma migrate resolve --applied 20260501000000_init` (requires Prisma CLI access). Production should prefer the explicit UPDATE so the change is reviewable.
+
+**Escalation:** If `prisma migrate diff` shows ACTUAL schema differences (not just metadata), treat as a real migration mismatch — restore from snapshot or manually apply the missing DDL before resolving the checksum. Never resolve drift on a DB whose schema you have not personally verified.
+
 ---
 
 ## 6. Metrics endpoint unreachable or leaking
@@ -290,6 +325,33 @@ curl -v http://<api-host>:3000/metrics 2>&1 | grep "< HTTP"
 3. Restart the API container for env changes to take effect.
 
 **Escalation:** If metrics are confirmed reachable from the public internet, treat as a security incident — Prometheus metrics expose internal labels, queue depths, and memory usage that aid attackers in profiling the system. Rotate any secrets that may appear in metric labels, restrict access immediately, and review ingress firewall rules.
+
+### 6a. BullMQ counters inflated by replica count
+
+**Symptom:** `rate(bullmq_jobs_total{status="failed"}[5m])` jumps to N× the rate observed in the worker logs, where N matches `API_REPLICAS`. SLO alerts on the counter fire even though the actual worker error rate is fine.
+
+**Root cause:** Every API replica subscribes to the same BullMQ `QueueEvents` Redis stream, so each terminal event (completed/failed/stalled/delayed) increments `bullmq_jobs_total` once per replica. The fan-out is intentional (it keeps the duration histogram observable per-replica) but the counter sample is multiplied by the replica count.
+
+**Recipe for dashboards / alerts:** divide by the live API instance count instead of hard-coding the replica number.
+
+```promql
+# Replica-corrected failure rate
+sum(rate(bullmq_jobs_total{status="failed"}[5m]))
+  /
+sum(up{job="api"})
+```
+
+Or, equivalently, average across instances:
+
+```promql
+avg by (queue, status) (rate(bullmq_jobs_total[5m]))
+```
+
+The `bullmq_job_duration_seconds` histogram is NOT inflated — each replica observes its own per-job samples — so quantile alerts on it work unmodified.
+
+**Action:** update dashboards / recording rules to apply the division pattern. If you later move metric collection onto a leader-elected collector (see comment in `bullmq-metrics.listener.ts`), drop the divisor.
+
+**Prevention:** when introducing a new BullMQ-derived counter, document its replica behaviour next to the metric definition in `metrics.service.ts` so dashboard authors are warned at definition time.
 
 ---
 

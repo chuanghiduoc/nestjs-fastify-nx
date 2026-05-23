@@ -5,11 +5,24 @@ import { positiveIntEnv } from '@nestjs-fastify-nx/shared';
 
 const BATCH_SIZE = positiveIntEnv('OUTBOX_PURGE_BATCH_SIZE', 1000);
 const MAX_BATCHES = positiveIntEnv('OUTBOX_PURGE_MAX_BATCHES', 200);
+// Hard cap so a runaway OUTBOX_RETENTION_DAYS=99999 in env doesn't silently
+// disable cleanup. Worker env schema clamps the same range; this defence is
+// here because the scheduler doesn't run that validator.
+const MAX_RETENTION_DAYS = 365;
 
 @Injectable()
 export class OutboxCleanupTask {
   private readonly logger = new Logger(OutboxCleanupTask.name);
-  private readonly retentionDays = positiveIntEnv('OUTBOX_RETENTION_DAYS', 7);
+  private readonly retentionDays = (() => {
+    const raw = positiveIntEnv('OUTBOX_RETENTION_DAYS', 7);
+    if (raw > MAX_RETENTION_DAYS) {
+      new Logger(OutboxCleanupTask.name).warn(
+        `OUTBOX_RETENTION_DAYS=${raw} exceeds cap ${MAX_RETENTION_DAYS}; clamping`,
+      );
+      return MAX_RETENTION_DAYS;
+    }
+    return raw;
+  })();
 
   constructor(private readonly prisma: PrismaService) {}
 

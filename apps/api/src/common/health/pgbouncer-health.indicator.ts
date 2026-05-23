@@ -1,6 +1,7 @@
 import { Injectable, Logger, Optional } from '@nestjs/common';
 import { HealthCheckError, HealthIndicator, HealthIndicatorResult } from '@nestjs/terminus';
 import { Client, ClientConfig } from 'pg';
+import { injectDatabasePassword } from '@nestjs-fastify-nx/shared';
 
 const PROBE_TIMEOUT_MS = 2_000;
 // Sanitized marker — libpq internals (host/user/db) must not leak into readiness responses.
@@ -38,8 +39,16 @@ export class PgBouncerHealthIndicator extends HealthIndicator {
       });
     }
 
+    // Docker-secrets / k8s deployments publish DATABASE_URL without the password
+    // and mount it at DB_PASSWORD_FILE. Mirror PrismaService so the probe doesn't
+    // silently 503 the pod under the documented prod overlay.
+    const connectionString = injectDatabasePassword(
+      process.env['DATABASE_URL'],
+      process.env['DB_PASSWORD_FILE'],
+    );
+
     const client = this.clientFactory({
-      connectionString: process.env['DATABASE_URL'],
+      connectionString,
       connectionTimeoutMillis: PROBE_TIMEOUT_MS,
       statement_timeout: PROBE_TIMEOUT_MS,
     });

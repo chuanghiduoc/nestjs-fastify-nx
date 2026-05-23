@@ -165,6 +165,14 @@ services:
         published: ${API_PORT:-3000}
         protocol: tcp
         mode: ingress
+    # Swarm ignores depends_on.condition (and the older parser rejects the
+    # long-form). Strip back to short-form — bounded retry on migration +
+    # app-level connection retry covers the cold-boot race.
+    depends_on: !override
+      - postgres
+      - migration
+      - redis-cache
+      - redis-queue
     deploy:
       <<: [*deploy-restart, *deploy-update]
       replicas: ${API_REPLICAS:-2}
@@ -173,6 +181,10 @@ services:
 
   worker:
     networks: [app-net]
+    depends_on: !override
+      - postgres
+      - migration
+      - redis-queue
     deploy:
       <<: [*deploy-restart, *deploy-update]
       replicas: ${WORKER_REPLICAS:-2}
@@ -181,6 +193,11 @@ services:
 
   scheduler:
     networks: [app-net]
+    depends_on: !override
+      - postgres
+      - migration
+      - redis-cache
+      - redis-queue
     # MUST stay at exactly 1 replica — additional replicas duplicate every
     # cron firing. `max_replicas_per_node: 1` is belt-and-suspenders for
     # operators who later raise replicas without reading this comment.
