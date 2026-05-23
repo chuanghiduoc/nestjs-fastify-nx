@@ -8,3 +8,9 @@ import { Logger } from '@nestjs/common';
 if (!process.env.VITEST_VERBOSE) {
   Logger.overrideLogger(false);
 }
+
+// Minimum env required by `validateConfig` so specs importing AppModule /
+// CodegenAppModule don't crash during `ConfigModule.forRoot()` evaluation.
+// Real values are injected by e2e / integration setups; unit tests just need
+// the schema to pass.
+process.env.DATABASE_URL ??= 'postgresql://test:test@localhost:5432/test';
