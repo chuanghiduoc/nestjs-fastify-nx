@@ -42,10 +42,10 @@ export class BullMqHealthIndicator extends HealthIndicator implements OnModuleDe
 
   async isHealthy(key: string): Promise<HealthIndicatorResult> {
     try {
-      await withTimeout(
-        this.queue.client.then((client) => client.ping()),
-        PROBE_TIMEOUT_MS,
-      );
+      // getJobCounts exercises the queue end-to-end (Redis connection + prefix
+      // + queue key lookup) without touching BullMQ's IRedisClient internals —
+      // 5.77.x narrowed that type so `ping` is no longer publicly exposed.
+      await withTimeout(this.queue.getJobCounts('waiting'), PROBE_TIMEOUT_MS);
       return this.getStatus(key, true);
     } catch (err) {
       throw new HealthCheckError(
