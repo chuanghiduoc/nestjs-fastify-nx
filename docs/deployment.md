@@ -85,6 +85,50 @@ MinIO) and healthcheck specs for worker/scheduler. The
 (`${IMAGE_REGISTRY}/${IMAGE_NAMESPACE}/<app>:${IMAGE_TAG}`), enforces a single
 scheduler replica, and excludes mailpit via the `dev-only` profile.
 
+## Network Exposure & Port Binding
+
+The base `compose.yml` publishes host ports for Postgres, Redis, and MinIO as a
+**dev convenience**. Short-form mappings (`5432:5432`) bind to `0.0.0.0`, so on a
+host with a public IP and no firewall those data services would be reachable from
+the internet. The `compose.prod.yml` overlay closes this:
+
+| Service                                      | Host port in prod overlay                            | Reachable by                                                                    |
+| -------------------------------------------- | ---------------------------------------------------- | ------------------------------------------------------------------------------- |
+| postgres / redis-cache / redis-queue / minio | none — stripped via `ports: !override []`            | other containers only, by service name (`postgres:5432`, `redis-cache:6379`, …) |
+| api                                          | `${API_BIND_HOST:-127.0.0.1}:${API_PORT:-3000}:3000` | a reverse proxy (see below) — **not** the public internet by default            |
+
+Apps connect to the data tier over the internal compose network using service
+names, so removing the host ports changes nothing for runtime — it only removes
+the attack surface.
+
+### Reverse proxy models
+
+The api binds to **loopback (`127.0.0.1`) by default**, so it is never directly
+internet-facing. Front it with an L7 reverse proxy (Coolify, nginx, Traefik,
+Caddy, ALB) that terminates TLS, forwards `X-Forwarded-For`, and proxies
+WebSocket upgrades. Two valid topologies:
+
+- **Proxy installed on the host** (nginx/Traefik on the VM, not a container) —
+  it reaches the api via `proxy_pass http://127.0.0.1:3000`. The loopback bind is
+  required here. ✅ works out of the box.
+- **Proxy running as a container** (Coolify-managed, or a dockerized
+  Traefik/nginx that joins the same network) — it routes to `api:3000` by Docker
+  DNS, ignoring the host bind entirely. The loopback bind is harmless. For a
+  fully port-less api, additionally set `ports: !override []` on the api service
+  and attach the proxy to the compose network; the host then publishes nothing
+  but the proxy's 80/443.
+
+Set `API_BIND_HOST=0.0.0.0` **only** if you deliberately want the api exposed on
+every interface (e.g. no proxy, or a managed LB on another host) — firewall the
+port in that case.
+
+> **Swarm note**: `compose.swarm.yml` publishes the api through the routing mesh
+> (`ports: !override` with `mode: ingress`) and strips the data-tier ports the
+> same way, so the swarm path is unaffected by `API_BIND_HOST`.
+
+See also `TRUST_PROXY_HOPS` under [Scaling](#scaling) — set it to the number of
+proxy hops so Fastify resolves `req.ip` from `X-Forwarded-For` correctly.
+
 ## Local Observability Stack (opt-in)
 
 The `docker/compose.observability.yml` overlay starts Prometheus, Grafana, Jaeger, and an OTel collector alongside the dev stack. It is intentionally excluded from the base compose files to keep the default stack lightweight.

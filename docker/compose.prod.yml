@@ -11,10 +11,13 @@
 # This file deliberately omits `build:` so a thin host (no source checkout)
 # can pull and run from the registry alone.
 #
-# Note: the base compose.yml exposes postgres/redis/minio ports for dev
-# convenience. In production deployments where these services run on the
-# same docker network as the apps, restrict host firewall rules so those
-# ports are NOT reachable from outside the host.
+# Note: the base compose.yml publishes postgres/redis/minio host ports for dev
+# convenience (short-form mappings bind 0.0.0.0 — reachable from the internet on
+# a host with a public IP). This prod overlay strips those bindings via
+# `ports: !override []` so the data tier is reachable only over the internal
+# compose network (apps connect by service name: postgres:5432, redis-cache:6379,
+# redis-queue:6380). Only the api port is published. Host firewall rules remain a
+# sensible defense-in-depth layer, but are no longer the sole protection.
 
 # x-anchors are reused across api/worker/scheduler so policy stays in one place.
 x-app-security: &app-security
@@ -50,6 +53,9 @@ services:
 
   postgres:
     <<: *app-logging
+    # Strip the host-port mapping inherited from compose.yml — the data tier
+    # talks to apps over the internal compose network only.
+    ports: !override []
     deploy:
       resources:
         limits:
@@ -61,6 +67,7 @@ services:
 
   redis-cache:
     <<: *app-logging
+    ports: !override []
     deploy:
       resources:
         limits:
@@ -69,6 +76,7 @@ services:
 
   redis-queue:
     <<: *app-logging
+    ports: !override []
     deploy:
       resources:
         limits:
@@ -77,6 +85,7 @@ services:
 
   minio:
     <<: *app-logging
+    ports: !override []
 
   # Migration intentionally skips read_only because pnpm + prisma migrate write
   # transient files outside /tmp during migration apply. Other hardening still applies.
@@ -114,8 +123,14 @@ services:
       REDIS_CACHE_HOST: redis-cache
       REDIS_QUEUE_HOST: redis-queue
       REDIS_QUEUE_PORT: '6380'
+    # Bind to loopback by default so the api is NOT reachable directly from the
+    # internet — a reverse proxy (Coolify, nginx, Traefik, …) terminates TLS and
+    # forwards traffic. A host-installed proxy reaches it via 127.0.0.1:3000; a
+    # containerized proxy on the same docker network reaches `api:3000` by service
+    # name regardless of this host bind. Set API_BIND_HOST=0.0.0.0 only if you
+    # deliberately want to expose the api on every interface (firewall it then).
     ports:
-      - '${API_PORT:-3000}:3000'
+      - '${API_BIND_HOST:-127.0.0.1}:${API_PORT:-3000}:3000'
     # Long-form gates plain-compose deploys on migration completion + dependency
     # health so the api doesn't crash-loop on a fresh DB. compose.swarm.yml
     # overrides back to short-form because `docker stack deploy` rejects the
