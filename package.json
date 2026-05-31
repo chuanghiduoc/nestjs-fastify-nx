@@ -52,7 +52,7 @@
     "@opentelemetry/semantic-conventions": "^1.41.1",
     "@prisma/adapter-pg": "^7.8.0",
     "@prisma/client": "^7.8.0",
-    "@redis/client": "^5.12.1",
+    "@redis/client": "^6.0.0",
     "@scalar/fastify-api-reference": "^1.57.5",
     "@sentry/nestjs": "^10.55.0",
     "@sentry/profiling-node": "^10.55.0",
