@@ -205,6 +205,7 @@ pnpm nx affected -t lint test build # run only affected projects (CI parity)
 pnpm nx run-many -t test            # all projects
 
 # Single project
+./scripts/dev.sh                    # hot reload: infra in Docker + api on host (nx watch + serve)
 pnpm nx serve api                   # build once then spawn Node (@nx/js:node, no HMR)
 pnpm nx test api                    # vitest
 pnpm nx build api --configuration=production
@@ -243,6 +244,7 @@ pnpm codegen:full                   # export OpenAPI → orval → libs/api-clie
 ├── prisma/           # schema, migrations, seed
 ├── scripts/
 │   ├── build-dev.sh          # build + start dev stack (--with-obs flag)
+│   ├── dev.sh                # hot reload: infra in Docker + app on host (nx watch + serve)
 │   ├── build-prod.sh         # build production images with SBOM + provenance
 │   ├── doctor.sh             # preflight: Docker, Node, pnpm, ports, .env
 │   ├── teardown.sh           # stop stack + optional volume removal

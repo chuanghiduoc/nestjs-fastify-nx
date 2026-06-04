@@ -52,7 +52,6 @@
     "@opentelemetry/semantic-conventions": "^1.41.1",
     "@prisma/adapter-pg": "^7.8.0",
     "@prisma/client": "^7.8.0",
-    "@redis/client": "^5.12.1",
     "@scalar/fastify-api-reference": "^1.57.5",
     "@sentry/nestjs": "^10.55.0",
     "@sentry/profiling-node": "^10.55.0",
@@ -151,6 +150,7 @@
       "kysely": ">=0.28.17",
       "protobufjs": ">=8.0.2",
       "qs": ">=6.15.2",
+      "tmp": ">=0.2.6",
       "webpack-dev-server": ">=5.2.4",
       "ws": ">=8.20.1"
     },
