@@ -37,6 +37,14 @@ case "$MODE" in
   full|*)   ARGS=(detect --redact --verbose) ;;
 esac
 
+# Gitleaks runs inside a container. Without a reachable Docker daemon the scan
+# cannot run, so skip rather than block the commit — pre-push full scan and the
+# CI secret-scan job still gate the diff before it reaches the remote.
+if ! docker info >/dev/null 2>&1; then
+  sec::warn "Docker unavailable — skipping local Gitleaks scan (pre-push + CI still gate)."
+  exit 0
+fi
+
 sec::log "Gitleaks ${GITLEAKS_VERSION} (mode: ${MODE})"
 # Read-only mount; gitleaks never writes back.
 sec::docker_run --rm \
