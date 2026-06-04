@@ -142,7 +142,8 @@ cp .env.example .env && pnpm install
 pnpm nx affected -t lint test build --base=origin/main
 
 # Inner loop
-pnpm nx serve api                  # build once then spawn Node; no file watching. For HMR: pnpm nx watch -p api -- pnpm nx run api:build
+./scripts/dev.sh                   # HOT RELOAD: infra in Docker, api on host (nx watch + nx serve). Pass an app name to reload worker/scheduler instead.
+pnpm nx serve api                  # build once then spawn Node; no file watching. For manual HMR: pnpm nx watch -p api -- pnpm nx run api:build
 pnpm nx test <project>             # vitest
 pnpm nx affected -t lint test build
 pnpm nx run api:e2e                # Testcontainers — Docker required
