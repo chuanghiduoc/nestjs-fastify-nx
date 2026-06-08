@@ -51,7 +51,7 @@ services:
       dockerfile: Dockerfile
       target: api-dev
     ports:
-      - '${API_PORT:-3000}:3000'
+      - '${API_PORT:-3000}:${PORT:-3000}'
       - '${API_DEBUG_PORT:-9229}:9229'
     env_file: ../.env
     environment:

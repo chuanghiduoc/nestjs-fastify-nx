@@ -123,14 +123,11 @@ services:
       REDIS_CACHE_HOST: redis-cache
       REDIS_QUEUE_HOST: redis-queue
       REDIS_QUEUE_PORT: '6380'
-    # Bind to loopback by default so the api is NOT reachable directly from the
-    # internet — a reverse proxy (Coolify, nginx, Traefik, …) terminates TLS and
-    # forwards traffic. A host-installed proxy reaches it via 127.0.0.1:3000; a
-    # containerized proxy on the same docker network reaches `api:3000` by service
-    # name regardless of this host bind. Set API_BIND_HOST=0.0.0.0 only if you
-    # deliberately want to expose the api on every interface (firewall it then).
+    # Loopback by default — not internet-facing. Set API_BIND_HOST=0.0.0.0 for
+    # direct exposure, but Docker's port publishing BYPASSES ufw/firewalld; gate
+    # it with a cloud security group or a DOCKER-USER rule, not the host firewall.
     ports:
-      - '${API_BIND_HOST:-127.0.0.1}:${API_PORT:-3000}:3000'
+      - '${API_BIND_HOST:-127.0.0.1}:${API_PORT:-3000}:${PORT:-3000}'
     # Long-form gates plain-compose deploys on migration completion + dependency
     # health so the api doesn't crash-loop on a fresh DB. compose.swarm.yml
     # overrides back to short-form because `docker stack deploy` rejects the
@@ -155,7 +152,7 @@ services:
           '--quiet',
           '--spider',
           '--tries=1',
-          'http://127.0.0.1:3000/api/v1/health/live',
+          'http://127.0.0.1:${PORT:-3000}/api/v1/health/live',
         ]
       interval: 30s
       timeout: 10s

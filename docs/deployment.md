@@ -88,39 +88,30 @@ scheduler replica, and excludes mailpit via the `dev-only` profile.
 ## Network Exposure & Port Binding
 
 The base `compose.yml` publishes host ports for Postgres, Redis, and MinIO as a
-**dev convenience**. Short-form mappings (`5432:5432`) bind to `0.0.0.0`, so on a
-host with a public IP and no firewall those data services would be reachable from
-the internet. The `compose.prod.yml` overlay closes this:
+**dev convenience**. Short-form mappings (`5432:5432`) bind `0.0.0.0` _through
+Docker's own iptables chain, which bypasses `ufw`/`firewalld`_ — on a public-IP
+host they are internet-reachable even behind a "deny" rule. The
+`compose.prod.yml` overlay closes this:
 
-| Service                                      | Host port in prod overlay                            | Reachable by                                                                    |
-| -------------------------------------------- | ---------------------------------------------------- | ------------------------------------------------------------------------------- |
-| postgres / redis-cache / redis-queue / minio | none — stripped via `ports: !override []`            | other containers only, by service name (`postgres:5432`, `redis-cache:6379`, …) |
-| api                                          | `${API_BIND_HOST:-127.0.0.1}:${API_PORT:-3000}:3000` | a reverse proxy (see below) — **not** the public internet by default            |
+| Service                                      | Host port in prod overlay                                     | Reachable by                                                                    |
+| -------------------------------------------- | ------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| postgres / redis-cache / redis-queue / minio | none — stripped via `ports: !override []`                     | other containers only, by service name (`postgres:5432`, `redis-cache:6379`, …) |
+| api                                          | `${API_BIND_HOST:-127.0.0.1}:${API_PORT:-3000}:${PORT:-3000}` | loopback only by default — **not** the public internet                          |
 
-Apps connect to the data tier over the internal compose network using service
-names, so removing the host ports changes nothing for runtime — it only removes
-the attack surface.
+### Exposing the api
 
-### Reverse proxy models
+Loopback (`127.0.0.1`) by default, so the api is never internet-facing out of
+the box. This image is deploy-agnostic — pick whichever fits, nothing else changes:
 
-The api binds to **loopback (`127.0.0.1`) by default**, so it is never directly
-internet-facing. Front it with an L7 reverse proxy (Coolify, nginx, Traefik,
-Caddy, ALB) that terminates TLS, forwards `X-Forwarded-For`, and proxies
-WebSocket upgrades. Two valid topologies:
+- **TLS proxy on the host** (nginx/Caddy/…) → `proxy_pass http://127.0.0.1:${API_PORT}`.
+- **Proxy or tunnel container on the compose network** → reaches `api:${PORT}` by
+  Docker DNS, ignoring the host bind. A `cloudflared`/Tailscale sidecar needs no
+  published host port at all — drop `ports:` on the api service entirely.
+- **Direct exposure** (managed L4 LB, or none) → set `API_BIND_HOST=0.0.0.0`.
 
-- **Proxy installed on the host** (nginx/Traefik on the VM, not a container) —
-  it reaches the api via `proxy_pass http://127.0.0.1:3000`. The loopback bind is
-  required here. ✅ works out of the box.
-- **Proxy running as a container** (Coolify-managed, or a dockerized
-  Traefik/nginx that joins the same network) — it routes to `api:3000` by Docker
-  DNS, ignoring the host bind entirely. The loopback bind is harmless. For a
-  fully port-less api, additionally set `ports: !override []` on the api service
-  and attach the proxy to the compose network; the host then publishes nothing
-  but the proxy's 80/443.
-
-Set `API_BIND_HOST=0.0.0.0` **only** if you deliberately want the api exposed on
-every interface (e.g. no proxy, or a managed LB on another host) — firewall the
-port in that case.
+> Docker port publishing **bypasses `ufw`/`firewalld`** — a `0.0.0.0` bind is
+> internet-open even behind a host "deny" rule. Gate it with a cloud security
+> group or a `DOCKER-USER` iptables rule.
 
 > **Swarm note**: `compose.swarm.yml` publishes the api through the routing mesh
 > (`ports: !override` with `mode: ingress`) and strips the data-tier ports the
