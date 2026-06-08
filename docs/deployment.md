@@ -168,8 +168,9 @@ Config files live under `docker/prometheus/`, `docker/otel-collector/`, and `doc
      the workflow ref, recorded in the public Rekor log.
    - Gates on **Trivy** image scan (HIGH/CRITICAL, fixable only) and
      **Semgrep** SAST (TS/Node/OWASP rule packs).
-   - Migrates the database and triggers Coolify deploy only after every gate
-     passes.
+4. Roll out from your target environment: pull the published tag from GHCR, run
+   the migration image against the prod database, then start/restart the
+   services. This step is deployment-specific and intentionally left out of CI.
 
 See [docs/security.md](./security.md) for the full scanner inventory and how
 to verify a signed tag locally with `cosign verify`.
