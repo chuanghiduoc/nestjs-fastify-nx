@@ -85,3 +85,65 @@ jobs:
 
       - name: Build affected
         run: pnpm nx affected --target=build --base=$NX_BASE --head=$NX_HEAD --parallel=3
+
+  # `nx build` emits dist but never boots it, so runtime-only regressions slip
+  # through every job above — an swc transpile target that breaks `class extends`,
+  # a broken DI wiring, a missing runtime dep, a Dockerfile stage error. This job
+  # builds the real multi-stage images and boots the full dev stack so those fail
+  # here on the PR instead of at `release.yml` tag time. Supply-chain scanning
+  # (Trivy/SBOM/Cosign) stays in release.yml — this gate is correctness only.
+  docker-smoke:
+    needs: main
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      COMPOSE_FILE: docker/compose.yml:docker/compose.dev.yml
+      BUILDX_NO_DEFAULT_ATTESTATIONS: 1
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      # compose.dev.yml overrides DB/Redis/S3/SMTP hosts to service names, so the
+      # example's dev defaults are sufficient — no secrets needed for a smoke boot.
+      - name: Seed .env from example
+        run: cp .env.example .env
+
+      # depends_on chains every service (infra + migration + minio-init), so this
+      # one command builds the images and boots the whole stack. --wait blocks on
+      # worker/scheduler healthchecks; a crash loop trips --wait-timeout and fails.
+      - name: Build images and boot stack
+        run: |
+          docker compose --env-file .env up -d --build --wait --wait-timeout 300 \
+            api worker scheduler
+
+      - name: Smoke test — API health
+        run: |
+          for _ in $(seq 1 30); do
+            if curl -sf -m 2 http://127.0.0.1:3000/api/v1/health/live; then
+              echo; echo "API healthy"; exit 0
+            fi
+            sleep 2
+          done
+          echo "API did not become healthy within 60s"; exit 1
+
+      - name: Assert services are not crash-looping
+        run: |
+          fail=0
+          for svc in api worker scheduler; do
+            cid=$(docker compose --env-file .env ps -q "$svc")
+            status=$(docker inspect -f '{{.State.Status}}' "$cid")
+            restarts=$(docker inspect -f '{{.RestartCount}}' "$cid")
+            echo "$svc: status=$status restarts=$restarts"
+            { [ "$status" = "running" ] && [ "$restarts" -le 1 ]; } || fail=1
+          done
+          exit $fail
+
+      - name: Dump logs on failure
+        if: ${{ failure() }}
+        run: docker compose --env-file .env logs --tail=200 --no-color
+
+      - name: Teardown
+        if: ${{ always() }}
+        run: docker compose --env-file .env down -v --remove-orphans
