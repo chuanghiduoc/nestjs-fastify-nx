@@ -1,5 +1,8 @@
 const { NxAppWebpackPlugin } = require('@nx/webpack/app-plugin');
 const { join } = require('path');
+const {
+  SwcEs2022TargetPlugin,
+} = require('../../tools/webpack/swc-es2022-target-plugin');
 
 module.exports = {
   output: {
@@ -23,5 +26,6 @@ module.exports = {
       runtimeDependencies: ['tslib'],
       sourceMap: true,
     }),
+    new SwcEs2022TargetPlugin(),
   ],
 };
