@@ -245,7 +245,7 @@ pnpm codegen:full                   # export OpenAPI → orval → libs/api-clie
 ├── scripts/
 │   ├── build-dev.sh          # build + start dev stack (--with-obs flag)
 │   ├── dev.sh                # hot reload: infra in Docker + app on host (nx watch + serve)
-│   ├── build-prod.sh         # build production images with SBOM + provenance
+│   ├── build-prod.sh         # build production images + boot stack (scan/sign in CI)
 │   ├── doctor.sh             # preflight: Docker, Node, pnpm, ports, .env
 │   ├── teardown.sh           # stop stack + optional volume removal
 │   └── security/             # gitleaks / osv / semgrep / trivy / cosign

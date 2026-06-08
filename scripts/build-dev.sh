@@ -9,8 +9,12 @@
 #   --with-obs    Include the observability overlay (Prometheus, Grafana, Jaeger, OTel)
 #
 # Env flags:
-#   NO_CACHE=1     full clean rebuild (default: incremental)
-#   TRIVY_SCAN=0   skip vulnerability scan
+#   NO_CACHE=1       full clean rebuild (default: incremental)
+#   BUILD_PARALLEL=1 build all services concurrently (default: serial)
+#
+# Security scanning (Trivy/SBOM/etc.) is intentionally NOT run here — it lives in
+# CI (.github/workflows). Local builds stay fast; run scripts/security/*.sh
+# manually if you need local parity.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -30,8 +34,8 @@ if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
   echo "  --with-obs    Also start the observability stack (Prometheus/Grafana/Jaeger/OTel)"
   echo ""
   echo "Env flags:"
-  echo "  NO_CACHE=1    Full clean rebuild"
-  echo "  TRIVY_SCAN=0  Skip Trivy vulnerability scan"
+  echo "  NO_CACHE=1        Full clean rebuild"
+  echo "  BUILD_PARALLEL=1  Build all services concurrently (default: serial)"
   echo ""
   echo "Examples:"
   echo "  ./scripts/build-dev.sh"
@@ -161,56 +165,8 @@ if printf '%s\n' "${SERVICES[@]}" | grep -qx api; then
 fi
 
 # Compose tags as `<project>-<service>:latest`; project name defaults to the
-# directory name unless COMPOSE_PROJECT_NAME is set. Used by trivy scan and
-# the build report below.
+# directory name unless COMPOSE_PROJECT_NAME is set. Used by the build report below.
 COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-$(basename "$(pwd)")}"
-
-# Dev images carry devDeps so unfixed-and-noisy CVEs are normal: gate is OFF
-# (TRIVY_EXIT_CODE=0). Awareness, not blocking. Set TRIVY_SCAN=0 to skip.
-#
-# api/worker/scheduler all derive from the shared `workspace` stage, so they
-# share identical base layers. Scanning all three would produce duplicate CVE
-# reports for every Node/OS finding. Scan only the first built image and note
-# that its findings cover the shared workspace layers for all three services.
-if [[ "${TRIVY_SCAN:-1}" = "1" ]] && command -v docker >/dev/null 2>&1; then
-  echo ""
-  sec::log "Image vulnerability scan (Trivy, warn-only on dev images)"
-
-  # Collect built images in order; stop at the first one that exists.
-  SCAN_IMG=""
-  SCAN_SVC=""
-  for svc in "${SERVICES[@]}"; do
-    img="${COMPOSE_PROJECT_NAME}-${svc}:latest"
-    if docker image inspect "$img" >/dev/null 2>&1; then
-      SCAN_IMG="$img"
-      SCAN_SVC="$svc"
-      break
-    fi
-  done
-
-  if [[ -n "$SCAN_IMG" ]]; then
-    echo ""
-    echo "--- trivy: ${SCAN_SVC} (workspace base layers shared by all services) ---"
-    MSYS_NO_PATHCONV=1 docker run --rm \
-      -v //var/run/docker.sock:/var/run/docker.sock \
-      -v "${HOME}/.cache/trivy:/root/.cache/trivy" \
-      aquasec/trivy:0.62.0 image \
-      --severity HIGH,CRITICAL \
-      --ignore-unfixed \
-      --scanners vuln \
-      --exit-code 0 \
-      --format table \
-      "$SCAN_IMG" || true
-
-    # Report skipped services so the output is explicit, not silently absent.
-    for svc in "${SERVICES[@]}"; do
-      [[ "$svc" == "$SCAN_SVC" ]] && continue
-      img="${COMPOSE_PROJECT_NAME}-${svc}:latest"
-      docker image inspect "$img" >/dev/null 2>&1 \
-        && sec::log "Skipping trivy: ${svc} — same workspace base layers as ${SCAN_SVC}"
-    done
-  fi
-fi
 
 # --- Build report -----------------------------------------------------------
 echo ""

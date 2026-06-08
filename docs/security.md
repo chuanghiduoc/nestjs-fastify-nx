@@ -70,8 +70,10 @@ misconfigurations.
 TRIVY_EXIT_CODE=0 ./scripts/security/scan-images.sh   # warn-only
 ```
 
-The `build-prod.sh` script gates on this by default. `build-dev.sh` runs
-Trivy too but warn-only — dev images carry devDeps so the noise floor is high.
+Image scanning is enforced in CI (`release.yml` runs Trivy per app on tag and
+uploads SARIF to GitHub Security). The local `build-*.sh` scripts deliberately
+skip it to keep the inner loop fast — run `scripts/security/scan-images.sh`
+manually when you want a pre-push check.
 
 ### Cosign — supply-chain signatures
 
@@ -102,8 +104,11 @@ back to a specific commit, workflow run, and signing identity.
 ./scripts/security/scan-secrets.sh
 ./scripts/security/scan-deps.sh
 
-# After building production images
-./scripts/build-prod.sh    # gates Trivy automatically
+# Build production images locally (fast — no scan); CI owns the security gate
+./scripts/build-prod.sh
+
+# Optional pre-push image scan (CI parity)
+./scripts/security/scan-images.sh
 ```
 
 Lefthook wires Gitleaks into `pre-commit` (staged hunks) and `pre-push`

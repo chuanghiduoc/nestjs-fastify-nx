@@ -41,7 +41,7 @@ docker build -f Dockerfile --target migration -t your-registry/nestjs-migration:
 For all four in one shot (BuildKit shares stages across siblings):
 
 ```bash
-./scripts/build-prod.sh                       # gated by Trivy on local
+./scripts/build-prod.sh                       # build + boot only; Trivy/SBOM/sign live in CI (release.yml)
 ```
 
 ## Database Migrations
