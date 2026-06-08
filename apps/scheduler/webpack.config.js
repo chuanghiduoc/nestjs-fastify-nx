@@ -1,8 +1,6 @@
 const { NxAppWebpackPlugin } = require('@nx/webpack/app-plugin');
 const { join } = require('path');
-const {
-  SwcEs2022TargetPlugin,
-} = require('../../tools/webpack/swc-es2022-target-plugin');
+const { SwcEs2022TargetPlugin } = require('../../tools/webpack/swc-es2022-target-plugin');
 
 module.exports = {
   output: {

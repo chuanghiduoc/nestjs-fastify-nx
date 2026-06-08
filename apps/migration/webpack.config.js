@@ -1,9 +1,7 @@
 const { NxAppWebpackPlugin } = require('@nx/webpack/app-plugin');
 const { join } = require('path');
 const fs = require('fs');
-const {
-  SwcEs2022TargetPlugin,
-} = require('../../tools/webpack/swc-es2022-target-plugin');
+const { SwcEs2022TargetPlugin } = require('../../tools/webpack/swc-es2022-target-plugin');
 
 // seed.mjs runs via execSync — webpack misses its imports. Nx's `runtimeDependencies`
 // resolves via `require.resolve('<pkg>/package.json')`, which @prisma/adapter-pg
