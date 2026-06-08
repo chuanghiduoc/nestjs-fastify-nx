@@ -35,6 +35,67 @@ nestjs-fastify-nx/
 └── docs/             # this folder
 ```
 
+### Layered view
+
+The runnable apps sit on top; dependencies flow strictly downward. Nothing in a
+lower layer ever imports something above it.
+
+```mermaid
+flowchart TD
+    subgraph apps["apps/ · runnable entrypoints"]
+        direction LR
+        api["api<br/>HTTP · GraphQL · WS"]
+        worker["worker<br/>BullMQ consumer"]
+        scheduler["scheduler<br/>cron jobs"]
+        migration["migration<br/>prisma deploy"]
+    end
+
+    comp["libs/composition/ · scope:composition<br/>(admin · Bull Board)"]
+
+    subgraph modules["libs/modules/ · scope:modules · bounded contexts"]
+        direction LR
+        users["users"]
+        audit["audit-log"]
+        upload["upload"]
+    end
+
+    subgraph infra["libs/infra/ · scope:infra · adapters"]
+        direction LR
+        infraAuth["auth"]
+        database["database"]
+        redis["redis"]
+        messaging["messaging"]
+        storage["storage"]
+        observability["observability"]
+    end
+
+    subgraph foundation["libs/core · contracts · shared"]
+        direction LR
+        core["core"]
+        contracts["contracts"]
+        shared["shared"]
+    end
+
+    apps --> comp
+    apps --> modules
+    apps --> infra
+    comp --> modules
+    modules --> infra
+    infra --> foundation
+    modules --> foundation
+
+    classDef appBox fill:#1e3a8a,stroke:#1e40af,color:#fff;
+    classDef compBox fill:#7c2d12,stroke:#9a3412,color:#fff;
+    classDef modBox fill:#065f46,stroke:#047857,color:#fff;
+    classDef infraBox fill:#4338ca,stroke:#4f46e5,color:#fff;
+    classDef baseBox fill:#374151,stroke:#4b5563,color:#fff;
+    class api,worker,scheduler,migration appBox;
+    class comp compBox;
+    class users,audit,upload modBox;
+    class infraAuth,database,redis,messaging,storage,observability infraBox;
+    class core,contracts,shared baseBox;
+```
+
 ## Domain Module Layout (DDD + Hexagonal)
 
 Each `libs/modules/<context>` follows this structure:
@@ -81,6 +142,47 @@ Enforced by `@nx/enforce-module-boundaries` (see `eslint.config.mjs`):
 | `scope:core`        | shared                                                           |
 | `scope:contracts`   | shared                                                           |
 | `scope:testing`     | modules, infra, core, shared, contracts                          |
+
+Visualised — solid arrows are allowed dependencies; the dashed crossed arrow is
+the one rule the linter exists to enforce:
+
+```mermaid
+flowchart TD
+    api["scope:api"]
+    worker["scope:worker"]
+    scheduler["scope:scheduler"]
+    comp["scope:composition"]
+
+    subgraph bc["scope:modules · bounded contexts"]
+        direction LR
+        m1["users"]
+        m2["audit-log"]
+    end
+
+    infra["scope:infra"]
+    core["scope:core"]
+    contracts["scope:contracts"]
+    shared["scope:shared"]
+
+    api --> comp
+    api --> bc
+    api --> infra
+    worker --> bc
+    worker --> infra
+    scheduler --> bc
+    scheduler --> infra
+    comp --> bc
+    bc --> infra
+    infra --> core
+    infra --> contracts
+    infra --> shared
+    core --> shared
+    contracts --> shared
+
+    m1 -. "❌ NEVER" .-x m2
+
+    linkStyle 14 stroke:#dc2626,stroke-width:2px;
+```
 
 ### Why `scope:composition`?
 
@@ -133,6 +235,33 @@ GET /api/v1/admin/users → AdminUsersController.list (BetterAuthGuard + RolesGu
 
 Protected REST and GraphQL endpoints rely on `BetterAuthGuard` and
 `RolesGuard`, both wired globally as `APP_GUARD` providers in `AppModule`.
+
+Sign-up traces the full event chain — note the Postgres trigger writes the
+outbox row inside Better Auth's own transaction, so the event can never be lost:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor U as Client
+    participant BA as Better Auth<br/>/api/auth/*
+    participant PG as Postgres
+    participant OB as outbox_events
+    participant Q as BullMQ
+    participant W as worker
+
+    U->>BA: POST /sign-up/email
+    BA->>PG: INSERT User + Session
+    PG-->>OB: trigger writes UserRegistered (same tx)
+    BA-->>U: 200 · Set-Cookie better-auth.session_token
+    OB->>Q: UserRegisteredListener enqueues EMAIL_NOTIFICATION
+    Q->>W: deliver job
+    W->>U: welcome email (SMTP)
+
+    Note over U,BA: later request
+    U->>BA: GET /api/v1/users/me (cookie)
+    BA->>BA: BetterAuthGuard validates session
+    BA-->>U: 200 · UserProfileDto
+```
 
 ## Pagination Strategy
 
@@ -204,6 +333,29 @@ in FE       │   ↓ sendResetPassword callback fires         │
             │ Better Auth validates token + hashes pwd     │
             │ → 200 OK, user can now sign in               │
             └──────────────────────────────────────────────┘
+```
+
+As a sequence — backend mints/validates the token, frontend owns every page the
+user sees:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor U as User
+    participant BE as Backend (NestJS)
+    participant Q as BullMQ + worker
+    participant FE as Frontend (SPA)
+
+    U->>BE: POST /api/auth/request-password-reset
+    BE->>BE: mint + persist token hash
+    BE->>Q: enqueue EMAIL_NOTIFICATION
+    Q-->>U: email links ${FRONTEND_BASE_URL}/reset?token=t
+    U->>FE: GET /reset?token=t
+    FE-->>U: render new-password form
+    U->>FE: submit new password
+    FE->>BE: POST /api/auth/reset-password { token, newPassword }
+    BE->>BE: validate token + hash password
+    BE-->>FE: 200 OK → redirect to sign-in
 ```
 
 The same shape applies to the other two flows:
@@ -362,6 +514,26 @@ The outbox pattern guarantees atomicity: either both the domain row and the even
 Listeners are NestJS event subscribers; durable side-effects (email, audit)
 always go through BullMQ so retries and dead-letter routing are uniform.
 
+```mermaid
+flowchart LR
+    A["Domain mutation"] --> PG[("Postgres<br/>aggregate row")]
+    PG -- "trigger · same tx" --> OB[("outbox_events")]
+    OB --> EB["EventBusService.publish<br/>(in-process · default)"]
+    EB --> L["Listeners (sync)"]
+    L --> Q["BullMQ durable job"]
+    Q --> W["worker process"]
+    W --> S1["send email"]
+    W --> S2["write audit log"]
+
+    OB -. "EVENT_PUBLISHER_DRIVER=outbox" .-> RL["OutboxRelayService<br/>polls + publishes durably"]
+    RL --> EB
+
+    classDef store fill:#7c2d12,stroke:#9a3412,color:#fff;
+    classDef proc fill:#065f46,stroke:#047857,color:#fff;
+    class PG,OB store;
+    class W,RL proc;
+```
+
 ## Spec export & API codegen
 
 `apps/api/src/common/swagger/codegen-app.module.ts` is an HTTP-only variant of
@@ -505,6 +677,33 @@ PrismaService
   ├── db      (write client) ── DATABASE_URL           ── primary / pgbouncer nestjs_db
   └── dbRead  (read client)  ── DATABASE_REPLICA_URL   ── replica / pgbouncer nestjs_db_read
                                 (aliases to db when DATABASE_REPLICA_URL is unset)
+```
+
+```mermaid
+flowchart TD
+    subgraph PS["PrismaService"]
+        db["db · write client"]
+        dbRead["dbRead · read client"]
+    end
+
+    P[("Primary<br/>DATABASE_URL")]
+    R[("Replica<br/>DATABASE_REPLICA_URL")]
+
+    db --> P
+    dbRead --> R
+    dbRead -. "aliases to db when replica unset" .-> P
+
+    BA["Better Auth (read-after-write)"] --> db
+    OR["Outbox relay (tx)"] --> db
+    CH["Command handlers (tx)"] --> db
+    FW["findById / findByEmail<br/>read-your-writes"] --> db
+    FA["findAllCursor (admin list)"] --> dbRead
+    EX["exists (lag-tolerant pre-check)"] --> dbRead
+
+    classDef primary fill:#1e3a8a,stroke:#1e40af,color:#fff;
+    classDef replica fill:#065f46,stroke:#047857,color:#fff;
+    class P primary;
+    class R replica;
 ```
 
 ### What always uses `db` (primary)
