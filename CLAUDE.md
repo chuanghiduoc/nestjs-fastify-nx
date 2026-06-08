@@ -35,7 +35,7 @@ Production-grade NestJS + Fastify + Nx monorepo. DDD/CQRS, Better Auth (cookie s
 - **ORM**: Prisma 7 with `@prisma/adapter-pg`; schema at `prisma/schema.prisma`
 - **Auth**: Better Auth 1.6 — **NOT** JWT. Cookie name is `better-auth.session_token`. Mounted at `/api/auth/*` by `BetterAuthModule` (in `libs/infra/auth`). The auth surface is published at `/api/auth/reference`.
 - **Test runner**: Vitest 4 + Testcontainers (real Postgres/Redis) + Supertest. **NOT** Jest.
-- **Bundler**: Webpack 5 (NestJS-correct decorator metadata via `tsc` compiler)
+- **Bundler**: Webpack 5 with `swc` compiler (`@nx/webpack` auto-injects `swc-loader` with `legacyDecorator` + `decoratorMetadata`, so NestJS DI metadata stays intact). Type-checking is NOT done at build time — it lives in the separate `typecheck` target (`tsc --build`) that the CI gate runs. **Consequence**: interface/type-only imports MUST use `import type`. swc transpiles per-file with no type graph, so a *value* import of an interface used as a `@Inject`-decorated constructor param type leaks into `design:paramtypes` and webpack warns `export 'X' was not found`. Keep class imports as value imports — their runtime reference is exactly what DI metadata needs.
 
 ## Architecture & boundaries
 
