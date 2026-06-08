@@ -25,12 +25,8 @@ import {
 } from '@nestjs/swagger';
 import { ApiCommonErrors } from '@nestjs-fastify-nx/contracts';
 import { I18N_KEYS } from '@nestjs-fastify-nx/infra-i18n';
-import {
-  PresignedUpload,
-  STORAGE_PORT,
-  StoragePort,
-  StoredFile,
-} from '@nestjs-fastify-nx/infra-storage';
+import { STORAGE_PORT } from '@nestjs-fastify-nx/infra-storage';
+import type { PresignedUpload, StoragePort, StoredFile } from '@nestjs-fastify-nx/infra-storage';
 import { BetterAuthGuard } from '@nestjs-fastify-nx/infra-auth';
 import {
   ALLOWED_MIME_TYPES,
