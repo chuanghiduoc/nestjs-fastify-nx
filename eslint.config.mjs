@@ -15,6 +15,12 @@ export default tseslint.config(
       '**/.nx/**',
       '**/coverage/**',
       '**/tmp/**',
+      // Tool-generated sources (Orval REST client, etc.) are owned by the
+      // generator, not the developer — regenerated on every codegen run and
+      // never hand-edited. Linting them only surfaces the generator's stylistic
+      // choices (e.g. orval 8.15's escaped `\/` in string literals), which we
+      // cannot fix without forking the tool.
+      '**/generated/**',
       '**/*.js',
       '**/*.mjs',
       '**/*.cjs',
