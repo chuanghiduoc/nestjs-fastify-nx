@@ -30,16 +30,15 @@ if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
   echo "  MAIL_HOST             empty / localhost / mailpit -> bundle local Mailpit"
   echo ""
   echo "Env flags:"
-  echo "  TRIVY_SCAN=0        Skip Trivy gate"
-  echo "  TRIVY_EXIT_CODE=0   Demote Trivy failures to warnings"
-  echo "  ATTEST_SKIP=1       Skip SBOM + provenance attestations (faster local iteration)"
   echo "  NO_UP=1             Skip the auto-up step (build only)"
   echo "  IMAGE_NAMESPACE     Required for registry push; defaults to 'local' for smoke"
   echo ""
+  echo "Security scanning + SBOM/provenance attestations are NOT run here — they"
+  echo "live in CI (.github/workflows/release.yml: Trivy, Cosign, SBOM, provenance)."
+  echo "Local builds stay fast; run scripts/security/*.sh manually for local parity."
+  echo ""
   echo "Examples:"
   echo "  ./scripts/build-prod.sh"
-  echo "  TRIVY_EXIT_CODE=0 ./scripts/build-prod.sh   # warn-only scan"
-  echo "  TRIVY_SCAN=0 ./scripts/build-prod.sh        # skip scan"
   echo "  NO_UP=1 ./scripts/build-prod.sh             # only build, do not start stack"
   exit 0
 fi
@@ -63,14 +62,12 @@ PREFIX="${IMAGE_REGISTRY}/${IMAGE_NAMESPACE}"
 
 sec::log "Building production images under ${PREFIX}/*:${IMAGE_TAG}"
 
-# SBOM + max-mode provenance attestations let Scout/Trivy/registry policy engines
-# reason about the image without re-indexing the filesystem. Set ATTEST_SKIP=1
-# to disable when iterating locally — syft can flake on slow disks.
-ATTEST_ARGS=(--sbom=true --provenance=mode=max)
-if [[ "${ATTEST_SKIP:-0}" = "1" ]]; then
-  ATTEST_ARGS=()
-  sec::warn "Attestations disabled (ATTEST_SKIP=1)"
-fi
+# SBOM + provenance attestations are produced by CI (release.yml) on the pushed
+# image, not here — local builds only `--load` into the daemon for smoke tests,
+# where attestations add minutes (syft filesystem indexing) for no benefit.
+# buildx still emits a default (min) provenance manifest unless told otherwise,
+# so disable default attestations explicitly — they double the export phase.
+export BUILDX_NO_DEFAULT_ATTESTATIONS=1
 
 build() {
   local app="$1" dockerfile="$2" target="${3:-}"
@@ -78,7 +75,7 @@ build() {
   [[ -n "$target" ]] && target_args=(--target "$target")
   echo ""
   echo "--- ${app} ---"
-  docker buildx build -f "$dockerfile" "${target_args[@]}" "${ATTEST_ARGS[@]}" \
+  docker buildx build -f "$dockerfile" "${target_args[@]}" \
     --load -t "${PREFIX}/${app}:${IMAGE_TAG}" .
 }
 
@@ -95,18 +92,9 @@ sec::ok "All production images built:"
 docker images --format 'table {{.Repository}}:{{.Tag}}\t{{.Size}}\t{{.CreatedSince}}' \
   | grep -E "^${PREFIX}/(api|worker|scheduler|migration):${IMAGE_TAG}\b" || true
 
-# Image scan via shared helper. Local prod-build defaults to gate ON (CI parity);
-# pass TRIVY_EXIT_CODE=0 to demote to warn-only, TRIVY_SCAN=0 to skip entirely.
-if [[ "${TRIVY_SCAN:-1}" = "1" ]]; then
-  echo ""
-  sec::log "Image vulnerability scan (Trivy)"
-  ./scripts/security/scan-images.sh || {
-    echo ""
-    sec::err "Trivy gate failed. To inspect:  ./scripts/security/scan-images.sh <app>"
-    sec::err "To bypass for a quick local smoke:  TRIVY_EXIT_CODE=0 ./scripts/build-prod.sh"
-    exit 1
-  }
-fi
+# Image vulnerability scanning is the CI gate's job (release.yml runs Trivy per
+# app and uploads SARIF to GitHub Security). Run ./scripts/security/scan-images.sh
+# manually if you need a local pre-push check.
 
 if [[ "${NO_UP:-0}" = "1" ]]; then
   echo ""

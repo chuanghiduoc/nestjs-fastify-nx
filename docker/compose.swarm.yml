@@ -57,8 +57,8 @@
 # - Postgres / Redis / MinIO ports are reset (`!override []`) so they only
 #   exist on the encrypted overlay — never published on host interfaces.
 # - `api` publishes via `mode: ingress` so any node IP routes to a healthy
-#   replica via Swarm's L4 routing mesh. Front this with Caddy / Traefik /
-#   Cloudflare for TLS termination.
+#   replica via Swarm's L4 routing mesh. Terminate TLS in front of it with
+#   whatever the deployment uses (host proxy, tunnel, or a cloud L4 LB).
 # - For full secret-management, promote `POSTGRES_PASSWORD`,
 #   `BETTER_AUTH_SECRET`, etc. to `docker secret` and switch the postgres
 #   image to `POSTGRES_PASSWORD_FILE`. Out of scope here to keep .env-based
@@ -161,7 +161,7 @@ services:
     # Override the host-port mapping inherited from compose.yml: in Swarm we
     # publish via the routing mesh so any node IP can serve traffic.
     ports: !override
-      - target: 3000
+      - target: ${PORT:-3000}
         published: ${API_PORT:-3000}
         protocol: tcp
         mode: ingress
