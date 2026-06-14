@@ -25,7 +25,7 @@ import {
   PROBLEM_CONTENT_TYPE,
 } from './problem-details.helper';
 
-type RawWithIds = IncomingMessage & { requestId?: string };
+type RawWithIds = IncomingMessage & { requestId?: string; correlationId?: string };
 
 interface NormalizedError {
   status: number;
@@ -81,7 +81,9 @@ export class GlobalExceptionFilter implements ExceptionFilter {
 
     if (normalized.status >= 500) {
       this.logger.error({ err: exception, url: request.url }, 'Unhandled exception');
-      Sentry.captureException(exception);
+      Sentry.captureException(exception, {
+        tags: { requestId: raw.requestId, correlationId: raw.correlationId },
+      });
     } else if (
       normalized.status === HttpStatus.UNAUTHORIZED ||
       normalized.status === HttpStatus.FORBIDDEN

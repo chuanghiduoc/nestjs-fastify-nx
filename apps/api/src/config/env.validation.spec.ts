@@ -15,6 +15,8 @@ const baseProdEnv = {
   STORAGE_ACCESS_KEY: 'real-key',
   STORAGE_SECRET_KEY: 'real-secret',
   BULL_BOARD_PASSWORD: 'strong-pw',
+  MAIL_IGNORE_TLS: 'false',
+  MAIL_REQUIRE_TLS: 'true',
 };
 
 describe('validateConfig', () => {
@@ -93,6 +95,18 @@ describe('validateConfig', () => {
 
   it('rejects localhost mail host in production', () => {
     expect(() => validateConfig({ ...baseProdEnv, MAIL_HOST: 'localhost' })).toThrow(/MAIL_HOST/);
+  });
+
+  it('rejects MAIL_IGNORE_TLS=true in production', () => {
+    expect(() => validateConfig({ ...baseProdEnv, MAIL_IGNORE_TLS: 'true' })).toThrow(
+      /MAIL_IGNORE_TLS/,
+    );
+  });
+
+  it('requires MAIL_SECURE or MAIL_REQUIRE_TLS in production', () => {
+    expect(() =>
+      validateConfig({ ...baseProdEnv, MAIL_SECURE: 'false', MAIL_REQUIRE_TLS: 'false' }),
+    ).toThrow(/MAIL_REQUIRE_TLS/);
   });
 
   it('rejects default bull board password in production', () => {

@@ -26,6 +26,7 @@ export class OutboxRelayService implements OnModuleInit, OnModuleDestroy {
   private readonly pollIntervalMs = intEnv('OUTBOX_POLL_INTERVAL_MS', 1_000);
   private readonly batchSize = intEnv('OUTBOX_BATCH_SIZE', 50);
   private readonly maxAttempts = intEnv('OUTBOX_MAX_ATTEMPTS', 10);
+  private readonly txTimeoutMs = intEnv('OUTBOX_TX_TIMEOUT_MS', 30_000);
   private timer?: NodeJS.Timeout;
   private running = false;
   private stopped = false;
@@ -90,25 +91,28 @@ export class OutboxRelayService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async claimBatch(): Promise<OutboxRow[]> {
-    return this.prisma.transaction(async (tx) => {
-      return tx.$queryRawUnsafe<OutboxRow[]>(
-        `WITH locked AS (
-           SELECT id
-             FROM "outbox_events"
-            WHERE "processedAt" IS NULL AND attempts < $1
-            ORDER BY "createdAt"
-            LIMIT $2
-            FOR UPDATE SKIP LOCKED
-         )
-         UPDATE "outbox_events" o
-            SET attempts = o.attempts + 1
-           FROM locked
-          WHERE o.id = locked.id
-         RETURNING o.id, o."eventType", o."aggregateId", o.payload, o.attempts`,
-        this.maxAttempts,
-        this.batchSize,
-      );
-    });
+    return this.prisma.transaction(
+      async (tx) => {
+        return tx.$queryRawUnsafe<OutboxRow[]>(
+          `WITH locked AS (
+             SELECT id
+               FROM "outbox_events"
+              WHERE "processedAt" IS NULL AND attempts < $1
+              ORDER BY "createdAt"
+              LIMIT $2
+              FOR UPDATE SKIP LOCKED
+           )
+           UPDATE "outbox_events" o
+              SET attempts = o.attempts + 1
+             FROM locked
+            WHERE o.id = locked.id
+           RETURNING o.id, o."eventType", o."aggregateId", o.payload, o.attempts`,
+          this.maxAttempts,
+          this.batchSize,
+        );
+      },
+      { timeout: this.txTimeoutMs },
+    );
   }
 
   private async dispatchOne(row: OutboxRow): Promise<boolean> {

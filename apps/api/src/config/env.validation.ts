@@ -217,6 +217,24 @@ const envSchema = z
       });
     }
 
+    // SMTP runs in the worker, but api and worker share one .env in prod, so
+    // both validators enforce TLS to keep credentials off the wire.
+    if (data.MAIL_IGNORE_TLS) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['MAIL_IGNORE_TLS'],
+        message:
+          'MAIL_IGNORE_TLS must be false in production — sending SMTP credentials without TLS exposes them in plaintext',
+      });
+    }
+    if (!data.MAIL_SECURE && !data.MAIL_REQUIRE_TLS) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['MAIL_REQUIRE_TLS'],
+        message: 'Enable MAIL_SECURE or MAIL_REQUIRE_TLS in production so SMTP negotiates TLS',
+      });
+    }
+
     if (data.CORS_ORIGINS.length === 0) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,

@@ -34,6 +34,28 @@ process.stderr.write = ((...args: StderrWriteArgs): boolean => {
   return origStderrWrite(...args);
 }) as typeof process.stderr.write;
 
+// Swallow Redis connection failures (codegen has no Redis service); the spec
+// only needs the DI graph. Any other fault still fails the build.
+const isRedisConnectionError = (err: unknown): boolean => {
+  const parts = [String((err as Error)?.message ?? err), (err as { code?: string })?.code ?? ''];
+  const nested = (err as AggregateError)?.errors;
+  if (Array.isArray(nested))
+    parts.push(...nested.map((e) => `${e?.message ?? ''} ${e?.code ?? ''}`));
+  return /ECONNREFUSED|ioredis/i.test(parts.join(' '));
+};
+process.on('uncaughtException', (err) => {
+  if (isRedisConnectionError(err)) return;
+  origStderrWrite(
+    `Uncaught exception during spec export: ${(err as Error)?.stack ?? String(err)}\n`,
+  );
+  process.exit(1);
+});
+process.on('unhandledRejection', (reason) => {
+  if (isRedisConnectionError(reason)) return;
+  origStderrWrite(`Unhandled rejection during spec export: ${String(reason)}\n`);
+  process.exit(1);
+});
+
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe, VersioningType } from '@nestjs/common';
 import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify';

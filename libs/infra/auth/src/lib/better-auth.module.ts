@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { Global, Module } from '@nestjs/common';
 import { BullModule, getQueueToken } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
@@ -18,8 +19,15 @@ import { RolesGuard } from './roles.guard';
       useFactory: (prisma: PrismaService, emailQueue: Queue, i18n: I18nService) => {
         const mailer: AuthMailDispatcher = {
           send: async ({ to, subject, body, templateId }) => {
-            // BullMQ rejects ':' in jobIds — use '__' as separator.
-            const jobId = `auth-email__${templateId ?? 'generic'}__${to}__${Date.now()}`;
+            // Content fingerprint keeps the jobId idempotent: a retried callback
+            // with the identical email dedupes, while a fresh token (new body)
+            // produces a new id and still sends. BullMQ rejects ':' in jobIds.
+            const label = (templateId ?? 'generic').replace(/[^a-zA-Z0-9_-]/g, '-');
+            const fingerprint = createHash('sha256')
+              .update(`${templateId ?? 'generic'}|${to}|${subject}|${body}`)
+              .digest('hex')
+              .slice(0, 32);
+            const jobId = `auth-email__${label}__${fingerprint}`;
             await emailQueue.add(
               templateId ?? 'auth-email',
               { to, subject, body, templateId },

@@ -436,7 +436,7 @@ Pagination conventions:
 - **Page-based** (`PaginationDto`): query `page` + `pageSize`; response carries
   matching `page` + `pageSize` + `totalCount`.
 - **Cursor-based** (`CursorPaginationDto`, preferred for high-volume endpoints):
-  query `limit` + `startingAfter` / `endingBefore`; response carries `hasMore`
+  query `limit` + `startingAfter` (forward-only); response carries `hasMore`
   and omits `page` / `pageSize` / `totalCount`.
 - **Offset-based**: query `limit` + `offset` — only adopt when neither of the
   above fits.

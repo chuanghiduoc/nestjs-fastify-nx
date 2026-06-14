@@ -82,16 +82,6 @@ export class CursorPaginationDto {
   @IsString()
   @MaxLength(200)
   startingAfter?: string;
-
-  @ApiPropertyOptional({
-    description:
-      "Opaque cursor for the previous page — pass the first item's cursor from the current response. Same opaque format as `startingAfter`.",
-    example: 'MjAyNi0wNS0xOVQwMzowMDowMC4wMDBaOjAxOTczMmRiLTYwMTAtN2Y3Zi1iNDY0LTBkMjBjNWUzYThmOQ',
-  })
-  @IsOptional()
-  @IsString()
-  @MaxLength(200)
-  endingBefore?: string;
 }
 
 export function toListResponse<T>(args: {
