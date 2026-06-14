@@ -53,8 +53,11 @@ export function applyFastifyErrorHandler(fastify: FastifyInstance): void {
       reply.header('x-request-id', requestId);
     }
 
-    // Pass through pre-shaped RFC 9457 bodies (@fastify/rate-limit) — rebuilding drops plugin-specific fields.
-    if (isProblemDetailsShape(error)) {
+    // Pass through pre-shaped RFC 9457 bodies (@fastify/rate-limit) — rebuilding
+    // drops plugin-specific fields. A production 5xx still falls through to the
+    // masked rebuild below so internal detail never leaks.
+    const isProdServerError = status >= 500 && process.env['NODE_ENV'] === 'production';
+    if (isProblemDetailsShape(error) && !isProdServerError) {
       void reply.status(status).header('content-type', PROBLEM_CONTENT_TYPE).send(error);
       return;
     }

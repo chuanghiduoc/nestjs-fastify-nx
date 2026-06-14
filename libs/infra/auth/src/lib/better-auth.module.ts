@@ -22,11 +22,12 @@ import { RolesGuard } from './roles.guard';
             // Content fingerprint keeps the jobId idempotent: a retried callback
             // with the identical email dedupes, while a fresh token (new body)
             // produces a new id and still sends. BullMQ rejects ':' in jobIds.
+            const label = (templateId ?? 'generic').replace(/[^a-zA-Z0-9_-]/g, '-');
             const fingerprint = createHash('sha256')
               .update(`${templateId ?? 'generic'}|${to}|${subject}|${body}`)
               .digest('hex')
               .slice(0, 32);
-            const jobId = `auth-email__${templateId ?? 'generic'}__${fingerprint}`;
+            const jobId = `auth-email__${label}__${fingerprint}`;
             await emailQueue.add(
               templateId ?? 'auth-email',
               { to, subject, body, templateId },

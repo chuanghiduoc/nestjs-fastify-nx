@@ -4,11 +4,13 @@ import { HealthCheckError } from '@nestjs/terminus';
 import type { ConfigService } from '@nestjs/config';
 import type { EnvConfig } from '../../config/env.validation';
 
-const mockQueue = {
-  getJobCounts: vi.fn(),
-  close: vi.fn().mockResolvedValue(undefined),
-  on: vi.fn(),
-};
+const { mockQueue } = vi.hoisted(() => ({
+  mockQueue: {
+    getJobCounts: vi.fn(),
+    close: vi.fn(() => Promise.resolve()),
+    on: vi.fn(),
+  },
+}));
 
 vi.mock('bullmq', () => ({
   Queue: class {
