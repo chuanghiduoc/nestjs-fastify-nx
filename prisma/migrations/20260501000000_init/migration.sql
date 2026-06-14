@@ -94,9 +94,20 @@ CREATE INDEX "users_status_idx" ON "users"("status");
 CREATE INDEX "users_createdAt_idx" ON "users"("createdAt");
 CREATE INDEX "users_status_updatedAt_idx" ON "users"("status", "updatedAt");
 
+-- Pin role/status to their domain enum values at the DB layer.
+ALTER TABLE "users" ADD CONSTRAINT "users_role_chk" CHECK ("role" IN ('ADMIN', 'USER'));
+ALTER TABLE "users" ADD CONSTRAINT "users_status_chk" CHECK ("status" IN ('ACTIVE', 'INACTIVE', 'BANNED'));
+
+-- Trigram indexes back the case-insensitive admin user search (ILIKE '%term%').
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+CREATE INDEX "users_email_trgm_idx" ON "users" USING gin ("email" gin_trgm_ops);
+CREATE INDEX "users_name_trgm_idx" ON "users" USING gin ("name" gin_trgm_ops);
+
 CREATE UNIQUE INDEX "sessions_token_key" ON "sessions"("token");
+CREATE INDEX "sessions_userId_idx" ON "sessions"("userId");
 
 CREATE UNIQUE INDEX "accounts_providerId_accountId_key" ON "accounts"("providerId", "accountId");
+CREATE INDEX "accounts_userId_idx" ON "accounts"("userId");
 
 CREATE INDEX "outbox_events_processedAt_createdAt_idx" ON "outbox_events"("processedAt", "createdAt");
 
