@@ -77,7 +77,9 @@ export function startTracing(options: StartTracingOptions = {}): NodeSDK | null 
     instrumentations: [
       getNodeAutoInstrumentations({
         '@opentelemetry/instrumentation-fs': { enabled: false },
-        '@opentelemetry/instrumentation-pino': { enabled: false },
+        // Pino instrumentation injects trace_id/span_id into every log line so
+        // logs can be pivoted to their trace in the backend.
+        '@opentelemetry/instrumentation-pino': { enabled: true },
       }),
     ],
   });
