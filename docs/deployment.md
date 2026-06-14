@@ -156,6 +156,39 @@ METRICS_ALLOW_CIDRS=172.0.0.0/8
 
 Config files live under `docker/prometheus/`, `docker/otel-collector/`, and `docker/grafana/provisioning/`. The observability stack is for local development and demos — production observability should use a managed service or a dedicated cluster.
 
+The overlay binds every port to `127.0.0.1` only, so none of these UIs are reachable from the internet even on a public host — reach them with an SSH tunnel (see below).
+
+### Viewing logs & errors on a headless server
+
+A container logs structured JSON to stdout — never to a file inside the container. Docker captures it via the `json-file` driver (rotated `50m × 5` in `compose.prod.yml`). On a server without a desktop, everything below runs in the SSH terminal — no browser needed.
+
+```bash
+# Tail one app's logs (JSON, one line per request)
+docker compose -f docker/compose.yml -f docker/compose.prod.yml logs -f api
+
+# Trace a single request end-to-end by its id (echoed in the RFC 9457 error body)
+docker compose -f docker/compose.yml -f docker/compose.prod.yml logs api | grep 'req-019732db'
+
+# Pretty-print while reading
+docker compose -f docker/compose.yml -f docker/compose.prod.yml logs api | npx pino-pretty
+```
+
+Typical failure-triage flow:
+
+1. The API error response carries `requestId` (RFC 9457 problem+json) — the user reports it.
+2. `grep` that id in `docker compose ... logs` to see the full ordered log chain for the request.
+3. Open **Sentry** and filter by the `requestId` tag for the exact stack trace and breadcrumbs.
+4. If it is slow rather than broken, copy the `trace_id` from the log line (present once `OTEL_ENABLED=true`) into **Jaeger** to find the offending span.
+
+To open Jaeger/Grafana/Prometheus that run on the remote host, do **not** expose them publicly. Tunnel them to your workstation over SSH:
+
+```bash
+# Run on your workstation, then open http://localhost:16686 etc. locally
+ssh -L 16686:localhost:16686 -L 3001:localhost:3001 -L 9090:localhost:9090 user@your-server
+```
+
+For a team that needs persistent access, put the host on a private network (VPN / Tailscale) or use a managed backend (Grafana Cloud, Sentry SaaS, Datadog). Only expose a dashboard publicly behind TLS **and** authentication, ideally behind a VPN — never a raw public port.
+
 ## Release Process
 
 1. Merge to `main`
