@@ -10,7 +10,10 @@
 # Or via the build script:
 #   ./scripts/build-dev.sh --with-obs
 #
-# Ports exposed on the host:
+# Ports bound to 127.0.0.1 ONLY (never 0.0.0.0) so they are not reachable from
+# the internet on a public host. From a workstation, reach the UIs on a remote
+# headless host via an SSH tunnel, e.g.:
+#   ssh -L 16686:localhost:16686 -L 3001:localhost:3001 -L 9090:localhost:9090 user@host
 #   16686  Jaeger UI         http://localhost:16686
 #   9090   Prometheus        http://localhost:9090
 #   3001   Grafana           http://localhost:3001  (admin / admin)
@@ -31,10 +34,12 @@ services:
     volumes:
       - ./otel-collector/config.yaml:/etc/otel/config.yaml:ro
     ports:
-      - '4317:4317' # OTLP gRPC
-      - '4318:4318' # OTLP HTTP
-      - '8888:8888' # collector internal metrics (scraped by Prometheus)
-      - '8889:8889' # Prometheus exporter for app metrics forwarded by collector
+      # Bound to 127.0.0.1 only — never 0.0.0.0. On a headless/remote host these
+      # UIs are reached over an SSH tunnel, never exposed to the internet.
+      - '127.0.0.1:4317:4317' # OTLP gRPC
+      - '127.0.0.1:4318:4318' # OTLP HTTP
+      - '127.0.0.1:8888:8888' # collector internal metrics (scraped by Prometheus)
+      - '127.0.0.1:8889:8889' # Prometheus exporter for app metrics forwarded by collector
 
   jaeger:
     image: jaegertracing/jaeger:2.6.0
@@ -42,7 +47,7 @@ services:
     environment:
       COLLECTOR_OTLP_ENABLED: 'true'
     ports:
-      - '16686:16686' # Jaeger UI
+      - '127.0.0.1:16686:16686' # Jaeger UI
 
   prometheus:
     image: prom/prometheus:v3.3.0
@@ -56,7 +61,7 @@ services:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus_data:/prometheus
     ports:
-      - '9090:9090'
+      - '127.0.0.1:9090:9090'
 
   grafana:
     image: grafana/grafana:11.6.0
@@ -69,7 +74,7 @@ services:
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
       - grafana_data:/var/lib/grafana
     ports:
-      - '3001:3001'
+      - '127.0.0.1:3001:3001'
     depends_on:
       - prometheus
 

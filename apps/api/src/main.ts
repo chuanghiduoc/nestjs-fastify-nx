@@ -27,7 +27,7 @@ if (sentryDsn) {
   // Cap prod sample rates to avoid burning through Sentry quota.
   const sampleRateCap = isProduction ? 0.1 : 1;
   const tracesSampleRate = Math.min(
-    Number(process.env['SENTRY_TRACES_SAMPLE_RATE'] ?? 0.1),
+    Number(process.env['SENTRY_TRACES_SAMPLE_RATE'] ?? 0.01),
     sampleRateCap,
   );
   const profilesSampleRate = Math.min(0.1, sampleRateCap);
@@ -116,7 +116,6 @@ async function bootstrap() {
             scriptSrc: [
               "'self'",
               "'unsafe-inline'",
-              "'unsafe-eval'",
               'https://cdn.jsdelivr.net',
               'https://*.scalar.com',
             ],

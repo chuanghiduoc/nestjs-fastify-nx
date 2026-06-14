@@ -217,6 +217,15 @@ const envSchema = z
       });
     }
 
+    if (data.MAIL_IGNORE_TLS) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['MAIL_IGNORE_TLS'],
+        message:
+          'MAIL_IGNORE_TLS must be false in production — sending SMTP credentials without TLS exposes them in plaintext',
+      });
+    }
+
     if (data.CORS_ORIGINS.length === 0) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,

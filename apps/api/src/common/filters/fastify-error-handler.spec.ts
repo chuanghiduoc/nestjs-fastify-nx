@@ -117,6 +117,25 @@ describe('applyFastifyErrorHandler', () => {
     expect(res.headers['x-request-id']).toBe('caller-supplied-id-123');
   });
 
+  it('masks 5xx detail in production but keeps it in non-production', async () => {
+    app.get('/leak', async () => {
+      throw new Error('internal db connection string leak');
+    });
+
+    const devRes = await app.inject({ method: 'GET', url: '/leak' });
+    expect(devRes.json().detail).toBe('internal db connection string leak');
+
+    const prev = process.env['NODE_ENV'];
+    process.env['NODE_ENV'] = 'production';
+    try {
+      const prodRes = await app.inject({ method: 'GET', url: '/leak' });
+      expect(prodRes.json().detail).toBe('Internal Server Error');
+      expect(prodRes.json().detail).not.toContain('leak');
+    } finally {
+      process.env['NODE_ENV'] = prev;
+    }
+  });
+
   it('does not overwrite a hijacked reply', async () => {
     app.get('/hijack', async (_req, reply) => {
       reply.hijack();

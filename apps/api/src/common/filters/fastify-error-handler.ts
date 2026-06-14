@@ -35,7 +35,9 @@ export function applyFastifyErrorHandler(fastify: FastifyInstance): void {
     const status = resolveStatus(error);
     const code = resolveCode(error, status);
     const title = HTTP_STATUS_TITLES[status] ?? 'Error';
-    const detail = error.message || title;
+    // Mask 5xx detail in production — raw FST_ERR_*/driver messages can leak internals.
+    const detail =
+      status >= 500 && process.env['NODE_ENV'] === 'production' ? title : error.message || title;
 
     if (status >= 500) {
       logger.error({ err: error, url: request.url }, 'Fastify-level exception');
