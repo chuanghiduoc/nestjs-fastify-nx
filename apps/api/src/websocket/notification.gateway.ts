@@ -67,7 +67,7 @@ export class NotificationGateway
   afterInit(server: Server): void {
     // null after the cap stops ioredis reconnecting forever on a dead Redis.
     const retryStrategy = (times: number): number | null =>
-      times > 10 ? null : Math.min(times * 100, 3000);
+      times >= 10 ? null : Math.min(times * 100, 3000);
     const host = this.config.get('REDIS_CACHE_HOST', { infer: true });
     const port = this.config.get('REDIS_CACHE_PORT', { infer: true });
 
