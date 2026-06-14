@@ -1,4 +1,5 @@
-import { HttpStatus, Injectable, NotFoundException, Inject } from '@nestjs/common';
+import { HttpStatus, Injectable, Inject } from '@nestjs/common';
+import { BusinessRuleException } from '@nestjs-fastify-nx/core';
 import { I18N_KEYS } from '@nestjs-fastify-nx/infra-i18n';
 import { GetUserProfileQuery } from './get-user-profile.query';
 import { USER_REPOSITORY_PORT } from '../../../domain/ports/user-repository.port';
@@ -22,10 +23,18 @@ export class GetUserProfileHandler {
   async execute(query: GetUserProfileQuery): Promise<UserProfileResult> {
     const user = await this.users.findById(query.userId);
     if (!user) {
-      throw new NotFoundException({
-        statusCode: HttpStatus.NOT_FOUND,
+      throw new BusinessRuleException({
+        status: HttpStatus.NOT_FOUND,
+        code: 'user_not_found',
         messageKey: I18N_KEYS.errors.users.not_found,
-        message: 'User not found',
+        violations: [
+          {
+            path: 'userId',
+            code: 'not_found',
+            message: 'User not found',
+            messageKey: I18N_KEYS.errors.users.not_found,
+          },
+        ],
       });
     }
 

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { NotFoundException } from '@nestjs/common';
+import { BusinessRuleException } from '@nestjs-fastify-nx/core';
 import { GetUserProfileHandler } from './get-user-profile.handler';
 import { GetUserProfileQuery } from './get-user-profile.query';
 import { MockUserRepository } from '../../../testing/mock-user-repository';
@@ -27,9 +27,9 @@ describe('GetUserProfileHandler', () => {
     expect(result.createdAt).toBeInstanceOf(Date);
   });
 
-  it('throws NotFoundException when the user does not exist', async () => {
+  it('throws BusinessRuleException when the user does not exist', async () => {
     await expect(handler.execute(new GetUserProfileQuery('non-existent-id'))).rejects.toThrow(
-      NotFoundException,
+      BusinessRuleException,
     );
   });
 
