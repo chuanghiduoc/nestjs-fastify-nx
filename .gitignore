@@ -53,6 +53,9 @@ Thumbs.db
 .env
 .env.*
 !.env.example
+# local load-test env copy (holds a throwaway admin password); the committed
+# template is scripts/loadtest/loadtest.env.example
+scripts/loadtest/loadtest.env
 
 vitest.config.*.timestamp*
 .nx/polygraph
