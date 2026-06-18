@@ -111,12 +111,13 @@ jobs:
         run: cp .env.example .env
 
       # depends_on chains every service (infra + migration + minio-init), so this
-      # one command builds the images and boots the whole stack. --wait blocks on
-      # worker/scheduler healthchecks; a crash loop trips --wait-timeout and fails.
+      # one command builds all four app images and boots the whole stack. --wait
+      # blocks on worker/scheduler healthchecks and migration completing; a crash
+      # loop or failed migration trips --wait-timeout and fails.
       - name: Build images and boot stack
         run: |
           docker compose --env-file .env up -d --build --wait --wait-timeout 300 \
-            api worker scheduler
+            migration api worker scheduler
 
       - name: Smoke test — API health
         run: |
@@ -127,6 +128,18 @@ jobs:
             sleep 2
           done
           echo "API did not become healthy within 60s"; exit 1
+
+      # migration is a one-shot (prisma migrate deploy then exit); it won't appear
+      # in `ps -q`, so query stopped containers and assert a clean exit.
+      - name: Assert migration completed successfully
+        run: |
+          cid=$(docker compose --env-file .env ps -aq migration)
+          [ -n "$cid" ] || { echo "migration container not found"; exit 1; }
+          status=$(docker inspect -f '{{.State.Status}}' "$cid")
+          code=$(docker inspect -f '{{.State.ExitCode}}' "$cid")
+          echo "migration: status=$status exit=$code"
+          { [ "$status" = "exited" ] && [ "$code" -eq 0 ]; } \
+            || { echo "migration did not complete cleanly"; exit 1; }
 
       - name: Assert services are not crash-looping
         run: |
