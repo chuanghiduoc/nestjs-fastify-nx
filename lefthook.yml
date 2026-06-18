@@ -1,3 +1,14 @@
+# Show full hook stdout/stderr so rejected commits surface the real error.
+output:
+  - meta
+  - summary
+  - success
+  - failure
+  - execution
+  - execution_out
+  - execution_info
+  - skips
+
 pre-commit:
   # Run serially so lint-staged finishes auto-fixing files before nx-affected
   # reads them — otherwise tsc/eslint can race the prettier writeback.
@@ -22,7 +33,9 @@ pre-commit:
     nx-affected:
       priority: 3
       glob: '*.{ts,tsx,json,js,cjs,mjs}'
-      run: pnpm nx affected -t typecheck lint build --uncommitted --parallel=3
+      # --output-style=stream prints per-task output inline instead of nx's
+      # collapsed summary boxes, so failures show the actual error.
+      run: pnpm nx affected -t typecheck lint build --uncommitted --parallel=3 --output-style=stream
       skip:
         - merge
         - rebase

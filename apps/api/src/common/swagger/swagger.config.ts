@@ -10,6 +10,7 @@ import {
 } from '@nestjs-fastify-nx/contracts';
 import { BETTER_AUTH_INSTANCE, type BetterAuthInstance } from '@nestjs-fastify-nx/infra-auth';
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
+import { Converter } from '@apiture/openapi-down-convert';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import ScalarApiReference from '@scalar/fastify-api-reference';
@@ -160,67 +161,45 @@ async function mergeBetterAuthSpec(app: INestApplication, document: OpenAPIObjec
     return;
   }
 
-  let authSchema:
-    | { paths?: Record<string, unknown>; components?: { schemas?: Record<string, unknown> } }
-    | undefined;
+  let authSchema: AuthOpenApiDocument | undefined;
   try {
-    authSchema = (await auth.api.generateOpenAPISchema()) as typeof authSchema;
+    authSchema = (await auth.api.generateOpenAPISchema()) as AuthOpenApiDocument;
   } catch (err) {
     logger.warn(`Failed to generate Better Auth OpenAPI schema: ${(err as Error).message}`);
     return;
   }
 
-  if (authSchema?.paths) {
+  if (!authSchema) return;
+
+  // Better Auth emits OpenAPI 3.1.1; @nestjs/swagger emits 3.0.0. Down-convert
+  // the auth sub-document so every 3.1-only construct is normalised in one pass.
+  const converted = new Converter(authSchema, { verbose: false }).convert() as AuthOpenApiDocument;
+
+  if (converted.paths) {
     document.paths = document.paths ?? {};
-    for (const [rawPath, pathItem] of Object.entries(authSchema.paths)) {
+    for (const [rawPath, pathItem] of Object.entries(converted.paths)) {
       const fullPath = rawPath.startsWith(AUTH_PATH_PREFIX)
         ? rawPath
         : `${AUTH_PATH_PREFIX}${rawPath.startsWith('/') ? rawPath : `/${rawPath}`}`;
-      const tagged = tagOperations(pathItem, AUTH_TAG);
-      const sanitized = sanitizeForOpenApi30(tagged) as Record<string, unknown>;
-      ensurePathParameters(fullPath, sanitized);
-      document.paths[fullPath] = sanitized as (typeof document.paths)[string];
+      const tagged = tagOperations(pathItem, AUTH_TAG) as Record<string, unknown>;
+      ensurePathParameters(fullPath, tagged);
+      document.paths[fullPath] = tagged as (typeof document.paths)[string];
     }
   }
 
-  if (authSchema?.components?.schemas) {
+  if (converted.components?.schemas) {
     document.components = document.components ?? {};
     document.components.schemas = {
       ...(document.components.schemas ?? {}),
-      ...(sanitizeForOpenApi30(authSchema.components.schemas) as Record<string, unknown>),
+      ...converted.components.schemas,
     } as NonNullable<typeof document.components.schemas>;
   }
 }
 
-// Better Auth emits OpenAPI 3.1 (`type: ['string', 'null']`) under a 3.0.0 declaration. Orval's validator rejects this — rewrite to 3.0 nullable shape so the merged doc round-trips through every downstream tool.
-function sanitizeForOpenApi30(node: unknown): unknown {
-  if (Array.isArray(node)) return node.map(sanitizeForOpenApi30);
-  if (!node || typeof node !== 'object') return node;
-
-  const source = node as Record<string, unknown>;
-  const out: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(source)) {
-    out[key] = sanitizeForOpenApi30(value);
-  }
-
-  if (Array.isArray(out['type'])) {
-    const types = out['type'] as unknown[];
-    const nonNull = types.filter((t) => t !== 'null');
-    if (nonNull.length !== types.length) {
-      out['nullable'] = true;
-    }
-    if (nonNull.length === 1) {
-      out['type'] = nonNull[0];
-    } else if (nonNull.length === 0) {
-      delete out['type'];
-    } else {
-      // Multi-type union without null — collapse to oneOf for 3.0 compatibility.
-      out['oneOf'] = nonNull.map((t) => ({ type: t }));
-      delete out['type'];
-    }
-  }
-
-  return out;
+interface AuthOpenApiDocument {
+  paths?: Record<string, unknown>;
+  components?: { schemas?: Record<string, unknown> };
+  [key: string]: unknown;
 }
 
 // Better Auth's spec sometimes inlines `{id}` in a path without declaring the parameter. Inject the missing parameter so strict validators (Orval) accept the merged document.
