@@ -47,7 +47,7 @@ jobs:
             target: migration
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Set up QEMU (for cross-arch base images)
         uses: docker/setup-qemu-action@v4
@@ -135,7 +135,7 @@ jobs:
           - app: migration
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Log in to Container Registry
         uses: docker/login-action@v4
@@ -170,7 +170,7 @@ jobs:
       security-events: write
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Semgrep static analysis
         run: ./scripts/security/scan-sast.sh
