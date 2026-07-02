@@ -16,7 +16,6 @@ pre-commit:
     lint-staged:
       priority: 1
       run: pnpm lint-staged
-      glob: '*.{ts,json,yml}'
     # Secret scan staged hunks only — pre-push catches the full diff. Skips
     # silently if Docker isn't available so contributors without it aren't
     # blocked locally; CI still gates.
@@ -26,8 +25,9 @@ pre-commit:
       skip:
         - merge
         - rebase
-    # Mirror the gate CI applies (`nx affected -t typecheck lint build`) so a
-    # broken commit is rejected locally instead of failing the PR build.
+    # Reject a broken commit locally instead of failing the PR build. Runs
+    # typecheck + lint only — the heavier `build` is deferred to pre-push so the
+    # commit inner loop stays fast (CI still runs the full build gate).
     # `--uncommitted` scopes to staged + working-tree changes; cache hits keep
     # repeat commits cheap. Skips when only docs/yaml/sh files changed.
     nx-affected:
@@ -35,7 +35,7 @@ pre-commit:
       glob: '*.{ts,tsx,json,js,cjs,mjs}'
       # --output-style=stream prints per-task output inline instead of nx's
       # collapsed summary boxes, so failures show the actual error.
-      run: pnpm nx affected -t typecheck lint build --uncommitted --parallel=3 --output-style=stream
+      run: pnpm nx affected -t typecheck lint --uncommitted --parallel=3 --output-style=stream
       skip:
         - merge
         - rebase
@@ -45,6 +45,11 @@ pre-push:
     # Full repo + history scan — last line of defence before remote sees commits.
     gitleaks-full:
       run: bash scripts/security/scan-secrets.sh full
+    # Full affected build — kept out of pre-commit so the commit loop stays
+    # fast, but gated here so a broken build never reaches the remote.
+    # --output-style=stream surfaces the real per-task error on failure.
+    build-affected:
+      run: pnpm nx affected -t build --base=origin/main --parallel=3 --output-style=stream
 
 commit-msg:
   commands:
