@@ -87,8 +87,9 @@ CREATE TABLE "audit_logs" (
     CONSTRAINT "audit_logs_pkey" PRIMARY KEY ("id", "createdAt")
 ) PARTITION BY RANGE ("createdAt");
 
+-- The UNIQUE index on email already serves every lookup path; a second
+-- non-unique index would only double write amplification, so it is omitted.
 CREATE UNIQUE INDEX "users_email_key" ON "users"("email");
-CREATE INDEX "users_email_idx" ON "users"("email");
 CREATE INDEX "users_role_idx" ON "users"("role");
 CREATE INDEX "users_status_idx" ON "users"("status");
 CREATE INDEX "users_createdAt_idx" ON "users"("createdAt");
@@ -109,11 +110,16 @@ CREATE INDEX "sessions_userId_idx" ON "sessions"("userId");
 CREATE UNIQUE INDEX "accounts_providerId_accountId_key" ON "accounts"("providerId", "accountId");
 CREATE INDEX "accounts_userId_idx" ON "accounts"("userId");
 
+-- Relay claim path uses (processedAt, createdAt); the (eventType, processedAt) index
+-- backs ops debugging ("show me all undelivered users.registered events").
 CREATE INDEX "outbox_events_processedAt_createdAt_idx" ON "outbox_events"("processedAt", "createdAt");
+CREATE INDEX "outbox_events_eventType_processedAt_idx" ON "outbox_events"("eventType", "processedAt");
 
 CREATE INDEX "audit_logs_userId_createdAt_idx" ON "audit_logs"("userId", "createdAt");
 CREATE INDEX "audit_logs_action_createdAt_idx" ON "audit_logs"("action", "createdAt");
 CREATE INDEX "audit_logs_createdAt_idx" ON "audit_logs"("createdAt");
+-- Compliance query path — "every admin action on resource X in window Y".
+CREATE INDEX "audit_logs_resource_createdAt_idx" ON "audit_logs"("resource", "createdAt");
 
 ALTER TABLE "sessions" ADD CONSTRAINT "sessions_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 ALTER TABLE "accounts" ADD CONSTRAINT "accounts_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
@@ -155,6 +161,7 @@ BEGIN
     'users.registered',
     NEW."id"::text,
     jsonb_build_object(
+      'schemaVersion', 1,
       'eventId', uuidv7()::text,
       'occurredAt', to_char(NOW() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
       'payload', jsonb_build_object('email', NEW."email")
@@ -179,6 +186,7 @@ BEGIN
     'users.logged_in',
     NEW."userId"::text,
     jsonb_build_object(
+      'schemaVersion', 1,
       'eventId', uuidv7()::text,
       'occurredAt', to_char(NOW() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
       'payload', jsonb_strip_nulls(jsonb_build_object(
@@ -207,6 +215,7 @@ BEGIN
     'users.logged_out',
     OLD."userId"::text,
     jsonb_build_object(
+      'schemaVersion', 1,
       'eventId', uuidv7()::text,
       'occurredAt', to_char(NOW() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
       'payload', jsonb_strip_nulls(jsonb_build_object(

@@ -1,8 +1,9 @@
 import { HttpStatus, Logger } from '@nestjs/common';
 import * as Sentry from '@sentry/nestjs';
 import type { FastifyError, FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import { trace } from '@opentelemetry/api';
 import { ERROR_CODES } from '@nestjs-fastify-nx/contracts';
-import { generateId } from '@nestjs-fastify-nx/shared';
+import { generateCorrelationId } from '@nestjs-fastify-nx/shared';
 import {
   buildProblemDetails,
   HTTP_STATUS_CODES,
@@ -44,10 +45,12 @@ export function applyFastifyErrorHandler(fastify: FastifyInstance): void {
       Sentry.captureException(error);
     }
 
+    // `||` (not `??`) mirrors the middleware: an empty x-request-id header falls through.
     const requestId =
-      (request.raw as RawWithIds).requestId ??
-      (request.headers['x-request-id'] as string | undefined) ??
-      `req-${generateId()}`;
+      (request.raw as RawWithIds).requestId ||
+      (request.headers['x-request-id'] as string) ||
+      trace.getActiveSpan()?.spanContext().traceId ||
+      generateCorrelationId();
 
     if (!reply.getHeader('x-request-id')) {
       reply.header('x-request-id', requestId);

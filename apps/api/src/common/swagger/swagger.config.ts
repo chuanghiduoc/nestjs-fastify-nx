@@ -16,6 +16,7 @@ import * as path from 'node:path';
 import ScalarApiReference from '@scalar/fastify-api-reference';
 
 const API_TITLE = 'NestJS Fastify Nx Boilerplate';
+const PROBLEM_JSON = 'application/problem+json';
 const SESSION_COOKIE = 'better-auth.session_token';
 const DOCS_ROUTE_PREFIX = '/docs';
 const REQUEST_ID_HEADER = 'X-Request-Id';
@@ -131,8 +132,7 @@ function dedupeOperationIds(document: OpenAPIObject): void {
     if (!pathItem || typeof pathItem !== 'object') continue;
     for (const method of HTTP_METHODS) {
       const op = (pathItem as Record<string, unknown>)[method] as
-        | { operationId?: string }
-        | undefined;
+        { operationId?: string } | undefined;
       if (!op?.operationId) continue;
 
       let id = op.operationId;
@@ -183,6 +183,7 @@ async function mergeBetterAuthSpec(app: INestApplication, document: OpenAPIObjec
         : `${AUTH_PATH_PREFIX}${rawPath.startsWith('/') ? rawPath : `/${rawPath}`}`;
       const tagged = tagOperations(pathItem, AUTH_TAG) as Record<string, unknown>;
       ensurePathParameters(fullPath, tagged);
+      normalizeAuthInfraErrors(tagged);
       document.paths[fullPath] = tagged as (typeof document.paths)[string];
     }
   }
@@ -210,8 +211,7 @@ function ensurePathParameters(url: string, pathItem: Record<string, unknown>): v
   const HTTP_METHODS = ['get', 'put', 'post', 'delete', 'options', 'head', 'patch', 'trace'];
   for (const method of HTTP_METHODS) {
     const op = pathItem[method] as
-      | { parameters?: Array<{ name?: string; in?: string }> }
-      | undefined;
+      { parameters?: Array<{ name?: string; in?: string }> } | undefined;
     if (!op || typeof op !== 'object') continue;
     op.parameters = op.parameters ?? [];
     for (const name of placeholders) {
@@ -224,6 +224,33 @@ function ensurePathParameters(url: string, pathItem: Record<string, unknown>): v
           schema: { type: 'string' },
         } as { name?: string; in?: string });
       }
+    }
+  }
+}
+
+// Better Auth's generateOpenAPISchema() attaches a generic `{ message }` (application/json)
+// error template to every operation. For 429 and 500 that shape is factually wrong on our host:
+// /api/auth/* rate-limit rejections come from @fastify/rate-limit and unhandled failures from
+// applyFastifyErrorHandler(), both emitting RFC 9457 problem+json — identical to every other
+// route. Rewrite just those two so the documented shape matches the real runtime response.
+// Better Auth's own 2xx/400/401 semantics are left intact (they genuinely return `{ message }`).
+function normalizeAuthInfraErrors(pathItem: Record<string, unknown>): void {
+  const HTTP_METHODS = ['get', 'put', 'post', 'delete', 'options', 'head', 'patch', 'trace'];
+  const INFRA_CODES: Record<string, string> = {
+    '429': 'Rate limit exceeded — see the `Retry-After` response header.',
+    '500': 'Unexpected server error. The `requestId` field can be quoted to support.',
+  };
+  for (const method of HTTP_METHODS) {
+    const op = pathItem[method] as { responses?: Record<string, unknown> } | undefined;
+    if (!op?.responses) continue;
+    for (const [code, description] of Object.entries(INFRA_CODES)) {
+      if (!op.responses[code]) continue;
+      op.responses[code] = {
+        description,
+        content: {
+          [PROBLEM_JSON]: { schema: { $ref: '#/components/schemas/ProblemDetailsDto' } },
+        },
+      };
     }
   }
 }
@@ -255,8 +282,7 @@ function injectRequestIdResponseHeader(document: OpenAPIObject): void {
     if (!pathItem || typeof pathItem !== 'object') continue;
     for (const method of HTTP_METHODS) {
       const op = (pathItem as Record<string, unknown>)[method] as
-        | { responses?: Record<string, { headers?: Record<string, unknown> }> }
-        | undefined;
+        { responses?: Record<string, { headers?: Record<string, unknown> }> } | undefined;
       if (!op?.responses) continue;
       for (const response of Object.values(op.responses)) {
         if (!response || typeof response !== 'object') continue;

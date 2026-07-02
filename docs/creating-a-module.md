@@ -149,23 +149,36 @@ both from `@nestjs-fastify-nx/contracts`.
 ```typescript
 import { ApiCommonErrors, ApiPaginatedResponse } from '@nestjs-fastify-nx/contracts';
 import { ApiTags } from '@nestjs/swagger';
+import { CommandBus, QueryBus } from '@nestjs/cqrs';
 
 @ApiTags('products')
 @Controller('products')
 export class ProductsController {
+  // Inject the buses, never the handlers — CqrsModule.forRoot() registers handlers globally.
+  constructor(
+    private readonly queryBus: QueryBus,
+    private readonly commandBus: CommandBus,
+  ) {}
+
   @Get()
   @ApiPaginatedResponse(ProductResponseDto)
   @ApiCommonErrors({ auth: true, validation: true })
-  list(@Query() query: ListProductsDto) { … }
+  list(@Query() query: ListProductsDto) {
+    return this.queryBus.execute(new ListProductsQuery(query.limit, query.startingAfter));
+  }
 
   @Post()
   @ApiCreatedResponse({ type: ProductResponseDto })
   @ApiCommonErrors({ auth: true, validation: true, conflict: true })
-  create(@Body() dto: CreateProductDto) { … }
+  create(@Body() dto: CreateProductDto) {
+    return this.commandBus.execute(new CreateProductCommand(dto.name, dto.price));
+  }
 }
 ```
 
 `ProblemDetailsValidationPipe` is wired globally — no extra setup needed for 422 validation envelopes.
+
+**Register handlers**: add each `@QueryHandler`/`@CommandHandler` to the module's `providers` array (they do not need to be exported). The `CqrsModule.forRoot()` explorer in each runnable app (`api`, `scheduler`, `codegen-app`) discovers them across all loaded modules — no manual bus registration.
 
 ## Testing Pattern
 

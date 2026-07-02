@@ -57,6 +57,7 @@ Thumbs.db
 vitest.config.*.timestamp*
 .nx/polygraph
 .claude/worktrees
+.claude/agent-memory/
 .claude/settings.local.json
 /generated/prisma
 .test-tmp/

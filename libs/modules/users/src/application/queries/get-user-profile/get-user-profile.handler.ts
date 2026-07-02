@@ -1,23 +1,16 @@
-import { HttpStatus, Injectable, Inject } from '@nestjs/common';
+import { HttpStatus, Inject } from '@nestjs/common';
+import { IQueryHandler, QueryHandler } from '@nestjs/cqrs';
 import { BusinessRuleException } from '@nestjs-fastify-nx/core';
 import { I18N_KEYS } from '@nestjs-fastify-nx/infra-i18n';
-import { GetUserProfileQuery } from './get-user-profile.query';
+import { GetUserProfileQuery, type UserProfileResult } from './get-user-profile.query';
 import { USER_REPOSITORY_PORT } from '../../../domain/ports/user-repository.port';
 import type { UserRepositoryPort } from '../../../domain/ports/user-repository.port';
-import type { UserRole, UserStatus } from '../../../domain/entities/user.entity';
 
-export interface UserProfileResult {
-  id: string;
-  email: string;
-  name: string;
-  role: UserRole;
-  status: UserStatus;
-  createdAt: Date;
-  updatedAt: Date;
-}
-
-@Injectable()
-export class GetUserProfileHandler {
+@QueryHandler(GetUserProfileQuery)
+export class GetUserProfileHandler implements IQueryHandler<
+  GetUserProfileQuery,
+  UserProfileResult
+> {
   constructor(@Inject(USER_REPOSITORY_PORT) private readonly users: UserRepositoryPort) {}
 
   async execute(query: GetUserProfileQuery): Promise<UserProfileResult> {

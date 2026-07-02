@@ -1,4 +1,5 @@
 import { Controller, Get, HttpCode, HttpStatus, Query, UseGuards } from '@nestjs/common';
+import { QueryBus } from '@nestjs/cqrs';
 import { ApiCookieAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import {
   ApiCommonErrors,
@@ -9,7 +10,6 @@ import {
 import { BetterAuthGuard, Roles, RolesGuard } from '@nestjs-fastify-nx/infra-auth';
 import {
   ListUsersCursorFilterDto,
-  ListUsersCursorHandler,
   ListUsersCursorQuery,
   UserListItemResponseDto,
   type UserListItemDto,
@@ -23,7 +23,7 @@ const ADMIN_USERS_PATH = '/api/v1/admin/users';
 @Roles('ADMIN')
 @ApiCookieAuth('session')
 export class AdminUsersController {
-  constructor(private readonly listUsersCursorHandler: ListUsersCursorHandler) {}
+  constructor(private readonly queryBus: QueryBus) {}
 
   @Get()
   @HttpCode(HttpStatus.OK)
@@ -35,7 +35,7 @@ export class AdminUsersController {
   @ApiCommonErrors({ auth: true, forbidden: true, validation: true })
   @ApiPaginatedResponse(UserListItemResponseDto, { description: 'Cursor-paginated list of users.' })
   async list(@Query() filter: ListUsersCursorFilterDto): Promise<ListResponseDto<UserListItemDto>> {
-    const result = await this.listUsersCursorHandler.execute(
+    const result = await this.queryBus.execute(
       new ListUsersCursorQuery(
         filter.limit,
         filter.startingAfter,

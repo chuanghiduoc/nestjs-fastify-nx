@@ -15,6 +15,9 @@ export const SENSITIVE_REDACT_PATHS = [
   '*.password',
   '*.passwordHash',
   '*.token',
+  // Distinct key from `token` — Better Auth attaches `sessionToken` to req.user, which
+  // `*.token` does not match.
+  '*.sessionToken',
   '*.refreshToken',
   '*.accessToken',
   '*.apiKey',

@@ -1,8 +1,8 @@
 import { Controller, Get, UseGuards, Req } from '@nestjs/common';
+import { QueryBus } from '@nestjs/cqrs';
 import { ApiTags, ApiOperation, ApiOkResponse, ApiCookieAuth } from '@nestjs/swagger';
 import { ApiCommonErrors } from '@nestjs-fastify-nx/contracts';
 import { UserProfileResponseDto } from '../dto/auth-response.dto';
-import { GetUserProfileHandler } from '../../application/queries/get-user-profile/get-user-profile.handler';
 import { GetUserProfileQuery } from '../../application/queries/get-user-profile/get-user-profile.query';
 import { BetterAuthGuard, type AuthenticatedSession } from '@nestjs-fastify-nx/infra-auth';
 import type { FastifyRequest } from 'fastify';
@@ -12,7 +12,7 @@ import type { FastifyRequest } from 'fastify';
 @UseGuards(BetterAuthGuard)
 @ApiCookieAuth('session')
 export class UsersController {
-  constructor(private readonly getProfileHandler: GetUserProfileHandler) {}
+  constructor(private readonly queryBus: QueryBus) {}
 
   @Get('me')
   @ApiOperation({
@@ -25,6 +25,6 @@ export class UsersController {
   getProfile(
     @Req() req: FastifyRequest & { user: AuthenticatedSession },
   ): Promise<UserProfileResponseDto> {
-    return this.getProfileHandler.execute(new GetUserProfileQuery(req.user.userId));
+    return this.queryBus.execute(new GetUserProfileQuery(req.user.userId));
   }
 }

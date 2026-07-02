@@ -1,0 +1,57 @@
+groups:
+  - name: nestjs-api-availability
+    rules:
+      - alert: ApiDown
+        expr: up{job="nestjs-api"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: 'API target {{ $labels.instance }} is down'
+          description: 'Prometheus has not scraped nestjs-api for 2m. Check the api container and /metrics IP allowlist (METRICS_ALLOW_CIDRS).'
+
+      - alert: HighHttp5xxRate
+        # Aggregated across replicas — a real backend fault shows on every instance.
+        expr: sum(rate(http_requests_total{status_code=~"5.."}[5m])) / sum(rate(http_requests_total[5m])) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'HTTP 5xx rate above 5%'
+          description: '{{ $value | humanizePercentage }} of requests returned 5xx over the last 5m.'
+
+  - name: outbox
+    rules:
+      - alert: OutboxLagHigh
+        # outbox_lag_seconds is the age of the oldest unprocessed event. Sustained lag
+        # means OutboxRelayService (scheduler process) is behind or dead — no domain
+        # events reach listeners. See docs/runbook.md "Outbox stuck".
+        expr: max(outbox_lag_seconds) > 60
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: 'Outbox lag above 60s'
+          description: 'Oldest unprocessed outbox event is {{ $value | humanizeDuration }} old. Verify the scheduler pod and OUTBOX_* tuning.'
+
+  - name: bullmq
+    rules:
+      - alert: QueueBacklogHigh
+        # max by() not sum by() — every API replica reports the same queue depth via its
+        # QueueEvents subscription, so summing double-counts. See docs/runbook.md.
+        expr: max by (queue) (bullmq_queue_depth{state="waiting"}) > 1000
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Queue {{ $labels.queue }} backlog above 1000'
+          description: '{{ $value }} jobs waiting in {{ $labels.queue }} for 10m — workers may be under-provisioned or stalled.'
+
+      - alert: QueueFailuresRising
+        expr: max by (queue) (rate(bullmq_jobs_total{status="failed"}[5m])) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Queue {{ $labels.queue }} failing jobs'
+          description: '{{ $labels.queue }} is failing {{ $value | printf "%.2f" }} jobs/s. Check the DLQ (docs/runbook.md "DLQ full") and worker logs.'

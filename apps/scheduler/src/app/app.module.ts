@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { CqrsModule } from '@nestjs/cqrs';
 import { LoggerModule } from 'nestjs-pino';
 import { ScheduleModule } from '@nestjs/schedule';
 import { DatabaseModule } from '@nestjs-fastify-nx/infra-database';
@@ -19,6 +20,9 @@ import { SchedulerHealthService } from './health/scheduler-health.service';
     ConfigModule.forRoot({ isGlobal: true, validate: validateSchedulerConfig }),
     LoggerModule.forRoot(buildPinoLoggerConfig()),
     ScheduleModule.forRoot(),
+    // Outbox relay republishes domain events → AuditLogListener dispatches RecordAuditLogCommand
+    // on this CommandBus. forRoot() registers the command handler across loaded modules.
+    CqrsModule.forRoot(),
     DatabaseModule,
     OutboxRelayModule,
     // Listener-only slices live here so the outbox relay's republished
