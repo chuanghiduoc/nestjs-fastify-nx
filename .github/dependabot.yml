@@ -25,6 +25,11 @@ updates:
     ignore:
       - dependency-name: webpack-cli
         update-types: [version-update:semver-major]
+      # graphql 17 breaks the mercurius stack — mercurius@16 peers `graphql ^16`
+      # and @nestjs/graphql peers `graphql ^16.11`. Hold at 16.x until the
+      # Mercurius/@nestjs GraphQL packages ship graphql 17 support.
+      - dependency-name: graphql
+        update-types: [version-update:semver-major]
     groups:
       production-dependencies:
         dependency-type: production
