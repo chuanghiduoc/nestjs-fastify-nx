@@ -21,10 +21,12 @@ import { UsersController } from './presentation/controllers/users.controller';
   controllers: [UsersController],
   providers: [
     { provide: USER_REPOSITORY_PORT, useClass: PrismaUserRepository },
+    // Query handlers are registered with the global QueryBus by CqrsModule's explorer;
+    // consumers dispatch via QueryBus, so they no longer need to be exported for direct DI.
     GetUserProfileHandler,
     ListUsersCursorHandler,
     UserRegisteredListener,
   ],
-  exports: [USER_REPOSITORY_PORT, ListUsersCursorHandler, GetUserProfileHandler],
+  exports: [USER_REPOSITORY_PORT],
 })
 export class UsersModule {}

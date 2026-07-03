@@ -226,11 +226,11 @@ POST /api/auth/sign-out → Better Auth
 
 GET /api/v1/users/me → UsersController.getProfile (BetterAuthGuard)
   → guard validates `better-auth.session_token`, attaches user to request
-  → GetUserProfileHandler → UserRepository.findById()
+  → QueryBus.execute(GetUserProfileQuery) → GetUserProfileHandler → UserRepository.findById()
 
 GET /api/v1/admin/users → AdminUsersController.list (BetterAuthGuard + RolesGuard)
   → guards reject non-ADMIN sessions with 403
-  → ListUsersCursorHandler runs cursor-paginated query
+  → QueryBus.execute(ListUsersCursorQuery) → ListUsersCursorHandler (cursor-paginated)
 ```
 
 Protected REST and GraphQL endpoints rely on `BetterAuthGuard` and

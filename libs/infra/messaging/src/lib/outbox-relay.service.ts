@@ -3,8 +3,11 @@ import { PrismaService } from '@nestjs-fastify-nx/infra-database';
 import type { DomainEvent } from '@nestjs-fastify-nx/core';
 import { intEnv } from '@nestjs-fastify-nx/shared';
 import { EventBusService } from './event-bus.service';
+import { OUTBOX_SCHEMA_VERSION } from './outbox-schema-version';
 
 interface OutboxPayloadShape {
+  // Absent on rows written before envelope versioning — treated as version 1.
+  schemaVersion?: number;
   eventId: string;
   occurredAt: string;
   payload: Record<string, unknown>;
@@ -116,6 +119,17 @@ export class OutboxRelayService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async dispatchOne(row: OutboxRow): Promise<boolean> {
+    // Reject envelopes newer than this relay understands rather than silently
+    // deserialising a shape we cannot interpret. The row exhausts its attempts and
+    // surfaces via the stuck-row warning with an explanatory lastError.
+    const version = row.payload.schemaVersion ?? 1;
+    if (version > OUTBOX_SCHEMA_VERSION) {
+      const message = `Unsupported outbox schemaVersion=${version} (relay supports up to ${OUTBOX_SCHEMA_VERSION}) — producer/consumer deploy skew`;
+      this.logger.error(`Outbox dispatch skipped for ${row.eventType} (id=${row.id}) — ${message}`);
+      await this.recordError(row.id, message.slice(0, 2_000));
+      return false;
+    }
+
     const event: DomainEvent = {
       eventId: row.payload.eventId,
       eventType: row.eventType,

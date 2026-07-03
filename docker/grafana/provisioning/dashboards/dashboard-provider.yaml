@@ -6,7 +6,12 @@ providers:
     type: file
     disableDeletion: false
     updateIntervalSeconds: 30
-    allowUiUpdates: true
+    # Disk JSON is the single source of truth; block UI edits so they can't drift and be
+    # overwritten on the next provisioner reload.
+    allowUiUpdates: false
     options:
-      path: /var/lib/grafana/dashboards
+      # Load committed dashboard JSON straight from the read-only provisioning mount
+      # (docker/grafana/provisioning → /etc/grafana/provisioning) so dashboards are
+      # code-reviewed and GitOps-friendly, not hand-drawn in the UI against an empty volume.
+      path: /etc/grafana/provisioning/dashboards
       foldersFromFilesStructure: false

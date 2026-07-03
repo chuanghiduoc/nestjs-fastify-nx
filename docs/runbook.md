@@ -297,6 +297,29 @@ Faster alternative for staging / sandbox: `prisma migrate resolve --applied 2026
 
 ---
 
+### 5b. "Applied migration missing from local directory" after a squash
+
+**Symptom:** `prisma migrate deploy`/`dev` reports a migration that is recorded in `_prisma_migrations` but no longer exists on disk (e.g. a follow-up migration was folded into `20260501000000_init` and its folder removed to keep the boilerplate at a single init migration).
+
+**Root cause:** The folded DDL now lives inside `init`, and a fork that already applied the standalone follow-up migration has a phantom ledger row pointing at a deleted folder. The DB schema is correct — the squashed DDL is already present — only the ledger references a file that is gone.
+
+**Action (dev / sandbox):** `prisma migrate reset` rebuilds the DB from the single init migration (drops data — dev only).
+
+**Action (preserve data — verify schema first with `prisma migrate status`):**
+
+```bash
+# Drop the phantom ledger row; its DDL is already applied and now lives inside init.
+docker compose exec postgres psql -U postgres -d nestjs_db \
+  -c "DELETE FROM _prisma_migrations WHERE migration_name = '20260601000000_indexes_hardening';"
+
+# Re-run deploy — the ledger now matches the on-disk single init migration.
+docker compose run --rm migration
+```
+
+**Escalation:** Only delete a ledger row after confirming the folded DDL is genuinely present in the live database — `prisma migrate diff --from-schema-datasource prisma/schema.prisma --to-migrations prisma/migrations` diffs the live DB against the on-disk migrations; an empty diff means they match. Never drop a ledger row on a DB whose schema you have not verified.
+
+---
+
 ## 6. Metrics endpoint unreachable or leaking
 
 **Symptom:** Prometheus scrape jobs return 403 or connection refused. Or, conversely, `/metrics` is accidentally reachable from the public internet.

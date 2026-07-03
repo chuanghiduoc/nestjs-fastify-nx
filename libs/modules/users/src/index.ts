@@ -4,13 +4,17 @@ export { UsersListenersModule } from './users-listeners.module';
 // Enums used by consumers (scheduler, GraphQL type registration)
 export { UserRole, UserStatus } from './domain/entities/user.entity';
 
-// Query handlers + queries exposed for DI injection in cross-cutting resolvers.
-export { GetUserProfileHandler } from './application/queries/get-user-profile/get-user-profile.handler';
-export { GetUserProfileQuery } from './application/queries/get-user-profile/get-user-profile.query';
-export type { UserProfileResult } from './application/queries/get-user-profile/get-user-profile.handler';
-export { ListUsersCursorHandler } from './application/queries/list-users-cursor/list-users-cursor.handler';
-export type { ListUsersCursorResult } from './application/queries/list-users-cursor/list-users-cursor.handler';
-export { ListUsersCursorQuery } from './application/queries/list-users-cursor/list-users-cursor.query';
+// Queries + result types exposed so cross-cutting consumers (GraphQL resolver, admin
+// composition) can dispatch through the QueryBus. Handlers stay internal — registered
+// with the global bus by CqrsModule's explorer, never injected directly.
+export {
+  GetUserProfileQuery,
+  type UserProfileResult,
+} from './application/queries/get-user-profile/get-user-profile.query';
+export {
+  ListUsersCursorQuery,
+  type ListUsersCursorResult,
+} from './application/queries/list-users-cursor/list-users-cursor.query';
 export type { UserListItemDto } from './application/dtos/user-list-item.dto';
 
 // Public presentation types

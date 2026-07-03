@@ -1,27 +1,21 @@
 import { Resolver, Query, Context, Args } from '@nestjs/graphql';
-import { UseGuards, NotFoundException } from '@nestjs/common';
+import { HttpStatus, UseGuards } from '@nestjs/common';
+import { QueryBus } from '@nestjs/cqrs';
+import { BusinessRuleException } from '@nestjs-fastify-nx/core';
 import {
   BetterAuthGuard,
   RolesGuard,
   Roles,
   type AuthenticatedSession,
 } from '@nestjs-fastify-nx/infra-auth';
-import {
-  ListUsersCursorHandler,
-  ListUsersCursorQuery,
-  GetUserProfileHandler,
-  GetUserProfileQuery,
-} from '@nestjs-fastify-nx/modules-users';
+import { ListUsersCursorQuery, GetUserProfileQuery } from '@nestjs-fastify-nx/modules-users';
 import { UserType } from '../types/user.type';
 import { UserCursorPageType } from '../types/user-cursor-page.type';
 import { ListUsersCursorArgs } from '../dto/list-users-cursor.args';
 
 @Resolver(() => UserType)
 export class UserResolver {
-  constructor(
-    private readonly listUsersCursorHandler: ListUsersCursorHandler,
-    private readonly getProfileHandler: GetUserProfileHandler,
-  ) {}
+  constructor(private readonly queryBus: QueryBus) {}
 
   @Query(() => UserType, { name: 'me', nullable: true })
   @UseGuards(BetterAuthGuard)
@@ -30,9 +24,13 @@ export class UserResolver {
     if (!userId) return null;
 
     try {
-      return await this.getProfileHandler.execute(new GetUserProfileQuery(userId));
+      return await this.queryBus.execute(new GetUserProfileQuery(userId));
     } catch (err) {
-      if (err instanceof NotFoundException) return null;
+      // Session valid but the account was deleted — the handler raises a 404 BusinessRuleException;
+      // `me` is nullable, so surface null instead of an error.
+      if (err instanceof BusinessRuleException && err.getStatus() === HttpStatus.NOT_FOUND) {
+        return null;
+      }
       throw err;
     }
   }
@@ -41,7 +39,7 @@ export class UserResolver {
   @UseGuards(BetterAuthGuard, RolesGuard)
   @Roles('ADMIN')
   async users(@Args() args: ListUsersCursorArgs): Promise<UserCursorPageType> {
-    const result = await this.listUsersCursorHandler.execute(
+    const result = await this.queryBus.execute(
       new ListUsersCursorQuery(args.limit, args.startingAfter, args.role, args.status, args.search),
     );
     return {

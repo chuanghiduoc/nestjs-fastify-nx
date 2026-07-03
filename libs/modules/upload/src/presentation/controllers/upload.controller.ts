@@ -113,6 +113,8 @@ export class UploadController {
   @ApiOkResponse({ type: StoredFileDto, description: 'Object verified.' })
   @ApiCommonErrors({ auth: true, forbidden: false, notFound: true })
   async confirm(@Body() dto: ConfirmUploadDto): Promise<StoredFile> {
+    // Key shape (uploads/<id>.<ext>, no path traversal) is enforced by ConfirmUploadDto's
+    // @Matches regex at the validation pipe, so head() only ever sees a legitimate key.
     const meta = await this.storage.head(dto.key);
     if (!meta) {
       throw new NotFoundException({
@@ -124,7 +126,7 @@ export class UploadController {
     }
 
     if (!ALLOWED_MIME_TYPES.has(meta.contentType)) {
-      await this.storage.delete(dto.key).catch(() => undefined);
+      await this.safeDelete(dto.key);
       throw new BadRequestException({
         statusCode: HttpStatus.BAD_REQUEST,
         messageKey: I18N_KEYS.errors.upload.mime_not_allowed,
@@ -134,7 +136,7 @@ export class UploadController {
     }
 
     if (meta.size <= 0 || meta.size > this.maxFileSize) {
-      await this.storage.delete(dto.key).catch(() => undefined);
+      await this.safeDelete(dto.key);
       throw new BadRequestException({
         statusCode: HttpStatus.BAD_REQUEST,
         messageKey: I18N_KEYS.errors.upload.size_out_of_range,
@@ -147,7 +149,7 @@ export class UploadController {
     const head = await this.storage.readRange(dto.key, MAGIC_BYTES_TO_READ, meta.bucket);
     const detected = detectFileType(head);
     if (!detected || detected.mimeType !== meta.contentType) {
-      await this.storage.delete(dto.key).catch(() => undefined);
+      await this.safeDelete(dto.key);
       throw new BadRequestException(
         detected
           ? {
@@ -197,5 +199,17 @@ export class UploadController {
 
     const url = await this.storage.getSignedUrl(dto.key);
     return { key: dto.key, url, bucket: meta.bucket, size: meta.size };
+  }
+
+  // Best-effort cleanup of a rejected upload. A failed delete must not mask the
+  // validation error that triggered it, but silently swallowing it orphans the object
+  // until the 24h lifecycle expiry — so surface it for observability.
+  private async safeDelete(key: string): Promise<void> {
+    await this.storage.delete(key).catch((err) => {
+      this.logger.warn(
+        { err, key },
+        'cleanup delete failed — object orphaned until lifecycle expiry',
+      );
+    });
   }
 }

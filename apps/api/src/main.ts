@@ -10,12 +10,15 @@ import { Logger } from 'nestjs-pino';
 import { fastifyHelmet } from '@fastify/helmet';
 import fastifyRateLimit from '@fastify/rate-limit';
 import fastifyMultipart from '@fastify/multipart';
+import fastifyCompress from '@fastify/compress';
+import fastifyUnderPressure from '@fastify/under-pressure';
 import { Redis } from 'ioredis';
 import { toNodeHandler } from 'better-auth/node';
 import { BETTER_AUTH_INSTANCE, type BetterAuthInstance } from '@nestjs-fastify-nx/infra-auth';
 import { positiveIntEnv } from '@nestjs-fastify-nx/shared';
 import { AppModule } from './app/app.module';
 import { applyFastifyErrorHandler } from './common/filters/fastify-error-handler';
+import { resolveRequestId } from './common/logging/request-id';
 import { ProblemDetailsValidationPipe } from './common/pipes';
 import { setupSwagger } from './common/swagger/swagger.config';
 import { createBullBoardPlugin } from './common/bull-board/create-bull-board-plugin';
@@ -141,6 +144,39 @@ async function bootstrap() {
     crossOriginResourcePolicy: { policy: 'same-site' },
   });
 
+  // Load shedding: on event-loop saturation, reply 503 (problem+json) so a load balancer / k8s
+  // drains this instance. Heap/RSS caps are env-specific and left off by default.
+  await fastify.register(fastifyUnderPressure, {
+    maxEventLoopDelay: positiveIntEnv('HTTP_MAX_EVENT_LOOP_DELAY_MS', 1000),
+    // Same problem+json shape as every other error so clients branch on `code` uniformly.
+    pressureHandler: (req, reply) => {
+      const requestId = resolveRequestId(req.headers);
+      reply
+        .code(503)
+        .header('content-type', 'application/problem+json')
+        .header('x-request-id', requestId)
+        .header('retry-after', '10')
+        .send({
+          type: 'about:blank',
+          title: 'Service Unavailable',
+          status: 503,
+          code: 'service_unavailable',
+          detail: 'Server is under heavy load; please retry shortly.',
+          instance: req.url,
+          requestId,
+          timestamp: new Date().toISOString(),
+        });
+    },
+  });
+
+  // Compress JSON/GraphQL responses above 1 KB. br omitted: CPU cost outweighs the gain on
+  // dynamic JSON; a proxy/CDN can add it. Better Auth hijack routes bypass onSend (uncompressed).
+  await fastify.register(fastifyCompress, {
+    global: true,
+    threshold: 1024,
+    encodings: ['gzip', 'deflate'],
+  });
+
   const uploadMaxBytes = positiveIntEnv('UPLOAD_MAX_FILE_BYTES', 10_485_760);
   await fastify.register(fastifyMultipart, {
     limits: {
@@ -185,13 +221,23 @@ async function bootstrap() {
       const email = body && typeof body['email'] === 'string' ? body['email'].toLowerCase() : '';
       return `${req.ip}:${email}`;
     },
-    errorResponseBuilder: (_req, context) => ({
-      type: 'https://tools.ietf.org/html/rfc6585#section-4',
-      title: 'Too Many Requests',
-      status: 429,
-      detail: `Rate limit exceeded. Try again in ${Math.ceil(context.ttl / 1000)} seconds.`,
-      retryAfter: Math.ceil(context.ttl / 1000),
-    }),
+    errorResponseBuilder: (req, context) => {
+      // Stamp req.raw so applyFastifyErrorHandler echoes the SAME id on the x-request-id
+      // header (rate-limit throws this body into setErrorHandler).
+      const requestId = resolveRequestId(req.headers);
+      (req.raw as { requestId?: string }).requestId = requestId;
+      return {
+        type: 'https://tools.ietf.org/html/rfc6585#section-4',
+        title: 'Too Many Requests',
+        status: 429,
+        // Match ProblemDetailsDto so rate-limit 429s carry the same shape as every other error.
+        code: 'too_many_requests',
+        detail: `Rate limit exceeded. Try again in ${Math.ceil(context.ttl / 1000)} seconds.`,
+        retryAfter: Math.ceil(context.ttl / 1000),
+        requestId,
+        timestamp: new Date().toISOString(),
+      };
+    },
     addHeaders: {
       'x-ratelimit-limit': true,
       'x-ratelimit-remaining': true,

@@ -48,6 +48,28 @@ Cause: upload module moved from `apps/api/src/common/upload` to `libs/modules/up
 
 Resolution: update your import to `@nestjs-fastify-nx/modules-upload`.
 
+### Nx marks a build/typecheck "flaky", or `tsc` errors with TS6305 / EPERM
+
+Symptom: `nx affected` succeeds but prints "Nx detected a flaky task", or an occasional
+`TS6305: Output file ... has not been built` / `EPERM: permission denied, ...\.nx\...`.
+
+Cause: on Windows, the Nx daemon and Windows Defender hold short-lived locks on `.nx/` and
+`dist/out-tsc/` while parallel `tsc --build` / webpack tasks read and write there. A lock
+contention makes one task fail transiently; Nx then remembers the task as flaky until reset.
+It is an environment race, not a code error — the same task passes on the next run.
+
+Resolution:
+
+```bash
+pnpm nx daemon --stop   # release daemon file locks
+pnpm nx reset           # clear the cache + flaky task history
+pnpm nx affected -t lint typecheck test build --base=origin/main
+```
+
+Prevention: exclude the workspace folder from Windows Defender real-time scanning
+(Settings → Virus & threat protection → Exclusions), which removes the main source of the
+lock contention. CI on Linux runners does not hit this.
+
 ## Database & migrations
 
 ### `prisma migrate deploy` aborts mid-migration
