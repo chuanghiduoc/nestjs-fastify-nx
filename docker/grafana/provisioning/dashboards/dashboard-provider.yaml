@@ -8,5 +8,8 @@ providers:
     updateIntervalSeconds: 30
     allowUiUpdates: true
     options:
-      path: /var/lib/grafana/dashboards
+      # Load committed dashboard JSON straight from the read-only provisioning mount
+      # (docker/grafana/provisioning → /etc/grafana/provisioning) so dashboards are
+      # code-reviewed and GitOps-friendly, not hand-drawn in the UI against an empty volume.
+      path: /etc/grafana/provisioning/dashboards
       foldersFromFilesStructure: false

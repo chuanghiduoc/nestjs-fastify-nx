@@ -2,7 +2,7 @@ import { HttpStatus, Logger } from '@nestjs/common';
 import * as Sentry from '@sentry/nestjs';
 import type { FastifyError, FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { ERROR_CODES } from '@nestjs-fastify-nx/contracts';
-import { generateId } from '@nestjs-fastify-nx/shared';
+import { resolveRequestId } from '../logging/request-id';
 import {
   buildProblemDetails,
   HTTP_STATUS_CODES,
@@ -44,10 +44,9 @@ export function applyFastifyErrorHandler(fastify: FastifyInstance): void {
       Sentry.captureException(error);
     }
 
-    const requestId =
-      (request.raw as RawWithIds).requestId ??
-      (request.headers['x-request-id'] as string | undefined) ??
-      `req-${generateId()}`;
+    // raw.requestId is set by the middleware (or the rate-limit errorResponseBuilder) so the
+    // header echoes the id already in the body; otherwise resolve it the same way.
+    const requestId = (request.raw as RawWithIds).requestId || resolveRequestId(request.headers);
 
     if (!reply.getHeader('x-request-id')) {
       reply.header('x-request-id', requestId);

@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { CqrsModule } from '@nestjs/cqrs';
 import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { GqlThrottlerGuard } from '../common/throttler/gql-throttler.guard';
 import { SentryModule } from '@sentry/nestjs/setup';
@@ -29,6 +30,9 @@ const conditionalImports = process.env['ENABLE_METRICS'] === 'true' ? [MetricsMo
   imports: [
     SentryModule.forRoot(),
     ConfigModule.forRoot({ isGlobal: true, validate: validateConfig }),
+    // Global CommandBus/QueryBus; the explorer auto-registers @CommandHandler/@QueryHandler
+    // providers across all loaded modules — no manual handler wiring in controllers/resolvers.
+    CqrsModule.forRoot(),
     I18nInfraModule.forRoot(),
     ThrottlerModule,
     LoggingModule,

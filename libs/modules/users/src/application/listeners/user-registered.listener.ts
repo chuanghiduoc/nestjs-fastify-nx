@@ -34,6 +34,7 @@ export class UserRegisteredListener {
       },
     );
 
-    this.logger.log(`Enqueued welcome-email (jobId=${jobId}) for ${event.payload.email}`);
+    // Structured, no email — pino redaction only covers object keys, not string interpolation.
+    this.logger.log({ jobId, userId: event.aggregateId }, 'Enqueued welcome-email');
   }
 }

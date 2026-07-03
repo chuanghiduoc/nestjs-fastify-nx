@@ -45,8 +45,9 @@ export class ProblemDetailsDto {
   code!: string;
 
   @ApiPropertyOptional({
-    description: 'Request correlation ID. Mirrors the `X-Request-Id` response header.',
-    example: 'req-01HXY7K3MN8P2RZ4QW9TB6FH3D',
+    description:
+      'Request correlation ID. Mirrors the `X-Request-Id` response header (the trace id when tracing is active).',
+    example: '4bf92f3577b34da6a3ce929d0e0e4736',
   })
   requestId?: string;
 

@@ -121,7 +121,9 @@ export const ApiCommonErrors = (options: CommonErrorsOptions = {}) => {
     }),
     ApiResponse({
       status: HttpStatus.INTERNAL_SERVER_ERROR,
-      ...problemContent('Unexpected server error. The `requestId` field can be quoted to support.'),
+      ...problemContent(
+        'Unexpected server error. Quote the `requestId` field when contacting support.',
+      ),
     }),
   );
 

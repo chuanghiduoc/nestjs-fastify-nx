@@ -2,6 +2,12 @@ global:
   scrape_interval: 15s
   evaluation_interval: 15s
 
+# Alert rules are version-controlled and evaluated on every scrape. They surface in the
+# Prometheus UI (Alerts tab / ALERTS series) out of the box. Wire an Alertmanager under
+# `alerting:` to route them to Slack/PagerDuty in a real deployment.
+rule_files:
+  - alert_rules.yml
+
 scrape_configs:
   # Scrape Prometheus itself.
   - job_name: prometheus

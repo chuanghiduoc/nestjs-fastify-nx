@@ -7,7 +7,12 @@ interface OutboxRow {
   id: string;
   eventType: string;
   aggregateId: string;
-  payload: { eventId: string; occurredAt: string; payload: Record<string, unknown> };
+  payload: {
+    schemaVersion?: number;
+    eventId: string;
+    occurredAt: string;
+    payload: Record<string, unknown>;
+  };
   attempts: number;
 }
 
@@ -124,6 +129,55 @@ describe('OutboxRelayService', () => {
     expect(dbExecuteCalls[0].sql).toMatch(/lastError/);
     expect(dbExecuteCalls[0].args[0]).toContain('listener failed');
     expect(dbExecuteCalls[0].sql).not.toMatch(/processedAt/);
+  });
+
+  it('skips a row whose schemaVersion is newer than the relay supports and records the error', async () => {
+    const { prisma, dbExecuteCalls } = buildPrisma({
+      claim: () => [
+        buildRow({
+          payload: {
+            schemaVersion: 99,
+            eventId: 'evt-1',
+            occurredAt: '2026-04-28T00:00:00.000Z',
+            payload: { email: 'a@b.c' },
+          },
+        }),
+      ],
+    });
+    const bus = buildBus();
+    const relay = new OutboxRelayService(prisma, bus);
+
+    expect(await relay.tick()).toBe(0);
+    // Never dispatched, never marked processed — only lastError recorded so the row
+    // exhausts attempts and surfaces via the stuck-row warning.
+    expect(bus.publish).not.toHaveBeenCalled();
+    expect(dbExecuteCalls).toHaveLength(1);
+    expect(dbExecuteCalls[0].sql).toMatch(/lastError/);
+    expect(dbExecuteCalls[0].args[0]).toContain('schemaVersion=99');
+    expect(dbExecuteCalls[0].sql).not.toMatch(/processedAt/);
+  });
+
+  it('dispatches a legacy row with no schemaVersion field (backward-compat: treated as v1)', async () => {
+    // Rows written before envelope versioning carry no schemaVersion. They must still
+    // dispatch so a rolling upgrade does not strand in-flight events.
+    const { prisma } = buildPrisma({
+      claim: () => [
+        buildRow({
+          payload: {
+            eventId: 'legacy-1',
+            occurredAt: '2026-04-28T00:00:00.000Z',
+            payload: { email: 'legacy@b.c' },
+          },
+        }),
+      ],
+    });
+    const bus = buildBus();
+    const relay = new OutboxRelayService(prisma, bus);
+
+    expect(await relay.tick()).toBe(1);
+    expect(bus.publish).toHaveBeenCalledWith(
+      expect.objectContaining({ eventId: 'legacy-1', eventType: 'users.registered' }),
+    );
   });
 
   it('does not hold the claim transaction across the publish call', async () => {

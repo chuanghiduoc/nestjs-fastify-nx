@@ -84,14 +84,15 @@ keyed by IP + email; LOOSE bucket guards session ops (`sign-out`, `get-session`,
 `list-sessions`, …) keyed by IP only. Both are enforced by `@fastify/rate-limit`
 because `reply.hijack()` bypasses the NestJS ThrottlerGuard.
 
-| Variable                            | Default    | Required | Description                                                                 |
-| ----------------------------------- | ---------- | -------- | --------------------------------------------------------------------------- |
-| `AUTH_RATE_LIMIT_MAX`               | `5`        | No       | STRICT: max requests per window on credential paths (per IP+email)          |
-| `AUTH_RATE_LIMIT_WINDOW_MS`         | `900000`   | No       | STRICT window in milliseconds (15 min default)                              |
-| `AUTH_SESSION_RATE_LIMIT_MAX`       | `60`       | No       | LOOSE: max requests per window on other `/api/auth/*` paths (per IP)        |
-| `AUTH_SESSION_RATE_LIMIT_WINDOW_MS` | `60000`    | No       | LOOSE window in milliseconds (60 sec default)                               |
-| `HTTP_BODY_LIMIT_BYTES`             | `1048576`  | No       | Max raw JSON request body size (1 MB default)                               |
-| `UPLOAD_MAX_FILE_BYTES`             | `10485760` | No       | Max multipart file size (10 MB default); pinned in S3 presigned-POST policy |
+| Variable                            | Default    | Required | Description                                                                  |
+| ----------------------------------- | ---------- | -------- | ---------------------------------------------------------------------------- |
+| `AUTH_RATE_LIMIT_MAX`               | `5`        | No       | STRICT: max requests per window on credential paths (per IP+email)           |
+| `AUTH_RATE_LIMIT_WINDOW_MS`         | `900000`   | No       | STRICT window in milliseconds (15 min default)                               |
+| `AUTH_SESSION_RATE_LIMIT_MAX`       | `60`       | No       | LOOSE: max requests per window on other `/api/auth/*` paths (per IP)         |
+| `AUTH_SESSION_RATE_LIMIT_WINDOW_MS` | `60000`    | No       | LOOSE window in milliseconds (60 sec default)                                |
+| `HTTP_BODY_LIMIT_BYTES`             | `1048576`  | No       | Max raw JSON request body size (1 MB default)                                |
+| `UPLOAD_MAX_FILE_BYTES`             | `10485760` | No       | Max multipart file size (10 MB default); pinned in S3 presigned-POST policy  |
+| `HTTP_MAX_EVENT_LOOP_DELAY_MS`      | `1000`     | No       | `@fastify/under-pressure` load-shed threshold; over this the API replies 503 |
 
 ## Error documentation
 

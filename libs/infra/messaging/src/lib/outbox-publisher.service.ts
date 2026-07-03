@@ -3,8 +3,10 @@ import { PrismaService } from '@nestjs-fastify-nx/infra-database';
 import type { Prisma } from '@prisma/client';
 import type { DomainEvent, EventPublisherPort } from '@nestjs-fastify-nx/core';
 import { generateId } from '@nestjs-fastify-nx/shared';
+import { OUTBOX_SCHEMA_VERSION } from './outbox-schema-version';
 
 interface OutboxPayload extends Prisma.InputJsonObject {
+  schemaVersion: number;
   eventId: string;
   occurredAt: string;
   payload: Prisma.InputJsonValue;
@@ -44,6 +46,7 @@ export class OutboxPublisher implements EventPublisherPort {
 
   private serializePayload(event: DomainEvent): OutboxPayload {
     return {
+      schemaVersion: OUTBOX_SCHEMA_VERSION,
       eventId: event.eventId,
       occurredAt: event.occurredAt.toISOString(),
       payload: event.payload as Prisma.InputJsonValue,

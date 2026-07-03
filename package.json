@@ -20,10 +20,12 @@
     "@aws-sdk/s3-request-presigner": "^3.1078.0",
     "@bull-board/api": "^8.1.0",
     "@bull-board/fastify": "^8.1.0",
+    "@fastify/compress": "^9.0.0",
     "@fastify/helmet": "^13.0.2",
     "@fastify/multipart": "^10.0.0",
     "@fastify/rate-limit": "^11.1.0",
     "@fastify/static": "^9.1.3",
+    "@fastify/under-pressure": "^9.0.3",
     "@keyv/redis": "^5.1.6",
     "@nest-lab/throttler-storage-redis": "^1.2.0",
     "@nestjs/bullmq": "^11.0.4",
@@ -31,6 +33,7 @@
     "@nestjs/common": "^11.1.27",
     "@nestjs/config": "^4.0.4",
     "@nestjs/core": "^11.1.27",
+    "@nestjs/cqrs": "^11.0.3",
     "@nestjs/event-emitter": "^3.1.0",
     "@nestjs/graphql": "^13.4.2",
     "@nestjs/mercurius": "^13.4.2",
@@ -72,6 +75,7 @@
     "nestjs-pino": "^4.6.1",
     "nodemailer": "^9.0.3",
     "pg": "^8.22.0",
+    "pino": "^10.3.1",
     "pino-http": "^11.0.0",
     "pino-pretty": "^13.1.3",
     "prisma": "^7.8.0",
@@ -126,8 +130,8 @@
     "webpack-cli": "^5.1.4"
   },
   "engines": {
-    "node": ">=20.0.0",
-    "pnpm": ">=9.0.0"
+    "node": ">=22.0.0",
+    "pnpm": ">=10.0.0"
   },
   "packageManager": "pnpm@10.33.0",
   "prisma": {

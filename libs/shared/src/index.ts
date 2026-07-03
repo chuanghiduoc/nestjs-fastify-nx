@@ -1,4 +1,4 @@
-export { generateId } from './lib/id';
+export { generateId, generateCorrelationId } from './lib/id';
 export {
   buildPageMeta,
   paginationSkip,

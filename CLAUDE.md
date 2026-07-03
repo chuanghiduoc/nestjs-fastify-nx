@@ -110,8 +110,8 @@ domain/
   events/          domain events
   ports/           repository interfaces (depended on by application/, implemented in infrastructure/)
 application/
-  commands/        CQRS command handlers
-  queries/         CQRS query handlers
+  commands/        CQRS command handlers (@CommandHandler, dispatched via CommandBus)
+  queries/         CQRS query handlers (@QueryHandler, dispatched via QueryBus)
   listeners/       domain-event subscribers
   dtos/            application transport types — PURE TS, no @nestjs/swagger
                    nor class-validator decorators. Application stays
@@ -128,6 +128,8 @@ presentation/
 <context>.module.ts
 index.ts           public barrel — re-export only what consumers need
 ```
+
+**CQRS bus (`@nestjs/cqrs`)**: command/query handlers are decorated with `@CommandHandler`/`@QueryHandler` and registered automatically by `CqrsModule.forRoot()` (imported once per runnable app: `api`, `scheduler`, `codegen-app`). Consumers (controllers, GraphQL resolvers, event listeners) inject `CommandBus`/`QueryBus` and dispatch `commandBus.execute(new SomeCommand(...))` / `queryBus.execute(new SomeQuery(...))` — never inject a handler directly. Queries/commands extend `Query<TResult>`/`Command<TResult>` so `execute()` infers the return type; the result interface is co-located in the query/command file. The barrel exports the query/command classes + result types, **not** the handlers (handlers stay internal, found by the bus explorer). Domain events still flow through the **outbox** (`EventPublisherPort` + `OutboxRelayService`), NOT the in-memory `@nestjs/cqrs` EventBus/AggregateRoot — the outbox is the transactional, cross-process channel and must not be replaced by in-memory event publishing.
 
 ## Common workflows
 
@@ -234,6 +236,7 @@ pnpm nx g @nestjs-fastify-nx/tools-generators:module --name=my-feature --directo
 - `docs/environment.md` — every env var, defaults, validation
 - `docs/deployment.md` — Docker, GHCR, Cosign, Coolify
 - `docs/security.md` — five-layer scan pipeline (Gitleaks, OSV, Semgrep, Trivy, Cosign)
+- `docs/observability.md` — logging, tracing, metrics, correlation-id design, resilience
 - `docs/troubleshooting.md` — known failure modes
 - `docs/runbook.md` — ops runbook (outbox stuck, DLQ full, stuck queue workers, performance)
 - `docs/code-standards.md` — coding conventions enforced (logging, error handling, DTOs, boundaries)

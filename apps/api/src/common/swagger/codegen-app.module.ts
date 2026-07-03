@@ -1,6 +1,7 @@
 // HTTP-only module for OpenAPI spec export — drops Socket.io/GraphQL/Sentry/Metrics to avoid opening sockets.
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { CqrsModule } from '@nestjs/cqrs';
 import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { DatabaseModule } from '@nestjs-fastify-nx/infra-database';
 import { RedisCacheModule, RedisQueueModule } from '@nestjs-fastify-nx/infra-redis';
@@ -22,6 +23,7 @@ import { AppController } from '../../app/app.controller';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true, validate: validateConfig }),
+    CqrsModule.forRoot(),
     I18nInfraModule.forRoot(),
     ThrottlerModule,
     LoggingModule,

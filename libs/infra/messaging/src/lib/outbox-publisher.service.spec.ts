@@ -49,6 +49,7 @@ describe('OutboxPublisher', () => {
       eventType: 'users.registered',
       aggregateId: 'user-1',
       payload: {
+        schemaVersion: 1,
         eventId: 'evt-1',
         occurredAt: '2026-04-28T00:00:00.000Z',
         payload: { email: 'a@b.c' },
@@ -72,7 +73,7 @@ describe('OutboxPublisher', () => {
     expect(outbox.created[1]).toMatchObject({
       eventType: 'users.logged_in',
       aggregateId: 'user-2',
-      payload: { eventId: 'evt-2', payload: { ip: '1.1.1.1' } },
+      payload: { schemaVersion: 1, eventId: 'evt-2', payload: { ip: '1.1.1.1' } },
     });
   });
 

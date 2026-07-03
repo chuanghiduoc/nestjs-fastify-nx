@@ -62,17 +62,20 @@ export class UserDto {
 // DON'T: create UserApplicationDto and UserPresentationDto unless justified
 ```
 
-**Re-export from module barrel only what is public.** Keep domain entities and repositories private. Command/query handlers and their query types SHOULD also be private by default. Export them from the barrel only when a composition lib or cross-cutting resolver must inject them directly for DI — document each such export with a brief comment explaining why. Prefer `QueryBus.execute(new SomeQuery(...))` over direct handler injection when feasible.
+**Re-export from module barrel only what is public.** Keep domain entities and repositories private. Command/query **handlers stay private** — they are registered with the global `CommandBus`/`QueryBus` by `CqrsModule.forRoot()`'s explorer and are never injected directly. Export the **command/query classes + their result types** so composition libs and cross-cutting resolvers can dispatch `commandBus.execute(new SomeCommand(...))` / `queryBus.execute(new SomeQuery(...))`. Queries/commands extend `Query<TResult>`/`Command<TResult>` so `execute()` infers the return type.
 
 ```typescript
 // libs/modules/users/src/index.ts
 export { UsersModule } from './users.module';
 export { UserDto } from './application/dtos/user.dto';
-export { CreateUserCommand } from './application/commands/create-user.command';
+// Query class + result type — consumers dispatch via QueryBus, no handler injection.
+export {
+  GetUserProfileQuery,
+  type UserProfileResult,
+} from './application/queries/get-user-profile/get-user-profile.query';
 
-// Don't export: User (entity), UserRepository, UserEntity
-// Only export handlers when a composition lib requires direct DI injection
-// (document the reason inline in the barrel).
+// Don't export: User (entity), UserRepository, GetUserProfileHandler (handlers are
+// found by the CqrsModule explorer, so they never need to leave the module).
 ```
 
 ## Module Boundaries

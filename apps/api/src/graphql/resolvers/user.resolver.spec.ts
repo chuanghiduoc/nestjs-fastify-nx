@@ -1,10 +1,9 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { NotFoundException } from '@nestjs/common';
+import { HttpStatus } from '@nestjs/common';
+import { BusinessRuleException } from '@nestjs-fastify-nx/core';
+import type { QueryBus } from '@nestjs/cqrs';
 import { UserResolver } from './user.resolver';
-import type {
-  ListUsersCursorHandler,
-  GetUserProfileHandler,
-} from '@nestjs-fastify-nx/modules-users';
+import { GetUserProfileQuery, ListUsersCursorQuery } from '@nestjs-fastify-nx/modules-users';
 import type { AuthenticatedSession } from '@nestjs-fastify-nx/infra-auth';
 
 const mockProfileResult = {
@@ -15,6 +14,22 @@ const mockProfileResult = {
   status: 'ACTIVE' as const,
   createdAt: new Date('2024-01-01'),
   updatedAt: new Date('2024-01-01'),
+};
+
+const mockListResult = {
+  data: [
+    {
+      id: 'u1',
+      email: 'test@example.com',
+      name: 'Test User',
+      role: 'USER' as const,
+      status: 'ACTIVE' as const,
+      createdAt: new Date('2024-01-01'),
+      updatedAt: new Date('2024-01-01'),
+    },
+  ],
+  hasMore: false,
+  lastCursor: 'dGVzdC1jdXJzb3I',
 };
 
 const mockSession: AuthenticatedSession = {
@@ -29,33 +44,18 @@ const mockSession: AuthenticatedSession = {
 
 describe('UserResolver', () => {
   let resolver: UserResolver;
-  let mockListCursorHandler: ListUsersCursorHandler;
-  let mockGetProfileHandler: GetUserProfileHandler;
+  let execute: ReturnType<typeof vi.fn>;
+  let queryBus: QueryBus;
 
   beforeEach(() => {
-    mockGetProfileHandler = {
-      execute: vi.fn().mockResolvedValue(mockProfileResult),
-    } as unknown as GetUserProfileHandler;
-
-    mockListCursorHandler = {
-      execute: vi.fn().mockResolvedValue({
-        data: [
-          {
-            id: 'u1',
-            email: 'test@example.com',
-            name: 'Test User',
-            role: 'USER',
-            status: 'ACTIVE',
-            createdAt: new Date('2024-01-01'),
-            updatedAt: new Date('2024-01-01'),
-          },
-        ],
-        hasMore: false,
-        lastCursor: 'dGVzdC1jdXJzb3I',
-      }),
-    } as unknown as ListUsersCursorHandler;
-
-    resolver = new UserResolver(mockListCursorHandler, mockGetProfileHandler);
+    // Single QueryBus mock dispatches by query type — mirrors how the global bus routes to handlers.
+    execute = vi.fn(async (query: unknown) => {
+      if (query instanceof GetUserProfileQuery) return mockProfileResult;
+      if (query instanceof ListUsersCursorQuery) return mockListResult;
+      throw new Error(`unexpected query: ${String(query)}`);
+    });
+    queryBus = { execute } as unknown as QueryBus;
+    resolver = new UserResolver(queryBus);
   });
 
   describe('me', () => {
@@ -65,16 +65,26 @@ describe('UserResolver', () => {
       expect(result?.id).toBe('u1');
       expect(result?.email).toBe('test@example.com');
       expect(result?.name).toBe('Test User');
-      expect(mockGetProfileHandler.execute).toHaveBeenCalledWith(
-        expect.objectContaining({ userId: 'u1' }),
-      );
+      expect(execute).toHaveBeenCalledWith(expect.objectContaining({ userId: 'u1' }));
     });
 
-    it('returns null when user is not found', async () => {
-      vi.mocked(mockGetProfileHandler.execute).mockRejectedValue(new NotFoundException());
+    it('returns null when the account was deleted (404 BusinessRuleException)', async () => {
+      execute.mockRejectedValueOnce(
+        new BusinessRuleException({
+          status: HttpStatus.NOT_FOUND,
+          code: 'user_not_found',
+          violations: [],
+        }),
+      );
       const ctx: { req: { user: AuthenticatedSession } } = { req: { user: mockSession } };
       const result = await resolver.me(ctx);
       expect(result).toBeNull();
+    });
+
+    it('rethrows non-404 errors from the query bus', async () => {
+      execute.mockRejectedValueOnce(new Error('db down'));
+      const ctx: { req: { user: AuthenticatedSession } } = { req: { user: mockSession } };
+      await expect(resolver.me(ctx)).rejects.toThrow('db down');
     });
 
     it('returns null when no session userId', async () => {
@@ -85,29 +95,25 @@ describe('UserResolver', () => {
   });
 
   describe('users', () => {
-    it('returns cursor-paginated users from handler', async () => {
+    it('returns cursor-paginated users from the query bus', async () => {
       const result = await resolver.users({ limit: 20 });
       expect(result.data).toHaveLength(1);
       expect(result.data[0].id).toBe('u1');
       expect(result.hasMore).toBe(false);
       expect(result.lastCursor).toBe('dGVzdC1jdXJzb3I');
-      expect(mockListCursorHandler.execute).toHaveBeenCalled();
+      expect(execute).toHaveBeenCalledWith(expect.any(ListUsersCursorQuery));
     });
 
-    it('passes startingAfter to handler', async () => {
+    it('passes startingAfter to the query', async () => {
       const cursor = 'some-cursor';
       await resolver.users({ limit: 10, startingAfter: cursor });
-      expect(mockListCursorHandler.execute).toHaveBeenCalledWith(
+      expect(execute).toHaveBeenCalledWith(
         expect.objectContaining({ startingAfter: cursor, limit: 10 }),
       );
     });
 
     it('returns null lastCursor when result has no items', async () => {
-      vi.mocked(mockListCursorHandler.execute).mockResolvedValue({
-        data: [],
-        hasMore: false,
-        lastCursor: null,
-      });
+      execute.mockResolvedValueOnce({ data: [], hasMore: false, lastCursor: null });
       const result = await resolver.users({ limit: 20 });
       expect(result.lastCursor).toBeNull();
       expect(result.data).toHaveLength(0);
