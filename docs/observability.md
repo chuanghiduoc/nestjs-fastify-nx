@@ -10,7 +10,7 @@ Every request is identified by one id shared across all three signals and the HT
   **OpenTelemetry trace id** (W3C 128-bit hex). So the value in a client's response header is
   the same id you search for in the trace backend and in the logs — no mapping table.
 - Precedence: client-supplied `X-Request-Id` → active `trace_id` → random 128-bit hex
-  (`generateCorrelationId()`, only when tracing is disabled). Set in `CorrelationIdMiddleware`
+  (`generateCorrelationId()`, when no valid trace id is available). Set in `CorrelationIdMiddleware`
   and mirrored by `fastify-error-handler` for Fastify-level failures.
 - **`X-Correlation-Id`** spans a client journey (multiple requests). It defaults to the
   request id when the client omits it; a client that wants to tie several calls together sends
@@ -22,7 +22,7 @@ Every request is identified by one id shared across all three signals and the HT
 
 ## Structured logging (pino)
 
-`nestjs-pino` + `pino-http`, configured in `libs/infra/observability/pino-logger-config.ts`.
+`nestjs-pino` + `pino-http`, configured in `libs/infra/observability/src/lib/pino-logger-config.ts`.
 
 - **Dev**: `pino-pretty`, colourised, single-line, numeric level.
 - **Prod**: raw JSON with the level as a string label (`"level":"info"`) — what Loki / ELK /
@@ -35,7 +35,7 @@ Every request is identified by one id shared across all three signals and the HT
   `responseTime` is still emitted at top level.
 - **Probe noise dropped**: `autoLogging.ignore` skips `/metrics` and `/api/v1/health*` so
   Kubernetes/Prometheus polling doesn't bury real traffic (the trace still records them).
-- **Redaction**: `SENSITIVE_REDACT_PATHS` (`libs/shared/logger-redact.ts`) censors auth
+- **Redaction**: `SENSITIVE_REDACT_PATHS` (`libs/shared/src/lib/logger-redact.ts`) censors auth
   headers, cookies, and any `*.password` / `*.token` / `*.sessionToken` / `*.secret` key.
 - `LOG_LEVEL` sets the threshold (default `info`).
 

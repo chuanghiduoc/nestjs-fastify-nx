@@ -316,7 +316,7 @@ docker compose exec postgres psql -U postgres -d nestjs_db \
 docker compose run --rm migration
 ```
 
-**Escalation:** Only delete a ledger row after confirming (via `prisma migrate diff --from-empty --to-migrations prisma/migrations` against the live schema) that the folded DDL is genuinely present. Never drop a ledger row on a DB whose schema you have not verified.
+**Escalation:** Only delete a ledger row after confirming the folded DDL is genuinely present in the live database — `prisma migrate diff --from-schema-datasource prisma/schema.prisma --to-migrations prisma/migrations` diffs the live DB against the on-disk migrations; an empty diff means they match. Never drop a ledger row on a DB whose schema you have not verified.
 
 ---
 
