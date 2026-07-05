@@ -118,7 +118,7 @@
     "lefthook": "^2.1.9",
     "lint-staged": "^17.0.8",
     "nx": "^23.0.1",
-    "orval": "^8.19.0",
+    "orval": "^8.20.0",
     "prettier": "~3.9.1",
     "supertest": "^7.2.2",
     "swc-loader": "^0.2.7",
