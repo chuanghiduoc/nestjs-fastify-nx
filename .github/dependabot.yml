@@ -30,6 +30,12 @@ updates:
       # Mercurius/@nestjs GraphQL packages ship graphql 17 support.
       - dependency-name: graphql
         update-types: [version-update:semver-major]
+      # orval 8.20.0 ships an ESM config bundle that does `import yaml from
+      # "js-yaml"`, but js-yaml's `.mjs` build exports named-only (no default),
+      # so `pnpm codegen` crashes. Pin the exact broken release — a future
+      # patched orval (8.20.1+) will be proposed again.
+      - dependency-name: orval
+        versions: ['8.20.0']
     groups:
       production-dependencies:
         dependency-type: production
