@@ -113,7 +113,7 @@
     "@types/nodemailer": "^8.0.1",
     "@types/pg": "^8.20.0",
     "@types/supertest": "^7.2.0",
-    "@vitest/coverage-v8": "~4.1.9",
+    "@vitest/coverage-v8": "~4.1.10",
     "eslint": "^10.6.0",
     "lefthook": "^2.1.9",
     "lint-staged": "^17.0.8",
@@ -124,9 +124,9 @@
     "swc-loader": "^0.2.7",
     "testcontainers": "^12.0.4",
     "typescript": "^6.0.3",
-    "typescript-eslint": "^8.62.1",
+    "typescript-eslint": "^8.63.0",
     "vite": "^8.1.0",
-    "vitest": "~4.1.9",
+    "vitest": "~4.1.10",
     "webpack-cli": "^5.1.4"
   },
   "engines": {
