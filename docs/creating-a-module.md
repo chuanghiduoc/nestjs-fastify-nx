@@ -1,5 +1,10 @@
 # Creating a New Module
 
+> Want to understand what each generated file is _for_ before you start? Read
+> [`domain-module-anatomy.md`](./domain-module-anatomy.md) — it explains every
+> file type (entity, value object, port, command/query handler, repository,
+> controller, DTOs, module, barrel) with real examples from the `users` module.
+
 ## Quick Start
 
 ```bash

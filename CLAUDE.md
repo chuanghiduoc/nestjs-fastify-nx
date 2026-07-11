@@ -240,6 +240,7 @@ pnpm rm:project <name>             # remove a lib/app + clean refs/tags (nx work
 - `docs/architecture.md` — module map, boundary table, auth flow
 - `docs/getting-started.md` — local setup
 - `docs/creating-a-module.md` — DDD generator walkthrough
+- `docs/domain-module-anatomy.md` — every file type in a module explained (what/why/when/how, beginner walkthrough)
 - `docs/environment.md` — every env var, defaults, validation
 - `docs/deployment.md` — Docker, GHCR, Cosign, Coolify
 - `docs/security.md` — five-layer scan pipeline (Gitleaks, OSV, Semgrep, Trivy, Cosign)

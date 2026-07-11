@@ -53,6 +53,18 @@ pnpm nx run-many --target=test --all
 pnpm nx run api:e2e
 ```
 
+## Understand the codebase
+
+New here? Read these in order:
+
+1. [Architecture](architecture.md) — the big picture: monorepo layout, the layer
+   diagram, module boundaries, auth flow, and the API contract.
+2. [Domain Module Anatomy](domain-module-anatomy.md) — every file inside a module
+   explained one-by-one (what it is, why it exists, when to create one, how to
+   wire it), using the real `users` module.
+3. [Creating a Module](creating-a-module.md) — scaffold a new bounded context with
+   the generator once the above makes sense.
+
 ## When something breaks
 
 See [Troubleshooting](troubleshooting.md) for common failure modes —
