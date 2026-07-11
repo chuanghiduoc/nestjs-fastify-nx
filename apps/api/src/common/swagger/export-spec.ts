@@ -1,22 +1,8 @@
 import 'reflect-metadata';
-
-function setIfMissing(key: string, value: string): void {
-  if (!process.env[key]) process.env[key] = value;
-}
-
-setIfMissing('NODE_ENV', 'development');
-setIfMissing('DATABASE_URL', 'postgresql://codegen:codegen@localhost:5432/codegen');
-setIfMissing('BETTER_AUTH_SECRET', 'codegen-placeholder-secret-min-32-characters-ok');
-// Better Auth logs a warning at module init if BETTER_AUTH_URL is unset, even
-// though the spec exporter never serves a real request. Sentinel keeps it quiet.
-setIfMissing('BETTER_AUTH_URL', 'http://codegen.invalid');
-setIfMissing('CORS_ORIGINS', 'http://localhost:3000');
-setIfMissing('STORAGE_ACCESS_KEY', 'codegen');
-setIfMissing('STORAGE_SECRET_KEY', 'codegen');
-setIfMissing('BULL_BOARD_PASSWORD', 'codegen');
-setIfMissing('MAIL_HOST', 'codegen.mail.invalid');
-setIfMissing('MAIL_DEFAULT_EMAIL', 'codegen@codegen.invalid');
-setIfMissing('ENABLE_METRICS', 'false');
+// MUST be first: sets placeholder env before CodegenAppModule loads, because its
+// `ConfigModule.forRoot({ validate })` runs `validateConfig(process.env)` at module
+// load. Inline statements can't do this — imports hoist above them. See codegen-env.ts.
+import './codegen-env';
 
 // The spec exporter only needs the DI graph for swagger introspection — no
 // Redis traffic is required. BullMQ Queue / KeyvRedis / throttler still open

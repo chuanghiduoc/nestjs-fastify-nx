@@ -10,7 +10,10 @@ import { Reflector } from '@nestjs/core';
 import { GqlContextType, GqlExecutionContext } from '@nestjs/graphql';
 import { fromNodeHeaders } from 'better-auth/node';
 import type { FastifyRequest } from 'fastify';
+import * as Sentry from '@sentry/nestjs';
+import { ClsService } from 'nestjs-cls';
 import { I18N_KEYS } from '@nestjs-fastify-nx/infra-i18n';
+import { REQUEST_CONTEXT_KEYS, type RequestContextStore } from '@nestjs-fastify-nx/core';
 import { BETTER_AUTH_INSTANCE } from './better-auth-instance.token';
 import type { BetterAuthInstance } from './better-auth.config';
 import type { AuthenticatedSession } from './better-auth.types';
@@ -21,6 +24,7 @@ export class BetterAuthGuard implements CanActivate {
   constructor(
     @Inject(BETTER_AUTH_INSTANCE) private readonly auth: BetterAuthInstance,
     private readonly reflector: Reflector,
+    private readonly cls: ClsService<RequestContextStore>,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -82,6 +86,15 @@ export class BetterAuthGuard implements CanActivate {
     };
 
     (request as FastifyRequest & { user: AuthenticatedSession }).user = authenticatedSession;
+
+    // userId isn't known until the session resolves here, so it's seeded into CLS (and
+    // Sentry's scope) from the guard rather than the request-start middleware — both then
+    // read back the same value for the rest of the request (logs, error tags).
+    if (this.cls.isActive()) {
+      this.cls.set(REQUEST_CONTEXT_KEYS.userId, user.id);
+    }
+    Sentry.setUser({ id: user.id });
+
     return true;
   }
 

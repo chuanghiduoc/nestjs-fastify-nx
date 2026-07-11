@@ -4,8 +4,7 @@
     "outDir": "../../../dist/out-tsc/libs/infra/observability",
     "declaration": true,
     "composite": true,
-    "types": ["node"],
-    "ignoreDeprecations": "6.0"
+    "types": ["node"]
   },
   "include": ["src/**/*.ts"],
   "exclude": [
@@ -25,6 +24,9 @@
   "references": [
     {
       "path": "../../shared/tsconfig.lib.json"
+    },
+    {
+      "path": "../../core/tsconfig.lib.json"
     }
   ]
 }

@@ -6,7 +6,7 @@
   "targets": {
     "test": {
       "executor": "@nx/vitest:test",
-      "outputs": ["{options.reportsDirectory}"],
+      "outputs": ["{workspaceRoot}/coverage/tools/generators"],
       "options": {
         "reportsDirectory": "../../coverage/tools/generators",
         "passWithNoTests": true

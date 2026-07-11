@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { CqrsModule } from '@nestjs/cqrs';
 import { LoggerModule } from 'nestjs-pino';
 import { ScheduleModule } from '@nestjs/schedule';
+import { CqrsInstrumentationInitializer } from '@nestjs-fastify-nx/core';
 import { DatabaseModule } from '@nestjs-fastify-nx/infra-database';
 import { OutboxRelayModule } from '@nestjs-fastify-nx/infra-messaging';
 import { buildPinoLoggerConfig } from '@nestjs-fastify-nx/infra-observability';
@@ -39,6 +40,9 @@ import { SchedulerHealthService } from './health/scheduler-health.service';
     HeartbeatTask,
     OutboxCleanupTask,
     SchedulerHealthService,
+    // Tracing only here — the scheduler has no Prometheus registry, so cqrs_* metrics are
+    // skipped (CqrsMetricsRecorderHolder stays unset). See CqrsInstrumentationInitializer.
+    CqrsInstrumentationInitializer,
   ],
 })
 export class AppModule {}

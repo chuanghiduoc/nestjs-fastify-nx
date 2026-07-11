@@ -4,19 +4,20 @@ Copy `.env.example` to `.env` and fill in the values.
 
 ## Database
 
-| Variable                         | Default                                                   | Required    | Description                    |
-| -------------------------------- | --------------------------------------------------------- | ----------- | ------------------------------ |
-| `DATABASE_URL`                   | `postgresql://postgres:postgres@localhost:5432/nestjs_db` | Yes         | PostgreSQL connection string   |
-| `DATABASE_POOL_MAX`              | `20`                                                      | No          | Max pool connections           |
-| `DATABASE_POOL_MIN`              | `0`                                                       | No          | Min pool connections           |
-| `DATABASE_IDLE_TIMEOUT_MS`       | `10000`                                                   | No          | Idle connection timeout        |
-| `DATABASE_CONNECTION_TIMEOUT_MS` | `5000`                                                    | No          | Connection acquire timeout     |
-| `DATABASE_STATEMENT_TIMEOUT_MS`  | `30000`                                                   | No          | Per-statement timeout          |
-| `DATABASE_APPLICATION_NAME`      | `nestjs-fastify-api`                                      | No          | Surfaced in `pg_stat_activity` |
-| `POSTGRES_USER`                  | `postgres`                                                | Docker only | DB username for Compose        |
-| `POSTGRES_PASSWORD`              | `postgres`                                                | Docker only | DB password for Compose        |
-| `POSTGRES_DB`                    | `nestjs_db`                                               | Docker only | Database name for Compose      |
-| `POSTGRES_PORT`                  | `5432`                                                    | Docker only | Host port for Compose          |
+| Variable                         | Default                                                   | Required    | Description                                                                  |
+| -------------------------------- | --------------------------------------------------------- | ----------- | ---------------------------------------------------------------------------- |
+| `DATABASE_URL`                   | `postgresql://postgres:postgres@localhost:5432/nestjs_db` | Yes         | PostgreSQL connection string                                                 |
+| `DATABASE_POOL_MAX`              | `20`                                                      | No          | Max pool connections                                                         |
+| `DATABASE_POOL_MIN`              | `0`                                                       | No          | Min pool connections                                                         |
+| `DATABASE_IDLE_TIMEOUT_MS`       | `10000`                                                   | No          | Idle connection timeout                                                      |
+| `DATABASE_CONNECTION_TIMEOUT_MS` | `5000`                                                    | No          | Connection acquire timeout                                                   |
+| `DATABASE_STATEMENT_TIMEOUT_MS`  | `30000`                                                   | No          | Per-statement timeout                                                        |
+| `DATABASE_APPLICATION_NAME`      | `nestjs-fastify-api`                                      | No          | Surfaced in `pg_stat_activity`                                               |
+| `DATABASE_SLOW_QUERY_MS`         | `200`                                                     | No          | Logs a `warn` (query template + duration, never params) above this threshold |
+| `POSTGRES_USER`                  | `postgres`                                                | Docker only | DB username for Compose                                                      |
+| `POSTGRES_PASSWORD`              | `postgres`                                                | Docker only | DB password for Compose                                                      |
+| `POSTGRES_DB`                    | `nestjs_db`                                               | Docker only | Database name for Compose                                                    |
+| `POSTGRES_PORT`                  | `5432`                                                    | Docker only | Host port for Compose                                                        |
 
 ## Redis
 

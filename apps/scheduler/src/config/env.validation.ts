@@ -12,6 +12,8 @@ const schedulerEnvSchema = z.object({
   DATABASE_STATEMENT_TIMEOUT_MS: z.coerce.number().int().min(0).default(30_000),
   DATABASE_APPLICATION_NAME: z.string().default('nestjs-fastify-scheduler'),
   DB_PASSWORD_FILE: z.string().trim().min(1).optional(),
+  // Prisma query events above this duration are logged as `warn`. See PrismaService.
+  DATABASE_SLOW_QUERY_MS: z.coerce.number().int().min(1).default(200),
 
   REDIS_QUEUE_HOST: z.string().default('localhost'),
   REDIS_QUEUE_PORT: z.coerce.number().int().min(1).max(65535).default(6380),

@@ -332,6 +332,7 @@ Full flow: [docs/deployment.md](docs/deployment.md).
 
 - [Getting Started](docs/getting-started.md) — local setup, tooling, common gotchas
 - [Architecture](docs/architecture.md) — module map, boundaries, dataflow
+- [Domain Module Anatomy](docs/domain-module-anatomy.md) — every file in a module explained file-by-file (beginner-friendly)
 - [Creating a Module](docs/creating-a-module.md) — DDD/CQRS scaffold walkthrough
 - [Environment Variables](docs/environment.md) — every env var, defaults, validation
 - [Deployment](docs/deployment.md) — Docker, GHCR, Coolify, migrations

@@ -11,7 +11,12 @@ import * as Sentry from '@sentry/nestjs';
 import type { IncomingMessage } from 'http';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { I18nService } from 'nestjs-i18n';
-import { BusinessRuleException } from '@nestjs-fastify-nx/core';
+import { ClsService } from 'nestjs-cls';
+import {
+  BusinessRuleException,
+  REQUEST_CONTEXT_KEYS,
+  type RequestContextStore,
+} from '@nestjs-fastify-nx/core';
 import { ERROR_CODES, type ValidationErrorItemDto } from '@nestjs-fastify-nx/contracts';
 import {
   I18N_KEYS,
@@ -54,7 +59,10 @@ const HTTP_STATUS_TO_I18N_KEY: Record<number, string> = {
 export class GlobalExceptionFilter implements ExceptionFilter {
   private readonly logger = new Logger(GlobalExceptionFilter.name);
 
-  constructor(private readonly i18n: I18nService) {}
+  constructor(
+    private readonly i18n: I18nService,
+    private readonly cls: ClsService<RequestContextStore>,
+  ) {}
 
   async catch(exception: unknown, host: ArgumentsHost): Promise<void> {
     // Mercurius owns GraphQL error formatting — re-throw into the GraphQL envelope.
@@ -65,7 +73,9 @@ export class GlobalExceptionFilter implements ExceptionFilter {
           : HttpStatus.INTERNAL_SERVER_ERROR;
       if (status >= 500) {
         this.logger.error({ err: exception }, 'Unhandled GraphQL exception');
-        Sentry.captureException(exception);
+        const requestId = this.cls.get(REQUEST_CONTEXT_KEYS.requestId);
+        const correlationId = this.cls.get(REQUEST_CONTEXT_KEYS.correlationId);
+        Sentry.captureException(exception, { tags: { requestId, correlationId } });
       }
       throw exception;
     }

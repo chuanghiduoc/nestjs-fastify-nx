@@ -1,6 +1,7 @@
 /// <reference types="vitest/globals" />
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import Fastify, { type FastifyInstance } from 'fastify';
+import * as Sentry from '@sentry/nestjs';
 import { applyFastifyErrorHandler } from './fastify-error-handler';
 
 vi.mock('@sentry/nestjs', () => ({ captureException: vi.fn() }));
@@ -155,6 +156,23 @@ describe('applyFastifyErrorHandler', () => {
     } finally {
       process.env['NODE_ENV'] = prev;
     }
+  });
+
+  it('tags the Sentry event with requestId/correlationId for 5xx errors', async () => {
+    app.get('/boom-tags', async () => {
+      throw new Error('kaboom');
+    });
+    const res = await app.inject({
+      method: 'GET',
+      url: '/boom-tags',
+      headers: { 'x-request-id': 'req-abc', 'x-correlation-id': 'corr-abc' },
+    });
+
+    expect(res.statusCode).toBe(500);
+    expect(Sentry.captureException).toHaveBeenCalledWith(
+      expect.any(Error),
+      expect.objectContaining({ tags: { requestId: 'req-abc', correlationId: 'corr-abc' } }),
+    );
   });
 
   it('does not overwrite a hijacked reply', async () => {

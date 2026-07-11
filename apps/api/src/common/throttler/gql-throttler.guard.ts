@@ -5,7 +5,7 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 
 @Injectable()
 export class GqlThrottlerGuard extends ThrottlerGuard {
-  protected getRequestResponse(context: ExecutionContext): {
+  protected override getRequestResponse(context: ExecutionContext): {
     req: Record<string, unknown>;
     res: Record<string, unknown>;
   } {

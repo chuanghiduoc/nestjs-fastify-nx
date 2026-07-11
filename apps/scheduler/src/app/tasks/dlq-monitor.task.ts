@@ -40,7 +40,7 @@ export class DlqMonitorTask {
     for (const queue of this.queues) {
       try {
         const counts = await queue.getJobCounts('waiting', 'failed');
-        const total = (counts.waiting ?? 0) + (counts.failed ?? 0);
+        const total = (counts['waiting'] ?? 0) + (counts['failed'] ?? 0);
         if (total >= this.threshold) {
           this.logger.warn(
             `DLQ "${queue.name}" has ${total} job(s) (>= threshold ${this.threshold}); manual triage required`,

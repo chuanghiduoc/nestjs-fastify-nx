@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ScheduleModule } from '@nestjs/schedule';
 import { BullModule } from '@nestjs/bullmq';
+import { CQRS_METRICS_RECORDER } from '@nestjs-fastify-nx/core';
 import { DatabaseModule } from '@nestjs-fastify-nx/infra-database';
 import { RedisQueueModule } from '@nestjs-fastify-nx/infra-redis';
 import { QUEUE_NAMES } from '@nestjs-fastify-nx/shared';
@@ -14,6 +15,7 @@ import {
 import { MetricsIpAllowGuard } from './metrics-ip-allow.guard';
 import { QueueDepthCollector } from './queue-depth.collector';
 import { OutboxLagCollector } from './outbox-lag.collector';
+import { MetricsCqrsRecorderAdapter } from './cqrs-metrics-recorder.adapter';
 
 @Module({
   imports: [
@@ -34,7 +36,8 @@ import { OutboxLagCollector } from './outbox-lag.collector';
     MetricsIpAllowGuard,
     QueueDepthCollector,
     OutboxLagCollector,
+    { provide: CQRS_METRICS_RECORDER, useClass: MetricsCqrsRecorderAdapter },
   ],
-  exports: [MetricsService],
+  exports: [MetricsService, CQRS_METRICS_RECORDER],
 })
 export class MetricsModule {}

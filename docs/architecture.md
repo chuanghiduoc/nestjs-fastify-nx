@@ -122,6 +122,10 @@ module/src/
   index.ts             # Public barrel — re-export only what consumers need
 ```
 
+**New to the codebase?** [`domain-module-anatomy.md`](./domain-module-anatomy.md)
+walks through every file above one-by-one — what it is, why it exists, when you
+create one, and how to wire it — using the real `users` module as the example.
+
 Authentication is delegated to [Better Auth](https://better-auth.com) (mounted by
 `libs/infra/auth`), so feature modules do not own login/logout flows or token
 adapters — they only consume the resulting session via `BetterAuthGuard`.

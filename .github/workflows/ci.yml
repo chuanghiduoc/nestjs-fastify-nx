@@ -86,6 +86,21 @@ jobs:
       - name: Build affected
         run: pnpm nx affected --target=build --base=$NX_BASE --head=$NX_HEAD --parallel=3
 
+      # The generated API client is committed so IDEs and fresh clones resolve
+      # `@nestjs-fastify-nx/api-client` without a codegen step. Regenerate it and
+      # fail on drift, so a changed OpenAPI surface can't land without the client
+      # being regenerated and committed.
+      - name: Verify generated API client is up to date
+        run: |
+          pnpm codegen:full
+          # `git status --porcelain` (not `git diff`) so a NEW tag file — which is
+          # untracked, and thus invisible to `git diff` — also trips the check.
+          if [ -n "$(git status --porcelain -- libs/api-client/src/generated)" ]; then
+            echo "::error::api-client generated code is stale — run 'pnpm codegen:full' and commit libs/api-client/src/generated.";
+            git status --porcelain -- libs/api-client/src/generated;
+            exit 1;
+          fi
+
   # `nx build` emits dist but never boots it, so runtime-only regressions slip
   # through every job above — an swc transpile target that breaks `class extends`,
   # a broken DI wiring, a missing runtime dep, a Dockerfile stage error. This job

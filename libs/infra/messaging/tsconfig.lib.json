@@ -4,8 +4,7 @@
     "outDir": "../../../dist/out-tsc/libs/infra/messaging",
     "declaration": true,
     "composite": true,
-    "types": ["node"],
-    "ignoreDeprecations": "6.0"
+    "types": ["node"]
   },
   "include": ["src/**/*.ts"],
   "exclude": [

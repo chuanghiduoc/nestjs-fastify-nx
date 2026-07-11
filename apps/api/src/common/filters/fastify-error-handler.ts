@@ -1,7 +1,9 @@
 import { HttpStatus, Logger } from '@nestjs/common';
 import * as Sentry from '@sentry/nestjs';
 import type { FastifyError, FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import { ClsServiceManager } from 'nestjs-cls';
 import { ERROR_CODES } from '@nestjs-fastify-nx/contracts';
+import type { RequestContextStore } from '@nestjs-fastify-nx/core';
 import { resolveRequestId } from '../logging/request-id';
 import {
   buildProblemDetails,
@@ -39,14 +41,25 @@ export function applyFastifyErrorHandler(fastify: FastifyInstance): void {
     const detail =
       status >= 500 && process.env['NODE_ENV'] === 'production' ? title : error.message || title;
 
+    // raw.requestId is set by the middleware (or the rate-limit errorResponseBuilder) so the
+    // header echoes the id already in the body; otherwise resolve it the same way. CLS is
+    // preferred when active since it's the single source correlationId is seeded from —
+    // this handler can run before ClsMiddleware for the earliest Fastify-level failures
+    // (e.g. malformed requests), so `raw`/header fallbacks stay as a safety net.
+    // Guard the lookup: this handler can fire on a raw Fastify scope where the
+    // CLS service was never registered, so getClsService() may be undefined.
+    const clsStore = ClsServiceManager.getClsService<RequestContextStore>()?.get();
+    const requestId =
+      clsStore?.requestId ||
+      (request.raw as RawWithIds).requestId ||
+      resolveRequestId(request.headers);
+    const correlationId =
+      clsStore?.correlationId || (request.headers['x-correlation-id'] as string) || requestId;
+
     if (status >= 500) {
       logger.error({ err: error, url: request.url }, 'Fastify-level exception');
-      Sentry.captureException(error);
+      Sentry.captureException(error, { tags: { requestId, correlationId } });
     }
-
-    // raw.requestId is set by the middleware (or the rate-limit errorResponseBuilder) so the
-    // header echoes the id already in the body; otherwise resolve it the same way.
-    const requestId = (request.raw as RawWithIds).requestId || resolveRequestId(request.headers);
 
     if (!reply.getHeader('x-request-id')) {
       reply.header('x-request-id', requestId);

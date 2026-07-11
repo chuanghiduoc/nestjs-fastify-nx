@@ -1,5 +1,7 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import type { Options as PinoHttpOptions } from 'pino-http';
+import { ClsServiceManager } from 'nestjs-cls';
+import type { RequestContextStore } from '@nestjs-fastify-nx/core';
 import { buildPinoLoggerConfig } from './pino-logger-config';
 
 function pinoHttp(overrides = {}): PinoHttpOptions {
@@ -65,5 +67,39 @@ describe('buildPinoLoggerConfig', () => {
 
     const custom = pinoHttp({ level: 'debug' });
     expect(custom.level).toBe('debug');
+  });
+});
+
+describe('buildPinoLoggerConfig — request context mixin', () => {
+  // ClsServiceManager reads a module-level singleton independent of any Nest DI container,
+  // so we can drive it directly here without bootstrapping ClsModule.
+  const cls = ClsServiceManager.getClsService<RequestContextStore>();
+
+  function mixin(): Record<string, string> {
+    const fn = pinoHttp().mixin as () => Record<string, string>;
+    return fn();
+  }
+
+  it('returns an empty object outside any CLS context (e.g. worker/scheduler apps)', () => {
+    expect(mixin()).toEqual({});
+  });
+
+  it('includes requestId/correlationId/userId once seeded on the CLS store', () => {
+    cls.run(() => {
+      cls.set('requestId', 'req-1');
+      cls.set('correlationId', 'corr-1');
+      cls.set('userId', 'user-1');
+
+      expect(mixin()).toEqual({ requestId: 'req-1', correlationId: 'corr-1', userId: 'user-1' });
+    });
+  });
+
+  it('omits fields that are not yet set (e.g. userId before auth resolves)', () => {
+    cls.run(() => {
+      cls.set('requestId', 'req-2');
+      cls.set('correlationId', 'req-2');
+
+      expect(mixin()).toEqual({ requestId: 'req-2', correlationId: 'req-2' });
+    });
   });
 });

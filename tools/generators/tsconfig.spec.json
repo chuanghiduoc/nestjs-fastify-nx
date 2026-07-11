@@ -3,8 +3,7 @@
   "compilerOptions": {
     "outDir": "../../dist/out-tsc",
     "types": ["vitest/globals", "vitest/importMeta", "node", "vitest"],
-    "declaration": true,
-    "ignoreDeprecations": "6.0"
+    "declaration": true
   },
   "include": [
     "vite.config.ts",

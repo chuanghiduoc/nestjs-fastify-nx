@@ -4,6 +4,7 @@ import { CqrsModule } from '@nestjs/cqrs';
 import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { GqlThrottlerGuard } from '../common/throttler/gql-throttler.guard';
 import { SentryModule } from '@sentry/nestjs/setup';
+import { CqrsInstrumentationInitializer } from '@nestjs-fastify-nx/core';
 import { DatabaseModule } from '@nestjs-fastify-nx/infra-database';
 import { RedisCacheModule, RedisQueueModule } from '@nestjs-fastify-nx/infra-redis';
 import { MessagingModule } from '@nestjs-fastify-nx/infra-messaging';
@@ -62,6 +63,10 @@ const conditionalImports = process.env['ENABLE_METRICS'] === 'true' ? [MetricsMo
     { provide: APP_GUARD, useClass: BetterAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
     { provide: APP_FILTER, useClass: GlobalExceptionFilter },
+    // Attaches tracing/metrics to the CommandBus/QueryBus singleton CqrsModule.forRoot()
+    // already created above — see CqrsInstrumentationInitializer for why this can't be a
+    // `{ provide: CommandBus, useClass }` DI override instead.
+    CqrsInstrumentationInitializer,
   ],
 })
 export class AppModule {}
