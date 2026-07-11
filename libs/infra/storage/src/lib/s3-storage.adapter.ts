@@ -29,13 +29,20 @@ import type {
   UploadOptions,
 } from './storage.port';
 
+// Applied at presign so the lifecycle rule expires uploads that never reach
+// /confirm; commit() flips it to committed=true.
+const UNCOMMITTED_TAGGING =
+  '<Tagging><TagSet><Tag><Key>committed</Key><Value>false</Value></Tag></TagSet></Tagging>';
+
 // forcePathStyle required for MinIO and S3-compatible services (R2, B2); harmless on AWS S3.
 @Injectable()
 export class S3StorageAdapter implements StoragePort, OnModuleInit {
   private readonly logger = new Logger(S3StorageAdapter.name);
   private readonly client: S3Client;
+  private readonly presignClient: S3Client;
   private readonly bucket: string;
   private readonly endpoint: string;
+  private readonly publicEndpoint: string;
 
   constructor(private readonly config: ConfigService) {
     this.endpoint = this.requireConfig('STORAGE_ENDPOINT', 'http://localhost:9000');
@@ -44,14 +51,33 @@ export class S3StorageAdapter implements StoragePort, OnModuleInit {
     const region = this.requireConfig('STORAGE_REGION', 'us-east-1');
     const accessKeyId = this.requireConfig('STORAGE_ACCESS_KEY', 'minioadmin');
     const secretAccessKey = this.requireConfig('STORAGE_SECRET_KEY', 'minioadmin');
+    const credentials = { accessKeyId, secretAccessKey };
 
     this.client = new S3Client({
       endpoint: this.endpoint,
       region,
-      credentials: { accessKeyId, secretAccessKey },
+      credentials,
       forcePathStyle: true,
       maxAttempts: 3,
     });
+
+    // Presigned URLs must be signed against a host the browser can reach; in
+    // containers STORAGE_ENDPOINT is internal (http://minio:9000), so
+    // STORAGE_PUBLIC_ENDPOINT overrides it for signing. Unset means both equal.
+    const configuredPublic = this.config.get<string>('STORAGE_PUBLIC_ENDPOINT');
+    this.publicEndpoint = configuredPublic ? configuredPublic : this.endpoint;
+    // Presigning is offline, so this client only shapes the signed host — it
+    // never has to reach the public endpoint.
+    this.presignClient =
+      this.publicEndpoint === this.endpoint
+        ? this.client
+        : new S3Client({
+            endpoint: this.publicEndpoint,
+            region,
+            credentials,
+            forcePathStyle: true,
+            maxAttempts: 3,
+          });
   }
 
   // Auto-create bucket on startup — MinIO ships empty and first upload would 500 otherwise.
@@ -127,7 +153,7 @@ export class S3StorageAdapter implements StoragePort, OnModuleInit {
       });
     }
 
-    const url = `${this.endpoint}/${bucket}/${key}`;
+    const url = `${this.publicEndpoint}/${bucket}/${key}`;
 
     return { key, bucket, url, size: body.length };
   }
@@ -138,14 +164,15 @@ export class S3StorageAdapter implements StoragePort, OnModuleInit {
     const expiresInSeconds = options.expiresInSeconds ?? 300;
 
     try {
-      const { url, fields } = await createPresignedPost(this.client, {
+      const { url, fields } = await createPresignedPost(this.presignClient, {
         Bucket: bucket,
         Key: key,
         Conditions: [
           ['content-length-range', 1, options.maxBytes],
           ['eq', '$Content-Type', options.contentType],
+          ['eq', '$tagging', UNCOMMITTED_TAGGING],
         ],
-        Fields: { 'Content-Type': options.contentType },
+        Fields: { 'Content-Type': options.contentType, tagging: UNCOMMITTED_TAGGING },
         Expires: expiresInSeconds,
       });
 
@@ -194,7 +221,7 @@ export class S3StorageAdapter implements StoragePort, OnModuleInit {
         Bucket: targetBucket,
         Key: key,
       });
-      return await getSignedUrl(this.client, command, { expiresIn });
+      return await getSignedUrl(this.presignClient, command, { expiresIn });
     } catch (err) {
       this.logger.error({ err, key }, 'S3 getSignedUrl failed');
       throw new InternalServerErrorException({
@@ -223,7 +250,7 @@ export class S3StorageAdapter implements StoragePort, OnModuleInit {
     }
   }
 
-  // Tag committed=true so the lifecycle rule expires untagged orphans after 24h.
+  // Flip committed=false → true so the lifecycle rule no longer expires it.
   async commit(key: string, bucket?: string): Promise<void> {
     try {
       await this.client.send(

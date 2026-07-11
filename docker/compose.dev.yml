@@ -1,6 +1,6 @@
 services:
-  # One-shot: creates the STORAGE_BUCKET if it does not already exist.
-  # Runs after minio is healthy; restarts on failure until mc alias connects.
+  # One-shot: creates the STORAGE_BUCKET and its orphan-expiry lifecycle rule if
+  # absent. Runs after minio is healthy; restarts on failure until mc connects.
   minio-init:
     image: minio/mc:RELEASE.2025-05-21T01-59-54Z
     restart: 'no'
@@ -16,6 +16,8 @@ services:
         done;
         mc alias set local http://minio:9000 $$MINIO_ROOT_USER $$MINIO_ROOT_PASSWORD || { echo 'minio-init: cannot reach minio after 30s'; exit 1; };
         mc mb -p local/$$STORAGE_BUCKET;
+        mc ilm rule remove --all --force local/$$STORAGE_BUCKET 2>/dev/null;
+        mc ilm rule add --expire-days 1 --tags 'committed=false' local/$$STORAGE_BUCKET;
         echo 'bucket ready: '$$STORAGE_BUCKET
       "
 
@@ -62,6 +64,9 @@ services:
       REDIS_QUEUE_HOST: redis-queue
       REDIS_QUEUE_PORT: '6380'
       STORAGE_ENDPOINT: http://minio:9000
+      # Presigned upload/download URLs are signed against the host-reachable
+      # address so a browser outside the compose network can resolve them.
+      STORAGE_PUBLIC_ENDPOINT: http://localhost:9000
       MAIL_HOST: mailpit
     depends_on:
       postgres:

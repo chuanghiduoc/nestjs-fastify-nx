@@ -167,7 +167,7 @@ export class UploadController {
       );
     }
 
-    // Untagged objects auto-expire in 24h — fail explicitly so the client retries.
+    // Uncommitted (committed=false) objects auto-expire in 24h — fail explicitly so the client retries.
     try {
       await this.storage.commit(dto.key);
     } catch (err) {
