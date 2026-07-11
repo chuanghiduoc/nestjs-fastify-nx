@@ -65,6 +65,10 @@ export async function createTestApp(): Promise<TestAppContext> {
   process.env['REDIS_QUEUE_HOST'] = redisHost;
   process.env['REDIS_QUEUE_PORT'] = redisPort;
   process.env['BETTER_AUTH_SECRET'] = 'e2e-better-auth-secret-must-be-32-chars-long';
+  // Enable the Google provider so the social sign-in test can build an authorize
+  // URL. Fake creds are fine — sign-in/social only mints the redirect URL locally.
+  process.env['GOOGLE_CLIENT_ID'] = 'e2e-google-client-id';
+  process.env['GOOGLE_CLIENT_SECRET'] = 'e2e-google-client-secret';
 
   // Low strict cap so the 429 test fires after 3 requests; loose cap stays
   // high enough that session ops between tests don't trip it.

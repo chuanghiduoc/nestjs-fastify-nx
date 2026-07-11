@@ -1,5 +1,6 @@
 import { Logger } from '@nestjs/common';
 import { betterAuth } from 'better-auth';
+import type { BetterAuthOptions } from 'better-auth';
 import { prismaAdapter } from 'better-auth/adapters/prisma';
 import { openAPI } from 'better-auth/plugins';
 import type { PrismaClient } from '@prisma/client';
@@ -14,6 +15,30 @@ export interface AuthMailDispatcher {
 }
 
 const logger = new Logger('BetterAuth');
+
+type OAuthCredentials = { clientId: string; clientSecret: string };
+
+// Returns a provider's OAuth pair only when BOTH id and secret are set, so a
+// half-configured provider stays disabled rather than failing at request time.
+function readOAuthPair(prefix: string): OAuthCredentials | undefined {
+  const clientId = process.env[`${prefix}_CLIENT_ID`]?.trim();
+  const clientSecret = process.env[`${prefix}_CLIENT_SECRET`]?.trim();
+  if (!clientId || !clientSecret) return undefined;
+  return { clientId, clientSecret };
+}
+
+// Enables only the social providers whose credentials are present. Each provider
+// is opt-in via env — no env means the provider is simply absent from the config.
+export function buildSocialProviders(): NonNullable<BetterAuthOptions['socialProviders']> {
+  const providers: NonNullable<BetterAuthOptions['socialProviders']> = {};
+  const google = readOAuthPair('GOOGLE');
+  if (google) providers.google = google;
+  const github = readOAuthPair('GITHUB');
+  if (github) providers.github = github;
+  const facebook = readOAuthPair('FACEBOOK');
+  if (facebook) providers.facebook = facebook;
+  return providers;
+}
 
 export function createBetterAuth(
   prisma: PrismaClient,
@@ -41,10 +66,17 @@ export function createBetterAuth(
     logger.warn('CORS_ORIGINS empty — cross-origin session cookies will be rejected');
   }
 
+  const socialProviders = buildSocialProviders();
+  const enabledProviders = Object.keys(socialProviders);
+  if (enabledProviders.length > 0) {
+    logger.log(`Social login enabled: ${enabledProviders.join(', ')}`);
+  }
+
   return betterAuth({
     ...(secret ? { secret } : {}),
     ...(baseURL ? { baseURL } : {}),
     database: prismaAdapter(prisma, { provider: 'postgresql' }),
+    ...(enabledProviders.length > 0 ? { socialProviders } : {}),
     emailAndPassword: {
       enabled: true,
       minPasswordLength: 8,
@@ -115,6 +147,15 @@ export function createBetterAuth(
             templateId: 'account-deletion',
           });
         },
+      },
+    },
+    account: {
+      accountLinking: {
+        enabled: true,
+        // Only providers that guarantee a verified email may auto-link to an
+        // existing account. Facebook can return an unverified email, so it is
+        // excluded — otherwise an attacker could hijack an account by that email.
+        trustedProviders: ['google', 'github'],
       },
     },
     trustedOrigins,

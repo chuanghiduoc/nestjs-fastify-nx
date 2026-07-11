@@ -270,4 +270,24 @@ describe('Auth E2E (Better Auth)', () => {
       );
     });
   });
+
+  describe('POST /api/auth/sign-in/social', () => {
+    it('returns a provider authorize URL when the provider is configured', async () => {
+      const res = await request(ctx.app.getHttpServer())
+        .post('/api/auth/sign-in/social')
+        .send({ provider: 'google', callbackURL: 'http://localhost:5173/dashboard' })
+        .expect(200);
+
+      expect(res.body.redirect).toBe(true);
+      expect(res.body.url).toContain('accounts.google.com');
+    });
+
+    it('rejects a provider that has no credentials configured', async () => {
+      const res = await request(ctx.app.getHttpServer())
+        .post('/api/auth/sign-in/social')
+        .send({ provider: 'facebook' });
+
+      expect(res.status).toBeGreaterThanOrEqual(400);
+    });
+  });
 });
