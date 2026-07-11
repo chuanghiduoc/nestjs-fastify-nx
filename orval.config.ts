@@ -6,14 +6,15 @@ export default defineConfig({
       target: './dist/swagger/openapi.json',
     },
     output: {
-      // `workspace` is the base for `target` + `schemas` + auto-barrel.
-      // `clean: true` wipes stale files (prevents the duplicate-export
-      // accretion bug in orval #1875 and stale tag files after rename).
+      // One file per OpenAPI tag (admin/users/auth/upload/…, mirroring the DDD
+      // modules) plus a single `api.schemas.ts` — the generated client is
+      // committed, so `tags` keeps the diff readable instead of `tags-split`'s
+      // one-file-per-model explosion (~250 files). `clean: true` wipes stale
+      // files (orval #1875 duplicate-export accretion + stale tag files on rename).
       workspace: 'libs/api-client/src/generated/',
       target: './api.ts',
-      schemas: './schemas',
       client: 'axios',
-      mode: 'tags-split',
+      mode: 'tags',
       indexFiles: true,
       clean: true,
       formatter: 'prettier',
