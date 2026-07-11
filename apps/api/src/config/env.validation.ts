@@ -35,9 +35,19 @@ const envSchema = z
     BETTER_AUTH_URL: z.string().url().optional(),
     // SPA host that owns /reset, /verify-email, /delete-account pages. Required in production.
     FRONTEND_BASE_URL: z.string().url().optional(),
+    // Social login — each provider activates only when BOTH id and secret are set.
+    GOOGLE_CLIENT_ID: z.string().optional(),
+    GOOGLE_CLIENT_SECRET: z.string().optional(),
+    GITHUB_CLIENT_ID: z.string().optional(),
+    GITHUB_CLIENT_SECRET: z.string().optional(),
+    FACEBOOK_CLIENT_ID: z.string().optional(),
+    FACEBOOK_CLIENT_SECRET: z.string().optional(),
 
     // Storage (S3 / MinIO)
     STORAGE_ENDPOINT: z.string().default('http://localhost:9000'),
+    // Browser-facing endpoint for presigned URLs; overrides STORAGE_ENDPOINT for
+    // signing when the app reaches storage at an internal hostname (containers).
+    STORAGE_PUBLIC_ENDPOINT: z.string().optional(),
     STORAGE_BUCKET: z.string().default('uploads'),
     STORAGE_REGION: z.string().default('us-east-1'),
     STORAGE_ACCESS_KEY: z.string().default('minioadmin'),

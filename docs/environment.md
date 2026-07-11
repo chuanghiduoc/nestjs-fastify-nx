@@ -32,13 +32,14 @@ Copy `.env.example` to `.env` and fill in the values.
 
 ## Storage (MinIO / S3)
 
-| Variable             | Default                 | Required             | Description            |
-| -------------------- | ----------------------- | -------------------- | ---------------------- |
-| `STORAGE_ENDPOINT`   | `http://localhost:9000` | Yes                  | S3-compatible endpoint |
-| `STORAGE_ACCESS_KEY` | `minioadmin`            | Yes (rotate in prod) | Access key             |
-| `STORAGE_SECRET_KEY` | `minioadmin`            | Yes (rotate in prod) | Secret key             |
-| `STORAGE_BUCKET`     | `uploads`               | Yes                  | Default bucket name    |
-| `STORAGE_REGION`     | `us-east-1`             | No                   | S3 region              |
+| Variable                  | Default                 | Required             | Description                                                                                                                                                             |
+| ------------------------- | ----------------------- | -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `STORAGE_ENDPOINT`        | `http://localhost:9000` | Yes                  | S3-compatible endpoint (app → storage)                                                                                                                                  |
+| `STORAGE_PUBLIC_ENDPOINT` | _(unset)_               | No                   | Browser-facing endpoint for presigned URLs; set when the app reaches storage at an internal hostname (e.g. `http://minio:9000` in containers) the browser can't resolve |
+| `STORAGE_ACCESS_KEY`      | `minioadmin`            | Yes (rotate in prod) | Access key                                                                                                                                                              |
+| `STORAGE_SECRET_KEY`      | `minioadmin`            | Yes (rotate in prod) | Secret key                                                                                                                                                              |
+| `STORAGE_BUCKET`          | `uploads`               | Yes                  | Default bucket name                                                                                                                                                     |
+| `STORAGE_REGION`          | `us-east-1`             | No                   | S3 region                                                                                                                                                               |
 
 **Upload pattern** — clients call `POST /api/v1/upload/presign` to receive a
 short-lived (5 min) S3 presigned-POST policy, upload the bytes browser→S3
@@ -64,6 +65,16 @@ scrypt-hashed via `better-auth/crypto`).
 | `BETTER_AUTH_URL`    | —                                                                              | Prod       | Public origin used to build cookie scope and trusted-origin list                                                                                                                                                     |
 | `FRONTEND_BASE_URL`  | dev: falls back to `BETTER_AUTH_URL` w/ warning; **prod: boot fails if unset** | Yes (prod) | SPA origin that renders `/reset`, `/verify-email`, `/delete-account` pages. The SPA pulls `?token=` from the URL, shows a form, and POSTs to the matching `/api/auth/*` endpoint. Backend has no UI for these flows. |
 | `CORS_ORIGINS`       | —                                                                              | Prod       | Comma-separated allowed origins; required for cookie-bearing CORS and Socket.io upgrades                                                                                                                             |
+
+### Social login (OAuth)
+
+Optional. Each provider activates only when **both** its `*_CLIENT_ID` and `*_CLIENT_SECRET` are set — otherwise it stays disabled. Register the callback `${BETTER_AUTH_URL}/api/auth/callback/<provider>` in the provider's console. The frontend triggers login via `signIn.social({ provider, callbackURL })`; the API renders no OAuth UI. Google and GitHub verify email, so they auto-link to an existing account by email; Facebook is excluded from `accountLinking.trustedProviders` to prevent takeover via an unverified email.
+
+| Variable                                        | Default | Required | Description              |
+| ----------------------------------------------- | ------- | -------- | ------------------------ |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`     | —       | No       | Enables Google sign-in   |
+| `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET`     | —       | No       | Enables GitHub sign-in   |
+| `FACEBOOK_CLIENT_ID` / `FACEBOOK_CLIENT_SECRET` | —       | No       | Enables Facebook sign-in |
 
 ## Application
 
