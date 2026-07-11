@@ -11,7 +11,21 @@
     "format": "prettier --write \"**/*.{ts,json,md}\" --ignore-path .prettierignore",
     "codegen": "orval --config orval.config.ts",
     "codegen:export": "nx run api:codegen-export",
-    "codegen:full": "pnpm codegen:export && pnpm codegen"
+    "codegen:full": "pnpm codegen:export && pnpm codegen",
+    "gen:module": "bash scripts/gen-module.sh modules",
+    "gen:composition": "bash scripts/gen-module.sh composition",
+    "gen:lib": "nx g @nx/js:library",
+    "gen:app": "nx g @nx/nest:application",
+    "rm:project": "bash scripts/remove-project.sh",
+    "graph": "nx graph",
+    "sync": "nx sync",
+    "reset": "nx reset",
+    "clean": "nx reset && node -e \"const fs=require('fs');['dist','tmp','.nx/cache'].forEach(d=>fs.rmSync(d,{recursive:true,force:true}))\"",
+    "db:migrate": "prisma migrate dev",
+    "db:deploy": "prisma migrate deploy",
+    "db:seed": "node prisma/seed.mjs",
+    "db:studio": "prisma studio",
+    "db:generate": "prisma generate"
   },
   "private": true,
   "dependencies": {

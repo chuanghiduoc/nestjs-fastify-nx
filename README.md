@@ -210,10 +210,20 @@ pnpm nx serve api                   # build once then spawn Node (@nx/js:node, n
 pnpm nx test api                    # vitest
 pnpm nx build api --configuration=production
 
+# Scaffolding & removal
+pnpm gen:module <name>              # DDD bounded context under libs/modules/
+pnpm gen:composition <name>         # cross-context lib under libs/composition/
+pnpm gen:lib <name>                 # generic library
+pnpm rm:project <name>              # remove a lib/app + clean references
+
+# Housekeeping
+pnpm sync                           # nx sync (project references)
+pnpm clean                          # nx reset + wipe dist/tmp/.nx cache
+
 # Database
-pnpm prisma migrate dev             # create + apply a new migration
-pnpm prisma studio                  # browse data
-node prisma/seed.mjs                # seed admin
+pnpm db:migrate --name <slug>       # create + apply a new migration
+pnpm db:studio                      # browse data
+pnpm db:seed                        # seed admin
 
 # API codegen (consumes the live spec)
 pnpm codegen:full                   # export OpenAPI → orval → libs/api-client

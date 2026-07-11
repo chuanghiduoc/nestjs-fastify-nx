@@ -51,7 +51,8 @@ See [docs/architecture.md](./docs/architecture.md) for the full diagram.
 ### 1. Scaffold via generator
 
 ```bash
-pnpm nx g @nestjs-fastify-nx/tools-generators:module --name=payments --directory=modules
+pnpm gen:module payments   # shortcut → libs/modules/payments (+ nx sync)
+# equivalent: pnpm nx g @nestjs-fastify-nx/tools-generators:module --name=payments --directory=modules
 ```
 
 ### 2. Implement domain logic
@@ -113,19 +114,24 @@ Full walkthrough: [docs/creating-a-module.md](./docs/creating-a-module.md)
 
 ## Daily Commands
 
-| Task                 | Command                                         |
-| -------------------- | ----------------------------------------------- |
-| Start dev server     | `pnpm nx serve api`                             |
-| Watch + rebuild      | `pnpm nx watch -p api -- pnpm nx run api:build` |
-| Run tests for module | `pnpm nx test modules-payments`                 |
-| Run all tests        | `pnpm nx affected -t test --base=main`          |
-| Check lint           | `pnpm nx affected -t lint --base=main`          |
-| Create migration     | `pnpm prisma migrate dev --name add_field`      |
-| View DB              | `pnpm prisma studio`                            |
-| Codegen OpenAPI      | `pnpm codegen:full`                             |
-| Inspect workspace    | `pnpm nx graph`                                 |
-| Clean cache          | `pnpm nx reset`                                 |
-| Health check         | `./scripts/doctor.sh`                           |
+| Task                 | Command                                           |
+| -------------------- | ------------------------------------------------- |
+| Hot-reload dev       | `./scripts/dev.sh` (infra in Docker, app on host) |
+| Start dev server     | `pnpm nx serve api`                               |
+| Watch + rebuild      | `pnpm nx watch -p api -- pnpm nx run api:build`   |
+| Scaffold module      | `pnpm gen:module <name>`                          |
+| Scaffold composition | `pnpm gen:composition <name>`                     |
+| Remove a project     | `pnpm rm:project <name>`                          |
+| Run tests for module | `pnpm nx test modules-payments`                   |
+| Run all tests        | `pnpm nx affected -t test --base=main`            |
+| Check lint           | `pnpm nx affected -t lint --base=main`            |
+| Create migration     | `pnpm db:migrate --name add_field`                |
+| View DB              | `pnpm db:studio`                                  |
+| Seed DB              | `pnpm db:seed`                                    |
+| Codegen OpenAPI      | `pnpm codegen:full`                               |
+| Inspect workspace    | `pnpm graph`                                      |
+| Clean cache          | `pnpm clean` (reset + wipe dist/tmp)              |
+| Health check         | `./scripts/doctor.sh`                             |
 
 ## Code Standards
 

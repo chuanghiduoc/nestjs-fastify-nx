@@ -384,7 +384,7 @@ The `bullmq_job_duration_seconds` histogram is NOT inflated — each replica obs
 
 **Root cause:** The upload flow is presign → browser POST → confirm. If the browser uploads to S3 but the client never calls `POST /api/v1/upload/confirm`, the object lives forever — the backend never learned about that key.
 
-**Mitigation in code:** `UploadController.confirm()` calls `storage.commit(key)` after MIME + size pass, which sets the S3 object tag `committed=true`. Untagged objects are orphans and MUST be expired by an S3 lifecycle rule.
+**Mitigation in code:** the presign step tags every object `committed=false` at creation time; `UploadController.confirm()` then calls `storage.commit(key)` after MIME + size pass, which flips the tag to `committed=true`. Objects left at `committed=false` are orphans and are expired by the lifecycle rule below. In dev, `minio-init` (compose.dev.yml) applies this rule automatically; in prod apply it once at infra time.
 
 **Required bucket lifecycle rule (apply at infra time, NOT in code):**
 
@@ -406,7 +406,7 @@ The `bullmq_job_duration_seconds` histogram is NOT inflated — each replica obs
 }
 ```
 
-S3 treats a missing tag as no-match, so additionally configure a sweep rule on untagged objects (apply via `aws s3api put-bucket-lifecycle-configuration --bucket <name> --lifecycle-configuration file://lifecycle.json`).
+Because presign tags objects `committed=false` upfront, the single tag-filtered rule above matches every orphan — no separate untagged sweep is needed (apply via `aws s3api put-bucket-lifecycle-configuration --bucket <name> --lifecycle-configuration file://lifecycle.json`).
 
 **MinIO equivalent (`mc`):**
 
@@ -414,7 +414,7 @@ S3 treats a missing tag as no-match, so additionally configure a sweep rule on u
 mc ilm rule add --expire-days 1 --tags "committed=false" myminio/<your-bucket>
 ```
 
-**Action when bucket already bloated:** list orphan objects via `aws s3api list-objects-v2` + filter by missing tag, then bulk delete. Cost-wise the lifecycle rule is the right long-term fix; manual cleanup is one-time.
+**Action when bucket already bloated:** list orphan objects via `aws s3api list-objects-v2` + filter by the `committed=false` tag, then bulk delete. Cost-wise the lifecycle rule is the right long-term fix; manual cleanup is one-time.
 
 **Escalation:** If orphan rate is high (>10% of total uploads), investigate whether legitimate clients are failing to call `/confirm` (network errors, FE bug, mobile background suspend). Add a Prometheus alert on `s3_bucket_object_count` divergence from a confirmed-upload counter.
 

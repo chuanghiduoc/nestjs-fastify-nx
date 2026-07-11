@@ -42,8 +42,8 @@ export interface StoragePort {
   head(key: string, bucket?: string): Promise<ObjectMetadata | null>;
   getSignedUrl(key: string, expiresIn?: number, bucket?: string): Promise<string>;
   delete(key: string, bucket?: string): Promise<void>;
-  // Tag an object as committed so the bucket lifecycle rule preserves it.
-  // Objects without this tag are auto-expired (see docs/runbook.md).
+  // Tag committed=true so the lifecycle rule no longer expires the object
+  // (committed=false uploads are auto-expired; see docs/runbook.md).
   commit(key: string, bucket?: string): Promise<void>;
   // Read the first `byteCount` bytes of the object — used by the async
   // magic-byte verifier so the worker doesn't have to download whole files.
