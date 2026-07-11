@@ -93,10 +93,13 @@ jobs:
       - name: Verify generated API client is up to date
         run: |
           pnpm codegen:full
-          git diff --exit-code libs/api-client/src/generated || {
+          # `git status --porcelain` (not `git diff`) so a NEW tag file — which is
+          # untracked, and thus invisible to `git diff` — also trips the check.
+          if [ -n "$(git status --porcelain -- libs/api-client/src/generated)" ]; then
             echo "::error::api-client generated code is stale — run 'pnpm codegen:full' and commit libs/api-client/src/generated.";
+            git status --porcelain -- libs/api-client/src/generated;
             exit 1;
-          }
+          fi
 
   # `nx build` emits dist but never boots it, so runtime-only regressions slip
   # through every job above — an swc transpile target that breaks `class extends`,

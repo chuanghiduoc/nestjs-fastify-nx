@@ -30,9 +30,10 @@ Every request is identified by one id shared across all three signals and the HT
 - **Every line carries** `service`, `env`, `pid`, `hostname` (base fields), `trace_id` /
   `span_id` (injected by the OTel pino instrumentation, when tracing is on), and — via an
   **AsyncLocalStorage request context** (`nestjs-cls`) surfaced by a pino `mixin` — top-level
-  `requestId`, `correlationId`, and `userId` on **every** log line, not just the HTTP access
-  log. A command handler, repository, or event listener logs with the same request context
-  **even when `OTEL_ENABLED=false`**. The mixin is a no-op in apps that never seed the store
+  `requestId`, `correlationId`, and `userId` on **every log line emitted within an active
+  request context** (not just the HTTP access log). A command handler, repository, or event
+  listener logs with the same request context **even when `OTEL_ENABLED=false`**. Startup and
+  background (non-request) logs simply omit these fields — the mixin is a no-op with no store. The mixin is a no-op in apps that never seed the store
   (worker/scheduler) and is additive to — never clobbers — the OTel trace fields. Pivot from
   any log line to its trace by `trace_id`, or to its request by `requestId`.
 - **Slow-query log** — `PrismaService` emits a `warn` (query template + duration only, **never**

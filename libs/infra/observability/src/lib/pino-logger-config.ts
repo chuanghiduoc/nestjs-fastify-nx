@@ -13,7 +13,7 @@ import { SENSITIVE_REDACT_CENSOR, SENSITIVE_REDACT_PATHS } from '@nestjs-fastify
 // store (worker, scheduler) instead of throwing. @opentelemetry/instrumentation-pino wraps
 // (not replaces) an existing `mixin`, so trace_id/span_id from OTel are additive to this.
 function requestContextMixin(): Record<string, string> {
-  const store = ClsServiceManager.getClsService<RequestContextStore>().get();
+  const store = ClsServiceManager.getClsService<RequestContextStore>()?.get();
   if (!store) return {};
 
   const fields: Record<string, string> = {};

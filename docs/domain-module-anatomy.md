@@ -18,16 +18,18 @@ supplies **adapters** — domain never imports Prisma, Fastify, or
 controllers never call a handler directly, they dispatch a `Command`/`Query`
 through a bus, and a `@CommandHandler`/`@QueryHandler` picks it up.
 
-**Dependency rule**: domain depends on nothing; application depends on domain
-(ports, entities, VOs); infrastructure implements domain ports; presentation
-depends on application and maps results to HTTP DTOs. Never sideways from
-domain into infrastructure.
+**Dependency rule**: domain depends only on framework-agnostic domain/shared
+primitives (`ValueObject<T>`, `DomainEvent`, `generateId` from `core`/`shared`) —
+never on a framework or infrastructure; application depends on domain (ports,
+entities, VOs); infrastructure implements domain ports; presentation depends on
+application and maps results to HTTP DTOs. Never sideways from domain into
+infrastructure.
 
 ## 2. Request flow
 
 **Read path** — HTTP → QueryBus → handler → repository port → Prisma → DB:
 
-```
+```text
 Client → GET /api/v1/users/me
   ▼
 UsersController.getProfile()
@@ -51,7 +53,7 @@ Commands are identical, with `CommandBus` / `@CommandHandler` instead.
 **Event path** — domain event → outbox → relay → listener (NOT the in-memory
 `EventBus`):
 
-```
+```text
 Postgres AFTER INSERT trigger (same tx as source row)
   ▼
 outbox_events table

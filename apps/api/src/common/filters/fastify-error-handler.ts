@@ -46,7 +46,9 @@ export function applyFastifyErrorHandler(fastify: FastifyInstance): void {
     // preferred when active since it's the single source correlationId is seeded from —
     // this handler can run before ClsMiddleware for the earliest Fastify-level failures
     // (e.g. malformed requests), so `raw`/header fallbacks stay as a safety net.
-    const clsStore = ClsServiceManager.getClsService<RequestContextStore>().get();
+    // Guard the lookup: this handler can fire on a raw Fastify scope where the
+    // CLS service was never registered, so getClsService() may be undefined.
+    const clsStore = ClsServiceManager.getClsService<RequestContextStore>()?.get();
     const requestId =
       clsStore?.requestId ||
       (request.raw as RawWithIds).requestId ||

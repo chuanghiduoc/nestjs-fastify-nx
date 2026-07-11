@@ -17,7 +17,9 @@ tmp
 # context is what keeps the build fast: they were silently bloating every build.
 .code-review-graph
 .test-tmp
-generated
+# Leading slash = root only, so this never matches libs/api-client/src/generated
+# (the committed OpenAPI client, which the image DOES need).
+/generated
 
 # VCS / CI / editor metadata — no value at runtime, leaks history into images.
 .git
