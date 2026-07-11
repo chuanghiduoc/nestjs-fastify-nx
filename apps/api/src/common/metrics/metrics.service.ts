@@ -7,6 +7,9 @@ const HTTP_DURATION_BUCKETS = [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5,
 // Sized for BullMQ jobs (typically 50ms–30s).
 const JOB_DURATION_BUCKETS = [0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30];
 
+// Sized for in-process CQRS dispatch (sub-millisecond to a few hundred ms; no network hop).
+const CQRS_DURATION_BUCKETS = [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5];
+
 @Injectable()
 export class MetricsService implements OnModuleInit, OnModuleDestroy {
   readonly registry = new Registry();
@@ -51,6 +54,30 @@ export class MetricsService implements OnModuleInit, OnModuleDestroy {
   readonly outboxLagSeconds = new Gauge({
     name: 'outbox_lag_seconds',
     help: 'Age of the oldest unprocessed outbox event in seconds',
+    registers: [this.registry],
+  });
+
+  // CQRS handlers have no auto-instrumentation (unlike http/pg/redis) — see
+  // CqrsInstrumentationInitializer in @nestjs-fastify-nx/core, which drives these series.
+  readonly cqrsCommandsTotal = new Counter({
+    name: 'cqrs_commands_total',
+    help: 'Total CQRS commands executed by name and outcome',
+    labelNames: ['name', 'status'] as const,
+    registers: [this.registry],
+  });
+
+  readonly cqrsQueriesTotal = new Counter({
+    name: 'cqrs_queries_total',
+    help: 'Total CQRS queries executed by name and outcome',
+    labelNames: ['name', 'status'] as const,
+    registers: [this.registry],
+  });
+
+  readonly cqrsDurationSeconds = new Histogram({
+    name: 'cqrs_duration_seconds',
+    help: 'CQRS command/query execution duration in seconds',
+    labelNames: ['kind', 'name', 'status'] as const,
+    buckets: CQRS_DURATION_BUCKETS,
     registers: [this.registry],
   });
 

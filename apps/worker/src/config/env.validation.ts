@@ -11,6 +11,8 @@ const workerEnvSchema = z
     // Mirrors api validator for .env.example parity — worker has zero DB connections.
     DATABASE_REPLICA_URL: z.string().trim().min(1).optional(),
     DATABASE_REPLICA_POOL_MAX: z.coerce.number().int().min(1).max(1000).default(10),
+    // Mirrors api validator for .env.example parity — worker has zero DB connections.
+    DATABASE_SLOW_QUERY_MS: z.coerce.number().int().min(1).default(200),
 
     // Redis queue
     REDIS_QUEUE_HOST: z.string().default('localhost'),

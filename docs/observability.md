@@ -27,9 +27,17 @@ Every request is identified by one id shared across all three signals and the HT
 - **Dev**: `pino-pretty`, colourised, single-line, numeric level.
 - **Prod**: raw JSON with the level as a string label (`"level":"info"`) — what Loki / ELK /
   Datadog / GCP index on.
-- **Every line carries** `service`, `env`, `pid`, `hostname` (base fields) plus `trace_id` /
-  `span_id` (injected by the OTel pino instrumentation) and top-level `correlationId` /
-  `requestId` (customProps). Pivot from any log line to its trace by `trace_id`.
+- **Every line carries** `service`, `env`, `pid`, `hostname` (base fields), `trace_id` /
+  `span_id` (injected by the OTel pino instrumentation, when tracing is on), and — via an
+  **AsyncLocalStorage request context** (`nestjs-cls`) surfaced by a pino `mixin` — top-level
+  `requestId`, `correlationId`, and `userId` on **every** log line, not just the HTTP access
+  log. A command handler, repository, or event listener logs with the same request context
+  **even when `OTEL_ENABLED=false`**. The mixin is a no-op in apps that never seed the store
+  (worker/scheduler) and is additive to — never clobbers — the OTel trace fields. Pivot from
+  any log line to its trace by `trace_id`, or to its request by `requestId`.
+- **Slow-query log** — `PrismaService` emits a `warn` (query template + duration only, **never**
+  bound params) when a query exceeds `DATABASE_SLOW_QUERY_MS` (default 200 ms), giving DB-latency
+  visibility that works even with tracing disabled.
 - **Compact serializers**: requests log `{ method, url, remoteAddress }` and responses
   `{ statusCode }` — not the full header/body dump. Smaller lines, smaller PII surface;
   `responseTime` is still emitted at top level.
@@ -47,7 +55,14 @@ patches `http`/`pg`/`ioredis` before they load. Enabled by `OTEL_ENABLED=true`.
 - **Resource**: `service.name`, `service.namespace`, `service.version`, `deployment.environment`.
 - **Exporters**: OTLP/HTTP for traces and metrics (`OTEL_EXPORTER_OTLP_ENDPOINT`).
 - **Sampling**: `TraceIdRatioBasedSampler` via `OTEL_TRACES_SAMPLER_RATIO` (default `1`).
-- **Auto-instrumentation**: HTTP, Postgres, ioredis, pino (log injection). `fs` is disabled.
+- **Auto-instrumentation**: HTTP, Postgres, ioredis, GraphQL, socket.io, pino (log injection).
+  `fs` is disabled.
+- **CQRS use-case spans** — auto-instrumentation stops at the framework boundary (HTTP/DB/redis),
+  so a traced `CommandBus`/`QueryBus` (`libs/core`) wraps every dispatch in a `command.<Name>` /
+  `query.<Name>` span. This is where a slow request is attributed to a **specific handler**
+  instead of "the whole HTTP call". Records exceptions + `ERROR` status on failure. Deliberately
+  **not** added to HTTP/DB/redis (already auto-instrumented — would double-span); a cheap no-op
+  when tracing is off (the OTel API's default no-op tracer).
 - Graceful shutdown on `SIGTERM`/`SIGINT`.
 
 Local stack: `docker compose -f docker/compose.yml -f docker/compose.dev.yml -f docker/compose.observability.yml up`
@@ -61,6 +76,8 @@ brings up OTel Collector + Jaeger + Prometheus + Grafana (all bound to `127.0.0.
 - `http_requests_total`, `http_request_duration_seconds` (labels: method, route, status_code)
 - `bullmq_jobs_total`, `bullmq_job_duration_seconds`, `bullmq_queue_depth`
 - `outbox_lag_seconds` — age of the oldest unprocessed outbox event
+- `cqrs_commands_total`, `cqrs_queries_total` (labels: name, status), `cqrs_duration_seconds` —
+  per-use-case RED metrics recorded by the traced bus above (present only when `ENABLE_METRICS=true`)
 
 Alert rules ship in `docker/prometheus/alert_rules.yml`; dashboards in
 `docker/grafana/provisioning/dashboards/`. Because every API replica observes the same

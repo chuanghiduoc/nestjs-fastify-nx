@@ -17,6 +17,9 @@ const envSchema = z
     DATABASE_CONNECTION_TIMEOUT_MS: z.coerce.number().int().min(0).default(5_000),
     DATABASE_STATEMENT_TIMEOUT_MS: z.coerce.number().int().min(0).default(30_000),
     DATABASE_APPLICATION_NAME: z.string().default('nestjs-fastify-api'),
+    // Prisma query events above this duration are logged as `warn` (query template + duration
+    // only — never params, which can carry PII/secrets). See PrismaService.
+    DATABASE_SLOW_QUERY_MS: z.coerce.number().int().min(1).default(200),
 
     // Redis cache
     REDIS_CACHE_HOST: z.string().default('localhost'),

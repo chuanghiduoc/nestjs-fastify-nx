@@ -1,5 +1,6 @@
 import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
+import type { Prisma } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { injectDatabasePassword, intEnv } from '@nestjs-fastify-nx/shared';
 
@@ -9,6 +10,20 @@ type TransactionClient = Parameters<PrismaClient['$transaction']>[0] extends (
 ) => Promise<unknown>
   ? TX
   : never;
+
+// Prisma's `$on('query', ...)` overload only narrows its callback to Prisma.QueryEvent when
+// TypeScript can see the literal `log: [{ emit: 'event', level: 'query' }]` at the exact
+// `new PrismaClient(...)` call site — a readonly field typed as the bare `PrismaClient` (this
+// service constructs two, write + optional replica) loses that inference. This narrow
+// structural cast is more reliable than fighting the generic across both instantiations.
+interface PrismaQueryEventEmitter {
+  $on(event: 'query', callback: (event: Prisma.QueryEvent) => void): void;
+}
+
+// Exported so the threshold decision is unit-testable without wiring a real Prisma event.
+export function isSlowQuery(durationMs: number, thresholdMs: number): boolean {
+  return durationMs > thresholdMs;
+}
 
 function buildPgAdapter(
   connectionString: string,
@@ -43,6 +58,7 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
     if (!writeUrl) throw new Error('DATABASE_URL is required');
 
     const appName = process.env['DATABASE_APPLICATION_NAME'] ?? 'nestjs-fastify-api';
+    const slowQueryThresholdMs = intEnv('DATABASE_SLOW_QUERY_MS', 200);
 
     this._writeClient = new PrismaClient({
       adapter: buildPgAdapter(writeUrl, {
@@ -50,7 +66,9 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
         poolMin: intEnv('DATABASE_POOL_MIN', 0),
         applicationName: `${appName}-write`,
       }),
+      log: [{ emit: 'event', level: 'query' }],
     });
+    this.registerSlowQueryLogger(this._writeClient, slowQueryThresholdMs);
 
     const replicaUrl = injectDatabasePassword(
       process.env['DATABASE_REPLICA_URL']?.trim(),
@@ -65,11 +83,25 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
           poolMin: 0,
           applicationName: `${appName}-read`,
         }),
+        log: [{ emit: 'event', level: 'query' }],
       });
+      this.registerSlowQueryLogger(this._readClient, slowQueryThresholdMs);
       this.logger.log('Read replica enabled via DATABASE_REPLICA_URL');
     } else {
       this._readClient = this._writeClient;
     }
+  }
+
+  // Only `query` (the parameterized SQL template) and `duration` are logged — `params` is
+  // the serialized argument values and can carry PII/secrets, so it is never logged here.
+  private registerSlowQueryLogger(client: PrismaClient, thresholdMs: number): void {
+    (client as unknown as PrismaQueryEventEmitter).$on('query', (event) => {
+      if (!isSlowQuery(event.duration, thresholdMs)) return;
+      this.logger.warn(
+        { durationMs: event.duration, query: event.query },
+        'Slow database query detected',
+      );
+    });
   }
 
   get db(): PrismaClient {
