@@ -10,8 +10,5 @@
       "path": "./tsconfig.spec.json"
     }
   ],
-  "compilerOptions": {
-    "esModuleInterop": true,
-    "ignoreDeprecations": "6.0"
-  }
+  "compilerOptions": {}
 }

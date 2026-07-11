@@ -1,19 +1,14 @@
 {
   "extends": "<%= offsetFromRoot %>tsconfig.base.json",
-  "compilerOptions": {
-    "ignoreDeprecations": "6.0",
-    "forceConsistentCasingInFileNames": true,
-    "strict": true,
-    "importHelpers": true,
-    "noImplicitOverride": true,
-    "noImplicitReturns": true,
-    "noFallthroughCasesInSwitch": true,
-    "noPropertyAccessFromIndexSignature": true
-  },
+  "compilerOptions": {},
   "files": [],
   "include": [],
   "references": [
-    { "path": "./tsconfig.lib.json" },
-    { "path": "./tsconfig.spec.json" }
+    {
+      "path": "./tsconfig.lib.json"
+    },
+    {
+      "path": "./tsconfig.spec.json"
+    }
   ]
 }
