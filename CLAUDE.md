@@ -94,7 +94,7 @@ libs/
 
 prisma/         schema.prisma, migrations/, seed.mjs
 docker/         compose.yml + compose.dev.yml + compose.prod.yml + compose.test.yml
-scripts/        build-dev.sh, build-prod.sh, security/*
+scripts/        build-dev.sh, build-prod.sh, dev.sh, gen-module.sh, remove-project.sh, security/*
 docs/           architecture, deployment, environment, security, troubleshooting, runbook
 tools/generators/  Nx generator → `@nestjs-fastify-nx/tools-generators:module`
 ```
@@ -151,22 +151,29 @@ pnpm nx affected -t lint test build
 pnpm nx run api:e2e                # Testcontainers — Docker required
 pnpm nx graph
 
-# Database
-pnpm prisma migrate dev --name <slug>
-pnpm prisma generate               # already runs in postinstall
-node prisma/seed.mjs
+# Database (shortcuts wrap prisma; see package.json)
+pnpm db:migrate --name <slug>      # prisma migrate dev (create + apply + regen)
+pnpm db:deploy                     # prisma migrate deploy (committed migrations only)
+pnpm db:seed                       # node prisma/seed.mjs
+pnpm db:studio                     # prisma studio (browse data)
+pnpm db:generate                   # prisma generate (also runs in postinstall)
 
 # OpenAPI codegen (consumes live spec from CodegenAppModule)
 pnpm codegen:full                  # spec → orval → libs/api-client
 
-# Sync after creating libs / moving files
-pnpm nx sync
-pnpm nx reset                      # if daemon caches go stale
+# Housekeeping
+pnpm sync                          # nx sync — after creating libs / moving files
+pnpm reset                         # nx reset — if daemon caches go stale
+pnpm clean                         # nx reset + wipe dist/tmp/.nx cache
+pnpm graph                         # interactive dependency graph
 
-# Scaffolding a new bounded context (DDD layout)
-pnpm nx g @nestjs-fastify-nx/tools-generators:module --name=my-feature --directory=modules
-# For cross-context composition lib (e.g. admin, billing-report):
-pnpm nx g @nestjs-fastify-nx/tools-generators:module --name=my-feature --directory=composition
+# Scaffolding & removal (shortcuts wrap the generator; see package.json + scripts/)
+pnpm gen:module <name>             # DDD bounded context under libs/modules/ (runs nx sync)
+pnpm gen:composition <name>        # cross-context lib under libs/composition/ (admin, billing-report)
+pnpm gen:lib <name>                # generic @nx/js:library
+pnpm gen:app <name>                # @nx/nest:application (rare — new apps need scope:* tags)
+pnpm rm:project <name>             # remove a lib/app + clean refs/tags (nx workspace:remove + sync)
+# Raw generator (equivalent to gen:module): pnpm nx g @nestjs-fastify-nx/tools-generators:module --name=x --directory=modules
 # Reference: docs/creating-a-module.md for full DDD walkthrough
 ```
 

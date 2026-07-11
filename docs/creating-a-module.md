@@ -3,12 +3,16 @@
 ## Quick Start
 
 ```bash
+pnpm gen:module products             # shortcut → libs/modules/products (+ nx sync)
+pnpm gen:composition billing-report  # shortcut → libs/composition/billing-report
+
+# Equivalent raw generator:
 pnpm nx g @nestjs-fastify-nx/tools-generators:module --name=products
 ```
 
-Omit `--name` to be prompted interactively. The name must be kebab-case (e.g. `products`, `order-items`).
+`pnpm gen:module` / `pnpm gen:composition` wrap the generator and run `nx sync` for you (see `scripts/gen-module.sh`). The name must be kebab-case (e.g. `products`, `order-items`). To remove a module later: `pnpm rm:project modules-products`.
 
-Use `--directory=composition` when the module is a cross-cutting aggregate (default is `modules`).
+Omit `--name` on the raw generator to be prompted interactively. Use `--directory=composition` when the module is a cross-cutting aggregate (default is `modules`).
 
 ## Generated Structure
 
