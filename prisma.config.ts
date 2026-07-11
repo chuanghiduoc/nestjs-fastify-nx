@@ -1,4 +1,12 @@
+import { existsSync } from 'node:fs';
 import { defineConfig } from 'prisma/config';
+
+// Prisma 7 stops auto-loading .env once a prisma.config.ts exists. loadEnvFile
+// never overrides already-set vars, so the containerised path (no .env file)
+// is untouched.
+if (existsSync('.env')) {
+  process.loadEnvFile('.env');
+}
 
 // Driver adapter (PrismaPg) is configured at runtime in PrismaService,
 // not here — `adapter` is not a valid PrismaConfig field in Prisma 7.

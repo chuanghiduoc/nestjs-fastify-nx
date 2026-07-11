@@ -86,9 +86,19 @@ if [[ $NO_INFRA -eq 0 ]]; then
   pnpm exec prisma migrate deploy
 fi
 
+# nx serve starts the Node inspector on 9229 by default, so hot-reloading more
+# than one app on the host collides. Give each known app a distinct debug port;
+# anything else gets a random free port (--port=0).
+case "$APP" in
+  api)       INSPECT_PORT=9229 ;;
+  worker)    INSPECT_PORT=9230 ;;
+  scheduler) INSPECT_PORT=9231 ;;
+  *)         INSPECT_PORT=0 ;;
+esac
+
 sec::ok "Infra ready. Booting hot-reload loop for '${APP}'."
 sec::log "  watcher: nx watch -> nx run ${APP}:build:development"
-sec::log "  server:  nx serve ${APP}  (restarts on dist change)"
+sec::log "  server:  nx serve ${APP} --port=${INSPECT_PORT}  (debug port; restarts on dist change)"
 echo ""
 
 # Watcher: rebuild the app bundle whenever the app OR any lib it depends on
@@ -101,4 +111,4 @@ WATCH_PID=$!
 # Server: @nx/js:node is continuous and watches the build output, so when the
 # watcher rewrites dist it restarts the Node process. This call stays in the
 # foreground; Ctrl-C triggers the cleanup trap above.
-pnpm exec nx serve "${APP}"
+pnpm exec nx serve "${APP}" --port="${INSPECT_PORT}"
