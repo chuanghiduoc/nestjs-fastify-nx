@@ -12,6 +12,7 @@ export const I18N_KEYS = {
     payload_too_large: 'common.payload_too_large',
     unsupported_media_type: 'common.unsupported_media_type',
     unprocessable_entity: 'common.unprocessable_entity',
+    request_timeout: 'common.request_timeout',
   },
   validation: {
     failed_title: 'validation.failed_title',

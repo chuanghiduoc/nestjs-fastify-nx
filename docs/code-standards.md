@@ -181,6 +181,36 @@ Rules for producers that call `queue.add('email-notification', payload, { jobId:
 - **Resendable flows** (manual "resend verification", ops retrigger): include a timestamp or nonce — e.g. `${templateId}__${to}__${Date.now()}` — so each user-initiated resend produces a distinct jobId and bypasses the SETNX guard.
 - **Anti-pattern** (will silently drop resends within 24 h): `${userId}__${type}` with no timestamp. If a user requests two verification emails within 24 h only the first will be delivered.
 
+## HTTP Idempotency & Request Timeout
+
+Two cross-cutting resilience layers wrap every HTTP request.
+
+**Idempotency-Key (Stripe pattern)** — a Fastify plugin (`register-idempotency.ts`,
+wired in `main.ts` before `@fastify/compress`) guards mutating `/api/v1/*` requests
+that carry an `Idempotency-Key` header. It runs at the Fastify layer, not as a Nest
+interceptor, because `preHandler`/`onSend` have native access to the final status +
+serialized body — a Nest interceptor cannot replay the exact response since Nest sets
+the status after the interceptor chain.
+
+- First request wins an atomic `SET NX` lock (Redis cache DB 5), runs, and its 2xx
+  response is stored and replayed byte-for-byte on retries (`Idempotent-Replayed: true`).
+- Concurrent duplicate → `409 idempotency_key_conflict`; key reused with a different
+  body (fingerprint = `method + url + body`) → `422 idempotency_key_mismatch`; malformed
+  key → `400 idempotency_key_invalid`.
+- Scope: the store key hashes the session token (or client IP for anonymous) with the
+  key, so principals never read each other's cached response.
+- **Fail-open** on a Redis error (mirrors the throttler). Non-2xx responses release the
+  lock so the client may retry — safe because command handlers roll their transaction
+  back on error, leaving no committed side effect to duplicate.
+- **Invariant:** `IDEMPOTENCY_LOCK_TTL_SECONDS * 1000 > HTTP_REQUEST_TIMEOUT_MS` (validated
+  on boot) so a finishing request always still owns its lock — preventing a lock-steal.
+
+**Request timeout** — a global `TimeoutInterceptor` (`HTTP_REQUEST_TIMEOUT_MS`, default
+30s) aborts a handler that runs too long with `504 request_timeout`. WebSocket handlers
+are exempt. Node cannot cancel the orphaned promise, so background work still completes;
+the client just stops waiting and the socket is freed. Auth routes (`reply.hijack()`)
+bypass the Nest pipeline and are unaffected.
+
 ## Read Replica Routing
 
 `PrismaService` exposes two clients: `db` (primary write) and `dbRead` (replica

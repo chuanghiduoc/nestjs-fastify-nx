@@ -10,7 +10,6 @@ import {
 } from '@nestjs-fastify-nx/contracts';
 import { BETTER_AUTH_INSTANCE, type BetterAuthInstance } from '@nestjs-fastify-nx/infra-auth';
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
-import { Converter } from '@apiture/openapi-down-convert';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import ScalarApiReference from '@scalar/fastify-api-reference';
@@ -173,6 +172,10 @@ async function mergeBetterAuthSpec(app: INestApplication, document: OpenAPIObjec
 
   // Better Auth emits OpenAPI 3.1.1; @nestjs/swagger emits 3.0.0. Down-convert
   // the auth sub-document so every 3.1-only construct is normalised in one pass.
+  // Loaded lazily: @apiture/openapi-down-convert is a devDependency (docs/codegen only). A
+  // top-level import would crash the production image on boot, where Nx prunes it from the
+  // generated package.json — setupSwagger never runs in production, so this path is dev/codegen-only.
+  const { Converter } = await import('@apiture/openapi-down-convert');
   const converted = new Converter(authSchema, { verbose: false }).convert() as AuthOpenApiDocument;
 
   if (converted.paths) {

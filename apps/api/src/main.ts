@@ -2,7 +2,7 @@ import './tracing';
 import * as Sentry from '@sentry/nestjs';
 import { nodeProfilingIntegration } from '@sentry/profiling-node';
 import { NestFactory } from '@nestjs/core';
-import { VersioningType } from '@nestjs/common';
+import { HttpStatus, VersioningType } from '@nestjs/common';
 import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify';
 import type { FastifyReply, FastifyRequest, RouteShorthandOptions } from 'fastify';
 import { ConfigService } from '@nestjs/config';
@@ -16,12 +16,14 @@ import { Redis } from 'ioredis';
 import { toNodeHandler } from 'better-auth/node';
 import { BETTER_AUTH_INSTANCE, type BetterAuthInstance } from '@nestjs-fastify-nx/infra-auth';
 import { positiveIntEnv } from '@nestjs-fastify-nx/shared';
+import { ERROR_CODES } from '@nestjs-fastify-nx/contracts';
 import { AppModule } from './app/app.module';
 import { applyFastifyErrorHandler } from './common/filters/fastify-error-handler';
 import { resolveRequestId } from './common/logging/request-id';
 import { ProblemDetailsValidationPipe } from './common/pipes';
 import { setupSwagger } from './common/swagger/swagger.config';
 import { createBullBoardPlugin } from './common/bull-board/create-bull-board-plugin';
+import { registerIdempotency } from './common/idempotency/register-idempotency';
 import type { EnvConfig } from './config/env.validation';
 
 const sentryDsn = process.env['SENTRY_DSN'];
@@ -144,6 +146,32 @@ async function bootstrap() {
     crossOriginResourcePolicy: { policy: 'same-site' },
   });
 
+  // Idempotency-Key replay for mutating /api/v1/* writes (Stripe pattern). Registered before
+  // @fastify/compress so its onSend hook stores the uncompressed JSON body. db=5 isolates the
+  // keyspace from cache (0), throttler (1), and rate-limit (4). Fail-open on a Redis error.
+  if (config.get('IDEMPOTENCY_ENABLED', { infer: true })) {
+    const idempotencyRedis = new Redis({
+      host: config.get('REDIS_CACHE_HOST', { infer: true }),
+      port: config.get('REDIS_CACHE_PORT', { infer: true }),
+      db: 5,
+      maxRetriesPerRequest: 1,
+      retryStrategy: (times: number) => (times >= 10 ? null : Math.min(times * 200, 3000)),
+      enableOfflineQueue: false,
+    });
+    idempotencyRedis.on('error', (err: Error) => {
+      app.get(Logger).warn(`Idempotency Redis error: ${err.message}`);
+    });
+    fastify.addHook('onClose', async () => {
+      await idempotencyRedis.quit().catch(() => idempotencyRedis.disconnect());
+    });
+    registerIdempotency(fastify, {
+      redis: idempotencyRedis,
+      ttlSeconds: config.get('IDEMPOTENCY_TTL_SECONDS', { infer: true }),
+      lockTtlSeconds: config.get('IDEMPOTENCY_LOCK_TTL_SECONDS', { infer: true }),
+      onError: (message) => app.get(Logger).warn(message),
+    });
+  }
+
   // Load shedding: on event-loop saturation, reply 503 (problem+json) so a load balancer / k8s
   // drains this instance. Heap/RSS caps are env-specific and left off by default.
   await fastify.register(fastifyUnderPressure, {
@@ -152,15 +180,15 @@ async function bootstrap() {
     pressureHandler: (req, reply) => {
       const requestId = resolveRequestId(req.headers);
       reply
-        .code(503)
+        .code(HttpStatus.SERVICE_UNAVAILABLE)
         .header('content-type', 'application/problem+json')
         .header('x-request-id', requestId)
         .header('retry-after', '10')
         .send({
           type: 'about:blank',
           title: 'Service Unavailable',
-          status: 503,
-          code: 'service_unavailable',
+          status: HttpStatus.SERVICE_UNAVAILABLE,
+          code: ERROR_CODES.SERVICE_UNAVAILABLE,
           detail: 'Server is under heavy load; please retry shortly.',
           instance: req.url,
           requestId,
@@ -229,9 +257,10 @@ async function bootstrap() {
       return {
         type: 'https://tools.ietf.org/html/rfc6585#section-4',
         title: 'Too Many Requests',
-        status: 429,
-        // Match ProblemDetailsDto so rate-limit 429s carry the same shape as every other error.
-        code: 'too_many_requests',
+        status: HttpStatus.TOO_MANY_REQUESTS,
+        // Match ProblemDetailsDto so rate-limit 429s carry the same shape (and the same `code`,
+        // ERROR_CODES.RATE_LIMITED) as a 429 raised by the Nest ThrottlerGuard.
+        code: ERROR_CODES.RATE_LIMITED,
         detail: `Rate limit exceeded. Try again in ${Math.ceil(context.ttl / 1000)} seconds.`,
         retryAfter: Math.ceil(context.ttl / 1000),
         requestId,
@@ -307,9 +336,10 @@ async function bootstrap() {
         const body = JSON.stringify({
           type: 'https://tools.ietf.org/html/rfc7231#section-6.6.1',
           title: 'Internal Server Error',
-          status: 500,
+          status: HttpStatus.INTERNAL_SERVER_ERROR,
+          code: ERROR_CODES.INTERNAL_SERVER_ERROR,
         });
-        reply.raw.writeHead(500, {
+        reply.raw.writeHead(HttpStatus.INTERNAL_SERVER_ERROR, {
           'Content-Type': 'application/problem+json',
           'Content-Length': Buffer.byteLength(body),
         });

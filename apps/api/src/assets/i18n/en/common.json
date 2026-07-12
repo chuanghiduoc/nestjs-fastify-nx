@@ -8,5 +8,6 @@
   "too_many_requests": "Too many requests. Please slow down and try again later.",
   "payload_too_large": "The request body is larger than the server accepts.",
   "unsupported_media_type": "The request media type is not supported.",
-  "unprocessable_entity": "The request was understood but could not be processed."
+  "unprocessable_entity": "The request was understood but could not be processed.",
+  "request_timeout": "The server took too long to process the request. Please try again."
 }

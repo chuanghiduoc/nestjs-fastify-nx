@@ -10,12 +10,17 @@ export const ERROR_CODES = {
   RATE_LIMITED: 'rate_limited',
   INTERNAL_SERVER_ERROR: 'internal_server_error',
   SERVICE_UNAVAILABLE: 'service_unavailable',
+  REQUEST_TIMEOUT: 'request_timeout',
 
   ROUTE_NOT_FOUND: 'route_not_found',
   VALIDATION_FAILED: 'validation_failed',
   PAYLOAD_TOO_LARGE: 'payload_too_large',
   UNSUPPORTED_MEDIA_TYPE: 'unsupported_media_type',
   BUSINESS_RULE_VIOLATION: 'business_rule_violation',
+
+  IDEMPOTENCY_KEY_INVALID: 'idempotency_key_invalid',
+  IDEMPOTENCY_KEY_CONFLICT: 'idempotency_key_conflict',
+  IDEMPOTENCY_KEY_MISMATCH: 'idempotency_key_mismatch',
 } as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES];

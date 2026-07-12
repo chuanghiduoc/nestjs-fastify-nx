@@ -106,6 +106,29 @@ because `reply.hijack()` bypasses the NestJS ThrottlerGuard.
 | `UPLOAD_MAX_FILE_BYTES`             | `10485760` | No       | Max multipart file size (10 MB default); pinned in S3 presigned-POST policy  |
 | `HTTP_MAX_EVENT_LOOP_DELAY_MS`      | `1000`     | No       | `@fastify/under-pressure` load-shed threshold; over this the API replies 503 |
 
+## Resilience & Idempotency
+
+`HTTP_REQUEST_TIMEOUT_MS` caps handler execution via a global `TimeoutInterceptor`
+— a hung `await` is aborted with a `504` (RFC 9457 `request_timeout`) so it can't
+pin a worker. Node cannot cancel the orphaned promise, so the background work still
+finishes; the client just stops waiting.
+
+Idempotency-Key replay (Stripe pattern) protects mutating `/api/v1/*` requests. A
+client sends `Idempotency-Key: <opaque>`; the first response (2xx) is cached in
+Redis (cache DB 5) and replayed byte-for-byte on retries, with an
+`Idempotent-Replayed: true` header. Reuse with a different body → `422`
+(`idempotency_key_mismatch`); a still-in-flight duplicate → `409`
+(`idempotency_key_conflict`). A Redis outage fails **open** (the write proceeds
+without protection). Non-2xx responses release the lock so the client may retry —
+safe because command handlers roll back their transaction on error.
+
+| Variable                       | Default | Required | Description                                                                        |
+| ------------------------------ | ------- | -------- | ---------------------------------------------------------------------------------- |
+| `HTTP_REQUEST_TIMEOUT_MS`      | `30000` | No       | Handler execution cap; `504` on breach. `0` disables. Keep below the lock TTL (ms) |
+| `IDEMPOTENCY_ENABLED`          | `true`  | No       | Toggles the Idempotency-Key plugin                                                 |
+| `IDEMPOTENCY_TTL_SECONDS`      | `86400` | No       | How long a completed response stays replayable (24h, matches Stripe)               |
+| `IDEMPOTENCY_LOCK_TTL_SECONDS` | `60`    | No       | In-flight lock lifetime; MUST exceed `HTTP_REQUEST_TIMEOUT_MS` (validated on boot) |
+
 ## Error documentation
 
 | Variable              | Default              | Required | Description                                                                                                                                                                                                                                                                                   |

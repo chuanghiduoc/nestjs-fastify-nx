@@ -117,13 +117,10 @@ function resolveStatus(error: FastifyError): number {
     if (typeof c === 'number' && c >= 400 && c < 600) return c;
   }
   if (error.code && FASTIFY_CODE_TO_ERROR_CODE[error.code]) {
-    return error.code === 'FST_ERR_CTP_BODY_TOO_LARGE'
-      ? HttpStatus.PAYLOAD_TOO_LARGE
-      : error.code === 'FST_ERR_CTP_INVALID_MEDIA_TYPE'
-        ? HttpStatus.UNSUPPORTED_MEDIA_TYPE
-        : error.code === 'FST_ERR_VALIDATION'
-          ? HttpStatus.BAD_REQUEST
-          : HttpStatus.BAD_REQUEST;
+    if (error.code === 'FST_ERR_CTP_BODY_TOO_LARGE') return HttpStatus.PAYLOAD_TOO_LARGE;
+    if (error.code === 'FST_ERR_CTP_INVALID_MEDIA_TYPE') return HttpStatus.UNSUPPORTED_MEDIA_TYPE;
+    // Malformed JSON body, empty body, bad content-length, and schema-validation failures are all 400.
+    return HttpStatus.BAD_REQUEST;
   }
   return HttpStatus.INTERNAL_SERVER_ERROR;
 }

@@ -156,6 +156,8 @@ describe('Auth E2E (Better Auth)', () => {
       expect(res.headers['content-type']).toMatch(/application\/problem\+json/);
       expect(res.body.status).toBe(429);
       expect(res.body.title).toBe('Too Many Requests');
+      // Same `code` a 429 from the Nest ThrottlerGuard emits — one stable value per status.
+      expect(res.body.code).toBe('rate_limited');
       expect(res.body.retryAfter).toBeGreaterThan(0);
     });
   });
