@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { CqrsModule } from '@nestjs/cqrs';
-import { APP_FILTER, APP_GUARD } from '@nestjs/core';
+import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { GqlThrottlerGuard } from '../common/throttler/gql-throttler.guard';
 import { SentryModule } from '@sentry/nestjs/setup';
 import { CqrsInstrumentationInitializer } from '@nestjs-fastify-nx/core';
@@ -22,6 +22,7 @@ import { UploadModule } from '@nestjs-fastify-nx/modules-upload';
 import { GraphqlModule } from '../graphql/graphql.module';
 import { WebsocketModule } from '../websocket/websocket.module';
 import { GlobalExceptionFilter } from '../common/filters/global-exception.filter';
+import { TimeoutInterceptor } from '../common/interceptors';
 import { validateConfig } from '../config/env.validation';
 import { AppController } from './app.controller';
 
@@ -63,6 +64,9 @@ const conditionalImports = process.env['ENABLE_METRICS'] === 'true' ? [MetricsMo
     { provide: APP_GUARD, useClass: BetterAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
     { provide: APP_FILTER, useClass: GlobalExceptionFilter },
+    // Aborts handlers exceeding HTTP_REQUEST_TIMEOUT_MS with a 504 so a hung await can't pin a
+    // worker. Auth routes bypass the Nest pipeline (reply.hijack) and are unaffected.
+    { provide: APP_INTERCEPTOR, useClass: TimeoutInterceptor },
     // Attaches tracing/metrics to the CommandBus/QueryBus singleton CqrsModule.forRoot()
     // already created above — see CqrsInstrumentationInitializer for why this can't be a
     // `{ provide: CommandBus, useClass }` DI override instead.

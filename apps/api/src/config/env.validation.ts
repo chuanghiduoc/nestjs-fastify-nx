@@ -149,6 +149,22 @@ const envSchema = z
     HTTP_BODY_LIMIT_BYTES: z.coerce.number().int().min(1024).default(1_048_576),
     UPLOAD_MAX_FILE_BYTES: z.coerce.number().int().min(1024).default(10_485_760),
 
+    // Caps handler execution time (504 on breach). 0 disables — set that only when a fronting
+    // gateway already enforces its own timeout. Must stay below IDEMPOTENCY_LOCK_TTL_SECONDS so a
+    // timed-out request releases its idempotency lock within the lock's lifetime.
+    HTTP_REQUEST_TIMEOUT_MS: z.coerce.number().int().min(0).default(30_000),
+
+    // Idempotency-Key replay for mutating /api/v1/* requests (Stripe pattern).
+    IDEMPOTENCY_ENABLED: z
+      .string()
+      .default('true')
+      .transform((v) => v === 'true'),
+    // How long a completed response is replayable. 24h matches Stripe.
+    IDEMPOTENCY_TTL_SECONDS: z.coerce.number().int().min(1).default(86_400),
+    // In-flight lock lifetime. Must exceed HTTP_REQUEST_TIMEOUT_MS so the finishing request always
+    // owns its lock when it writes the result — preventing a lock-steal after expiry.
+    IDEMPOTENCY_LOCK_TTL_SECONDS: z.coerce.number().int().min(1).default(60),
+
     // Bull Board
     BULL_BOARD_ENABLED: z
       .string()
@@ -172,6 +188,21 @@ const envSchema = z
         code: z.ZodIssueCode.custom,
         path: ['DATABASE_POOL_MIN'],
         message: 'DATABASE_POOL_MIN must be less than or equal to DATABASE_POOL_MAX',
+      });
+    }
+
+    // A timed-out request must release its idempotency lock before the lock expires, otherwise a
+    // slow completion could overwrite a newer request's lock. Only enforced when both are active.
+    if (
+      data.IDEMPOTENCY_ENABLED &&
+      data.HTTP_REQUEST_TIMEOUT_MS > 0 &&
+      data.HTTP_REQUEST_TIMEOUT_MS >= data.IDEMPOTENCY_LOCK_TTL_SECONDS * 1000
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['IDEMPOTENCY_LOCK_TTL_SECONDS'],
+        message:
+          'IDEMPOTENCY_LOCK_TTL_SECONDS (ms) must be greater than HTTP_REQUEST_TIMEOUT_MS so a timed-out request releases its lock in time',
       });
     }
 

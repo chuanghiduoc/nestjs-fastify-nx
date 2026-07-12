@@ -1,3 +1,4 @@
+import { HttpStatus } from '@nestjs/common';
 import { createBullBoard } from '@bull-board/api';
 import { BullMQAdapter } from '@bull-board/api/bullMQAdapter';
 import { FastifyAdapter } from '@bull-board/fastify';
@@ -52,7 +53,7 @@ export function createBullBoardPlugin(opts: BullBoardOptions) {
       const authHeader = request.headers['authorization'];
       if (!authHeader?.startsWith('Basic ')) {
         reply.header('WWW-Authenticate', 'Basic realm="Bull Board"');
-        reply.status(401).send('Unauthorized');
+        reply.status(HttpStatus.UNAUTHORIZED).send('Unauthorized');
         return;
       }
       const decoded = Buffer.from(authHeader.slice('Basic '.length), 'base64').toString();
@@ -64,7 +65,7 @@ export function createBullBoardPlugin(opts: BullBoardOptions) {
       const passOk = safeEqual(password, opts.password);
       if (!userOk || !passOk) {
         reply.header('WWW-Authenticate', 'Basic realm="Bull Board"');
-        reply.status(401).send('Unauthorized');
+        reply.status(HttpStatus.UNAUTHORIZED).send('Unauthorized');
         return;
       }
     });

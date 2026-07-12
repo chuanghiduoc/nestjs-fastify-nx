@@ -53,6 +53,7 @@ const HTTP_STATUS_TO_I18N_KEY: Record<number, string> = {
   [HttpStatus.UNPROCESSABLE_ENTITY]: I18N_KEYS.common.unprocessable_entity,
   [HttpStatus.TOO_MANY_REQUESTS]: I18N_KEYS.common.too_many_requests,
   [HttpStatus.INTERNAL_SERVER_ERROR]: I18N_KEYS.common.internal_server_error,
+  [HttpStatus.GATEWAY_TIMEOUT]: I18N_KEYS.common.request_timeout,
 };
 
 @Catch()

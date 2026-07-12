@@ -1,16 +1,19 @@
 import { Test } from '@nestjs/testing';
-import { VersioningType } from '@nestjs/common';
+import { HttpStatus, VersioningType } from '@nestjs/common';
+import { ERROR_CODES } from '@nestjs-fastify-nx/contracts';
 import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify';
 import type { FastifyReply, FastifyRequest, RouteShorthandOptions } from 'fastify';
 import { toNodeHandler } from 'better-auth/node';
 import fastifyRateLimit from '@fastify/rate-limit';
 import fastifyMultipart from '@fastify/multipart';
+import Redis from 'ioredis';
 import { BETTER_AUTH_INSTANCE, type BetterAuthInstance } from '@nestjs-fastify-nx/infra-auth';
 import { PrismaService } from '@nestjs-fastify-nx/infra-database';
 import { STORAGE_PORT, type StoragePort } from '@nestjs-fastify-nx/infra-storage';
 import { DatabaseCleaner } from '@nestjs-fastify-nx/testing';
 import { AppModule } from '../src/app/app.module';
 import { applyFastifyErrorHandler } from '../src/common/filters/fastify-error-handler';
+import { registerIdempotency } from '../src/common/idempotency/register-idempotency';
 import { ProblemDetailsValidationPipe } from '../src/common/pipes';
 
 // In-process stub — e2e covers controller logic, not the S3 wire format.
@@ -105,6 +108,18 @@ export async function createTestApp(): Promise<TestAppContext> {
   // the body parser (FST_ERR_CTP_BODY_TOO_LARGE → 413) are correctly shaped.
   applyFastifyErrorHandler(fastify);
 
+  // Mirror main.ts idempotency wiring against the E2E Redis (db=5) so Idempotency-Key replay is
+  // exercised end-to-end. onClose quits the client when app.close() runs in afterAll.
+  const idempotencyRedis = new Redis({ host: redisHost, port: Number(redisPort), db: 5 });
+  fastify.addHook('onClose', async () => {
+    await idempotencyRedis.quit().catch(() => idempotencyRedis.disconnect());
+  });
+  registerIdempotency(fastify, {
+    redis: idempotencyRedis,
+    ttlSeconds: 86_400,
+    lockTtlSeconds: 60,
+  });
+
   // Register rate-limit + multipart mirroring main.ts so 429 and 413 edge cases
   // are exercised in e2e. Uses in-memory store (no Redis needed in tests).
   await fastify.register(fastifyRateLimit, {
@@ -120,7 +135,8 @@ export async function createTestApp(): Promise<TestAppContext> {
     errorResponseBuilder: (_req, context) => ({
       type: 'https://tools.ietf.org/html/rfc6585#section-4',
       title: 'Too Many Requests',
-      status: 429,
+      status: HttpStatus.TOO_MANY_REQUESTS,
+      code: ERROR_CODES.RATE_LIMITED,
       detail: `Rate limit exceeded. Try again in ${Math.ceil(context.ttl / 1000)} seconds.`,
       retryAfter: Math.ceil(context.ttl / 1000),
     }),
