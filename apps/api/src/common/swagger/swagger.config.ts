@@ -175,7 +175,7 @@ async function mergeBetterAuthSpec(app: INestApplication, document: OpenAPIObjec
   // Loaded lazily: @apiture/openapi-down-convert is a devDependency (docs/codegen only). A
   // top-level import would crash the production image on boot, where Nx prunes it from the
   // generated package.json — setupSwagger never runs in production, so this path is dev/codegen-only.
-  const { Converter } = await import('@apiture/openapi-down-convert');
+  const { Converter } = await import(/* webpackIgnore: true */ '@apiture/openapi-down-convert');
   const converted = new Converter(authSchema, { verbose: false }).convert() as AuthOpenApiDocument;
 
   if (converted.paths) {
@@ -234,7 +234,7 @@ function ensurePathParameters(url: string, pathItem: Record<string, unknown>): v
 // Better Auth's generateOpenAPISchema() attaches a generic `{ message }` (application/json)
 // error template to every operation. For 429 and 500 that shape is factually wrong on our host:
 // /api/auth/* rate-limit rejections come from @fastify/rate-limit and unhandled failures from
-// applyFastifyErrorHandler(), both emitting RFC 9457 problem+json — identical to every other
+// GlobalExceptionFilter, both emitting RFC 9457 problem+json — identical to every other
 // route. Rewrite just those two so the documented shape matches the real runtime response.
 // Better Auth's own 2xx/400/401 semantics are left intact (they genuinely return `{ message }`).
 function normalizeAuthInfraErrors(pathItem: Record<string, unknown>): void {

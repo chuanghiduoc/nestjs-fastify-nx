@@ -18,8 +18,9 @@ export function dlqNameFor(sourceQueue: string): string {
  * `@QueueEventsListener('email-notification')` provider that copies any
  * terminally-failed job into the DLQ with full diagnostic metadata.
  *
- * Hosting: only one process per cluster should import this for a given
- * queue. The natural home is the worker that owns the source queue.
+ * The natural host is every worker replica that owns the source queue.
+ * The router uses a deterministic DLQ job id, so concurrent QueueEvents
+ * listeners cannot create duplicate DLQ entries for the same failed job.
  */
 @Module({})
 export class DeadLetterModule {

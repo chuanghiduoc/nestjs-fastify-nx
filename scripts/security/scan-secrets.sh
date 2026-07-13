@@ -34,8 +34,14 @@ MODE="${1:-full}"
 case "$MODE" in
   --staged) ARGS=(protect --staged --redact --verbose) ;;
   --no-git) ARGS=(detect --no-git --redact --verbose) ;;
-  full|*)   ARGS=(detect --redact --verbose) ;;
+  full)     ARGS=(detect --redact --verbose) ;;
+  *) sec::err "Unknown mode: $MODE (try --help)"; exit 1 ;;
 esac
+
+CONFIG_ARGS=()
+if [[ -n "${GITLEAKS_CONFIG:-}" ]]; then
+  CONFIG_ARGS=(--config "$GITLEAKS_CONFIG")
+fi
 
 # Gitleaks runs inside a container. Without a reachable Docker daemon the scan
 # cannot run, so skip rather than block the commit — pre-push full scan and the
@@ -52,4 +58,4 @@ sec::docker_run --rm \
   -w /repo \
   "${GITLEAKS_IMAGE}" "${ARGS[@]}" \
   --source /repo \
-  ${GITLEAKS_CONFIG:+--config "${GITLEAKS_CONFIG}"}
+  "${CONFIG_ARGS[@]+"${CONFIG_ARGS[@]}"}"

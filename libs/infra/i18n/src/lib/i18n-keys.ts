@@ -85,6 +85,14 @@ export const I18N_KEYS = {
       lead: 'emails.email_verification.lead',
       expiry: 'emails.email_verification.expiry',
     },
+    email_change: {
+      subject: 'emails.email_change.subject',
+      greeting: 'emails.email_change.greeting',
+      greeting_named: 'emails.email_change.greeting_named',
+      lead: 'emails.email_change.lead',
+      target: 'emails.email_change.target',
+      not_you: 'emails.email_change.not_you',
+    },
     account_deletion: {
       subject: 'emails.account_deletion.subject',
       greeting: 'emails.account_deletion.greeting',

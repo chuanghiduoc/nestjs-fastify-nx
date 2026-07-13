@@ -1,13 +1,8 @@
 import { Resolver, Query, Context, Args } from '@nestjs/graphql';
-import { HttpStatus, UseGuards } from '@nestjs/common';
+import { HttpStatus } from '@nestjs/common';
 import { QueryBus } from '@nestjs/cqrs';
 import { BusinessRuleException } from '@nestjs-fastify-nx/core';
-import {
-  BetterAuthGuard,
-  RolesGuard,
-  Roles,
-  type AuthenticatedSession,
-} from '@nestjs-fastify-nx/infra-auth';
+import { Roles, type AuthenticatedSession } from '@nestjs-fastify-nx/infra-auth';
 import { ListUsersCursorQuery, GetUserProfileQuery } from '@nestjs-fastify-nx/modules-users';
 import { UserType } from '../types/user.type';
 import { UserCursorPageType } from '../types/user-cursor-page.type';
@@ -18,7 +13,6 @@ export class UserResolver {
   constructor(private readonly queryBus: QueryBus) {}
 
   @Query(() => UserType, { name: 'me', nullable: true })
-  @UseGuards(BetterAuthGuard)
   async me(@Context() context: { req: { user?: AuthenticatedSession } }): Promise<UserType | null> {
     const userId = context.req.user?.userId;
     if (!userId) return null;
@@ -36,7 +30,6 @@ export class UserResolver {
   }
 
   @Query(() => UserCursorPageType, { name: 'users' })
-  @UseGuards(BetterAuthGuard, RolesGuard)
   @Roles('ADMIN')
   async users(@Args() args: ListUsersCursorArgs): Promise<UserCursorPageType> {
     const result = await this.queryBus.execute(

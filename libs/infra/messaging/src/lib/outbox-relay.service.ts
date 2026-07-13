@@ -1,9 +1,17 @@
-import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
+import {
+  Inject,
+  Injectable,
+  Logger,
+  OnModuleDestroy,
+  OnModuleInit,
+  Optional,
+} from '@nestjs/common';
 import { PrismaService } from '@nestjs-fastify-nx/infra-database';
 import type { DomainEvent } from '@nestjs-fastify-nx/core';
 import { intEnv } from '@nestjs-fastify-nx/shared';
 import { EventBusService } from './event-bus.service';
 import { OUTBOX_SCHEMA_VERSION } from './outbox-schema-version';
+import { OUTBOX_RELAY_LEADERSHIP, type OutboxRelayLeadership } from './outbox-relay-leadership';
 
 interface OutboxPayloadShape {
   // Absent on rows written before envelope versioning — treated as version 1.
@@ -17,8 +25,29 @@ interface OutboxRow {
   id: string;
   eventType: string;
   aggregateId: string;
-  payload: OutboxPayloadShape;
+  payload: unknown;
   attempts: number;
+}
+
+const STUCK_CHECK_INTERVAL_MS = 60_000;
+
+function parsePayload(value: unknown): OutboxPayloadShape | null {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return null;
+  const candidate = value as Partial<OutboxPayloadShape>;
+  if (
+    (candidate.schemaVersion !== undefined &&
+      (!Number.isInteger(candidate.schemaVersion) || candidate.schemaVersion < 1)) ||
+    typeof candidate.eventId !== 'string' ||
+    candidate.eventId.length === 0 ||
+    typeof candidate.occurredAt !== 'string' ||
+    Number.isNaN(Date.parse(candidate.occurredAt)) ||
+    typeof candidate.payload !== 'object' ||
+    candidate.payload === null ||
+    Array.isArray(candidate.payload)
+  ) {
+    return null;
+  }
+  return candidate as OutboxPayloadShape;
 }
 
 // Three-stage dispatch: CLAIM tx (FOR UPDATE SKIP LOCKED) → PUBLISH (no tx) → MARK tx (per-row).
@@ -31,29 +60,47 @@ export class OutboxRelayService implements OnModuleInit, OnModuleDestroy {
   private readonly maxAttempts = intEnv('OUTBOX_MAX_ATTEMPTS', 10);
   private readonly txTimeoutMs = intEnv('OUTBOX_TX_TIMEOUT_MS', 30_000);
   private timer?: NodeJS.Timeout;
+  private inFlight?: Promise<number>;
   private running = false;
   private stopped = false;
+  private lastStuckCheckAt?: number;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly bus: EventBusService,
+    @Optional()
+    @Inject(OUTBOX_RELAY_LEADERSHIP)
+    private readonly leadership?: OutboxRelayLeadership,
   ) {}
 
   onModuleInit(): void {
     this.timer = setInterval(() => {
-      void this.tick();
+      if (this.inFlight) return;
+      this.inFlight = this.tick()
+        .catch((err) => {
+          // A transient claim/query failure must not become an unhandled rejection that kills the
+          // scheduler process. The next interval retries and the outbox rows remain durable.
+          this.logger.error(`Outbox relay tick failed: ${String(err)}`);
+          return 0;
+        })
+        .finally(() => {
+          this.inFlight = undefined;
+        });
     }, this.pollIntervalMs);
+    this.timer.unref();
     this.logger.log(
       `Outbox relay started — pollIntervalMs=${this.pollIntervalMs} batchSize=${this.batchSize}`,
     );
   }
 
-  onModuleDestroy(): void {
+  async onModuleDestroy(): Promise<void> {
     this.stopped = true;
     if (this.timer) clearInterval(this.timer);
+    await this.inFlight;
   }
 
   async tick(): Promise<number> {
+    if (this.leadership && !this.leadership.isLeader()) return 0;
     if (this.running || this.stopped) return 0;
     this.running = true;
     try {
@@ -77,6 +124,15 @@ export class OutboxRelayService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async checkStuckRows(): Promise<void> {
+    const now = Date.now();
+    if (
+      this.lastStuckCheckAt !== undefined &&
+      now - this.lastStuckCheckAt < STUCK_CHECK_INTERVAL_MS
+    ) {
+      return;
+    }
+    this.lastStuckCheckAt = now;
+
     try {
       const result = await this.prisma.db.$queryRawUnsafe<[{ count: bigint }]>(
         `SELECT COUNT(*) AS count FROM "outbox_events" WHERE attempts >= $1 AND "processedAt" IS NULL`,
@@ -119,10 +175,18 @@ export class OutboxRelayService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async dispatchOne(row: OutboxRow): Promise<boolean> {
+    const payload = parsePayload(row.payload);
+    if (!payload) {
+      const message = 'Invalid outbox payload envelope';
+      this.logger.error(`Outbox dispatch skipped for ${row.eventType} (id=${row.id}) - ${message}`);
+      await this.recordError(row.id, message);
+      return false;
+    }
+
     // Reject envelopes newer than this relay understands rather than silently
     // deserialising a shape we cannot interpret. The row exhausts its attempts and
     // surfaces via the stuck-row warning with an explanatory lastError.
-    const version = row.payload.schemaVersion ?? 1;
+    const version = payload.schemaVersion ?? 1;
     if (version > OUTBOX_SCHEMA_VERSION) {
       const message = `Unsupported outbox schemaVersion=${version} (relay supports up to ${OUTBOX_SCHEMA_VERSION}) — producer/consumer deploy skew`;
       this.logger.error(`Outbox dispatch skipped for ${row.eventType} (id=${row.id}) — ${message}`);
@@ -131,11 +195,11 @@ export class OutboxRelayService implements OnModuleInit, OnModuleDestroy {
     }
 
     const event: DomainEvent = {
-      eventId: row.payload.eventId,
+      eventId: payload.eventId,
       eventType: row.eventType,
       aggregateId: row.aggregateId,
-      occurredAt: new Date(row.payload.occurredAt),
-      payload: row.payload.payload,
+      occurredAt: new Date(payload.occurredAt),
+      payload: payload.payload,
     };
 
     try {

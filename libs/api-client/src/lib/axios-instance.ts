@@ -21,11 +21,11 @@ export interface CancellablePromise<T> extends Promise<T> {
 }
 
 export const customAxiosInstance = <T>(config: AxiosRequestConfig): CancellablePromise<T> => {
-  const source = axios.CancelToken.source(); // TODO: migrate to AbortController when axios drops CancelToken
-  const promise = axiosInstance({ ...config, cancelToken: source.token }).then(
+  const controller = new AbortController();
+  const promise = axiosInstance({ ...config, signal: controller.signal }).then(
     ({ data }) => data as T,
   ) as CancellablePromise<T>;
-  promise.cancel = () => source.cancel('Query was cancelled');
+  promise.cancel = () => controller.abort('Query was cancelled');
   return promise;
 };
 

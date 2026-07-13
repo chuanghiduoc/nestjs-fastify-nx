@@ -40,6 +40,18 @@ for (const svc of Object.values(doc.services ?? {})) {
   if (svc.depends_on && typeof svc.depends_on === 'object' && !Array.isArray(svc.depends_on)) {
     svc.depends_on = Object.keys(svc.depends_on);
   }
+
+  for (const quota of ['limits', 'reservations']) {
+    const resources = svc.deploy?.resources?.[quota];
+    if (resources?.cpus != null) resources.cpus = String(resources.cpus);
+  }
+
+  for (const port of svc.ports ?? []) {
+    if (port && typeof port === 'object' && /^\d+$/.test(String(port.published))) {
+      port.published = Number(port.published);
+      delete port.host_ip;
+    }
+  }
 }
 
 process.stdout.write(YAML.stringify(doc));

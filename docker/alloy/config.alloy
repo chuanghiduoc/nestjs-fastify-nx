@@ -1,0 +1,56 @@
+discovery.docker "project" {
+  host             = "unix:///var/run/docker.sock"
+  refresh_interval = "5s"
+}
+
+discovery.relabel "project" {
+  targets = discovery.docker.project.targets
+
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_project"]
+    regex         = sys.env("COMPOSE_PROJECT_NAME")
+    action        = "keep"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+    target_label  = "service"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.*)"
+    target_label  = "container"
+  }
+}
+
+loki.source.docker "project" {
+  host       = "unix:///var/run/docker.sock"
+  targets    = discovery.relabel.project.output
+  forward_to = [loki.process.project.receiver]
+}
+
+loki.process "project" {
+  // Docker wraps stdout in metadata, while pino's message itself is JSON.
+  stage.json {
+    expressions = {
+      level          = "level",
+      trace_id       = "trace_id",
+      requestId      = "requestId",
+      correlationId  = "correlationId",
+    }
+  }
+
+  // Only bounded fields become labels. IDs remain searchable JSON fields to avoid cardinality blowup.
+  stage.labels {
+    values = { level = "" }
+  }
+
+  forward_to = [loki.write.local.receiver]
+}
+
+loki.write "local" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+}

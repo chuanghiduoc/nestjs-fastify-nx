@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { resolveRequestId, sanitizeClientId } from './request-id';
+import { resolveCorrelationId, resolveRequestId, sanitizeClientId } from './request-id';
 
 describe('sanitizeClientId', () => {
   it('accepts a well-formed opaque id', () => {
@@ -36,8 +36,18 @@ describe('sanitizeClientId', () => {
 });
 
 describe('resolveRequestId', () => {
-  it('returns the client x-request-id when it is well-formed', () => {
-    expect(resolveRequestId({ 'x-request-id': 'req_valid-123' })).toBe('req_valid-123');
+  it('does not trust a client x-request-id by default', () => {
+    expect(resolveRequestId({ 'x-request-id': 'req_valid-123' })).not.toBe('req_valid-123');
+  });
+
+  it('accepts a gateway request id only when explicitly trusted', () => {
+    const previous = process.env['TRUST_INBOUND_REQUEST_ID'];
+    process.env['TRUST_INBOUND_REQUEST_ID'] = 'true';
+    try {
+      expect(resolveRequestId({ 'x-request-id': 'req_valid-123' })).toBe('req_valid-123');
+    } finally {
+      process.env['TRUST_INBOUND_REQUEST_ID'] = previous;
+    }
   });
 
   it('never returns a poisoned client id — mints a fresh one instead', () => {
@@ -55,5 +65,14 @@ describe('resolveRequestId', () => {
 
     expect(a).not.toBe(b);
     expect(a.length).toBeGreaterThan(0);
+  });
+});
+
+describe('resolveCorrelationId', () => {
+  it('accepts a safe caller correlation id and otherwise falls back to request id', () => {
+    expect(resolveCorrelationId({ 'x-correlation-id': 'flow-123' }, 'request-1')).toBe('flow-123');
+    expect(resolveCorrelationId({ 'x-correlation-id': 'bad\nvalue' }, 'request-1')).toBe(
+      'request-1',
+    );
   });
 });

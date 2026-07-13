@@ -10,14 +10,17 @@ services:
     env_file: ../.env
     entrypoint: >
       /bin/sh -c "
+        set -eu;
+        case "$$MINIO_ORPHAN_EXPIRY_DAYS" in ''|*[!0-9]*|0) echo 'minio-init: MINIO_ORPHAN_EXPIRY_DAYS must be a positive integer'; exit 1;; esac;
+        connected=0;
         for i in $$(seq 1 15); do
-          mc alias set local http://minio:9000 $$MINIO_ROOT_USER $$MINIO_ROOT_PASSWORD && break;
+          if mc alias set local http://minio:9000 \"$$MINIO_ROOT_USER\" \"$$MINIO_ROOT_PASSWORD\"; then connected=1; break; fi;
           echo 'waiting for minio... attempt '$$i; sleep 2;
         done;
-        mc alias set local http://minio:9000 $$MINIO_ROOT_USER $$MINIO_ROOT_PASSWORD || { echo 'minio-init: cannot reach minio after 30s'; exit 1; };
-        mc mb -p local/$$STORAGE_BUCKET;
-        mc ilm rule remove --all --force local/$$STORAGE_BUCKET 2>/dev/null;
-        mc ilm rule add --expire-days 1 --tags 'committed=false' local/$$STORAGE_BUCKET;
+        [ "$$connected" = 1 ] || { echo 'minio-init: cannot reach minio after 30s'; exit 1; };
+        mc mb --ignore-existing \"local/$$STORAGE_BUCKET\";
+        mc ilm rule remove --all --force \"local/$$STORAGE_BUCKET\" 2>/dev/null || true;
+        mc ilm rule add --expire-days "$$MINIO_ORPHAN_EXPIRY_DAYS" --tags 'committed=false' \"local/$$STORAGE_BUCKET\";
         echo 'bucket ready: '$$STORAGE_BUCKET
       "
 
@@ -25,7 +28,7 @@ services:
     build:
       context: ..
       dockerfile: Dockerfile
-      target: migration
+      target: migration-dev
     env_file: ../.env
     environment:
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/nestjs_db
@@ -33,19 +36,13 @@ services:
   # Fake SMTP for dev/CI mail testing — UI at http://localhost:8025.
   # Prod deployments terminate at real SMTP via MAIL_HOST in .env.
   mailpit:
-    image: axllent/mailpit:v1.27.11
+    image: axllent/mailpit:v1.30.4
     restart: unless-stopped
     environment:
       TZ: ${TZ:-UTC}
     ports:
       - '${MAIL_PORT:-1025}:1025'
       - '${MAILPIT_UI_PORT:-8025}:8025'
-    healthcheck:
-      test: ['CMD', '/mailpit', '--help']
-      interval: 10s
-      timeout: 3s
-      retries: 5
-      start_period: 5s
 
   api:
     build:
@@ -58,6 +55,7 @@ services:
     env_file: ../.env
     environment:
       NODE_ENV: development
+      LOG_PRETTY: 'false'
       TZ: ${TZ:-UTC}
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/nestjs_db
       REDIS_CACHE_HOST: redis-cache
@@ -93,6 +91,7 @@ services:
     env_file: ../.env
     environment:
       NODE_ENV: development
+      LOG_PRETTY: 'false'
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/nestjs_db
       REDIS_CACHE_HOST: redis-cache
       REDIS_QUEUE_HOST: redis-queue
@@ -136,6 +135,7 @@ services:
     env_file: ../.env
     environment:
       NODE_ENV: development
+      LOG_PRETTY: 'false'
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/nestjs_db
       REDIS_CACHE_HOST: redis-cache
       REDIS_QUEUE_HOST: redis-queue

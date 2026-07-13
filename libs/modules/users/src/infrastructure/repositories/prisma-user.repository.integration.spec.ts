@@ -32,8 +32,8 @@ describe('PrismaUserRepository (integration)', () => {
   }, 90_000);
 
   afterAll(async () => {
-    await prismaService.onModuleDestroy();
-    await containers.teardown();
+    await prismaService?.onModuleDestroy();
+    await containers?.teardown();
   });
 
   beforeEach(async () => {
@@ -51,8 +51,8 @@ describe('PrismaUserRepository (integration)', () => {
   });
 
   it('returns null for unknown id', async () => {
-    // PK column is UUID — a syntactically-valid UUID that simply has no row
-    // exercises the not-found branch without tripping the Postgres type check.
+    // A syntactically valid UUID with no row exercises the not-found branch
+    // without tripping the Postgres type check.
     const result = await repository.findById('00000000-0000-0000-0000-000000000000');
     expect(result).toBeNull();
   });
@@ -106,7 +106,7 @@ describe('PrismaUserRepository (integration)', () => {
     });
 
     it('paginates 30 users into 3 pages of 10 with no overlaps', async () => {
-      // Insert 30 users with slightly different timestamps so ordering is stable
+      // The composite createdAt/id cursor is stable when timestamps match.
       for (let i = 0; i < 30; i++) {
         const user = UserFactory.create({ email: `bulk${i}@test.com` });
         await repository.save(user);
@@ -140,12 +140,12 @@ describe('PrismaUserRepository (integration)', () => {
       expect(seenIds.size).toBe(30);
     });
 
-    it('returns empty result for invalid cursor (falls back to first page)', async () => {
+    it('rejects an invalid cursor before querying Postgres', async () => {
       await repository.save(UserFactory.create({ email: 'any@test.com' }));
 
-      const result = await repository.findAllCursor({ limit: 10, startingAfter: '!!!bad!!!' });
-      // Invalid cursor is silently ignored → returns first page
-      expect(result.items.length).toBeGreaterThan(0);
+      await expect(
+        repository.findAllCursor({ limit: 10, startingAfter: '!!!bad!!!' }),
+      ).rejects.toMatchObject({ status: 400 });
     });
 
     it('filters by search term', async () => {

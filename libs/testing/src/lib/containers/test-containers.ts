@@ -8,10 +8,14 @@ export interface TestContainers {
 }
 
 export async function createTestContainers(): Promise<TestContainers> {
-  const [postgres, redis] = await Promise.all([
-    new PostgreSqlContainer('postgres:18-alpine').start(),
-    new RedisContainer('redis:7-alpine').start(),
-  ]);
+  const postgres = await new PostgreSqlContainer('postgres:18-alpine').start();
+  let redis: StartedRedisContainer;
+  try {
+    redis = await new RedisContainer('redis:7-alpine').start();
+  } catch (error) {
+    await postgres.stop().catch(() => undefined);
+    throw error;
+  }
 
   return {
     postgres,

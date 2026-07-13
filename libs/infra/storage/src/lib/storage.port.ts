@@ -15,6 +15,7 @@ export interface ObjectMetadata {
   contentType: string;
   size: number;
   bucket: string;
+  etag: string;
 }
 
 export interface PresignedUpload {
@@ -42,9 +43,14 @@ export interface StoragePort {
   head(key: string, bucket?: string): Promise<ObjectMetadata | null>;
   getSignedUrl(key: string, expiresIn?: number, bucket?: string): Promise<string>;
   delete(key: string, bucket?: string): Promise<void>;
-  // Tag committed=true so the lifecycle rule no longer expires the object
-  // (committed=false uploads are auto-expired; see docs/runbook.md).
-  commit(key: string, bucket?: string): Promise<void>;
+  // Copy a validated staging object to a fresh final key. The source ETag precondition closes
+  // the HEAD/read/copy race; callers must generate a new final key for every confirmation.
+  finalize(
+    sourceKey: string,
+    finalKey: string,
+    expectedEtag: string,
+    bucket?: string,
+  ): Promise<void>;
   // Read the first `byteCount` bytes of the object — used by the async
   // magic-byte verifier so the worker doesn't have to download whole files.
   readRange(key: string, byteCount: number, bucket?: string): Promise<Buffer>;

@@ -4,3 +4,4 @@ export { OutboxPublisher } from './lib/outbox-publisher.service';
 export { OutboxRelayService } from './lib/outbox-relay.service';
 export { OutboxRelayModule } from './lib/outbox-relay.module';
 export { OUTBOX_SCHEMA_VERSION } from './lib/outbox-schema-version';
+export { OUTBOX_RELAY_LEADERSHIP, type OutboxRelayLeadership } from './lib/outbox-relay-leadership';

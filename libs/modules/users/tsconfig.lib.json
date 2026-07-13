@@ -41,10 +41,10 @@
       "path": "../../testing/tsconfig.lib.json"
     },
     {
-      "path": "../../core/tsconfig.lib.json"
+      "path": "../../infra/i18n/tsconfig.lib.json"
     },
     {
-      "path": "../../infra/i18n/tsconfig.lib.json"
+      "path": "../../core/tsconfig.lib.json"
     },
     {
       "path": "../../shared/tsconfig.lib.json"

@@ -1,6 +1,13 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import request from 'supertest';
-import { createTestApp, cookieHeaderFromSetCookies, type TestAppContext } from './test-app';
+import {
+  createTestApp,
+  cookieHeaderFromSetCookies,
+  seedE2eStorageObject,
+  type TestAppContext,
+} from './test-app';
+
+const PNG_HEADER = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
 describe('Upload E2E', () => {
   let ctx: TestAppContext;
@@ -35,7 +42,7 @@ describe('Upload E2E', () => {
       expect(res.body.url.length).toBeGreaterThan(0);
       expect(typeof res.body.fields).toBe('object');
       expect(res.body.fields['Content-Type']).toBe('image/png');
-      expect(res.body.key).toMatch(/^uploads\/[A-Za-z0-9._-]+\.png$/);
+      expect(res.body.key).toMatch(/^uploads\/[0-9a-f-]{36}\/[0-9a-f-]{36}\.png$/i);
       expect(typeof res.body.bucket).toBe('string');
       expect(typeof res.body.expiresAt).toBe('string');
       // maxBytes must mirror UPLOAD_MAX_FILE_BYTES wired in test-app.ts (5 MB).
@@ -75,6 +82,27 @@ describe('Upload E2E', () => {
   });
 
   describe('POST /api/v1/upload/confirm', () => {
+    it('finalizes the object and persists durable verification state', async () => {
+      const presign = await request(ctx.app.getHttpServer())
+        .post('/api/v1/upload/presign')
+        .set('Cookie', cookie)
+        .send({ contentType: 'image/png' })
+        .expect(201);
+      seedE2eStorageObject(presign.body.key, PNG_HEADER, 'image/png');
+
+      const res = await request(ctx.app.getHttpServer())
+        .post('/api/v1/upload/confirm')
+        .set('Cookie', cookie)
+        .send({ key: presign.body.key })
+        .expect(200);
+
+      expect(res.body.key).toMatch(/^files\/[0-9a-f-]{36}\/[0-9a-f-]{36}\.png$/i);
+      const record = await ctx.prisma.db.storedFile.findUnique({
+        where: { sourceKey: presign.body.key },
+      });
+      expect(record).toMatchObject({ key: res.body.key, status: 'VERIFYING', size: 8 });
+    });
+
     it('returns 422 when key violates the uploads/<id>.<ext> pattern', async () => {
       // Path traversal attempt — regex anchors must reject this before the
       // controller ever calls storage.head().
@@ -98,10 +126,16 @@ describe('Upload E2E', () => {
     });
 
     it('returns 404 problem+json when key matches pattern but object does not exist on S3', async () => {
+      const presign = await request(ctx.app.getHttpServer())
+        .post('/api/v1/upload/presign')
+        .set('Cookie', cookie)
+        .send({ contentType: 'image/png' })
+        .expect(201);
+
       const res = await request(ctx.app.getHttpServer())
         .post('/api/v1/upload/confirm')
         .set('Cookie', cookie)
-        .send({ key: 'uploads/nonexistent-019dd1a5-1234.png' })
+        .send({ key: presign.body.key })
         .expect(404);
 
       expect(res.headers['content-type']).toMatch(/application\/problem\+json/);

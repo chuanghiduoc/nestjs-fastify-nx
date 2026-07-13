@@ -34,6 +34,17 @@ describe('module generator', () => {
     expect(tree.exists('libs/modules/orders/tsconfig.lib.json')).toBe(true);
     expect(tree.exists('libs/modules/orders/tsconfig.spec.json')).toBe(true);
     expect(tree.exists('libs/modules/orders/vitest.config.mts')).toBe(true);
+
+    const specConfig = readJson(tree, 'libs/modules/orders/tsconfig.spec.json');
+    expect(specConfig.compilerOptions.outDir).toBe(
+      '../../../dist/out-tsc/libs/modules/orders/spec',
+    );
+
+    const vitestConfig = tree.read('libs/modules/orders/vitest.config.mts', 'utf-8');
+    expect(vitestConfig).toContain('resolve: { tsconfigPaths: true }');
+    expect(vitestConfig).toContain("const isIntegrationRun = process.argv.includes('integration')");
+    expect(vitestConfig).toContain("exclude: isIntegrationRun ? [] : ['**/*.integration.spec.*']");
+    expect(vitestConfig).not.toContain('vite-tsconfig-paths');
   });
 
   it('generates full DDD domain layer', async () => {

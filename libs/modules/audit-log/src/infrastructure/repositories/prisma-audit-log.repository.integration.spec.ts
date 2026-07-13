@@ -31,8 +31,8 @@ describe('PrismaAuditLogRepository (integration)', () => {
   }, 90_000);
 
   afterAll(async () => {
-    await prismaService.onModuleDestroy();
-    await containers.teardown();
+    await prismaService?.onModuleDestroy();
+    await containers?.teardown();
   });
 
   beforeEach(async () => {
@@ -55,7 +55,7 @@ describe('PrismaAuditLogRepository (integration)', () => {
     expect(rows[0].action).toBe('users.registered');
   });
 
-  it('append same eventId twice → exactly 1 row (idempotent on outbox redelivery)', async () => {
+  it('appends the same eventId twice as exactly 1 row', async () => {
     // Simulate the outbox relay delivering the same event twice.
     // Both calls use the same deterministic id (derived from event.eventId).
     const deterministicId = 'bbbbbbbb-0000-0000-0000-000000000002';
@@ -68,13 +68,13 @@ describe('PrismaAuditLogRepository (integration)', () => {
     });
 
     await repository.append(entry);
-    // Second call must not throw — P2002 is caught and treated as a no-op.
+    // P2002 is caught and treated as a no-op on redelivery.
     await expect(repository.append(entry)).resolves.toBeUndefined();
 
     const rows = await prismaService.db.auditLog.findMany({
       where: { id: deterministicId },
     });
-    // Exactly one row — duplicate INSERT was silently dropped.
+    // The duplicate INSERT was silently dropped.
     expect(rows).toHaveLength(1);
   });
 

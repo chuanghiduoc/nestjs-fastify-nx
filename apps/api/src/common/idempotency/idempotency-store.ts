@@ -1,17 +1,40 @@
+import { randomUUID } from 'node:crypto';
 import type Redis from 'ioredis';
 
-export type IdempotencyState = 'pending' | 'completed';
+export interface PendingIdempotencyRecord {
+  state: 'pending';
+  fingerprint: string;
+  ownerToken: string;
+}
 
-export interface IdempotencyRecord {
-  state: IdempotencyState;
+export interface CompletedIdempotencyRecord {
+  state: 'completed';
   fingerprint: string;
   status?: number;
   contentType?: string;
   body?: string;
 }
 
+export type IdempotencyRecord = PendingIdempotencyRecord | CompletedIdempotencyRecord;
+
 export type AcquireResult =
-  { readonly acquired: true } | { readonly acquired: false; readonly record: IdempotencyRecord };
+  | { readonly acquired: true; readonly ownerToken: string }
+  | { readonly acquired: false; readonly record: IdempotencyRecord };
+
+const COMPLETE_IF_OWNER_SCRIPT = `
+local current = redis.call('get', KEYS[1])
+if not current then return 0 end
+local record = cjson.decode(current)
+if record.state ~= 'pending' or record.ownerToken ~= ARGV[1] then return 0 end
+redis.call('set', KEYS[1], ARGV[2], 'PX', ARGV[3])
+return 1`;
+
+const RELEASE_IF_OWNER_SCRIPT = `
+local current = redis.call('get', KEYS[1])
+if not current then return 0 end
+local record = cjson.decode(current)
+if record.state ~= 'pending' or record.ownerToken ~= ARGV[1] then return 0 end
+return redis.call('del', KEYS[1])`;
 
 // Redis-backed store for the idempotency plugin. `acquire` is the concurrency-safe primitive:
 // `SET NX` is atomic, so exactly one of N concurrent requests sharing a key wins the lock; the
@@ -30,9 +53,10 @@ export class IdempotencyStore {
   }
 
   async acquire(key: string, fingerprint: string): Promise<AcquireResult> {
-    const pending: IdempotencyRecord = { state: 'pending', fingerprint };
+    const ownerToken = randomUUID();
+    const pending: PendingIdempotencyRecord = { state: 'pending', fingerprint, ownerToken };
     const set = await this.redis.set(key, JSON.stringify(pending), 'PX', this.lockTtlMs, 'NX');
-    if (set === 'OK') return { acquired: true };
+    if (set === 'OK') return { acquired: true, ownerToken };
 
     const raw = await this.redis.get(key);
     if (raw === null) {
@@ -44,12 +68,25 @@ export class IdempotencyStore {
     return { acquired: false, record: JSON.parse(raw) as IdempotencyRecord };
   }
 
-  async complete(key: string, record: Omit<IdempotencyRecord, 'state'>): Promise<void> {
-    const completed: IdempotencyRecord = { ...record, state: 'completed' };
-    await this.redis.set(key, JSON.stringify(completed), 'PX', this.recordTtlMs);
+  async complete(
+    key: string,
+    ownerToken: string,
+    record: Omit<CompletedIdempotencyRecord, 'state'>,
+  ): Promise<boolean> {
+    const completed: CompletedIdempotencyRecord = { ...record, state: 'completed' };
+    const result = await this.redis.eval(
+      COMPLETE_IF_OWNER_SCRIPT,
+      1,
+      key,
+      ownerToken,
+      JSON.stringify(completed),
+      String(this.recordTtlMs),
+    );
+    return result === 1;
   }
 
-  async release(key: string): Promise<void> {
-    await this.redis.del(key);
+  async release(key: string, ownerToken: string): Promise<boolean> {
+    const result = await this.redis.eval(RELEASE_IF_OWNER_SCRIPT, 1, key, ownerToken);
+    return result === 1;
   }
 }

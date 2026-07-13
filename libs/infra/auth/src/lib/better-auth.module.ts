@@ -35,8 +35,8 @@ import { RolesGuard } from './roles.guard';
                 jobId,
                 attempts: 3,
                 backoff: { type: 'exponential', delay: 5000 },
-                removeOnComplete: { count: 100 },
-                removeOnFail: { count: 50 },
+                removeOnComplete: { age: 30 * 24 * 60 * 60, count: 10_000 },
+                removeOnFail: { age: 30 * 24 * 60 * 60, count: 1_000 },
               },
             );
           },

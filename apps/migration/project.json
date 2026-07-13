@@ -46,10 +46,10 @@
       "continuous": true,
       "executor": "@nx/js:node",
       "defaultConfiguration": "development",
-      "dependsOn": ["build"],
       "options": {
         "buildTarget": "migration:build",
-        "runBuildTargetDependencies": false
+        "runBuildTargetDependencies": false,
+        "watch": true
       },
       "configurations": {
         "development": {

@@ -10,7 +10,14 @@
 #   API_REPLICAS=5 ./scripts/swarm-local-test.sh up
 set -euo pipefail
 
-STACK=app
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
+source "${SCRIPT_DIR}/security/_lib.sh"
+cd "$(sec::repo_root)"
+sec::source_env SWARM_STACK_NAME IMAGE_REGISTRY IMAGE_NAMESPACE IMAGE_TAG \
+  COMPOSE_PROJECT_NAME API_REPLICAS WORKER_REPLICAS
+
+STACK="${SWARM_STACK_NAME:-app}"
 ACTION="${1:-up}"
 
 case "$ACTION" in
@@ -34,15 +41,13 @@ export WORKER_REPLICAS="${WORKER_REPLICAS:-2}"
 #   1. `docker compose config` resolves overlays + interpolation
 #   2. swarmify-compose.mjs flattens depends_on map → list (Swarm only takes short-form;
 #      compose drops the `!override` tag during merge so we re-canonicalise here)
-#   3. sed re-quotes cpus (Swarm rejects unquoted numerics) and unquotes
-#      published ports (Swarm requires integer ports)
-SCRIPT_DIR_SLT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+#   3. docker stack deploy consumes the canonical YAML from stdin
 docker compose \
+  --env-file .env \
   -f docker/compose.yml \
   -f docker/compose.prod.yml \
   -f docker/compose.swarm.yml \
   -f docker/compose.swarm-local-test.yml \
   config \
-  | node "${SCRIPT_DIR_SLT}/security/swarmify-compose.mjs" \
-  | sed -E "s/^([[:space:]]*cpus:)[[:space:]]+([0-9.]+)[[:space:]]*\$/\1 '\2'/; s/^([[:space:]]*published:)[[:space:]]+\"([0-9]+)\"[[:space:]]*\$/\1 \2/" \
+  | node "${SCRIPT_DIR}/security/swarmify-compose.mjs" \
   | docker stack deploy --resolve-image=never -c - "$STACK"

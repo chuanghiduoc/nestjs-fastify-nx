@@ -112,4 +112,16 @@ describe('MetricsIpAllowGuard', () => {
       expect(guard.canActivate(makeContext('::ffff:192.168.1.50'))).toBe(true);
     });
   });
+
+  describe('IPv6 CIDR ranges', () => {
+    it('allows an address inside the configured IPv6 subnet', () => {
+      const guard = makeGuard('2001:db8::/32');
+      expect(guard.canActivate(makeContext('2001:db8:1::5'))).toBe(true);
+    });
+
+    it('blocks an address outside the configured IPv6 subnet', () => {
+      const guard = makeGuard('2001:db8::/32');
+      expect(guard.canActivate(makeContext('2001:db9::1'))).toBe(false);
+    });
+  });
 });

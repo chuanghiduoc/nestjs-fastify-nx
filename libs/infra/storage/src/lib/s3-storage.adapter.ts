@@ -11,12 +11,12 @@ import { I18N_KEYS } from '@nestjs-fastify-nx/infra-i18n';
 import {
   S3Client,
   PutObjectCommand,
-  PutObjectTaggingCommand,
   DeleteObjectCommand,
   GetObjectCommand,
   HeadObjectCommand,
   HeadBucketCommand,
   CreateBucketCommand,
+  CopyObjectCommand,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { createPresignedPost } from '@aws-sdk/s3-presigned-post';
@@ -30,7 +30,7 @@ import type {
 } from './storage.port';
 
 // Applied at presign so the lifecycle rule expires uploads that never reach
-// /confirm; commit() flips it to committed=true.
+// /confirm; finalize() copies validated bytes to an immutable `files/` key.
 const UNCOMMITTED_TAGGING =
   '<Tagging><TagSet><Tag><Key>committed</Key><Value>false</Value></Tag></TagSet></Tagging>';
 
@@ -43,10 +43,15 @@ export class S3StorageAdapter implements StoragePort, OnModuleInit {
   private readonly bucket: string;
   private readonly endpoint: string;
   private readonly publicEndpoint: string;
+  private readonly downloadUrlExpiresSeconds: number;
 
   constructor(private readonly config: ConfigService) {
     this.endpoint = this.requireConfig('STORAGE_ENDPOINT', 'http://localhost:9000');
     this.bucket = this.requireConfig('STORAGE_BUCKET', 'uploads');
+    this.downloadUrlExpiresSeconds = this.config.get<number>(
+      'STORAGE_DOWNLOAD_URL_EXPIRES_SECONDS',
+      3_600,
+    );
 
     const region = this.requireConfig('STORAGE_REGION', 'us-east-1');
     const accessKeyId = this.requireConfig('STORAGE_ACCESS_KEY', 'minioadmin');
@@ -88,11 +93,14 @@ export class S3StorageAdapter implements StoragePort, OnModuleInit {
     } catch (err) {
       const status = (err as { $metadata?: { httpStatusCode?: number } })?.$metadata
         ?.httpStatusCode;
-      if (status !== 404 && status !== undefined) {
-        this.logger.warn(
-          { err, bucket: this.bucket, status },
-          'Bucket head check failed — skipping auto-create',
-        );
+      const code = (err as { name?: string })?.name;
+      const missing = status === 404 || code === 'NotFound' || code === 'NoSuchBucket';
+      if (!missing && status !== undefined) {
+        this.handleStartupFailure(err, `Bucket head check failed (status=${status})`);
+        return;
+      }
+      if (!missing) {
+        this.handleStartupFailure(err, 'Bucket head check failed');
         return;
       }
     }
@@ -105,8 +113,15 @@ export class S3StorageAdapter implements StoragePort, OnModuleInit {
       if (code === 'BucketAlreadyOwnedByYou' || code === 'BucketAlreadyExists') {
         return;
       }
-      this.logger.error({ err, bucket: this.bucket }, 'Failed to create storage bucket');
+      this.handleStartupFailure(err, 'Failed to create storage bucket');
     }
+  }
+
+  private handleStartupFailure(error: unknown, message: string): void {
+    if (process.env['NODE_ENV'] === 'production') {
+      throw new Error(`StorageModule: ${message} for "${this.bucket}"`, { cause: error });
+    }
+    this.logger.warn({ err: error, bucket: this.bucket }, `${message} — continuing in dev`);
   }
 
   private requireConfig(key: string, devDefault: string): string {
@@ -193,10 +208,14 @@ export class S3StorageAdapter implements StoragePort, OnModuleInit {
     const targetBucket = bucket ?? this.bucket;
     try {
       const res = await this.client.send(new HeadObjectCommand({ Bucket: targetBucket, Key: key }));
+      if (!res.ETag) {
+        throw new Error('S3 HeadObject returned no ETag');
+      }
       return {
         contentType: res.ContentType ?? 'application/octet-stream',
         size: Number(res.ContentLength ?? 0),
         bucket: targetBucket,
+        etag: res.ETag,
       };
     } catch (err) {
       const status = (err as { $metadata?: { httpStatusCode?: number } })?.$metadata
@@ -214,7 +233,11 @@ export class S3StorageAdapter implements StoragePort, OnModuleInit {
     }
   }
 
-  async getSignedUrl(key: string, expiresIn = 3600, bucket?: string): Promise<string> {
+  async getSignedUrl(
+    key: string,
+    expiresIn = this.downloadUrlExpiresSeconds,
+    bucket?: string,
+  ): Promise<string> {
     const targetBucket = bucket ?? this.bucket;
     try {
       const command = new GetObjectCommand({
@@ -250,24 +273,41 @@ export class S3StorageAdapter implements StoragePort, OnModuleInit {
     }
   }
 
-  // Flip committed=false → true so the lifecycle rule no longer expires it.
-  async commit(key: string, bucket?: string): Promise<void> {
+  async finalize(
+    sourceKey: string,
+    finalKey: string,
+    expectedEtag: string,
+    bucket?: string,
+  ): Promise<void> {
+    const targetBucket = bucket ?? this.bucket;
     try {
       await this.client.send(
-        new PutObjectTaggingCommand({
-          Bucket: bucket ?? this.bucket,
-          Key: key,
-          Tagging: { TagSet: [{ Key: 'committed', Value: 'true' }] },
+        new CopyObjectCommand({
+          Bucket: targetBucket,
+          Key: finalKey,
+          CopySource: encodeCopySource(targetBucket, sourceKey),
+          CopySourceIfMatch: expectedEtag,
+          MetadataDirective: 'COPY',
+          TaggingDirective: 'REPLACE',
+          Tagging: 'committed=true',
         }),
       );
     } catch (err) {
-      this.logger.error({ err, key }, 'S3 commit tag failed');
+      this.logger.error({ err, sourceKey, finalKey }, 'S3 finalize copy failed');
       throw new InternalServerErrorException({
         statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
         messageKey: I18N_KEYS.errors.storage.commit_failed,
-        message: 'Storage commit failed',
+        message: 'Storage finalize failed; retry confirmation',
       });
     }
+
+    // The source stays committed=false, so a delete failure is bounded by lifecycle TTL.
+    await this.delete(sourceKey, targetBucket).catch((err) => {
+      this.logger.warn(
+        { err, sourceKey, finalKey },
+        'finalized upload but failed to remove staging object',
+      );
+    });
   }
 
   async readRange(key: string, byteCount: number, bucket?: string): Promise<Buffer> {
@@ -294,4 +334,8 @@ export class S3StorageAdapter implements StoragePort, OnModuleInit {
       });
     }
   }
+}
+
+function encodeCopySource(bucket: string, key: string): string {
+  return [bucket, ...key.split('/')].map(encodeURIComponent).join('/');
 }

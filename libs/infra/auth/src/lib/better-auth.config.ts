@@ -127,7 +127,29 @@ export function createBetterAuth(
         role: { type: 'string', defaultValue: 'USER', input: false },
         status: { type: 'string', defaultValue: 'ACTIVE', input: false },
       },
-      changeEmail: { enabled: true },
+      changeEmail: {
+        enabled: true,
+        // Require control of the current verified mailbox before Better Auth sends the
+        // verification message to the new address. A stolen session cookie alone is insufficient.
+        sendChangeEmailConfirmation: async ({ user, newEmail, token }, request) => {
+          const lang = resolveRequestLocale(request);
+          const link = `${frontendBase}/verify-email?token=${encodeURIComponent(token)}`;
+          const subject = await translateOrFallback(i18n, I18N_KEYS.emails.email_change.subject, {
+            lang,
+          });
+          const body = await renderEmailChangeConfirmation(i18n, lang, {
+            name: user.name,
+            newEmail,
+            link,
+          });
+          await mail.send({
+            to: user.email,
+            subject,
+            body,
+            templateId: 'email-change-confirmation',
+          });
+        },
+      },
       // Email confirmation required — without it a stolen cookie deletes the account in one POST.
       deleteUser: {
         enabled: true,
@@ -150,12 +172,13 @@ export function createBetterAuth(
       },
     },
     account: {
+      // OAuth access/refresh/id tokens are credentials. Better Auth stores them as plaintext
+      // unless encryption is explicitly enabled.
+      encryptOAuthTokens: true,
       accountLinking: {
         enabled: true,
-        // Only providers that guarantee a verified email may auto-link to an
-        // existing account. Facebook can return an unverified email, so it is
-        // excluded — otherwise an attacker could hijack an account by that email.
-        trustedProviders: ['google', 'github'],
+        // Better Auth already links matching accounts when the provider confirms the email.
+        // Do not use trustedProviders here: it bypasses that provider verification signal.
       },
     },
     trustedOrigins,
@@ -239,6 +262,30 @@ async function renderEmailVerificationEmail(
 <p>${lead}</p>
 <p><a href="${ctx.link}">${ctx.link}</a></p>
 <p>${expiry}</p>
+</body></html>`;
+}
+
+async function renderEmailChangeConfirmation(
+  i18n: I18nService,
+  lang: string,
+  ctx: { name?: string; newEmail: string; link: string },
+): Promise<string> {
+  const keys = I18N_KEYS.emails.email_change;
+  const [hello, lead, target, notYou] = await Promise.all([
+    greeting(i18n, lang, keys, ctx.name),
+    translateOrFallback(i18n, keys.lead, { lang }),
+    translateOrFallback(i18n, keys.target, {
+      lang,
+      args: { newEmail: escapeHtml(ctx.newEmail) },
+    }),
+    translateOrFallback(i18n, keys.not_you, { lang }),
+  ]);
+  return `<!doctype html><html><body style="font-family:system-ui,sans-serif;line-height:1.5">
+<p>${hello}</p>
+<p>${lead}</p>
+<p>${target}</p>
+<p><a href="${ctx.link}">${ctx.link}</a></p>
+<p>${notYou}</p>
 </body></html>`;
 }
 

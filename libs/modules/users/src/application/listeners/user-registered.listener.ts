@@ -11,7 +11,9 @@ export class UserRegisteredListener {
 
   constructor(@InjectQueue(QUEUE_NAMES.EMAIL_NOTIFICATION) private readonly emailQueue: Queue) {}
 
-  @OnEvent('users.registered', { async: true })
+  // The outbox relay must await this deferred listener and receive queue failures. Nest's
+  // default `suppressErrors: true` would otherwise log the error and mark the row processed.
+  @OnEvent('users.registered', { async: true, promisify: true, suppressErrors: false })
   async handle(event: UserRegistered): Promise<void> {
     // BullMQ deduplicates on jobId — outbox redelivery never produces a second email.
     // BullMQ rejects ':' in jobIds — use '__' as separator.
@@ -29,8 +31,8 @@ export class UserRegisteredListener {
         jobId,
         attempts: 3,
         backoff: { type: 'exponential', delay: 5000 },
-        removeOnComplete: { count: 100 },
-        removeOnFail: { count: 50 },
+        removeOnComplete: { age: 30 * 24 * 60 * 60, count: 10_000 },
+        removeOnFail: { age: 30 * 24 * 60 * 60, count: 1_000 },
       },
     );
 

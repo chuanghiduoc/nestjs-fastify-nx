@@ -171,15 +171,15 @@ Never reference task IDs, callers, or "added for X" — those belong in PR descr
 
 ## Email Job Idempotency
 
-`EmailNotificationProcessor` uses a Redis SETNX guard keyed on `job.id` with a 24 h TTL. Any BullMQ job that fires twice within that window (stalled-recovery, manual re-queue) sends the email exactly once.
+`EmailNotificationProcessor` records successful sends in Redis by `job.id` for 30 days and reuses a deterministic SMTP `Message-ID`. Normal BullMQ redelivery after a completed attempt is therefore suppressed. Raw SMTP is still an at-least-once boundary: a worker crash after the SMTP server accepts a message but before Redis records success can redeliver it. The stable `Message-ID` lets providers and mail clients deduplicate that rare case.
 
-**Consequence for jobId design:** every email job whose `jobId` is reused within 24 h will be silently deduplicated. This is correct for stalled-recovery (same logical send), but wrong if the intent is a genuine re-send triggered by the user.
+**Consequence for jobId design:** every email job whose `jobId` is reused within 30 days will be silently deduplicated. This is correct for stalled-recovery (same logical send), but wrong if the intent is a genuine re-send triggered by the user.
 
 Rules for producers that call `queue.add('email-notification', payload, { jobId: '...' })`:
 
 - **Single-fire flows** (welcome email, password-reset, verification): use `${purpose}__${event.eventId}` — the outbox eventId is unique per event, so no dedup window applies across separate sends.
 - **Resendable flows** (manual "resend verification", ops retrigger): include a timestamp or nonce — e.g. `${templateId}__${to}__${Date.now()}` — so each user-initiated resend produces a distinct jobId and bypasses the SETNX guard.
-- **Anti-pattern** (will silently drop resends within 24 h): `${userId}__${type}` with no timestamp. If a user requests two verification emails within 24 h only the first will be delivered.
+- **Anti-pattern** (will silently drop resends within 30 days): `${userId}__${type}` with no timestamp. If a user requests two verification emails within that window only the first will be delivered.
 
 ## HTTP Idempotency & Request Timeout
 

@@ -1,16 +1,18 @@
 import { defineConfig } from 'vitest/config';
-import tsconfigPaths from 'vite-tsconfig-paths';
+
+const isIntegrationRun = process.argv.includes('integration');
 
 export default defineConfig(() => ({
   root: __dirname,
   cacheDir: '../../../node_modules/.vite/libs/infra/redis',
-  plugins: [tsconfigPaths()],
+  resolve: { tsconfigPaths: true },
   test: {
     name: 'infra-redis',
     watch: false,
     globals: true,
     environment: 'node',
     include: ['{src,tests}/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
+    exclude: isIntegrationRun ? [] : ['**/*.integration.spec.*'],
     reporters: ['default'],
     setupFiles: ['../../../vitest.setup.ts'],
     passWithNoTests: true,

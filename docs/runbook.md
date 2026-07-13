@@ -382,9 +382,9 @@ The `bullmq_job_duration_seconds` histogram is NOT inflated — each replica obs
 
 **Symptom:** S3 bucket size grows beyond what active users justify; many objects under `uploads/` were never referenced from any domain entity.
 
-**Root cause:** The upload flow is presign → browser POST → confirm. If the browser uploads to S3 but the client never calls `POST /api/v1/upload/confirm`, the object lives forever — the backend never learned about that key.
+**Root cause:** The upload flow is presign -> browser POST -> confirm. A client can abandon staging, or the API can crash between S3 finalization and its HTTP response. Final objects can also outlive a user unless ownership is tracked durably.
 
-**Mitigation in code:** the presign step tags every object `committed=false` at creation time; `UploadController.confirm()` then calls `storage.commit(key)` after MIME + size pass, which flips the tag to `committed=true`. Objects left at `committed=false` are orphans and are expired by the lifecycle rule below. In dev, `minio-init` (compose.dev.yml) applies this rule automatically; in prod apply it once at infra time.
+**Mitigation in code:** presign writes staging under `uploads/` tagged `committed=false`. Confirm creates a `stored_files` row before copying the exact ETag-checked version to a fresh `files/` key, advances it to `VERIFYING`, then durably enqueues verification. Retrying after a lost response recovers the same database record and final object. `StoredFileCleanupTask` claims stale/rejected rows with optimistic concurrency before deleting S3 data, and removes committed files whose user no longer exists. Abandoned staging remains bounded by the lifecycle rule below.
 
 **Required bucket lifecycle rule (apply at infra time, NOT in code):**
 

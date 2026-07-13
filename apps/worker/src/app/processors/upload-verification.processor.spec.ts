@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Job } from 'bullmq';
 import type { StoragePort } from '@nestjs-fastify-nx/infra-storage';
+import type { PrismaService } from '@nestjs-fastify-nx/infra-database';
 import { UploadVerificationProcessor } from './upload-verification.processor';
 import type { UploadVerificationPayload } from './upload-verification.processor';
 
@@ -31,56 +32,71 @@ function makeStorage(readResult: Buffer | Uint8Array | Error): StoragePort {
   } as unknown as StoragePort;
 }
 
+function makePrisma(): PrismaService {
+  return {
+    db: {
+      storedFile: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
+    },
+  } as unknown as PrismaService;
+}
+
 describe('UploadVerificationProcessor', () => {
   let processor: UploadVerificationProcessor;
+  let prisma: PrismaService;
 
   beforeEach(() => {
     vi.restoreAllMocks();
+    prisma = makePrisma();
   });
 
   it('does not delete when magic bytes match declared MIME', async () => {
     const storage = makeStorage(PNG_HEADER);
-    processor = new UploadVerificationProcessor(storage);
+    processor = new UploadVerificationProcessor(storage, prisma);
     await processor.process(
       makeJob({ key: 'uploads/img.png', declaredContentType: 'image/png', bucket: 'b' }),
     );
     expect(storage.delete).not.toHaveBeenCalled();
     expect(storage.readRange).toHaveBeenCalledWith('uploads/img.png', 16, 'b');
+    expect(prisma.db.storedFile.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ status: 'READY' }) }),
+    );
   });
 
   it('deletes the object when declared MIME mismatches detected MIME', async () => {
     const storage = makeStorage(JPEG_HEADER);
-    processor = new UploadVerificationProcessor(storage);
+    processor = new UploadVerificationProcessor(storage, prisma);
     await processor.process(
       makeJob({ key: 'uploads/tampered.png', declaredContentType: 'image/png', bucket: 'b' }),
     );
     expect(storage.delete).toHaveBeenCalledWith('uploads/tampered.png', 'b');
+    expect(prisma.db.storedFile.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ status: 'REJECTED' }) }),
+    );
   });
 
   it('deletes the object when magic bytes match no known signature', async () => {
     const storage = makeStorage(UNKNOWN_BLOB);
-    processor = new UploadVerificationProcessor(storage);
+    processor = new UploadVerificationProcessor(storage, prisma);
     await processor.process(
       makeJob({ key: 'uploads/exec.bin', declaredContentType: 'image/png', bucket: 'b' }),
     );
     expect(storage.delete).toHaveBeenCalledWith('uploads/exec.bin', 'b');
   });
 
-  it('swallows errors from storage.delete after a mismatch (best-effort cleanup)', async () => {
+  it('propagates storage.delete errors so BullMQ retries cleanup', async () => {
     const storage = makeStorage(JPEG_HEADER);
     (storage.delete as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('s3 down'));
-    processor = new UploadVerificationProcessor(storage);
-    // No throw — delete failure is observability concern, not a job failure.
+    processor = new UploadVerificationProcessor(storage, prisma);
     await expect(
       processor.process(
         makeJob({ key: 'uploads/x.png', declaredContentType: 'image/png', bucket: 'b' }),
       ),
-    ).resolves.toBeUndefined();
+    ).rejects.toThrow('s3 down');
   });
 
   it('lets readRange errors propagate so BullMQ retries the job', async () => {
     const storage = makeStorage(new Error('S3 GetObject returned no readable body'));
-    processor = new UploadVerificationProcessor(storage);
+    processor = new UploadVerificationProcessor(storage, prisma);
     await expect(
       processor.process(
         makeJob({ key: 'uploads/x.png', declaredContentType: 'image/png', bucket: 'b' }),
@@ -91,7 +107,7 @@ describe('UploadVerificationProcessor', () => {
 
   it('accepts a Uint8Array (not just Buffer) from storage.readRange', async () => {
     const storage = makeStorage(new Uint8Array(PNG_HEADER));
-    processor = new UploadVerificationProcessor(storage);
+    processor = new UploadVerificationProcessor(storage, prisma);
     await processor.process(
       makeJob({ key: 'uploads/img.png', declaredContentType: 'image/png', bucket: 'b' }),
     );

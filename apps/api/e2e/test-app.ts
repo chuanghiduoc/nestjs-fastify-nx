@@ -12,12 +12,21 @@ import { PrismaService } from '@nestjs-fastify-nx/infra-database';
 import { STORAGE_PORT, type StoragePort } from '@nestjs-fastify-nx/infra-storage';
 import { DatabaseCleaner } from '@nestjs-fastify-nx/testing';
 import { AppModule } from '../src/app/app.module';
-import { applyFastifyErrorHandler } from '../src/common/filters/fastify-error-handler';
 import { registerIdempotency } from '../src/common/idempotency/register-idempotency';
 import { ProblemDetailsValidationPipe } from '../src/common/pipes';
+import { applyFastifyProblemDetailsHook } from '../src/common/filters/fastify-error-handler';
 
 // In-process stub — e2e covers controller logic, not the S3 wire format.
 // Real S3 paths are unit-tested in s3-storage.adapter.spec.ts.
+const e2eObjects = new Map<
+  string,
+  { body: Buffer; contentType: string; bucket: string; etag: string }
+>();
+
+export function seedE2eStorageObject(key: string, body: Buffer, contentType: string): void {
+  e2eObjects.set(key, { body, contentType, bucket: 'uploads', etag: '"e2e-etag"' });
+}
+
 const e2eStorageStub: StoragePort = {
   upload: async (key, body, options) => ({
     key,
@@ -34,16 +43,35 @@ const e2eStorageStub: StoragePort = {
     maxBytes: options.maxBytes,
   }),
   // head() returns null for any key — confirm tests rely on this for the 404 path.
-  head: async () => null,
+  head: async (key) => {
+    const object = e2eObjects.get(key);
+    return object
+      ? {
+          contentType: object.contentType,
+          size: object.body.length,
+          bucket: object.bucket,
+          etag: object.etag,
+        }
+      : null;
+  },
   getSignedUrl: async (key) => `http://e2e-stub/signed/${key}`,
-  delete: async () => undefined,
-  commit: async () => undefined,
-  readRange: async () => Buffer.alloc(0),
+  delete: async (key) => {
+    e2eObjects.delete(key);
+  },
+  finalize: async (sourceKey, finalKey) => {
+    const source = e2eObjects.get(sourceKey);
+    if (!source) throw new Error('source object missing');
+    e2eObjects.set(finalKey, source);
+    e2eObjects.delete(sourceKey);
+  },
+  readRange: async (key, byteCount) =>
+    e2eObjects.get(key)?.body.subarray(0, byteCount) ?? Buffer.alloc(0),
 };
 
 export interface TestAppContext {
   app: NestFastifyApplication;
   cleaner: DatabaseCleaner;
+  prisma: PrismaService;
 }
 
 // Mirrors main.ts (prefix, ProblemDetailsValidationPipe, Better Auth mount)
@@ -104,10 +132,6 @@ export async function createTestApp(): Promise<TestAppContext> {
   // up users.
   const fastify = app.getHttpAdapter().getInstance();
 
-  // Wire RFC 9457 problem+json error handler — mirrors main.ts so 4xx/5xx from
-  // the body parser (FST_ERR_CTP_BODY_TOO_LARGE → 413) are correctly shaped.
-  applyFastifyErrorHandler(fastify);
-
   // Mirror main.ts idempotency wiring against the E2E Redis (db=5) so Idempotency-Key replay is
   // exercised end-to-end. onClose quits the client when app.close() runs in afterAll.
   const idempotencyRedis = new Redis({ host: redisHost, port: Number(redisPort), db: 5 });
@@ -142,15 +166,7 @@ export async function createTestApp(): Promise<TestAppContext> {
     }),
   });
 
-  fastify.addHook('onSend', (_req, reply, _payload, done) => {
-    if (
-      reply.statusCode === 429 &&
-      !reply.getHeader('content-type')?.toString().includes('problem+json')
-    ) {
-      reply.header('content-type', 'application/problem+json');
-    }
-    done();
-  });
+  applyFastifyProblemDetailsHook(fastify);
 
   await fastify.register(fastifyMultipart, {
     limits: {
@@ -199,8 +215,9 @@ export async function createTestApp(): Promise<TestAppContext> {
   await app.init();
   await fastify.ready();
 
-  const cleaner = new DatabaseCleaner(app.get(PrismaService).db);
-  return { app, cleaner };
+  const prisma = app.get(PrismaService);
+  const cleaner = new DatabaseCleaner(prisma.db);
+  return { app, cleaner, prisma };
 }
 
 // Joins multiple Set-Cookie values into one Cookie request header. Better Auth

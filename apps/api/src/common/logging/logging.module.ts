@@ -5,7 +5,7 @@ import type { IncomingMessage } from 'http';
 import { buildPinoLoggerConfig } from '@nestjs-fastify-nx/infra-observability';
 import { REQUEST_CONTEXT_KEYS } from '@nestjs-fastify-nx/core';
 import { CorrelationIdMiddleware } from './correlation-id.middleware';
-import { resolveRequestId, sanitizeClientId } from './request-id';
+import { resolveCorrelationId, resolveRequestId } from './request-id';
 
 @Module({
   imports: [
@@ -20,7 +20,10 @@ import { resolveRequestId, sanitizeClientId } from './request-id';
         mount: true,
         setup: (cls, req: IncomingMessage) => {
           const requestId = resolveRequestId(req.headers as Record<string, unknown>);
-          const correlationId = sanitizeClientId(req.headers['x-correlation-id']) ?? requestId;
+          const correlationId = resolveCorrelationId(
+            req.headers as Record<string, unknown>,
+            requestId,
+          );
           cls.set(REQUEST_CONTEXT_KEYS.requestId, requestId);
           cls.set(REQUEST_CONTEXT_KEYS.correlationId, correlationId);
         },
@@ -34,6 +37,7 @@ import { resolveRequestId, sanitizeClientId } from './request-id';
 })
 export class LoggingModule implements NestModule {
   configure(consumer: MiddlewareConsumer): void {
-    consumer.apply(CorrelationIdMiddleware).forRoutes('*');
+    // Nest 11's Fastify middleware matcher requires a named optional wildcard.
+    consumer.apply(CorrelationIdMiddleware).forRoutes('{*splat}');
   }
 }

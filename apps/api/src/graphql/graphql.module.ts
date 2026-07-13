@@ -1,25 +1,28 @@
 import { Module } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { GraphQLModule } from '@nestjs/graphql';
-import { MercuriusDriver, MercuriusDriverConfig } from '@nestjs/mercurius';
+import { MercuriusDriver, type MercuriusDriverConfig } from '@nestjs/mercurius';
 import { NoSchemaIntrospectionCustomRule } from 'graphql';
+import type { FastifyReply, FastifyRequest } from 'fastify';
 import { UsersModule } from '@nestjs-fastify-nx/modules-users';
+import type { EnvConfig } from '../config/env.validation';
 import { UserResolver } from './resolvers/user.resolver';
-
-const isProduction = process.env['NODE_ENV'] === 'production';
 
 @Module({
   imports: [
-    GraphQLModule.forRoot<MercuriusDriverConfig>({
+    GraphQLModule.forRootAsync<MercuriusDriverConfig>({
       driver: MercuriusDriver,
-      autoSchemaFile: true,
-      // GraphiQL IDE only in dev. In prod, `NoSchemaIntrospectionCustomRule`
-      // makes the validator reject any `__schema` / `__type` field so the
-      // schema cannot be enumerated even by authenticated clients — they
-      // should consume the generated libs/api-client instead.
-      graphiql: isProduction ? false : 'graphiql',
-      path: '/graphql',
-      context: (req, reply) => ({ req, reply }),
-      validationRules: isProduction ? [NoSchemaIntrospectionCustomRule] : [],
+      inject: [ConfigService],
+      useFactory: (config: ConfigService<EnvConfig, true>) => {
+        const isProduction = config.get('NODE_ENV', { infer: true }) === 'production';
+        return {
+          autoSchemaFile: true,
+          graphiql: isProduction ? false : 'graphiql',
+          path: '/graphql',
+          context: (req: FastifyRequest, reply: FastifyReply) => ({ req, reply }),
+          validationRules: isProduction ? [NoSchemaIntrospectionCustomRule] : [],
+        };
+      },
     }),
     UsersModule,
   ],

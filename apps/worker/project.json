@@ -47,10 +47,11 @@
       "continuous": true,
       "executor": "@nx/js:node",
       "defaultConfiguration": "development",
-      "dependsOn": ["build"],
       "options": {
         "buildTarget": "worker:build",
-        "runBuildTargetDependencies": false
+        "runBuildTargetDependencies": false,
+        "runtimeArgs": ["--env-file-if-exists=.env"],
+        "watch": true
       },
       "configurations": {
         "development": {

@@ -45,7 +45,9 @@ fi
 
 cd "$(sec::repo_root)"
 
-sec::source_env
+sec::source_env IMAGE_REGISTRY IMAGE_NAMESPACE IMAGE_TAG STORAGE_ENDPOINT MAIL_HOST \
+  API_PORT MINIO_PORT MINIO_CONSOLE_PORT MAILPIT_HTTP_PORT COMPOSE_PROJECT_NAME SWARM_STACK_NAME
+sec::source_env PROD_STARTUP_TIMEOUT_SECONDS
 
 IMAGE_REGISTRY="${IMAGE_REGISTRY:-ghcr.io}"
 IMAGE_NAMESPACE="${IMAGE_NAMESPACE:-}"
@@ -58,6 +60,7 @@ if [[ -z "$IMAGE_NAMESPACE" ]]; then
   IMAGE_NAMESPACE="local"
 fi
 
+export IMAGE_REGISTRY IMAGE_NAMESPACE IMAGE_TAG
 PREFIX="${IMAGE_REGISTRY}/${IMAGE_NAMESPACE}"
 
 sec::log "Building production images under ${PREFIX}/*:${IMAGE_TAG}"
@@ -69,31 +72,21 @@ sec::log "Building production images under ${PREFIX}/*:${IMAGE_TAG}"
 # so disable default attestations explicitly — they double the export phase.
 export BUILDX_NO_DEFAULT_ATTESTATIONS=1
 
-build() {
-  local app="$1" dockerfile="$2" target="${3:-}"
-  local target_args=()
-  [[ -n "$target" ]] && target_args=(--target "$target")
-  echo ""
-  echo "--- ${app} ---"
-  # `"${arr[@]+"${arr[@]}"}"` — expanding an empty array under `set -u` is an
-  # "unbound variable" error on bash < 4.4 (macOS ships 3.2). This idiom is a
-  # no-op on modern bash and safe everywhere.
-  docker buildx build -f "$dockerfile" "${target_args[@]+"${target_args[@]}"}" \
-    --load -t "${PREFIX}/${app}:${IMAGE_TAG}" .
-}
 
 # api/worker/scheduler/migration all share a single Dockerfile so BuildKit
-# reuses the `workspace` stage (install + COPY + prisma generate + nx sync)
-# across all four images — one install round-trip instead of two.
-build api       Dockerfile api
-build worker    Dockerfile worker
-build scheduler Dockerfile scheduler
-build migration Dockerfile migration
+# receives one Bake graph, so the shared workspace/build stage executes once.
+docker buildx bake -f docker-bake.hcl production --load
 
 echo ""
 sec::ok "All production images built:"
-docker images --format 'table {{.Repository}}:{{.Tag}}\t{{.Size}}\t{{.CreatedSince}}' \
-  | grep -E "^${PREFIX}/(api|worker|scheduler|migration):${IMAGE_TAG}\b" || true
+printf '  %-14s %10s\n' 'service' 'size'
+printf '  %-14s %10s\n' '-------' '----'
+for svc in api worker scheduler migration; do
+  image="${PREFIX}/${svc}:${IMAGE_TAG}"
+  size_bytes=$(docker image inspect "$image" --format '{{.Size}}')
+  size_mb=$(awk -v b="$size_bytes" 'BEGIN { printf "%.0f", b / 1024 / 1024 }')
+  printf '  %-14s %7s MB\n' "$svc" "$size_mb"
+done
 
 # Image vulnerability scanning is the CI gate's job (release.yml runs Trivy per
 # app and uploads SARIF to GitHub Security). Run ./scripts/security/scan-images.sh
@@ -117,9 +110,10 @@ sec::log "Tearing down any previous local stack"
 
 COMPOSE_PROJECT="${COMPOSE_PROJECT_NAME:-nestjs-fastify-nx}"
 
-# 1. Swarm leftover (swarm-local-test.sh up creates `app_*` services).
-if docker stack ls --format '{{.Name}}' 2>/dev/null | grep -q '^app$'; then
-  docker stack rm app >/dev/null 2>&1 || true
+# 1. Swarm leftover (swarm-local-test.sh uses SWARM_STACK_NAME, default `app`).
+SWARM_STACK_NAME="${SWARM_STACK_NAME:-app}"
+if docker stack ls --format '{{.Name}}' 2>/dev/null | grep -Fxq "$SWARM_STACK_NAME"; then
+  docker stack rm "$SWARM_STACK_NAME" >/dev/null 2>&1 || true
   # Swarm removal is async — wait a beat for services to fully unwind so the
   # compose up below doesn't race on overlapping networks.
   sleep 5
@@ -172,8 +166,29 @@ fi
 
 echo ""
 sec::log "Booting prod stack"
-docker compose -p "$COMPOSE_PROJECT" --env-file .env "${COMPOSE_FILES[@]}" \
-  up -d --remove-orphans
+if ! docker compose -p "$COMPOSE_PROJECT" --env-file .env "${COMPOSE_FILES[@]}" \
+  up -d --remove-orphans --wait --wait-timeout "${PROD_STARTUP_TIMEOUT_SECONDS:-120}"; then
+  sec::err "Production stack did not become healthy"
+  docker compose -p "$COMPOSE_PROJECT" --env-file .env "${COMPOSE_FILES[@]}" ps -a || true
+  docker compose -p "$COMPOSE_PROJECT" --env-file .env "${COMPOSE_FILES[@]}" logs \
+    --tail=100 api worker scheduler migration minio-init || true
+  exit 1
+fi
+
+API_BASE="http://127.0.0.1:${API_PORT:-3000}"
+LIVE_CODE=$(curl -sS -o /dev/null --max-time 10 -w '%{http_code}' \
+  "${API_BASE}/api/v1/health/live" || true)
+READY_CODE=$(curl -sS -o /dev/null --max-time 10 -w '%{http_code}' \
+  "${API_BASE}/api/v1/health/ready" || true)
+DOCS_CODE=$(curl -sS -o /dev/null --max-time 10 -w '%{http_code}' \
+  "${API_BASE}/docs-json" || true)
+if [[ "$LIVE_CODE" != "200" || "$READY_CODE" != "200" || "$DOCS_CODE" != "404" ]]; then
+  sec::err "Production smoke failed (live=${LIVE_CODE}, ready=${READY_CODE}, docs=${DOCS_CODE})"
+  docker compose -p "$COMPOSE_PROJECT" --env-file .env "${COMPOSE_FILES[@]}" logs \
+    --tail=100 api worker scheduler migration || true
+  exit 1
+fi
+sec::ok "Production smoke passed (live=200, ready=200, docs hidden=404)"
 
 echo ""
 sec::ok "Stack up. Useful endpoints:"
@@ -182,7 +197,8 @@ echo "    Healthcheck: http://localhost:${API_PORT:-3000}/api/v1/health"
 echo "    OpenAPI:     http://localhost:${API_PORT:-3000}/docs-json  (gated by NODE_ENV — prod hides it)"
 echo "    Bull Board:  http://localhost:${API_PORT:-3000}/api/admin/queues"
 if [[ $USE_LOCAL_S3 -eq 1 ]]; then
-  echo "    MinIO UI:    http://localhost:9001  (user: localtest-access-key)"
+  echo "    MinIO API:   http://localhost:${MINIO_PORT:-9000}"
+  echo "    MinIO UI:    http://localhost:${MINIO_CONSOLE_PORT:-9001}  (user: localtest-access-key)"
 fi
 if [[ $USE_LOCAL_SMTP -eq 1 ]]; then
   echo "    Mailpit UI:  http://localhost:${MAILPIT_HTTP_PORT:-8025}"

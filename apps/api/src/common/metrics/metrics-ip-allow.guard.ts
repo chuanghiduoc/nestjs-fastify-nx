@@ -1,68 +1,62 @@
 import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { FastifyRequest } from 'fastify';
+import { BlockList, isIP } from 'node:net';
 import type { EnvConfig } from '../../config/env.validation';
 
-// Fails closed on empty METRICS_ALLOW_CIDRS — loopback always allowed; Kubernetes: set pod CIDR.
+// Fails closed on empty/invalid METRICS_ALLOW_CIDRS. Loopback is always allowed.
 @Injectable()
 export class MetricsIpAllowGuard implements CanActivate {
-  private readonly allowedCidrs: string[];
+  private readonly allowlist = new BlockList();
+  private readonly hasRules: boolean;
 
   constructor(private readonly config: ConfigService<EnvConfig, true>) {
     const raw = config.get('METRICS_ALLOW_CIDRS', { infer: true }) ?? '';
-    this.allowedCidrs = raw
+    const rules = raw
       .split(',')
-      .map((s) => s.trim())
+      .map((value) => value.trim())
       .filter(Boolean);
+    let validRules = 0;
+    for (const rule of rules) {
+      if (this.addRule(rule)) validRules++;
+    }
+    this.hasRules = validRules > 0;
   }
 
   canActivate(context: ExecutionContext): boolean {
     const request = context.switchToHttp().getRequest<FastifyRequest>();
-    const ip = this.extractIp(request);
+    const ip = request.socket?.remoteAddress ?? '';
 
     if (ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1') {
       return true;
     }
+    if (!this.hasRules) return false;
 
-    if (this.allowedCidrs.length === 0) {
+    const family = isIP(ip);
+    return family !== 0 && this.allowlist.check(ip, family === 6 ? 'ipv6' : 'ipv4');
+  }
+
+  private addRule(rule: string): boolean {
+    const separator = rule.lastIndexOf('/');
+    const address = separator === -1 ? rule : rule.slice(0, separator);
+    const family = isIP(address);
+    if (family === 0) return false;
+    const type = family === 6 ? 'ipv6' : 'ipv4';
+
+    try {
+      if (separator === -1) {
+        this.allowlist.addAddress(address, type);
+      } else {
+        const prefixText = rule.slice(separator + 1);
+        if (!/^\d+$/.test(prefixText)) return false;
+        const prefix = Number(prefixText);
+        const maxPrefix = family === 6 ? 128 : 32;
+        if (prefix > maxPrefix) return false;
+        this.allowlist.addSubnet(address, prefix, type);
+      }
+      return true;
+    } catch {
       return false;
     }
-
-    return this.allowedCidrs.some((cidr) => this.ipMatchesCidr(ip, cidr));
-  }
-
-  private extractIp(request: FastifyRequest): string {
-    // socket.remoteAddress is direct TCP peer; req.ip is XFF-spoofable when trustProxy is set.
-    return request.socket?.remoteAddress ?? '';
-  }
-
-  private ipMatchesCidr(ip: string, cidr: string): boolean {
-    if (!cidr.includes('/')) {
-      return ip === cidr;
-    }
-
-    const [network, prefixStr] = cidr.split('/');
-    const prefix = parseInt(prefixStr, 10);
-
-    // JS bitwise shift is undefined for prefix > 32 — validate before shifting.
-    if (!Number.isInteger(prefix) || prefix < 0 || prefix > 32 || !network) return false;
-
-    const ipNum = this.ipv4ToNumber(ip.replace('::ffff:', ''));
-    const netNum = this.ipv4ToNumber(network);
-
-    if (ipNum === null || netNum === null) {
-      return ip === network;
-    }
-
-    const mask = prefix === 0 ? 0 : (~0 << (32 - prefix)) >>> 0;
-    return (ipNum & mask) === (netNum & mask);
-  }
-
-  private ipv4ToNumber(ip: string): number | null {
-    const parts = ip.split('.');
-    if (parts.length !== 4) return null;
-    const nums = parts.map(Number);
-    if (nums.some((n) => isNaN(n) || n < 0 || n > 255)) return null;
-    return ((nums[0] << 24) | (nums[1] << 16) | (nums[2] << 8) | nums[3]) >>> 0;
   }
 }

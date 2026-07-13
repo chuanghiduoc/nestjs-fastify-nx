@@ -2,6 +2,7 @@ import {
   Injectable,
   Logger,
   ConflictException,
+  BadRequestException,
   HttpStatus,
   InternalServerErrorException,
 } from '@nestjs/common';
@@ -125,17 +126,21 @@ export class PrismaUserRepository implements UserRepositoryPort {
     }
     if (startingAfter) {
       const decoded = decodeCursor(startingAfter);
-      if (decoded) {
-        where.AND = [
-          {
-            OR: [
-              { createdAt: { lt: decoded.createdAt } },
-              { AND: [{ createdAt: decoded.createdAt }, { id: { lt: decoded.id } }] },
-            ],
-          },
-        ];
+      if (!decoded) {
+        throw new BadRequestException({
+          statusCode: HttpStatus.BAD_REQUEST,
+          code: 'invalid_cursor',
+          message: 'startingAfter is not a valid cursor',
+        });
       }
-      // Invalid cursor → first page; decodeCursor returns null silently.
+      where.AND = [
+        {
+          OR: [
+            { createdAt: { lt: decoded.createdAt } },
+            { AND: [{ createdAt: decoded.createdAt }, { id: { lt: decoded.id } }] },
+          ],
+        },
+      ];
     }
     try {
       const rows = await this.prisma.dbRead.user.findMany({

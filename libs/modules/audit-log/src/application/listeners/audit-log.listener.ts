@@ -17,7 +17,7 @@ function isAuditPayload(value: unknown): value is AuditPayload {
 export class AuditLogListener {
   constructor(private readonly commandBus: CommandBus) {}
 
-  @OnEvent('users.*', { async: true, promisify: true })
+  @OnEvent('users.*', { async: true, promisify: true, suppressErrors: false })
   async handleUserEvent(event: DomainEvent): Promise<void> {
     const payload = isAuditPayload(event.payload) ? event.payload : {};
     const { ip, userAgent, ...metadata } = payload;

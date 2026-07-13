@@ -14,14 +14,15 @@ Every request is identified by one id shared across all three signals and the HT
   **OpenTelemetry trace id** (W3C 128-bit hex). So the value in a client's response header is
   the same id you search for in the trace backend and in the logs — no mapping table. It is a
   **search key only** — it never controls the trace context (that is owned by OTel; see tracing).
-- Precedence: **validated** client-supplied `X-Request-Id` → active `trace_id` → random 128-bit
-  hex (`generateCorrelationId()`, when no valid trace id is available). Set in
+- Precedence: trusted-gateway `X-Request-Id` (only with `TRUST_INBOUND_REQUEST_ID=true`) → active
+  `trace_id` → random 128-bit hex (`generateCorrelationId()`, when no valid trace id is available). Set in
   `CorrelationIdMiddleware` / the CLS setup and mirrored by `fastify-error-handler` for
   Fastify-level failures.
 - **Client ids are sanitized at the boundary** (`sanitizeClientId`, `request-id.ts`): only
   `[A-Za-z0-9._~-]{1,128}` is accepted. Anything with a newline/control char (log-injection
   vector) or over the length cap (log/trace-storage bloat) is discarded and a fresh id is minted —
-  the raw client value never reaches a log line or span attribute.
+  the raw client value never reaches a log line or span attribute. A public caller cannot select
+  the per-request support id even if its value is syntactically valid.
 - **`X-Correlation-Id`** spans a client journey (multiple requests). Same sanitization; defaults to
   the request id when the client omits it. A client that wants to tie several calls together sends
   its own stable value.
@@ -87,16 +88,16 @@ patches `http`/`pg`/`ioredis` before they load. Enabled by `OTEL_ENABLED=true`.
 
 ### Sampling strategy per environment
 
-Head sampling (the ratio above) decides **before** a request is known to be slow or failing, so a
-low ratio silently drops the traces you most want. Keep a low head ratio in prod and recover the
-interesting traces with **tail sampling in the OTel Collector**, which decides after seeing the whole
-trace:
+Head sampling (the ratio above) decides **before** a request is known to be slow or failing. A tail
+sampler cannot recover a trace already discarded by the application. When using the bundled
+Collector tail sampler, send every trace to it (`OTEL_TRACES_SAMPLER_RATIO=1`) and let the collector
+keep errors/slow traces plus a baseline sample:
 
-| Env         | `OTEL_TRACES_SAMPLER_RATIO` | Collector tail sampling        |
-| ----------- | --------------------------- | ------------------------------ |
-| development | `1` (all)                   | none                           |
-| staging     | `0.25`–`0.5`                | optional                       |
-| production  | `0.01`–`0.1` (head)         | keep 100% of error/slow traces |
+| Env         | `OTEL_TRACES_SAMPLER_RATIO` | Collector tail sampling     |
+| ----------- | --------------------------- | --------------------------- |
+| development | `1` (all)                   | none                        |
+| staging     | `1`                         | keep errors/slow + baseline |
+| production  | `1`                         | keep errors/slow + baseline |
 
 ```yaml
 # otel-collector: keep every error + slow trace, sample the rest
@@ -109,7 +110,14 @@ processors:
 ```
 
 Local stack: `docker compose -f docker/compose.yml -f docker/compose.dev.yml -f docker/compose.observability.yml up`
-brings up OTel Collector + Jaeger + Prometheus + Grafana (all bound to `127.0.0.1`).
+brings up OTel Collector + Jaeger + Prometheus + Loki + Alloy + Grafana (all host ports bound to
+`127.0.0.1`). Alloy discovers only containers whose Compose project label matches
+`COMPOSE_PROJECT_NAME`; request/correlation/trace IDs remain JSON fields rather than Loki labels to
+avoid unbounded cardinality. The read-only Docker socket mount is intended for this local overlay;
+use the platform's native log agent in Kubernetes/managed production.
+Selecting this overlay also enables OTEL in API/worker/scheduler, pushes background-process metrics,
+and enables the API `/metrics` endpoint for the Docker bridge scraper; no duplicate `.env` toggles
+are required for a local end-to-end run.
 
 ## Metrics (Prometheus)
 

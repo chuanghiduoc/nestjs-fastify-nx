@@ -29,16 +29,13 @@ Images are built automatically by the [release workflow](../.github/workflows/re
 To build manually:
 
 ```bash
-# Production images — all four apps share the root Dockerfile so BuildKit
-# reuses the `workspace` stage (install + source + prisma generate + nx sync)
-# across every image — one install round-trip instead of two.
-docker build -f Dockerfile --target api       -t your-registry/nestjs-api:latest .
-docker build -f Dockerfile --target worker    -t your-registry/nestjs-worker:latest .
-docker build -f Dockerfile --target scheduler -t your-registry/nestjs-scheduler:latest .
-docker build -f Dockerfile --target migration -t your-registry/nestjs-migration:latest .
+# Bake submits all four targets as one BuildKit graph. Shared dependency and
+# Nx build stages execute once; service-specific production installs run in parallel.
+IMAGE_REGISTRY=your-registry IMAGE_NAMESPACE=your-project IMAGE_TAG=latest \
+  docker buildx bake -f docker-bake.hcl production --load
 ```
 
-For all four in one shot (BuildKit shares stages across siblings):
+The wrapper uses the same Bake graph and optionally boots the prod-parity stack:
 
 ```bash
 ./scripts/build-prod.sh                       # build + boot only; Trivy/SBOM/sign live in CI (release.yml)
@@ -122,7 +119,10 @@ proxy hops so Fastify resolves `req.ip` from `X-Forwarded-For` correctly.
 
 ## Local Observability Stack (opt-in)
 
-The `docker/compose.observability.yml` overlay starts Prometheus, Grafana, Jaeger, and an OTel collector alongside the dev stack. It is intentionally excluded from the base compose files to keep the default stack lightweight.
+The `docker/compose.observability.yml` overlay starts Prometheus, Grafana, Jaeger, Loki, Alloy, and
+an OTel collector alongside the dev stack. It is intentionally excluded from the base compose files
+to keep the default stack lightweight. Alloy's read-only Docker socket is for local Compose log
+discovery; production platforms should use their native node/pod log agent.
 
 ```bash
 # Start dev stack + observability
@@ -232,13 +232,13 @@ Worker and scheduler use file-based liveness probes (`/tmp/worker-alive`, `/tmp/
 | `WORKER_EMAIL_CONCURRENCY`  | `5`     | Per-queue parallelism inside each worker replica for email jobs. Effective throughput = concurrency × replicas.               |
 | `WORKER_UPLOAD_CONCURRENCY` | `5`     | Per-queue parallelism inside each worker replica for upload-verification jobs.                                                |
 
-Place any L7 reverse proxy in front of the api service that forwards `X-Forwarded-For` and proxies WebSocket upgrades. Set `TRUST_PROXY_HOPS` to the number of proxy hops between the edge and the api container so Fastify resolves `req.ip` correctly; the WS per-IP cap and the metrics guard both use the raw TCP socket address (`socket.conn.remoteAddress` / `socket.remoteAddress`) and are not affected by this value.
+Place any L7 reverse proxy in front of the api service that forwards `X-Forwarded-For` and proxies WebSocket upgrades. Set `TRUST_PROXY_HOPS` to the number of proxy hops between the edge and the api container so Fastify and the WebSocket connection limiter resolve the client IP consistently. The metrics allowlist intentionally uses the raw TCP peer address because scrapers are expected to connect from the trusted internal network.
 
 > **Important**: Throttler limits (`THROTTLER_LIMIT`, `AUTH_RATE_LIMIT_MAX`) are cluster-wide counters backed by Redis shared state — set them for **total** expected traffic, not per-replica. With `API_REPLICAS=5` and `THROTTLER_LIMIT=100`, each IP is limited to 100 req/min total, not 500.
 >
 > **Connection pool budget**: `(API_REPLICAS + 1) × DATABASE_POOL_MAX` must stay below your Postgres `max_connections` (typically 80–100 for a default installation). The worker contributes 0 database connections. If replicas × pool would exceed the budget, add PgBouncer in transaction mode in front of Postgres — see [Connection Pooling](#connection-pooling) below.
 
-- **Scheduler**: Run as a **single instance** only. Multiple scheduler instances will duplicate cron jobs. The `deploy.update_config.order: stop-first` in `compose.prod.yml` ensures the old scheduler stops before the new one starts during rolling updates — a brief cron gap is preferable to a double-fire window.
+- **Scheduler**: Multiple replicas are supported through the Redis owner-token lease at `bull:scheduler:leader`; followers keep their cron and outbox loops idle. The production compose file remains at one replica by default to minimize idle resources. During failover, the 30-second lease TTL bounds takeover time.
 
 ## Connection Pooling
 

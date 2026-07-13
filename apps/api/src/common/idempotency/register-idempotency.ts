@@ -3,7 +3,7 @@ import { HttpStatus } from '@nestjs/common';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type Redis from 'ioredis';
 import { ERROR_CODES } from '@nestjs-fastify-nx/contracts';
-import { resolveRequestId } from '../logging/request-id';
+import { resolveCorrelationId, resolveRequestId } from '../logging/request-id';
 import { IdempotencyStore, type AcquireResult } from './idempotency-store';
 
 export interface IdempotencyOptions {
@@ -24,6 +24,7 @@ const PROBLEM_CONTENT_TYPE = 'application/problem+json';
 interface IdempotencyContext {
   storeKey: string;
   fingerprint: string;
+  ownerToken: string;
 }
 
 interface RequestWithIdempotency extends FastifyRequest {
@@ -34,12 +35,25 @@ function sha256(input: string): string {
   return createHash('sha256').update(input).digest('hex');
 }
 
+function canonicalize(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalize);
+  if (value === null || typeof value !== 'object') return value;
+
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>)
+      .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
+      .map(([key, entry]) => [key, canonicalize(entry)]),
+  );
+}
+
 // Authenticated requests scope by session token, anonymous ones by client IP. Two principals thus
 // never collide on — nor replay — each other's cached response for the same key.
 function extractPrincipal(req: FastifyRequest): string {
   const cookie = req.headers.cookie;
   if (typeof cookie === 'string') {
-    const match = cookie.match(/better-auth\.session_token=([^;]+)/);
+    // Better Auth prefixes secure production cookies with `__Secure-`. Missing that variant
+    // falls back to IP scope and lets users behind the same NAT collide on idempotency records.
+    const match = cookie.match(/(?:^|;\s*)(?:__Secure-)?better-auth\.session_token=([^;]+)/);
     if (match) return `s:${match[1]}`;
   }
   return `ip:${req.ip}`;
@@ -47,7 +61,7 @@ function extractPrincipal(req: FastifyRequest): string {
 
 // Method + full URL (query included) + body. Detects a key reused for a different operation.
 function buildFingerprint(req: FastifyRequest): string {
-  return sha256(`${req.method}\n${req.url}\n${JSON.stringify(req.body ?? null)}`);
+  return sha256(`${req.method}\n${req.url}\n${JSON.stringify(canonicalize(req.body ?? null))}`);
 }
 
 function shouldHandle(req: FastifyRequest): boolean {
@@ -120,7 +134,11 @@ export function registerIdempotency(fastify: FastifyInstance, options: Idempoten
     }
 
     if (result.acquired) {
-      (req as RequestWithIdempotency).idempotency = { storeKey, fingerprint };
+      (req as RequestWithIdempotency).idempotency = {
+        storeKey,
+        fingerprint,
+        ownerToken: result.ownerToken,
+      };
       return;
     }
 
@@ -149,11 +167,15 @@ export function registerIdempotency(fastify: FastifyInstance, options: Idempoten
 
     // Replay the stored response verbatim. This short-circuits before Nest, so x-request-id
     // (normally set by CorrelationIdMiddleware) must be stamped here.
+    const requestId = resolveRequestId(req.headers);
+    const correlationId = resolveCorrelationId(req.headers, requestId);
+    Object.assign(req.raw, { requestId, correlationId });
     return reply
       .status(record.status ?? 200)
       .header('content-type', record.contentType ?? 'application/json')
       .header(REPLAYED_HEADER, 'true')
-      .header('x-request-id', resolveRequestId(req.headers))
+      .header('x-request-id', requestId)
+      .header('x-correlation-id', correlationId)
       .send(record.body);
   });
 
@@ -164,17 +186,21 @@ export function registerIdempotency(fastify: FastifyInstance, options: Idempoten
     try {
       const status = reply.statusCode;
       if (status >= 200 && status < 300 && typeof payload === 'string') {
-        await store.complete(ctx.storeKey, {
+        const completed = await store.complete(ctx.storeKey, ctx.ownerToken, {
           fingerprint: ctx.fingerprint,
           status,
           contentType: String(reply.getHeader('content-type') ?? 'application/json'),
           body: payload,
         });
+        if (!completed) {
+          reportError('idempotency completion skipped because request no longer owns the lock');
+        }
+      } else if (status === HttpStatus.GATEWAY_TIMEOUT) {
+        // Timeout cannot cancel the underlying promise. Retain the pending record until its TTL so
+        // a retry cannot overlap work that may still commit after the 504 reaches the client.
       } else {
-        // Non-2xx (including the 504 from TimeoutInterceptor): release the lock so the client may
-        // retry. Safe because command handlers roll back their transaction on error — a failed
-        // request leaves no committed side effect to duplicate.
-        await store.release(ctx.storeKey);
+        // Ordinary failures completed their handler path, so the same operation may retry.
+        await store.release(ctx.storeKey, ctx.ownerToken);
       }
     } catch (err) {
       reportError(`idempotency finalize failed: ${(err as Error).message}`);

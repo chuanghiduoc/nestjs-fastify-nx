@@ -1,6 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 
+const queueInstances = vi.hoisted(
+  () =>
+    [] as Array<{
+      close: ReturnType<typeof vi.fn>;
+      disconnect: ReturnType<typeof vi.fn>;
+    }>,
+);
+
 vi.mock('@bull-board/api', () => ({
   createBullBoard: vi.fn().mockReturnValue({}),
 }));
@@ -21,7 +29,13 @@ vi.mock('@bull-board/fastify', () => {
 });
 vi.mock('bullmq', () => {
   function Queue(name: string) {
-    return { name, close: vi.fn().mockResolvedValue(undefined) };
+    const queue = {
+      name,
+      close: vi.fn().mockResolvedValue(undefined),
+      disconnect: vi.fn().mockResolvedValue(undefined),
+    };
+    queueInstances.push(queue);
+    return queue;
   }
   return { Queue };
 });
@@ -48,6 +62,7 @@ function makeFastify() {
 describe('createBullBoardPlugin', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    queueInstances.length = 0;
   });
 
   it('returns a function (Fastify plugin)', () => {
@@ -74,6 +89,22 @@ describe('createBullBoardPlugin', () => {
     const fastify = makeFastify();
     await plugin(fastify);
     expect(vi.mocked(fastify.addHook)).toHaveBeenCalledWith('onClose', expect.any(Function));
+  });
+
+  it('force-disconnects a queue when graceful close fails', async () => {
+    const plugin = createBullBoardPlugin(defaultOpts);
+    const fastify = makeFastify();
+    await plugin(fastify);
+    const [firstQueue, ...remainingQueues] = queueInstances;
+    if (!firstQueue) throw new Error('no BullMQ queues created');
+    firstQueue.close.mockRejectedValueOnce(new Error('close failed'));
+    const hook = vi.mocked(fastify.addHook).mock.calls.find((call) => call[0] === 'onClose')?.[1];
+    if (!hook) throw new Error('onClose hook not registered');
+
+    await (hook as () => Promise<void>)();
+
+    expect(firstQueue.disconnect).toHaveBeenCalledOnce();
+    expect(remainingQueues.every((queue) => queue.disconnect.mock.calls.length === 0)).toBe(true);
   });
 
   function getOnRequestHook(fastify: FastifyInstance) {

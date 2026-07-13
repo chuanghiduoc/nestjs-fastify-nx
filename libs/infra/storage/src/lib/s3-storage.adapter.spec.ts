@@ -1,12 +1,12 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BadRequestException, InternalServerErrorException } from '@nestjs/common';
 import type { ConfigService } from '@nestjs/config';
 import {
   DeleteObjectCommand,
+  CopyObjectCommand,
   GetObjectCommand,
   HeadObjectCommand,
   PutObjectCommand,
-  PutObjectTaggingCommand,
 } from '@aws-sdk/client-s3';
 import { S3StorageAdapter } from './s3-storage.adapter';
 
@@ -45,9 +45,35 @@ function mockSend(adapter: S3StorageAdapter): ReturnType<typeof vi.fn> {
 
 describe('S3StorageAdapter', () => {
   let adapter: S3StorageAdapter;
+  const originalNodeEnv = process.env['NODE_ENV'];
 
   beforeEach(() => {
     adapter = new S3StorageAdapter(makeConfigService());
+  });
+
+  afterEach(() => {
+    if (originalNodeEnv === undefined) delete process.env['NODE_ENV'];
+    else process.env['NODE_ENV'] = originalNodeEnv;
+  });
+
+  describe('onModuleInit', () => {
+    it('fails startup in production when the configured bucket is inaccessible', async () => {
+      process.env['NODE_ENV'] = 'production';
+      const send = mockSend(adapter);
+      send.mockRejectedValueOnce(
+        Object.assign(new Error('Forbidden'), { $metadata: { httpStatusCode: 403 } }),
+      );
+
+      await expect(adapter.onModuleInit()).rejects.toThrow('Bucket head check failed');
+    });
+
+    it('continues in development when storage is temporarily unavailable', async () => {
+      process.env['NODE_ENV'] = 'development';
+      const send = mockSend(adapter);
+      send.mockRejectedValueOnce(new Error('ECONNREFUSED'));
+
+      await expect(adapter.onModuleInit()).resolves.toBeUndefined();
+    });
   });
 
   describe('upload', () => {
@@ -99,9 +125,18 @@ describe('S3StorageAdapter', () => {
 
     it('returns metadata on 200', async () => {
       const send = mockSend(adapter);
-      send.mockResolvedValueOnce({ ContentType: 'image/png', ContentLength: 1234 });
+      send.mockResolvedValueOnce({
+        ContentType: 'image/png',
+        ContentLength: 1234,
+        ETag: '"etag-1"',
+      });
       const result = await adapter.head('uploads/x');
-      expect(result).toEqual({ contentType: 'image/png', size: 1234, bucket: 'uploads' });
+      expect(result).toEqual({
+        contentType: 'image/png',
+        size: 1234,
+        bucket: 'uploads',
+        etag: '"etag-1"',
+      });
       expect(send.mock.calls[0][0]).toBeInstanceOf(HeadObjectCommand);
     });
 
@@ -115,7 +150,7 @@ describe('S3StorageAdapter', () => {
 
     it('defaults contentType to application/octet-stream when missing', async () => {
       const send = mockSend(adapter);
-      send.mockResolvedValueOnce({ ContentLength: 0 });
+      send.mockResolvedValueOnce({ ContentLength: 0, ETag: '"etag-1"' });
       const result = await adapter.head('uploads/x');
       expect(result?.contentType).toBe('application/octet-stream');
     });
@@ -178,22 +213,30 @@ describe('S3StorageAdapter', () => {
     });
   });
 
-  describe('commit', () => {
-    it('tags the object as committed=true', async () => {
+  describe('finalize', () => {
+    it('copies the exact staging version to a committed final key and deletes the source', async () => {
       const send = mockSend(adapter);
-      send.mockResolvedValueOnce({});
-      await adapter.commit('uploads/x');
-      const cmd = send.mock.calls[0][0] as PutObjectTaggingCommand;
-      expect(cmd).toBeInstanceOf(PutObjectTaggingCommand);
-      expect(cmd.input.Tagging?.TagSet).toEqual([{ Key: 'committed', Value: 'true' }]);
+      send.mockResolvedValue({});
+      await adapter.finalize('uploads/user/x.png', 'files/user/y.png', '"etag-1"');
+      const cmd = send.mock.calls[0][0] as CopyObjectCommand;
+      expect(cmd).toBeInstanceOf(CopyObjectCommand);
+      expect(cmd.input).toMatchObject({
+        Bucket: 'uploads',
+        Key: 'files/user/y.png',
+        CopySource: 'uploads/uploads/user/x.png',
+        CopySourceIfMatch: '"etag-1"',
+        TaggingDirective: 'REPLACE',
+        Tagging: 'committed=true',
+      });
+      expect(send.mock.calls[1][0]).toBeInstanceOf(DeleteObjectCommand);
     });
 
     it('wraps errors as InternalServerError', async () => {
       const send = mockSend(adapter);
       send.mockRejectedValueOnce(new Error('AccessDenied'));
-      await expect(adapter.commit('uploads/x')).rejects.toBeInstanceOf(
-        InternalServerErrorException,
-      );
+      await expect(
+        adapter.finalize('uploads/user/x.png', 'files/user/y.png', '"etag-1"'),
+      ).rejects.toBeInstanceOf(InternalServerErrorException);
     });
   });
 

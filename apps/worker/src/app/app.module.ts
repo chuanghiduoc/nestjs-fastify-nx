@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { LoggerModule } from 'nestjs-pino';
 import { DeadLetterModule, RedisQueueModule } from '@nestjs-fastify-nx/infra-redis';
 import { StorageModule } from '@nestjs-fastify-nx/infra-storage';
+import { DatabaseModule } from '@nestjs-fastify-nx/infra-database';
 import { QUEUE_NAMES } from '@nestjs-fastify-nx/shared';
 import { buildPinoLoggerConfig } from '@nestjs-fastify-nx/infra-observability';
 import { EmailNotificationProcessor } from './processors/email-notification.processor';
@@ -15,6 +16,7 @@ import { validateWorkerConfig } from '../config/env.validation';
   imports: [
     ConfigModule.forRoot({ isGlobal: true, validate: validateWorkerConfig }),
     LoggerModule.forRoot(buildPinoLoggerConfig()),
+    DatabaseModule,
     RedisQueueModule,
     StorageModule,
     // Worker is the single owner of the DLQ router for these queues.

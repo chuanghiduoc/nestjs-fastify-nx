@@ -52,6 +52,9 @@ export class I18nInfraModule {
       imports: [
         I18nModule.forRoot({
           fallbackLanguage,
+          // Locale-sensitive call sites resolve the request language and pass
+          // it explicitly. Avoid nestjs-i18n's legacy `*` Fastify middleware.
+          disableMiddleware: true,
           loaderOptions: {
             path: translationsPath,
             watch,

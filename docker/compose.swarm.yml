@@ -198,12 +198,11 @@ services:
       - migration
       - redis-cache
       - redis-queue
-    # MUST stay at exactly 1 replica — additional replicas duplicate every
-    # cron firing. `max_replicas_per_node: 1` is belt-and-suspenders for
-    # operators who later raise replicas without reading this comment.
+    # Redis leader election makes multiple replicas safe; spread them across
+    # labeled nodes so a node loss does not take every scheduler down.
     deploy:
       <<: *deploy-restart
-      replicas: 1
+      replicas: ${SCHEDULER_REPLICAS:-1}
       placement:
         constraints: [node.labels.role.scheduler == true]
         max_replicas_per_node: 1

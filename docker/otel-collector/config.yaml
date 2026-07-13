@@ -11,13 +11,15 @@ processors:
   # traffic spike instead of being OOM-killed and losing everything.
   memory_limiter:
     check_interval: 1s
-    limit_percentage: 80
-    spike_limit_percentage: 25
+    # Paired with compose's 512 MiB container limit. Absolute limits behave consistently on
+    # Docker Desktop, CI, and large production hosts.
+    limit_mib: 400
+    spike_limit_mib: 100
 
   # Tail sampling decides AFTER seeing a whole trace, so it can keep every error
-  # and slow trace while sampling the rest — the signal head sampling in the app
-  # (OTEL_TRACES_SAMPLER_RATIO) can't preserve because it decides up front. In prod
-  # set a low head ratio (e.g. 0.05) and let this keep the interesting traces.
+  # and slow trace while sampling the rest. Every trace must reach this processor first:
+  # keep OTEL_TRACES_SAMPLER_RATIO=1, because tail sampling cannot recover a trace that
+  # the application already discarded at the head.
   #
   # NOTE: tail sampling needs all spans of a trace to reach the SAME collector. For a
   # horizontally scaled collector, put a trace-id-aware loadbalancing exporter in front
@@ -56,18 +58,26 @@ exporters:
     endpoint: 0.0.0.0:8889
     namespace: otelcol
 
-  # Debug exporter — prints to stdout at warn level; remove in prod.
-  debug:
-    verbosity: basic
-
 service:
+  telemetry:
+    metrics:
+      # Collector defaults this listener to localhost, which is unreachable from Prometheus in a
+      # sibling container. Expose it only on the Compose network; host binding remains 127.0.0.1.
+      readers:
+        - pull:
+            exporter:
+              prometheus:
+                host: 0.0.0.0
+                port: 8888
+                without_type_suffix: true
+                without_units: true
   pipelines:
     traces:
       receivers: [otlp]
       processors: [memory_limiter, tail_sampling, batch]
-      exporters: [otlp/jaeger, debug]
+      exporters: [otlp/jaeger]
 
     metrics:
       receivers: [otlp]
       processors: [memory_limiter, batch]
-      exporters: [prometheus, debug]
+      exporters: [prometheus]

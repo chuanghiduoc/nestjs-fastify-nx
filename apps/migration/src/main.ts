@@ -24,7 +24,17 @@ function run(command: string, label: string): void {
 // with a 1–3s gap on cold boot. Compose / Swarm restart the container on
 // failure, but the scary P1001 in the log noise alarms operators — retry
 // in-process instead.
-function runWithRetry(command: string, label: string, attempts = 10, delayMs = 1500): void {
+function boundedIntEnv(name: string, fallback: number, min: number, max: number): number {
+  const value = Number(process.env[name]);
+  return Number.isInteger(value) && value >= min && value <= max ? value : fallback;
+}
+
+async function runWithRetry(
+  command: string,
+  label: string,
+  attempts: number,
+  delayMs: number,
+): Promise<void> {
   for (let attempt = 1; attempt <= attempts; attempt++) {
     try {
       run(command, attempt === 1 ? label : `${label} (attempt ${attempt})`);
@@ -33,11 +43,7 @@ function runWithRetry(command: string, label: string, attempts = 10, delayMs = 1
       if (attempt === attempts) throw err;
       const msg = err instanceof Error ? err.message : String(err);
       log(`${label} attempt ${attempt} failed — retrying in ${delayMs}ms: ${msg}`);
-      // Synchronous sleep so we keep execSync's straightforward error model.
-      const wait = Date.now() + delayMs;
-      while (Date.now() < wait) {
-        // busy-wait — acceptable in a one-shot CLI that only blocks here.
-      }
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
     }
   }
 }
@@ -54,7 +60,7 @@ function injectDatabasePassword(
   return `${match[1]}${match[2]}:${encodeURIComponent(password)}@${match[3]}`;
 }
 
-function bootstrap(): void {
+async function bootstrap(): Promise<void> {
   const start = Date.now();
   log('starting');
 
@@ -68,7 +74,12 @@ function bootstrap(): void {
   }
 
   try {
-    runWithRetry('node_modules/.bin/prisma migrate deploy', 'prisma migrate deploy');
+    await runWithRetry(
+      'node_modules/.bin/prisma migrate deploy',
+      'prisma migrate deploy',
+      boundedIntEnv('MIGRATION_MAX_ATTEMPTS', 10, 1, 100),
+      boundedIntEnv('MIGRATION_RETRY_DELAY_MS', 1_500, 100, 60_000),
+    );
   } catch (err) {
     fail('prisma migrate deploy failed after retries', err);
   }
@@ -87,4 +98,4 @@ function bootstrap(): void {
   log(`completed in ${Date.now() - start}ms`);
 }
 
-bootstrap();
+void bootstrap();

@@ -75,14 +75,16 @@ export function startTracing(options: StartTracingOptions = {}): NodeSDK | null 
     '',
   );
   const headers = parseHeaders(process.env['OTEL_EXPORTER_OTLP_HEADERS'] ?? '');
-  const ratio = Number.parseFloat(process.env['OTEL_TRACES_SAMPLER_RATIO'] ?? '1');
+  const parsedRatio = Number.parseFloat(process.env['OTEL_TRACES_SAMPLER_RATIO'] ?? '1');
+  // Tracing starts before ConfigModule validates env, so defend here as well.
+  const ratio = Number.isFinite(parsedRatio) ? Math.max(0, Math.min(parsedRatio, 1)) : 1;
 
   // ParentBased, not a bare ratio sampler: the root sampler only decides for a NEW trace; a child
   // span MUST honor the parent's sampled flag, otherwise cross-service traces come back with holes
   // (a downstream service dropping spans its parent kept). Client-forced sampling is still blocked
   // because injectOnly() strips the inbound parent on the public edge — see textMapPropagator below.
   const sampler = new ParentBasedSampler({
-    root: new TraceIdRatioBasedSampler(Number.isFinite(ratio) ? ratio : 1),
+    root: new TraceIdRatioBasedSampler(ratio),
   });
 
   const basePropagator = new CompositePropagator({
@@ -100,9 +102,10 @@ export function startTracing(options: StartTracingOptions = {}): NodeSDK | null 
 
   const resource = resourceFromAttributes({
     [ATTR_SERVICE_NAME]:
-      options.serviceName ?? process.env['OTEL_SERVICE_NAME'] ?? 'unknown_service',
+      process.env['OTEL_SERVICE_NAME'] ?? options.serviceName ?? 'unknown_service',
     [ATTR_SERVICE_NAMESPACE]: process.env['OTEL_SERVICE_NAMESPACE'] ?? 'app',
-    [ATTR_SERVICE_VERSION]: process.env['npm_package_version'] ?? '0.0.0',
+    [ATTR_SERVICE_VERSION]:
+      process.env['OTEL_SERVICE_VERSION'] ?? process.env['npm_package_version'] ?? '0.0.0',
     [ATTR_DEPLOYMENT_ENVIRONMENT_NAME]: process.env['NODE_ENV'] ?? 'development',
   });
 

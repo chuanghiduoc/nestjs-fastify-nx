@@ -22,10 +22,10 @@
   ],
   "references": [
     {
-      "path": "../../libs/infra/redis/tsconfig.lib.json"
+      "path": "../../libs/shared/tsconfig.lib.json"
     },
     {
-      "path": "../../libs/shared/tsconfig.lib.json"
+      "path": "../../libs/infra/redis/tsconfig.lib.json"
     },
     {
       "path": "../../libs/modules/audit-log/tsconfig.lib.json"
@@ -38,6 +38,9 @@
     },
     {
       "path": "../../libs/infra/messaging/tsconfig.lib.json"
+    },
+    {
+      "path": "../../libs/infra/storage/tsconfig.lib.json"
     },
     {
       "path": "../../libs/infra/database/tsconfig.lib.json"

@@ -441,9 +441,10 @@ running, you've forced it on with `--profile dev-only`. Remove the flag.
 
 Symptom: scheduled jobs fire 2+ times per cron tick.
 
-Cause: the scheduler was scaled past 1 instance. Cron fires per-process — only
-one scheduler may run at a time. Enforce `replicas: 1` (already set in
-`compose.prod.yml`) and never run `--scale scheduler=N` with `N > 1`.
+Cause: scheduler leadership is not being shared, usually because replicas use different
+`REDIS_QUEUE_PREFIX` values or cannot reach the same Redis instance. Inspect the
+`<prefix>:scheduler:leader` key and Redis connectivity. Only the owner-token lease holder runs cron
+and outbox work; followers should remain idle.
 
 ### Health endpoint returns 503 even though the API is up
 

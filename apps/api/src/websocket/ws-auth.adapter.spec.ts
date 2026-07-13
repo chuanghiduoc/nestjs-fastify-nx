@@ -2,7 +2,11 @@ import { describe, it, expect, vi } from 'vitest';
 import type { Socket } from 'socket.io';
 import type { BetterAuthInstance } from '@nestjs-fastify-nx/infra-auth';
 import type Redis from 'ioredis';
-import { createWsAuthMiddleware } from './ws-auth.adapter';
+import {
+  createWsAuthMiddleware,
+  renewWsConnectionLease,
+  revalidateWsSession,
+} from './ws-auth.adapter';
 
 function makeSocket(
   overrides: {
@@ -14,6 +18,7 @@ function makeSocket(
   } = {},
 ) {
   return {
+    id: 'socket-1',
     handshake: {
       auth: overrides.auth ?? {},
       headers: overrides.headers ?? {},
@@ -38,9 +43,7 @@ function makeAuth(session: unknown) {
 
 function makeRedis(incrResult = 1): Redis {
   return {
-    incr: vi.fn().mockResolvedValue(incrResult),
-    expire: vi.fn().mockResolvedValue(1),
-    decr: vi.fn().mockResolvedValue(0),
+    eval: vi.fn().mockResolvedValue(incrResult),
   } as unknown as Redis;
 }
 
@@ -111,6 +114,9 @@ describe('createWsAuthMiddleware', () => {
 
     expect(next).toHaveBeenCalledWith();
     expect(socket.data['user']).toMatchObject({ userId: 'u1', email: 'a@b.com' });
+    expect(auth.api.getSession).toHaveBeenCalledWith(
+      expect.objectContaining({ query: { disableCookieCache: true } }),
+    );
   });
 
   it('rejects an expired session even when user is otherwise valid', async () => {
@@ -152,9 +158,46 @@ describe('createWsAuthMiddleware', () => {
       await middleware(socket as unknown as Socket, next);
 
       expect(next).toHaveBeenCalledWith();
-      // Redis INCR must be keyed on the real TCP peer, not the spoofed XFF address.
-      expect(redis.incr).toHaveBeenCalledWith(expect.stringContaining('10.0.0.1'));
-      expect(redis.incr).not.toHaveBeenCalledWith(expect.stringContaining('1.2.3.4'));
+      expect(redis.eval).toHaveBeenCalledWith(
+        expect.any(String),
+        1,
+        expect.stringContaining('10.0.0.1'),
+        expect.any(String),
+        '600000',
+        'socket-1',
+      );
+      expect(redis.eval).not.toHaveBeenCalledWith(
+        expect.any(String),
+        1,
+        expect.stringContaining('1.2.3.4'),
+        expect.anything(),
+      );
+    });
+
+    it('uses the first untrusted address behind the configured proxy hops', async () => {
+      const auth = makeAuth(VALID_SESSION);
+      const redis = makeRedis(1);
+      const middleware = createWsAuthMiddleware(auth, {
+        redis,
+        maxConcurrentPerIp: 50,
+        trustProxyHops: 2,
+      });
+      const socket = makeSocket({
+        auth: { token: 'tok' },
+        connRemoteAddress: '10.0.0.10',
+        headers: { 'x-forwarded-for': '203.0.113.20, 10.0.0.5' },
+      });
+
+      await middleware(socket as unknown as Socket, vi.fn());
+
+      expect(redis.eval).toHaveBeenCalledWith(
+        expect.any(String),
+        1,
+        expect.stringContaining('203.0.113.20'),
+        expect.any(String),
+        '600000',
+        'socket-1',
+      );
     });
 
     it('rejects the connection when the per-IP cap is exceeded', async () => {
@@ -170,6 +213,66 @@ describe('createWsAuthMiddleware', () => {
       expect(next).toHaveBeenCalledWith(
         expect.objectContaining({ message: expect.stringContaining('TOO_MANY_CONNECTIONS') }),
       );
+      expect(redis.eval).toHaveBeenCalledTimes(2);
     });
+
+    it('uses an atomic release handler on disconnect', async () => {
+      const auth = makeAuth(VALID_SESSION);
+      const redis = makeRedis(1);
+      const middleware = createWsAuthMiddleware(auth, { redis, maxConcurrentPerIp: 50 });
+      const socket = makeSocket({ auth: { token: 'tok' }, connRemoteAddress: '10.0.0.3' });
+
+      await middleware(socket as unknown as Socket, vi.fn());
+      const disconnectHandler = vi
+        .mocked(socket.on)
+        .mock.calls.find(([event]) => event === 'disconnect')?.[1] as (() => void) | undefined;
+      expect(disconnectHandler).toBeDefined();
+      disconnectHandler?.();
+      await vi.waitFor(() => expect(redis.eval).toHaveBeenCalledTimes(2));
+    });
+
+    it('renews the exact socket lease during session revalidation', async () => {
+      const auth = makeAuth(VALID_SESSION);
+      const redis = makeRedis(1);
+      const socket = makeSocket({ auth: { token: 'tok' }, connRemoteAddress: '10.0.0.4' });
+      await createWsAuthMiddleware(auth, { redis })(socket as unknown as Socket, vi.fn());
+      vi.mocked(redis.eval).mockClear();
+
+      await renewWsConnectionLease(redis, socket as unknown as Socket);
+
+      expect(redis.eval).toHaveBeenCalledWith(
+        expect.any(String),
+        1,
+        'ws:conn:10.0.0.4',
+        expect.any(String),
+        '600000',
+        'socket-1',
+      );
+    });
+  });
+});
+
+describe('revalidateWsSession', () => {
+  it('refreshes role changes on an already-connected socket', async () => {
+    const auth = makeAuth({
+      ...VALID_SESSION,
+      user: { ...VALID_SESSION.user, role: 'ADMIN' },
+    });
+    const socket = makeSocket({
+      auth: { token: 'valid-token' },
+      data: { user: { userId: 'u1', email: 'a@b.com', role: 'USER' } },
+    });
+
+    await revalidateWsSession(auth, socket as unknown as Socket);
+
+    expect(socket.data['user']).toMatchObject({ userId: 'u1', role: 'ADMIN' });
+  });
+
+  it('rejects a socket after its session is revoked', async () => {
+    const socket = makeSocket({ auth: { token: 'revoked-token' } });
+
+    await expect(revalidateWsSession(makeAuth(null), socket as unknown as Socket)).rejects.toThrow(
+      'Invalid session',
+    );
   });
 });

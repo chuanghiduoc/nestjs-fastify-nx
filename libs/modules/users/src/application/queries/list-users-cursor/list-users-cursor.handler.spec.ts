@@ -80,13 +80,12 @@ describe('ListUsersCursorHandler', () => {
     expect(page2.data.length).toBeGreaterThan(0);
   });
 
-  it('invalid startingAfter cursor is treated as first page', async () => {
+  it('rejects an invalid startingAfter cursor instead of returning the first page', async () => {
     await repo.save(UserFactory.create({ email: 'x@test.com' }));
 
-    const result = await handler.execute(new ListUsersCursorQuery(10, '!!!invalid!!!'));
-
-    // Invalid cursor → fallback to first page; should still return the item
-    expect(result.data).toHaveLength(1);
+    await expect(
+      handler.execute(new ListUsersCursorQuery(10, '!!!invalid!!!')),
+    ).rejects.toMatchObject({ status: 400 });
   });
 
   it('maps domain User fields to UserListItemDto correctly', async () => {
