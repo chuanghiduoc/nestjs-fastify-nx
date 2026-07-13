@@ -70,6 +70,58 @@ Prevention: exclude the workspace folder from Windows Defender real-time scannin
 (Settings → Virus & threat protection → Exclusions), which removes the main source of the
 lock contention. CI on Linux runners does not hit this.
 
+### `pnpm codegen` crashes with `js-yaml does not provide an export named 'default'`
+
+Symptom: `pnpm codegen` (orval) aborts before generating the client:
+
+```
+SyntaxError: The requested module 'js-yaml' does not provide an export named 'default'
+```
+
+Cause: orval's ESM config bundle does `import yaml from "js-yaml"` (a default import).
+`js-yaml@5` is pure ESM and dropped the default export, so the import fails. The `js-yaml`
+version is controlled by the `pnpm.overrides` entry in `package.json`. When that override was
+`">=4.2.0"` it floated up to `js-yaml@5` on any lockfile regeneration (e.g. a Dependabot bump),
+silently breaking codegen — the orval version was a red herring, every orval release broke
+once js-yaml floated to v5.
+
+Resolution: keep the override capped at v4 — `"js-yaml": "^4.2.0"`. It stays there until orval
+switches to a named `js-yaml` import; there is no reason to relax it.
+
+### Dependabot proposes `typescript` 7.x (major) — why it is ignored
+
+The `typescript` npm package is intentionally pinned to `^6.0.x`. Typecheck and build already
+run the faster TS 7 native compiler through the separate `@typescript/native` package, but the
+`typescript` package itself feeds tools that bind to the **TS 6** Compiler API:
+`typescript-eslint`, `orval`, and `vite`. Bumping `typescript` to 7.0.x crashes eslint across
+every project with `Cannot read properties of undefined (reading 'Ts')` /
+`(reading 'Intrinsic')`. The bump is blocked in `.github/dependabot.yml`
+(`dependency-name: typescript`, `version-update:semver-major`).
+
+Why each tool blocks (verified 2026-07-13):
+
+- **typescript-eslint** — the sole hard blocker. 8.63.0 pins `peerDependencies.typescript`
+  to `>=4.8.4 <6.1.0`; forcing TS 7 crashes `@typescript-eslint/typescript-estree`. Tracking
+  issue: [typescript-eslint#10940](https://github.com/typescript-eslint/typescript-eslint/issues/10940).
+- **orval** — already fine (8.20.0+ handles the TS 6 side-by-side alias); it only needs a
+  TS 6 Compiler API to remain available.
+- **vite** — unaffected; 8.x has no `typescript` dependency at all (it transpiles via esbuild).
+
+There is a deeper reason this can't move yet: **TypeScript 7.0 ships without a programmatic
+Compiler API** — a stable API is only expected in **TypeScript 7.1**. So even the tools want
+to wait.
+
+When to un-ignore: remove the `typescript` ignore entry once **both** hold — (1) TypeScript 7.1
+ships the stable Compiler API, and (2) `typescript-eslint` publishes a release whose
+`typescript` peer range includes `7.x`. Quick check:
+
+```bash
+npm view typescript-eslint peerDependencies.typescript   # must include 7.x
+```
+
+Also see [typescript-eslint dependency-versions](https://typescript-eslint.io/users/dependency-versions/).
+Bump `typescript-eslint` first, then drop the ignore so Dependabot re-proposes TS 7.
+
 ## Database & migrations
 
 ### `prisma migrate deploy` aborts mid-migration
