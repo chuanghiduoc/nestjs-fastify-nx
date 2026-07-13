@@ -744,7 +744,9 @@ variable is the only action needed to enable replica routing.
 
 ### Health monitoring
 
-`PrismaReplicationLagHealthIndicator` is wired into `/health/ready`. When
+`PrismaReplicationLagHealthIndicator` is wired into `/health/dependencies` (a
+deep check for dashboards/alerting — **not** the readiness probe, so a replica-lag
+spike can't flip every pod out of the load balancer at once). When
 `DATABASE_REPLICA_URL` is set it queries `pg_last_xact_replay_timestamp()` on
 the replica and reports:
 
