@@ -1,6 +1,9 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
-import { execSync } from 'child_process';
-import { createTestContainers, DatabaseCleaner } from '@nestjs-fastify-nx/testing';
+import {
+  createTestContainers,
+  DatabaseCleaner,
+  deployTestMigrations,
+} from '@nestjs-fastify-nx/testing';
 import type { TestContainers } from '@nestjs-fastify-nx/testing';
 import { encodeCursor } from '@nestjs-fastify-nx/shared';
 import { UserFactory } from '../../testing/user.factory';
@@ -19,10 +22,7 @@ describe('PrismaUserRepository (integration)', () => {
 
     process.env['DATABASE_URL'] = dbUrl;
 
-    execSync('pnpm prisma migrate deploy', {
-      cwd: process.cwd(),
-      env: { ...process.env, DATABASE_URL: dbUrl },
-    });
+    deployTestMigrations(dbUrl);
 
     prismaService = new PrismaService();
     await prismaService.onModuleInit();

@@ -4,13 +4,5 @@
   "sourceRoot": "libs/composition/admin/src",
   "projectType": "library",
   "tags": ["scope:composition", "type:feature"],
-  "targets": {
-    "test": {
-      "executor": "@nx/vitest:test",
-      "outputs": ["{options.reportsDirectory}"],
-      "options": {
-        "reportsDirectory": "coverage/libs/composition/admin"
-      }
-    }
-  }
+  "targets": {}
 }

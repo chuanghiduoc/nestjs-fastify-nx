@@ -4,13 +4,5 @@
   "sourceRoot": "libs/modules/upload/src",
   "projectType": "library",
   "tags": ["scope:modules", "type:feature"],
-  "targets": {
-    "test": {
-      "executor": "@nx/vitest:test",
-      "outputs": ["{options.reportsDirectory}"],
-      "options": {
-        "reportsDirectory": "coverage/libs/modules/upload"
-      }
-    }
-  }
+  "targets": {}
 }

@@ -80,18 +80,10 @@
         }
       }
     },
-    "test": {
-      "executor": "@nx/vitest:test",
-      "outputs": ["{options.reportsDirectory}"],
-      "options": {
-        "reportsDirectory": "coverage/apps/api"
-      }
-    },
     "e2e": {
-      "executor": "@nx/vitest:test",
+      "executor": "nx:run-commands",
       "options": {
-        "config": "apps/api/vite.e2e.config.ts",
-        "reportsDirectory": "coverage/apps/api-e2e"
+        "command": "vitest --run --config apps/api/vite.e2e.config.ts"
       }
     }
   }

@@ -4,13 +4,5 @@
   "sourceRoot": "libs/core/src",
   "projectType": "library",
   "tags": ["scope:core"],
-  "targets": {
-    "test": {
-      "executor": "@nx/vitest:test",
-      "outputs": ["{options.reportsDirectory}"],
-      "options": {
-        "reportsDirectory": "coverage/libs/core"
-      }
-    }
-  }
+  "targets": {}
 }

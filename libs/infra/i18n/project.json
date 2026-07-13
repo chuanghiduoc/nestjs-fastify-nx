@@ -9,13 +9,6 @@
       "options": {
         "args": ["**/*.ts"]
       }
-    },
-    "test": {
-      "executor": "@nx/vitest:test",
-      "outputs": ["{options.reportsDirectory}"],
-      "options": {
-        "reportsDirectory": "coverage/libs/infra/i18n"
-      }
     }
   }
 }

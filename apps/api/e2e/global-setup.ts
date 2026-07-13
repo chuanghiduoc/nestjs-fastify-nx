@@ -1,4 +1,4 @@
-import { execSync } from 'child_process';
+import { deployTestMigrations } from '@nestjs-fastify-nx/testing';
 import { PostgreSqlContainer } from '@testcontainers/postgresql';
 import { RedisContainer } from '@testcontainers/redis';
 import type { StartedPostgreSqlContainer } from '@testcontainers/postgresql';
@@ -52,11 +52,7 @@ export async function setup(): Promise<void> {
   // every subsequent spec will time out against a broken schema — exit loud
   // immediately rather than letting Vitest proceed with phantom timeouts.
   try {
-    execSync('pnpm prisma migrate deploy', {
-      cwd: process.cwd(),
-      env: { ...process.env, DATABASE_URL: dbUrl },
-      stdio: 'inherit',
-    });
+    deployTestMigrations(dbUrl);
   } catch (err) {
     console.error('prisma migrate deploy failed — aborting e2e run', err);
     await stopContainers();

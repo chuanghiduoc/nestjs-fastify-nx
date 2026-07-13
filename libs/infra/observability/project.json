@@ -4,13 +4,5 @@
   "sourceRoot": "libs/infra/observability/src",
   "projectType": "library",
   "tags": ["scope:infra"],
-  "targets": {
-    "test": {
-      "executor": "@nx/vitest:test",
-      "outputs": ["{options.reportsDirectory}"],
-      "options": {
-        "reportsDirectory": "coverage/libs/infra/observability"
-      }
-    }
-  }
+  "targets": {}
 }

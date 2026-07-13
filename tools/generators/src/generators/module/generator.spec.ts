@@ -22,7 +22,9 @@ describe('module generator', () => {
     expect(config.tags).toContain('scope:modules');
     expect(config.tags).toContain('type:feature');
     expect(config.tags).not.toContain('module:orders');
-    expect(config.targets?.['test']?.executor).toBe('@nx/vitest:test');
+    // No explicit targets — build/typecheck/lint/test are all inferred by the
+    // workspace plugins from tsconfig/eslint/vitest configs.
+    expect(config.targets?.['test']).toBeUndefined();
   });
 
   it('emits tsconfig and vitest config so build/typecheck targets are inferred', async () => {
