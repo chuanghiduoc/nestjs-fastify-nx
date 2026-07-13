@@ -1,4 +1,4 @@
-import { Controller, Get, HttpCode, HttpStatus, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, HttpCode, HttpStatus, Query } from '@nestjs/common';
 import { QueryBus } from '@nestjs/cqrs';
 import { ApiCookieAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import {
@@ -7,7 +7,7 @@ import {
   ListResponseDto,
   toCursorListResponse,
 } from '@nestjs-fastify-nx/contracts';
-import { BetterAuthGuard, Roles, RolesGuard } from '@nestjs-fastify-nx/infra-auth';
+import { Roles } from '@nestjs-fastify-nx/infra-auth';
 import {
   ListUsersCursorFilterDto,
   ListUsersCursorQuery,
@@ -19,7 +19,6 @@ const ADMIN_USERS_PATH = '/api/v1/admin/users';
 
 @ApiTags('admin')
 @Controller('admin/users')
-@UseGuards(BetterAuthGuard, RolesGuard)
 @Roles('ADMIN')
 @ApiCookieAuth('session')
 export class AdminUsersController {

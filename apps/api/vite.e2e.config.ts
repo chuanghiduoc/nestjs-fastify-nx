@@ -1,5 +1,4 @@
 import { defineConfig } from 'vitest/config';
-import tsconfigPaths from 'vite-tsconfig-paths';
 
 export default defineConfig({
   // Test-file resolution (include, globalSetup) is anchored to this dir so it works
@@ -7,7 +6,7 @@ export default defineConfig({
   // process.cwd(), which must stay the workspace root — the e2e target runs from
   // there (no `cwd` override), matching how the app runs under nx serve / prod.
   root: __dirname,
-  plugins: [tsconfigPaths()],
+  resolve: { tsconfigPaths: true },
   test: {
     globals: true,
     environment: 'node',

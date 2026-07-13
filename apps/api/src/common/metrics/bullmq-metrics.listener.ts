@@ -28,13 +28,14 @@ interface StalledEvent {
 // Stale entries (terminal event landed on a different replica, Redis reconnect)
 // linger forever without a cap. 1h covers the longest legitimate job.
 const MAX_ACTIVE_AGE_MS = 60 * 60 * 1000;
+const MAX_ACTIVE_AGE_NS = BigInt(MAX_ACTIVE_AGE_MS) * 1_000_000n;
 
 // @QueueEventsListener requires a literal name — one subclass per queue.
 // QueueEvents is a broadcast stream: at API_REPLICAS > 1 every replica receives every event, so
 // unguarded inc() would multiply counters by the replica count. Recording is gated on the collector
 // leader (single writer) so `sum()` over replicas equals the real job count.
 abstract class QueueMetricsListenerBase extends QueueEventsHost {
-  private readonly activeAt = new Map<string, number>();
+  private readonly activeAt = new Map<string, bigint>();
 
   constructor(
     private readonly metrics: MetricsService,
@@ -47,7 +48,7 @@ abstract class QueueMetricsListenerBase extends QueueEventsHost {
   @OnQueueEvent('active')
   onActive(args: ActiveEvent): void {
     if (!this.leader.isLeader()) return;
-    this.activeAt.set(args.jobId, Date.now());
+    this.activeAt.set(args.jobId, process.hrtime.bigint());
   }
 
   @OnQueueEvent('completed')
@@ -83,9 +84,10 @@ abstract class QueueMetricsListenerBase extends QueueEventsHost {
     const startedAt = this.activeAt.get(jobId);
     if (startedAt === undefined) return;
     this.activeAt.delete(jobId);
-    const durationSeconds = (Date.now() - startedAt) / 1000;
+    const elapsedNs = process.hrtime.bigint() - startedAt;
+    const durationSeconds = Number(elapsedNs) / 1e9;
     // Drop the sample if the active timestamp is impossibly old — keeps the histogram clean.
-    if (durationSeconds * 1000 > MAX_ACTIVE_AGE_MS) return;
+    if (elapsedNs > MAX_ACTIVE_AGE_NS) return;
     this.metrics.bullmqJobDurationSeconds.observe(
       { queue: this.queueLabel, status },
       durationSeconds,
@@ -93,7 +95,7 @@ abstract class QueueMetricsListenerBase extends QueueEventsHost {
   }
 
   private sweepStale(): void {
-    const cutoff = Date.now() - MAX_ACTIVE_AGE_MS;
+    const cutoff = process.hrtime.bigint() - MAX_ACTIVE_AGE_NS;
     for (const [id, ts] of this.activeAt) {
       if (ts < cutoff) this.activeAt.delete(id);
     }

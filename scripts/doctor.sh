@@ -4,10 +4,10 @@
 # Checks:
 #   - Docker daemon running
 #   - Docker Compose v2 available
-#   - Node.js >= 22
+#   - Node.js >= 24
 #   - pnpm >= 10
 #   - .env file exists
-#   - Required env vars present (derived from .env.example keys)
+#   - .env drift against .env.example
 #   - Ports free: 3000, 5432, 6379, 6380, 9000, 9001, 1025, 8025
 #
 # Usage:
@@ -27,7 +27,7 @@ if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
   echo ""
   echo "Verifies all prerequisites for running the dev stack:"
   echo "  - Docker daemon and Compose v2"
-  echo "  - Node.js >= 22, pnpm >= 10"
+  echo "  - Node.js >= 24, pnpm >= 10"
   echo "  - .env file present with required keys"
   echo "  - Host ports free: 3000 5432 6379 6380 9000 9001 1025 8025"
   echo ""
@@ -61,12 +61,20 @@ version_gte() {
 
 # ---------------------------------------------------------------------------
 # Helper: check if a TCP port is in use on localhost.
-# Tries nc first (most portable), falls back to ss, then /proc/net/tcp.
+# Uses Node's cross-platform TCP socket first (Node is a checked prerequisite), then native tools.
 # Returns 0 if port IS in use, 1 if free.
 # ---------------------------------------------------------------------------
 port_in_use() {
   local port="$1"
-  if command -v nc >/dev/null 2>&1; then
+  if command -v node >/dev/null 2>&1; then
+    node -e '
+      const socket = require("node:net").connect({ host: "127.0.0.1", port: Number(process.argv[1]) });
+      const finish = (code) => { socket.destroy(); process.exit(code); };
+      socket.setTimeout(750, () => finish(1));
+      socket.once("connect", () => finish(0));
+      socket.once("error", () => finish(1));
+    ' "$port" >/dev/null 2>&1
+  elif command -v nc >/dev/null 2>&1; then
     nc -z 127.0.0.1 "$port" >/dev/null 2>&1
   elif command -v ss >/dev/null 2>&1; then
     ss -tln 2>/dev/null | grep -qE ":${port}\b"
@@ -100,15 +108,15 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 3. Node.js >= 22
+# 3. Node.js >= 24
 # ---------------------------------------------------------------------------
 step "Checking Node.js version..."
 if command -v node >/dev/null 2>&1; then
   NODE_VER=$(node --version)
-  if version_gte "${NODE_VER}" "22.0.0"; then
+  if version_gte "${NODE_VER}" "24.0.0"; then
     pass "Node.js ${NODE_VER}"
   else
-    fail "Node.js ${NODE_VER} found but >= 22 required — use nvm/fnm to switch: 'nvm use 22'"
+    fail "Node.js ${NODE_VER} found but >= 24 required — use nvm/fnm to switch: 'nvm use 24'"
   fi
 else
   fail "Node.js not found — install from https://nodejs.org or via nvm"
@@ -140,9 +148,9 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 6. Required env vars present (all keys from .env.example)
+# 6. Environment key drift
 # ---------------------------------------------------------------------------
-step "Checking required env vars..."
+step "Checking .env key drift..."
 if [[ -f "${REPO_ROOT}/.env.example" && -f "${REPO_ROOT}/.env" ]]; then
   # Extract key names from .env.example — skip comments and blank lines.
   EXAMPLE_KEYS=$(grep -E '^[A-Z_][A-Z0-9_]*=' "${REPO_ROOT}/.env.example" | cut -d= -f1 | sort)
@@ -159,7 +167,7 @@ if [[ -f "${REPO_ROOT}/.env.example" && -f "${REPO_ROOT}/.env" ]]; then
   if [[ ${#MISSING_KEYS[@]} -eq 0 ]]; then
     pass "All env vars from .env.example are present in .env"
   else
-    fail "Missing keys in .env (copy from .env.example): ${MISSING_KEYS[*]}"
+    warn "Keys absent from .env (schema defaults still apply): ${MISSING_KEYS[*]}"
   fi
 elif [[ ! -f "${REPO_ROOT}/.env.example" ]]; then
   warn ".env.example not found — skipping key comparison"
@@ -170,15 +178,18 @@ fi
 # ---------------------------------------------------------------------------
 # 7. Required ports free
 # ---------------------------------------------------------------------------
+sec::source_env API_PORT POSTGRES_PORT REDIS_CACHE_PORT REDIS_QUEUE_PORT \
+  MINIO_PORT MINIO_CONSOLE_PORT MAIL_PORT MAILPIT_UI_PORT
+
 PORTS_TO_CHECK=(
-  "3000:API"
-  "5432:PostgreSQL"
-  "6379:Redis-cache"
-  "6380:Redis-queue"
-  "9000:MinIO-API"
-  "9001:MinIO-console"
-  "1025:Mailpit-SMTP"
-  "8025:Mailpit-UI"
+  "${API_PORT:-3000}:API"
+  "${POSTGRES_PORT:-5432}:PostgreSQL"
+  "${REDIS_CACHE_PORT:-6379}:Redis-cache"
+  "${REDIS_QUEUE_PORT:-6380}:Redis-queue"
+  "${MINIO_PORT:-9000}:MinIO-API"
+  "${MINIO_CONSOLE_PORT:-9001}:MinIO-console"
+  "${MAIL_PORT:-1025}:Mailpit-SMTP"
+  "${MAILPIT_UI_PORT:-8025}:Mailpit-UI"
 )
 
 step "Checking host port availability..."

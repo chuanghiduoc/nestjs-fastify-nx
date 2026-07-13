@@ -4,3 +4,9 @@ packages:
   - 'libs/infra/*'
   - 'libs/modules/*'
   - 'tools/*'
+
+# Reduce exposure to freshly published supply-chain attacks while still allowing
+# Dependabot's reviewed weekly updates. Existing lockfile resolutions remain reproducible.
+minimumReleaseAge: 10080
+trustPolicy: no-downgrade
+blockExoticSubdeps: true

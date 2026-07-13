@@ -35,13 +35,18 @@ describe('buildPinoLoggerConfig', () => {
     expect(ignore({ url: undefined })).toBe(false);
   });
 
-  it('emits the string level label only in production (dev keeps numeric for pino-pretty)', () => {
+  it('uses structured levels in production and when pretty logs are disabled', () => {
     process.env['NODE_ENV'] = 'production';
     const prodFormatters = pinoHttp().formatters as { level: (l: string) => object };
     expect(prodFormatters.level('info')).toEqual({ level: 'info' });
 
     process.env['NODE_ENV'] = 'development';
     expect(pinoHttp().formatters).toBeUndefined();
+
+    process.env['LOG_PRETTY'] = 'false';
+    const containerFormatters = pinoHttp().formatters as { level: (l: string) => object };
+    expect(containerFormatters.level('info')).toEqual({ level: 'info' });
+    expect(pinoHttp().transport).toBeUndefined();
   });
 
   it('trims request/response serializers to essentials', () => {

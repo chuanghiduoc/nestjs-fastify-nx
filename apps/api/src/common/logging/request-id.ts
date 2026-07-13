@@ -19,7 +19,17 @@ export function activeTraceId(): string | undefined {
   return id && isValidTraceId(id) ? id : undefined;
 }
 
-// Request id for a request: validated client header → active trace id → random hex.
+// Request id for a request: active trace id → random 128-bit hex. Public callers must not be
+// allowed to choose this identifier by default: even a syntactically safe value can be reused to
+// make unrelated requests look identical in logs. Trust an upstream gateway's value explicitly.
 export function resolveRequestId(headers: Record<string, unknown>): string {
-  return sanitizeClientId(headers['x-request-id']) ?? activeTraceId() ?? generateCorrelationId();
+  const inbound =
+    process.env['TRUST_INBOUND_REQUEST_ID'] === 'true'
+      ? sanitizeClientId(headers['x-request-id'])
+      : undefined;
+  return inbound ?? activeTraceId() ?? generateCorrelationId();
+}
+
+export function resolveCorrelationId(headers: Record<string, unknown>, requestId: string): string {
+  return sanitizeClientId(headers['x-correlation-id']) ?? requestId;
 }

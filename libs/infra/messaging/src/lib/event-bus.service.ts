@@ -1,17 +1,19 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import type { DomainEvent, EventPublisherPort } from '@nestjs-fastify-nx/core';
 
 // In-process adapter backed by EventEmitter2.emitAsync — listener errors propagate to the caller.
-// For exactly-once cross-process delivery, swap this behind EVENT_PUBLISHER_PORT with OutboxPublisher.
+// For durable at-least-once cross-process delivery, swap this behind EVENT_PUBLISHER_PORT with
+// OutboxPublisher. Consumers must remain idempotent because a publish/mark crash causes redelivery.
 @Injectable()
 export class EventBusService implements EventPublisherPort {
-  private readonly logger = new Logger(EventBusService.name);
-
   constructor(private readonly emitter: EventEmitter2) {}
 
   async publish(event: DomainEvent): Promise<void> {
-    await this.emitter.emitAsync(event.eventType, event);
+    const results = await this.emitter.emitAsync(event.eventType, event);
+    if (results.length === 0) {
+      throw new Error(`No listener registered for domain event "${event.eventType}"`);
+    }
   }
 
   async publishAll(events: DomainEvent[]): Promise<void> {

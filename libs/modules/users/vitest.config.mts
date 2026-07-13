@@ -1,10 +1,11 @@
 import { defineConfig } from 'vitest/config';
-import tsconfigPaths from 'vite-tsconfig-paths';
+
+const isIntegrationRun = process.argv.includes('integration');
 
 export default defineConfig(() => ({
   root: __dirname,
   cacheDir: '../../../node_modules/.vite/libs/modules/users',
-  plugins: [tsconfigPaths()],
+  resolve: { tsconfigPaths: true },
   test: {
     name: 'modules-users',
     watch: false,
@@ -13,6 +14,7 @@ export default defineConfig(() => ({
     include: ['{src,tests}/**/*.{test,spec,integration}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
     testTimeout: 60_000,
     hookTimeout: 60_000,
+    exclude: isIntegrationRun ? [] : ['**/*.integration.spec.*'],
     reporters: ['default'],
     setupFiles: ['../../../vitest.setup.ts'],
     passWithNoTests: true,

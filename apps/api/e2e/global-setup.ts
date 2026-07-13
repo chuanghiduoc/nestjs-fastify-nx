@@ -14,6 +14,22 @@ async function stopContainers(): Promise<void> {
 }
 
 export async function setup(): Promise<void> {
+  const externalDbUrl = process.env['E2E_DATABASE_URL'];
+  const externalRedisHost = process.env['E2E_REDIS_HOST'];
+  const externalRedisPort = process.env['E2E_REDIS_PORT'];
+  const externalValues = [externalDbUrl, externalRedisHost, externalRedisPort];
+  if (externalValues.some(Boolean) && !externalValues.every(Boolean)) {
+    throw new Error(
+      'E2E_DATABASE_URL, E2E_REDIS_HOST and E2E_REDIS_PORT must be provided together',
+    );
+  }
+
+  if (externalDbUrl && externalRedisHost && externalRedisPort) {
+    configureTestEnvironment(externalDbUrl, externalRedisHost, externalRedisPort);
+    deployTestMigrations(externalDbUrl);
+    return;
+  }
+
   const [postgresContainer, redisContainer] = await Promise.all([
     new PostgreSqlContainer('postgres:18-alpine').start(),
     new RedisContainer('redis:8-alpine').start(),
@@ -33,20 +49,11 @@ export async function setup(): Promise<void> {
   process.once('SIGTERM', handleSignal);
 
   const dbUrl = postgresContainer.getConnectionUri();
-  const redisHost = redisContainer.getHost();
-  const redisPort = String(redisContainer.getFirstMappedPort());
-
-  // Forked workers inherit env from this process, so setting the real keys
-  // here means every module-init read (BullModule.forRootAsync, indicators,
-  // gateway) sees the testcontainer values before any default kicks in.
-  process.env['DATABASE_URL'] = dbUrl;
-  process.env['E2E_DATABASE_URL'] = dbUrl;
-  process.env['E2E_REDIS_HOST'] = redisHost;
-  process.env['E2E_REDIS_PORT'] = redisPort;
-  process.env['REDIS_CACHE_HOST'] = redisHost;
-  process.env['REDIS_CACHE_PORT'] = redisPort;
-  process.env['REDIS_QUEUE_HOST'] = redisHost;
-  process.env['REDIS_QUEUE_PORT'] = redisPort;
+  configureTestEnvironment(
+    dbUrl,
+    redisContainer.getHost(),
+    String(redisContainer.getFirstMappedPort()),
+  );
 
   // Run migrations once against the shared container. Any failure here means
   // every subsequent spec will time out against a broken schema — exit loud
@@ -58,6 +65,18 @@ export async function setup(): Promise<void> {
     await stopContainers();
     process.exit(1);
   }
+}
+
+function configureTestEnvironment(dbUrl: string, redisHost: string, redisPort: string): void {
+  // Forked workers inherit env from global setup, so every module-init read sees test endpoints.
+  process.env['DATABASE_URL'] = dbUrl;
+  process.env['E2E_DATABASE_URL'] = dbUrl;
+  process.env['E2E_REDIS_HOST'] = redisHost;
+  process.env['E2E_REDIS_PORT'] = redisPort;
+  process.env['REDIS_CACHE_HOST'] = redisHost;
+  process.env['REDIS_CACHE_PORT'] = redisPort;
+  process.env['REDIS_QUEUE_HOST'] = redisHost;
+  process.env['REDIS_QUEUE_PORT'] = redisPort;
 }
 
 export async function teardown(): Promise<void> {

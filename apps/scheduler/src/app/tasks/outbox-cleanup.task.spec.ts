@@ -16,7 +16,7 @@ describe('OutboxCleanupTask', () => {
 
   beforeEach(() => {
     prisma = makePrismaMock();
-    task = new OutboxCleanupTask(prisma);
+    task = new OutboxCleanupTask(prisma, { isLeader: () => true } as never);
   });
 
   describe('purgeOldOutboxEvents', () => {

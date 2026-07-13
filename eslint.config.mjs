@@ -125,6 +125,18 @@ export default tseslint.config(
               onlyDependOnLibsWithTags: ['scope:shared'],
             },
             {
+              sourceTag: 'scope:shared',
+              onlyDependOnLibsWithTags: [],
+            },
+            {
+              sourceTag: 'scope:client',
+              onlyDependOnLibsWithTags: ['scope:shared', 'scope:contracts'],
+            },
+            {
+              sourceTag: 'scope:tools',
+              onlyDependOnLibsWithTags: [],
+            },
+            {
               sourceTag: 'scope:testing',
               onlyDependOnLibsWithTags: [
                 'scope:core',

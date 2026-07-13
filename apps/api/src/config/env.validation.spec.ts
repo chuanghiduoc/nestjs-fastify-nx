@@ -14,6 +14,8 @@ const baseProdEnv = {
   MAIL_DEFAULT_EMAIL: 'ops@example.com',
   STORAGE_ACCESS_KEY: 'real-key',
   STORAGE_SECRET_KEY: 'real-secret',
+  BETTER_AUTH_URL: 'https://api.example.com',
+  FRONTEND_BASE_URL: 'https://app.example.com',
   BULL_BOARD_PASSWORD: 'strong-pw',
   MAIL_IGNORE_TLS: 'false',
   MAIL_REQUIRE_TLS: 'true',
@@ -39,7 +41,9 @@ describe('validateConfig', () => {
   it('applies safe defaults for auth rate-limit and body-limit caps', () => {
     const result = validateConfig(baseDevEnv);
     expect(result.AUTH_RATE_LIMIT_MAX).toBe(5);
+    expect(result.AUTH_IP_RATE_LIMIT_MAX).toBe(50);
     expect(result.AUTH_RATE_LIMIT_WINDOW_MS).toBe(900_000);
+    expect(result.AUTH_RATE_LIMIT_FAIL_OPEN).toBe(false);
     expect(result.HTTP_BODY_LIMIT_BYTES).toBe(1_048_576);
     expect(result.UPLOAD_MAX_FILE_BYTES).toBe(10_485_760);
   });
@@ -143,6 +147,15 @@ describe('validateConfig', () => {
   it('rejects empty BETTER_AUTH_SECRET in production (treated as unset)', () => {
     expect(() => validateConfig({ ...baseProdEnv, BETTER_AUTH_SECRET: '' })).toThrow(
       /BETTER_AUTH_SECRET/,
+    );
+  });
+
+  it('requires stable API and frontend origins in production', () => {
+    expect(() => validateConfig({ ...baseProdEnv, BETTER_AUTH_URL: '' })).toThrow(
+      /BETTER_AUTH_URL/,
+    );
+    expect(() => validateConfig({ ...baseProdEnv, FRONTEND_BASE_URL: '' })).toThrow(
+      /FRONTEND_BASE_URL/,
     );
   });
 

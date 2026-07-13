@@ -9,7 +9,7 @@ import {
 import { GqlContextType } from '@nestjs/graphql';
 import * as Sentry from '@sentry/nestjs';
 import type { IncomingMessage } from 'http';
-import type { FastifyReply, FastifyRequest } from 'fastify';
+import type { FastifyError, FastifyReply, FastifyRequest } from 'fastify';
 import { I18nService } from 'nestjs-i18n';
 import { ClsService } from 'nestjs-cls';
 import {
@@ -29,6 +29,7 @@ import {
   HTTP_STATUS_TITLES,
   PROBLEM_CONTENT_TYPE,
 } from './problem-details.helper';
+import { resolveFastifyCode, resolveFastifyStatus } from './fastify-error-handler';
 
 type RawWithIds = IncomingMessage & { requestId?: string; correlationId?: string };
 
@@ -182,6 +183,28 @@ function normalizeException(exception: unknown): NormalizedError {
     };
   }
 
+  if (isFastifyLevelError(exception)) {
+    const status = resolveFastifyStatus(exception);
+    const problem = exception as FastifyError & {
+      title?: string;
+      detail?: string;
+      code?: string;
+    };
+    const title = problem.title ?? HTTP_STATUS_TITLES[status] ?? 'Error';
+    return {
+      status,
+      title,
+      detail:
+        status >= 500 && process.env['NODE_ENV'] === 'production'
+          ? title
+          : (problem.detail ?? problem.message ?? title),
+      code:
+        problem.code && !problem.code.startsWith('FST_')
+          ? problem.code
+          : resolveFastifyCode(exception, status),
+    };
+  }
+
   if (!(exception instanceof HttpException)) {
     return {
       status: HttpStatus.INTERNAL_SERVER_ERROR,
@@ -229,4 +252,22 @@ function normalizeException(exception: unknown): NormalizedError {
       : exception.message;
 
   return { status, title, detail, code, args: body.args };
+}
+
+function isFastifyLevelError(exception: unknown): exception is FastifyError {
+  if (!exception || typeof exception !== 'object' || exception instanceof HttpException) {
+    return false;
+  }
+  const candidate = exception as Record<string, unknown>;
+  if (typeof candidate['code'] === 'string' && candidate['code'].startsWith('FST_')) return true;
+
+  // Only accept an RFC 9457-like object here. Treating every object with a numeric `status` as a
+  // client error can turn a driver/library exception into a 4xx and expose its raw message.
+  return (
+    typeof candidate['status'] === 'number' &&
+    candidate['status'] >= 400 &&
+    candidate['status'] < 600 &&
+    typeof candidate['title'] === 'string' &&
+    typeof candidate['type'] === 'string'
+  );
 }

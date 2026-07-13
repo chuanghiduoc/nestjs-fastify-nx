@@ -18,10 +18,11 @@ services:
     ports:
       - '${POSTGRES_PORT:-5432}:5432'
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-postgres}']
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-nestjs_db}']
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 10s
 
   redis-cache:
     image: redis:8-alpine
@@ -86,7 +87,7 @@ services:
     environment:
       TZ: ${TZ:-UTC}
       # Self-identify in logs/metrics/traces. Without this the worker inherits the
-      # shared .env OTEL_SERVICE_NAME (nestjs-fastify-api) and mislabels itself as the API.
+      # Override the shared .env default so logs/traces have the worker identity.
       OTEL_SERVICE_NAME: nestjs-fastify-worker
     healthcheck:
       test:

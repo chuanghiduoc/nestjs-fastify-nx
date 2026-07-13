@@ -2,16 +2,18 @@ import { z } from 'zod';
 
 const workerEnvSchema = z
   .object({
-    // Database (used by domain-event outbox / future audit-log writers if any)
-    DATABASE_URL: z.string().trim().min(1).optional(),
-    // Mirrors the api validator — accepted but unused by the worker at runtime.
-    // Validated here so .env.example parity is enforced and misconfiguration surfaces
-    // at boot rather than silently being ignored.
+    // Database persists durable upload verification state.
+    DATABASE_URL: z.string().trim().min(1),
     DATABASE_DIRECT_URL: z.string().trim().min(1).optional(),
-    // Mirrors api validator for .env.example parity — worker has zero DB connections.
     DATABASE_REPLICA_URL: z.string().trim().min(1).optional(),
     DATABASE_REPLICA_POOL_MAX: z.coerce.number().int().min(1).max(1000).default(10),
-    // Mirrors api validator for .env.example parity — worker has zero DB connections.
+    DATABASE_POOL_MAX: z.coerce.number().int().min(1).max(1000).default(20),
+    DATABASE_POOL_MIN: z.coerce.number().int().min(0).max(1000).default(0),
+    DATABASE_IDLE_TIMEOUT_MS: z.coerce.number().int().min(0).default(10_000),
+    DATABASE_CONNECTION_TIMEOUT_MS: z.coerce.number().int().min(0).default(5_000),
+    DATABASE_STATEMENT_TIMEOUT_MS: z.coerce.number().int().min(0).default(30_000),
+    DATABASE_APPLICATION_NAME: z.string().default('nestjs-fastify-worker'),
+    DB_PASSWORD_FILE: z.string().trim().min(1).optional(),
     DATABASE_SLOW_QUERY_MS: z.coerce.number().int().min(1).default(200),
 
     // Redis queue
@@ -25,6 +27,12 @@ const workerEnvSchema = z
     STORAGE_REGION: z.string().default('us-east-1'),
     STORAGE_ACCESS_KEY: z.string().default('minioadmin'),
     STORAGE_SECRET_KEY: z.string().default('minioadmin'),
+    STORAGE_DOWNLOAD_URL_EXPIRES_SECONDS: z.coerce
+      .number()
+      .int()
+      .min(60)
+      .max(86_400)
+      .default(3_600),
 
     // Mail (Nodemailer SMTP)
     MAIL_HOST: z.string().default('localhost'),
@@ -46,8 +54,8 @@ const workerEnvSchema = z
     MAIL_DEFAULT_EMAIL: z.string().email().default('noreply@example.com'),
     MAIL_DEFAULT_NAME: z.string().default('No Reply'),
 
-    // Per-queue worker concurrency. Evaluated at module load time (process.env is
-    // already populated by ConfigModule). Increase for I/O-bound queues before
+    // Per-queue worker concurrency. Processor decorators read these at module load,
+    // so Nx serve loads .env through Node runtimeArgs and containers inject them. Increase before
     // scaling WORKER_REPLICAS — concurrency × replicas is the effective parallelism.
     WORKER_EMAIL_CONCURRENCY: z.coerce.number().int().min(1).max(500).default(5),
     WORKER_UPLOAD_CONCURRENCY: z.coerce.number().int().min(1).max(500).default(5),
@@ -64,6 +72,7 @@ const workerEnvSchema = z
       .transform((v) => v === 'true'),
     OTEL_SERVICE_NAME: z.string().default('nestjs-fastify-worker'),
     OTEL_SERVICE_NAMESPACE: z.string().default('app'),
+    OTEL_SERVICE_VERSION: z.string().default('0.0.0'),
     OTEL_EXPORTER_OTLP_ENDPOINT: z.string().default('http://localhost:4318'),
     OTEL_EXPORTER_OTLP_HEADERS: z.string().default(''),
     OTEL_TRACES_SAMPLER_RATIO: z.coerce.number().min(0).max(1).default(1),
@@ -75,6 +84,10 @@ const workerEnvSchema = z
     // The worker has no prom-client /metrics endpoint, so OTLP push is how its runtime metrics leave
     // the process — enable this (OTEL_METRICS_EXPORT_ENABLED=true) when OTEL_ENABLED is on in prod.
     OTEL_METRICS_EXPORT_ENABLED: z
+      .string()
+      .default('false')
+      .transform((v) => v === 'true'),
+    OTEL_DEBUG: z
       .string()
       .default('false')
       .transform((v) => v === 'true'),
@@ -91,26 +104,55 @@ const workerEnvSchema = z
     SENTRY_ENVIRONMENT: z.string().default('development'),
   })
   .superRefine((data, ctx) => {
-    // The worker owns the SMTP transport, so the production TLS guard belongs here.
-    // Enforced only when auth is used (MAIL_USER set): the rule protects credentials,
-    // and a no-auth relay (e.g. a local mailpit prod-parity smoke) leaks nothing in
-    // plaintext. Keeps prod secure without forcing TLS gymnastics against mailpit.
-    if (data.NODE_ENV !== 'production' || !data.MAIL_USER) return;
-    if (data.MAIL_IGNORE_TLS) {
+    if (data.DATABASE_POOL_MIN > data.DATABASE_POOL_MAX) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        path: ['MAIL_IGNORE_TLS'],
-        message:
-          'MAIL_IGNORE_TLS must be false in production when MAIL_USER is set — plaintext SMTP exposes credentials',
+        path: ['DATABASE_POOL_MIN'],
+        message: 'DATABASE_POOL_MIN must be less than or equal to DATABASE_POOL_MAX',
       });
     }
-    if (!data.MAIL_SECURE && !data.MAIL_REQUIRE_TLS) {
+    if (data.NODE_ENV !== 'production') return;
+
+    if (data.STORAGE_ACCESS_KEY === 'minioadmin') {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        path: ['MAIL_REQUIRE_TLS'],
-        message:
-          'Enable MAIL_SECURE or MAIL_REQUIRE_TLS in production when MAIL_USER is set so SMTP credentials negotiate TLS',
+        path: ['STORAGE_ACCESS_KEY'],
+        message: 'Must not use default value in production',
       });
+    }
+    if (data.STORAGE_SECRET_KEY === 'minioadmin') {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['STORAGE_SECRET_KEY'],
+        message: 'Must not use default value in production',
+      });
+    }
+    if (data.MAIL_DEFAULT_EMAIL === 'noreply@example.com') {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['MAIL_DEFAULT_EMAIL'],
+        message: 'MAIL_DEFAULT_EMAIL must be set to a real address in production',
+      });
+    }
+
+    // Only enforce transport TLS when SMTP authentication sends credentials.
+    if (data.MAIL_USER) {
+      if (data.MAIL_IGNORE_TLS) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['MAIL_IGNORE_TLS'],
+          message:
+            'MAIL_IGNORE_TLS must be false in production when MAIL_USER is set — plaintext SMTP exposes credentials',
+        });
+      }
+      if (!data.MAIL_SECURE && !data.MAIL_REQUIRE_TLS) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['MAIL_REQUIRE_TLS'],
+          message:
+            'Enable MAIL_SECURE or MAIL_REQUIRE_TLS in production when MAIL_USER is set so SMTP credentials negotiate TLS',
+        });
+      }
     }
   });
 

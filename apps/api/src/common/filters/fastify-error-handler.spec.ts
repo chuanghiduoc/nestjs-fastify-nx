@@ -2,7 +2,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import Fastify, { type FastifyInstance } from 'fastify';
 import * as Sentry from '@sentry/nestjs';
-import { applyFastifyErrorHandler } from './fastify-error-handler';
+import { applyFastifyErrorHandler, applyFastifyProblemDetailsHook } from './fastify-error-handler';
 
 vi.mock('@sentry/nestjs', () => ({ captureException: vi.fn() }));
 
@@ -110,12 +110,17 @@ describe('applyFastifyErrorHandler', () => {
     app.get('/echo', async () => {
       throw new Error('x');
     });
-    const res = await app.inject({
-      method: 'GET',
-      url: '/echo',
-      headers: { 'x-request-id': 'caller-supplied-id-123' },
-    });
-    expect(res.headers['x-request-id']).toBe('caller-supplied-id-123');
+    process.env['TRUST_INBOUND_REQUEST_ID'] = 'true';
+    try {
+      const res = await app.inject({
+        method: 'GET',
+        url: '/echo',
+        headers: { 'x-request-id': 'caller-supplied-id-123' },
+      });
+      expect(res.headers['x-request-id']).toBe('caller-supplied-id-123');
+    } finally {
+      delete process.env['TRUST_INBOUND_REQUEST_ID'];
+    }
   });
 
   it('masks 5xx detail in production but keeps it in non-production', async () => {
@@ -162,11 +167,13 @@ describe('applyFastifyErrorHandler', () => {
     app.get('/boom-tags', async () => {
       throw new Error('kaboom');
     });
+    process.env['TRUST_INBOUND_REQUEST_ID'] = 'true';
     const res = await app.inject({
       method: 'GET',
       url: '/boom-tags',
       headers: { 'x-request-id': 'req-abc', 'x-correlation-id': 'corr-abc' },
     });
+    delete process.env['TRUST_INBOUND_REQUEST_ID'];
 
     expect(res.statusCode).toBe(500);
     expect(Sentry.captureException).toHaveBeenCalledWith(
@@ -183,5 +190,75 @@ describe('applyFastifyErrorHandler', () => {
     });
     const res = await app.inject({ method: 'GET', url: '/hijack' });
     expect(res.statusCode).toBe(204);
+  });
+});
+
+describe('applyFastifyProblemDetailsHook', () => {
+  it('normalizes a Fastify parser error without registering another error handler', async () => {
+    const app = Fastify();
+    applyFastifyProblemDetailsHook(app);
+    app.post('/json', { bodyLimit: 10 }, async () => 'ok');
+
+    try {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/json',
+        headers: { 'content-type': 'application/json' },
+        payload: JSON.stringify({ data: 'x'.repeat(100) }),
+      });
+
+      expect(res.statusCode).toBe(413);
+      expect(res.headers['content-type']).toMatch(/application\/problem\+json/);
+      expect(res.json()).toMatchObject({ status: 413, code: 'payload_too_large' });
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('does not mistake an arbitrary numeric status field for Problem Details', async () => {
+    const app = Fastify();
+    applyFastifyProblemDetailsHook(app);
+    app.get('/partial', async (_request, reply) =>
+      reply
+        .status(400)
+        .header('content-type', 'application/problem+json')
+        .send({ status: 400, internal: 'must-not-pass-through' }),
+    );
+
+    try {
+      const res = await app.inject('/partial');
+      expect(res.json()).toMatchObject({ status: 400, code: 'bad_request', title: 'Bad Request' });
+      expect(res.json()).not.toHaveProperty('internal');
+      expect(res.headers['x-request-id']).toBe(res.json().requestId);
+      expect(res.headers['x-correlation-id']).toBeDefined();
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('preserves safe extensions on a complete Problem Details body', async () => {
+    const app = Fastify();
+    applyFastifyProblemDetailsHook(app);
+    app.get('/limited', async (_request, reply) =>
+      reply.status(429).header('x-request-id', 'server-generated-id').send({
+        type: 'about:blank',
+        title: 'Too Many Requests',
+        status: 429,
+        detail: 'Retry later',
+        retryAfter: 5,
+      }),
+    );
+
+    try {
+      const res = await app.inject('/limited');
+      expect(res.json()).toMatchObject({
+        status: 429,
+        retryAfter: 5,
+        requestId: 'server-generated-id',
+      });
+      expect(res.headers['x-request-id']).toBe('server-generated-id');
+    } finally {
+      await app.close();
+    }
   });
 });

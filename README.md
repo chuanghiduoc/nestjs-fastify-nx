@@ -150,7 +150,7 @@ See [docs/architecture.md](docs/architecture.md) for the full module map.
 
 ## Quick Start
 
-> **Prerequisites** — Docker 24+, Node 22, pnpm 10.33 (`corepack enable && corepack prepare pnpm@10.33.0 --activate`).
+> **Prerequisites** — Docker 24+, Node 24 LTS, pnpm 10.33 (`corepack enable && corepack prepare pnpm@10.33.0 --activate`).
 
 ```bash
 git clone https://github.com/chuanghiduoc/nestjs-fastify-nx.git
@@ -169,12 +169,13 @@ When done:
 ./scripts/teardown.sh --keep-volumes  # stop stack, keep data
 ```
 
-Optional — local observability (Prometheus · Grafana · Jaeger · OTel collector):
+Optional — local observability (Prometheus · Grafana · Jaeger · Loki · Alloy · OTel collector):
 
 ```bash
 ./scripts/build-dev.sh --with-obs
-# Grafana:    http://localhost:3001  (admin / admin)
+# Grafana:    http://localhost:3001  (admin / GRAFANA_ADMIN_PASSWORD)
 # Jaeger:     http://localhost:16686
+# Loki API:   http://localhost:3100
 # Prometheus: http://localhost:9090
 ```
 

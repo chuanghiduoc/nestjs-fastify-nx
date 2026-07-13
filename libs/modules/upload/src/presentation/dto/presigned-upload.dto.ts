@@ -17,7 +17,7 @@ export class PresignedUploadDto implements PresignedUpload {
     example: {
       'Content-Type': 'image/png',
       bucket: 'app-uploads',
-      key: 'uploads/019dd1a5-9235-70db-8d57-54ef901d8185.png',
+      key: 'uploads/019dd1a5-9235-70db-8d57-54ef901d8185/019dd1a6-102a-7b25-a5a3-54b298b81864.png',
       Policy: '...',
       'X-Amz-Signature': '...',
     },
@@ -27,7 +27,8 @@ export class PresignedUploadDto implements PresignedUpload {
 
   @ApiProperty({
     description: 'Storage key the file will land under — pass back to /upload/confirm.',
-    example: 'uploads/019dd1a5-9235-70db-8d57-54ef901d8185.png',
+    example:
+      'uploads/019dd1a5-9235-70db-8d57-54ef901d8185/019dd1a6-102a-7b25-a5a3-54b298b81864.png',
   })
   key!: string;
 

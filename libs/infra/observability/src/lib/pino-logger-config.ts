@@ -1,4 +1,5 @@
 import { hostname } from 'node:os';
+import { RequestMethod } from '@nestjs/common';
 import { stdSerializers } from 'pino';
 import type { Params } from 'nestjs-pino';
 import type { Options as PinoHttpOptions } from 'pino-http';
@@ -33,12 +34,16 @@ function isNoisyProbe(url: string | undefined): boolean {
 
 export function buildPinoLoggerConfig(overrides: Partial<PinoHttpOptions> = {}): Params {
   const isProduction = process.env['NODE_ENV'] === 'production';
+  const prettyLogs = !isProduction && process.env['LOG_PRETTY'] !== 'false';
   const service = process.env['OTEL_SERVICE_NAME'] ?? 'app';
   const env = process.env['NODE_ENV'] ?? 'development';
 
   return {
+    // nestjs-pino's backward-compatible default is `*`, which Nest 11 has to
+    // auto-convert on Fastify 5. Use the named optional wildcard for every HTTP method.
+    forRoutes: [{ path: '{*splat}', method: RequestMethod.ALL }],
     pinoHttp: {
-      transport: !isProduction
+      transport: prettyLogs
         ? { target: 'pino-pretty', options: { colorize: true, singleLine: true } }
         : undefined,
       level: process.env['LOG_LEVEL'] ?? 'info',
@@ -47,8 +52,8 @@ export function buildPinoLoggerConfig(overrides: Partial<PinoHttpOptions> = {}):
       base: { service, env, pid: process.pid, hostname: hostname() },
       // requestId/correlationId/userId on every line app-wide — see requestContextMixin().
       mixin: requestContextMixin,
-      // Prod: string level label for log backends. Dev keeps numeric for pino-pretty.
-      formatters: isProduction ? { level: (label) => ({ level: label }) } : undefined,
+      // Structured logs use a string level label; pino-pretty expects the numeric level.
+      formatters: !prettyLogs ? { level: (label) => ({ level: label }) } : undefined,
       autoLogging: { ignore: (req) => isNoisyProbe(req.url) },
       // Request essentials only, not the full header/body dump — smaller lines, smaller PII surface.
       // `remoteAddress` is the raw TCP peer (pod IP behind a proxy); pair with X-Forwarded-For

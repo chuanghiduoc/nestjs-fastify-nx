@@ -3,9 +3,7 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '@nestjs-fastify-nx/infra-database';
 import { positiveIntEnv } from '@nestjs-fastify-nx/shared';
 import { UserStatus } from '@nestjs-fastify-nx/modules-users';
-
-const PURGE_BATCH_SIZE = 500;
-const PURGE_MAX_BATCHES = 200;
+import { SchedulerLeaderService } from '../leadership/scheduler-leader.service';
 
 // Validated before DROP so a rogue table sharing the audit_logs_* prefix is never dropped accidentally.
 const AUDIT_PARTITION_NAME = /^audit_logs_(\d{4})_(\d{2})$/;
@@ -14,37 +12,49 @@ const AUDIT_PARTITION_NAME = /^audit_logs_(\d{4})_(\d{2})$/;
 export class CleanupTask {
   private readonly logger = new Logger(CleanupTask.name);
   private readonly auditRetentionMonths = positiveIntEnv('AUDIT_LOG_RETENTION_MONTHS', 12);
+  private readonly inactiveUserRetentionDays = positiveIntEnv('INACTIVE_USER_RETENTION_DAYS', 90);
+  private readonly userPurgeBatchSize = positiveIntEnv('USER_PURGE_BATCH_SIZE', 500);
+  private readonly userPurgeMaxBatches = positiveIntEnv('USER_PURGE_MAX_BATCHES', 200);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly leadership: SchedulerLeaderService,
+  ) {}
 
-  @Cron(CronExpression.EVERY_DAY_AT_2AM)
+  @Cron(CronExpression.EVERY_DAY_AT_2AM, { timeZone: 'UTC' })
   async purgeInactiveUsers(): Promise<void> {
-    this.logger.log('Starting inactive-user purge (>90 days INACTIVE)');
+    if (!this.leadership.isLeader()) return;
+    this.logger.log(
+      `Starting inactive-user purge (>${this.inactiveUserRetentionDays} days INACTIVE)`,
+    );
 
-    const cutoff = new Date();
-    cutoff.setDate(cutoff.getDate() - 90);
+    const cutoff = new Date(Date.now() - this.inactiveUserRetentionDays * 86_400_000);
 
     let totalPurged = 0;
     try {
-      for (let batch = 0; batch < PURGE_MAX_BATCHES; batch++) {
+      for (let batch = 0; batch < this.userPurgeMaxBatches; batch++) {
         const candidates = await this.prisma.db.user.findMany({
           where: {
             status: UserStatus.INACTIVE,
             updatedAt: { lt: cutoff },
           },
           select: { id: true },
-          take: PURGE_BATCH_SIZE,
+          take: this.userPurgeBatchSize,
         });
 
         if (candidates.length === 0) break;
 
         const { count } = await this.prisma.db.user.deleteMany({
-          where: { id: { in: candidates.map((u) => u.id) } },
+          where: {
+            id: { in: candidates.map((u) => u.id) },
+            status: UserStatus.INACTIVE,
+            updatedAt: { lt: cutoff },
+          },
         });
 
         totalPurged += count;
 
-        if (candidates.length < PURGE_BATCH_SIZE) break;
+        if (candidates.length < this.userPurgeBatchSize) break;
       }
 
       this.logger.log(
@@ -57,8 +67,9 @@ export class CleanupTask {
     }
   }
 
-  @Cron('0 3 * * 0') // Sunday 03:00 UTC
+  @Cron('0 3 * * 0', { timeZone: 'UTC' }) // Sunday 03:00 UTC
   async vacuumDatabase(): Promise<void> {
+    if (!this.leadership.isLeader()) return;
     this.logger.log('Running VACUUM ANALYZE');
 
     try {
@@ -69,12 +80,13 @@ export class CleanupTask {
     }
   }
 
-  @Cron(CronExpression.EVERY_DAY_AT_4AM)
+  @Cron(CronExpression.EVERY_DAY_AT_4AM, { timeZone: 'UTC' })
   async ensureAuditLogPartitions(): Promise<void> {
+    if (!this.leadership.isLeader()) return;
     try {
       for (const offset of [0, 1, 2]) {
         await this.prisma.db
-          .$executeRaw`SELECT ensure_audit_log_partition(NOW() + (${offset} || ' months')::interval)`;
+          .$queryRaw`SELECT ensure_audit_log_partition(NOW() + (${offset} || ' months')::interval)`;
       }
       this.logger.log('Ensured audit_logs partitions for current + next 2 months');
     } catch (error) {
@@ -82,12 +94,14 @@ export class CleanupTask {
     }
   }
 
-  @Cron('30 4 1 * *') // 1st of month 04:30 UTC — after partition ensure at 04:00; DROP is O(1) vs streaming DELETE
+  @Cron('30 4 1 * *', { timeZone: 'UTC' }) // 1st of month 04:30 UTC — after partition ensure at 04:00; DROP is O(1) vs streaming DELETE
   async purgeAuditLogPartitions(): Promise<void> {
+    if (!this.leadership.isLeader()) return;
     const cutoff = new Date();
     cutoff.setUTCDate(1);
     cutoff.setUTCHours(0, 0, 0, 0);
-    cutoff.setUTCMonth(cutoff.getUTCMonth() - this.auditRetentionMonths);
+    // Retention includes the active month: 1 keeps only current, 12 keeps current + 11 prior.
+    cutoff.setUTCMonth(cutoff.getUTCMonth() - (this.auditRetentionMonths - 1));
 
     const cutoffYear = cutoff.getUTCFullYear();
     const cutoffMonth = cutoff.getUTCMonth() + 1;
@@ -107,6 +121,7 @@ export class CleanupTask {
 
         const year = Number(match[1]);
         const month = Number(match[2]);
+        if (month < 1 || month > 12) continue;
         const isOlder = year < cutoffYear || (year === cutoffYear && month < cutoffMonth);
         if (!isOlder) continue;
 

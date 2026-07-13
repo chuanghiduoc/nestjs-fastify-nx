@@ -7,6 +7,7 @@ vi.mock('ioredis', () => {
   class MockRedis {
     // Each instance gets its own spy so tests are isolated.
     quit = vi.fn().mockResolvedValue('OK');
+    disconnect = vi.fn();
   }
   return { default: MockRedis };
 });
@@ -51,5 +52,8 @@ describe('RedisQueueClientProvider', () => {
     quitMock.mockRejectedValueOnce(new Error('Connection is already closed'));
 
     await expect(provider.onModuleDestroy()).resolves.toBeUndefined();
+    const disconnectMock = (provider.client as unknown as { disconnect: ReturnType<typeof vi.fn> })
+      .disconnect;
+    expect(disconnectMock).toHaveBeenCalledOnce();
   });
 });

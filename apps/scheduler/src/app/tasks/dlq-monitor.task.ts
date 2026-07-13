@@ -1,9 +1,10 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, type OnApplicationShutdown } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { Queue } from 'bullmq';
 import { ConfigService } from '@nestjs/config';
 import { dlqNameFor } from '@nestjs-fastify-nx/infra-redis';
 import { QUEUE_NAMES, positiveIntEnv } from '@nestjs-fastify-nx/shared';
+import { SchedulerLeaderService } from '../leadership/scheduler-leader.service';
 
 interface DlqMonitorEnv {
   REDIS_QUEUE_HOST: string;
@@ -13,12 +14,15 @@ interface DlqMonitorEnv {
 
 // Emits structured warn logs for alerting (Loki/Datadog). DLQ breach signals SMTP/S3/template failure.
 @Injectable()
-export class DlqMonitorTask {
+export class DlqMonitorTask implements OnApplicationShutdown {
   private readonly logger = new Logger(DlqMonitorTask.name);
   private readonly threshold = positiveIntEnv('DLQ_ALERT_THRESHOLD', 10);
   private readonly queues: Queue[];
 
-  constructor(config: ConfigService<DlqMonitorEnv, true>) {
+  constructor(
+    config: ConfigService<DlqMonitorEnv, true>,
+    private readonly leadership: SchedulerLeaderService,
+  ) {
     const connection = {
       host: config.get('REDIS_QUEUE_HOST', { infer: true }),
       port: config.get('REDIS_QUEUE_PORT', { infer: true }),
@@ -35,8 +39,9 @@ export class DlqMonitorTask {
     );
   }
 
-  @Cron(CronExpression.EVERY_MINUTE)
+  @Cron(CronExpression.EVERY_MINUTE, { timeZone: 'UTC' })
   async check(): Promise<void> {
+    if (!this.leadership.isLeader()) return;
     for (const queue of this.queues) {
       try {
         const counts = await queue.getJobCounts('waiting', 'failed');
@@ -53,6 +58,14 @@ export class DlqMonitorTask {
   }
 
   async onApplicationShutdown(): Promise<void> {
-    await Promise.all(this.queues.map((q) => q.close().catch(() => undefined)));
+    await Promise.all(
+      this.queues.map(async (queue) => {
+        try {
+          await queue.close();
+        } catch {
+          await queue.disconnect().catch(() => undefined);
+        }
+      }),
+    );
   }
 }

@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '@nestjs-fastify-nx/infra-database';
 import { positiveIntEnv } from '@nestjs-fastify-nx/shared';
+import { SchedulerLeaderService } from '../leadership/scheduler-leader.service';
 
 const BATCH_SIZE = positiveIntEnv('OUTBOX_PURGE_BATCH_SIZE', 1000);
 const MAX_BATCHES = positiveIntEnv('OUTBOX_PURGE_MAX_BATCHES', 200);
@@ -24,11 +25,15 @@ export class OutboxCleanupTask {
     return raw;
   })();
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly leadership: SchedulerLeaderService,
+  ) {}
 
   // UTC-pinned to guard against host TZ drift; 03:15 runs after weekly VACUUM at 03:00 Sun.
   @Cron('15 3 * * *', { name: 'outbox-purge', timeZone: 'UTC' })
   async purgeOldOutboxEvents(): Promise<void> {
+    if (!this.leadership.isLeader()) return;
     const cutoffDays = this.retentionDays;
     this.logger.log(
       `Starting outbox purge: processedAt IS NOT NULL AND createdAt < NOW() - ${cutoffDays} days`,

@@ -86,4 +86,18 @@ describe('OutboxPublisher', () => {
     outbox.createMany.mockRejectedValueOnce(new Error('unique violation'));
     await expect(publisher.publish(buildEvent())).rejects.toThrow('unique violation');
   });
+
+  it('uses the transaction-scoped delegate when PrismaService exposes one', async () => {
+    const transactionOutbox = new FakeOutboxEventDelegate();
+    const prisma = {
+      db: { outboxEvent: outbox },
+      currentTransaction: { outboxEvent: transactionOutbox },
+    } as unknown as PrismaService;
+    const transactionPublisher = new OutboxPublisher(prisma);
+
+    await transactionPublisher.publish(buildEvent());
+
+    expect(transactionOutbox.createMany).toHaveBeenCalledOnce();
+    expect(outbox.createMany).not.toHaveBeenCalled();
+  });
 });

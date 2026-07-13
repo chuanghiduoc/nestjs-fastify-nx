@@ -26,6 +26,11 @@ tmp
 .gitignore
 .gitattributes
 .github
+.agents
+.codex
+.mcp.json
+AGENTS.md
+CLAUDE.md
 .gitlab
 .circleci
 .husky

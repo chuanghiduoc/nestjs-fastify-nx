@@ -46,7 +46,15 @@ export function createBullBoardPlugin(opts: BullBoardOptions) {
     createBullBoard({ queues, serverAdapter });
 
     fastify.addHook('onClose', async () => {
-      await Promise.all(rawQueues.map((q) => q.close()));
+      await Promise.all(
+        rawQueues.map(async (queue) => {
+          try {
+            await queue.close();
+          } catch {
+            await queue.disconnect().catch(() => undefined);
+          }
+        }),
+      );
     });
 
     fastify.addHook('onRequest', async (request, reply) => {

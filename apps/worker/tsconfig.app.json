@@ -28,6 +28,9 @@
       "path": "../../libs/shared/tsconfig.lib.json"
     },
     {
+      "path": "../../libs/infra/database/tsconfig.lib.json"
+    },
+    {
       "path": "../../libs/infra/storage/tsconfig.lib.json"
     },
     {

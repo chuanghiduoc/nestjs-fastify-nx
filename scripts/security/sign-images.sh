@@ -30,7 +30,7 @@ if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
   exit 0
 fi
 
-sec::source_env
+sec::source_env IMAGE_REGISTRY IMAGE_NAMESPACE IMAGE_TAG
 cd "$(sec::repo_root)"
 
 COSIGN_VERSION="${COSIGN_VERSION:-v2.4.1}"

@@ -18,6 +18,7 @@ const envSchema = z
     DATABASE_CONNECTION_TIMEOUT_MS: z.coerce.number().int().min(0).default(5_000),
     DATABASE_STATEMENT_TIMEOUT_MS: z.coerce.number().int().min(0).default(30_000),
     DATABASE_APPLICATION_NAME: z.string().default('nestjs-fastify-api'),
+    DB_PASSWORD_FILE: z.string().trim().min(1).optional(),
     // Prisma query events above this duration are logged as `warn` (query template + duration
     // only — never params, which can carry PII/secrets). See PrismaService.
     DATABASE_SLOW_QUERY_MS: z.coerce.number().int().min(1).default(200),
@@ -56,6 +57,13 @@ const envSchema = z
     STORAGE_REGION: z.string().default('us-east-1'),
     STORAGE_ACCESS_KEY: z.string().default('minioadmin'),
     STORAGE_SECRET_KEY: z.string().default('minioadmin'),
+    STORAGE_DOWNLOAD_URL_EXPIRES_SECONDS: z.coerce
+      .number()
+      .int()
+      .min(60)
+      .max(86_400)
+      .default(3_600),
+    UPLOAD_PRESIGN_EXPIRES_SECONDS: z.coerce.number().int().min(60).max(3_600).default(300),
 
     // Throttler
     THROTTLER_ENABLED: z
@@ -89,6 +97,8 @@ const envSchema = z
     NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
     PORT: z.coerce.number().int().min(1).max(65535).default(3000),
     LOG_LEVEL: z.string().default('info'),
+    ERROR_DOCS_BASE_URL: z.string().url().optional(),
+    HTTP_MAX_EVENT_LOOP_DELAY_MS: z.coerce.number().int().min(10).max(60_000).default(1_000),
     CORS_ORIGINS: z
       .string()
       .default('')
@@ -101,9 +111,10 @@ const envSchema = z
           : [],
       ),
     // Wrong value lets attacker spoof req.ip and bypass rate limits. 1=single proxy, 2=Cloudflare+ingress.
-    TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(10).default(1),
+    TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(10).default(0),
     // Per-IP WebSocket cap — prevents a single client from OOMing the gateway.
     WS_CONNECTION_LIMIT_PER_IP: z.coerce.number().int().min(1).default(50),
+    WS_SESSION_REVALIDATE_MS: z.coerce.number().int().min(5_000).max(300_000).default(60_000),
     // Allow requests through when Redis is unreachable (brief unbounded rate) instead of cascading 500s.
     THROTTLER_FAIL_OPEN: z
       .string()
@@ -123,6 +134,7 @@ const envSchema = z
       .transform((v) => v === 'true'),
     OTEL_SERVICE_NAME: z.string().default('nestjs-fastify-api'),
     OTEL_SERVICE_NAMESPACE: z.string().default('app'),
+    OTEL_SERVICE_VERSION: z.string().default('0.0.0'),
     OTEL_EXPORTER_OTLP_ENDPOINT: z.string().default('http://localhost:4318'),
     OTEL_EXPORTER_OTLP_HEADERS: z.string().default(''),
     OTEL_TRACES_SAMPLER_RATIO: z.coerce.number().min(0).max(1).default(1),
@@ -137,6 +149,15 @@ const envSchema = z
     // metrics source of truth, so enabling both would double-count. Enable only in processes with no
     // prom-client scrape endpoint (worker, scheduler). Read by startTracing() via process.env.
     OTEL_METRICS_EXPORT_ENABLED: z
+      .string()
+      .default('false')
+      .transform((v) => v === 'true'),
+    OTEL_DEBUG: z
+      .string()
+      .default('false')
+      .transform((v) => v === 'true'),
+    // Only a trusted gateway should be allowed to assign the support/log lookup id.
+    TRUST_INBOUND_REQUEST_ID: z
       .string()
       .default('false')
       .transform((v) => v === 'true'),
@@ -157,9 +178,14 @@ const envSchema = z
 
     // Two-tier auth rate limit (bypasses NestJS ThrottlerGuard via reply.hijack). See main.ts.
     AUTH_RATE_LIMIT_MAX: z.coerce.number().int().min(1).default(5),
+    AUTH_IP_RATE_LIMIT_MAX: z.coerce.number().int().min(1).default(50),
     AUTH_RATE_LIMIT_WINDOW_MS: z.coerce.number().int().min(1000).default(900_000),
     AUTH_SESSION_RATE_LIMIT_MAX: z.coerce.number().int().min(1).default(60),
     AUTH_SESSION_RATE_LIMIT_WINDOW_MS: z.coerce.number().int().min(1000).default(60_000),
+    AUTH_RATE_LIMIT_FAIL_OPEN: z
+      .string()
+      .default('false')
+      .transform((v) => v === 'true'),
 
     HTTP_BODY_LIMIT_BYTES: z.coerce.number().int().min(1024).default(1_048_576),
     UPLOAD_MAX_FILE_BYTES: z.coerce.number().int().min(1024).default(10_485_760),
@@ -249,6 +275,20 @@ const envSchema = z
         code: z.ZodIssueCode.custom,
         path: ['BETTER_AUTH_SECRET'],
         message: 'BETTER_AUTH_SECRET must be set in production for stable session signing',
+      });
+    }
+    if (!data.BETTER_AUTH_URL) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['BETTER_AUTH_URL'],
+        message: 'BETTER_AUTH_URL must be set in production to a stable public API origin',
+      });
+    }
+    if (!data.FRONTEND_BASE_URL) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['FRONTEND_BASE_URL'],
+        message: 'FRONTEND_BASE_URL must be set in production for email action links',
       });
     }
 

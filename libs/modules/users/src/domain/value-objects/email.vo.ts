@@ -10,7 +10,7 @@ export class Email extends ValueObject<string> {
   static create(raw: string): Email {
     const normalized = raw.trim().toLowerCase();
     if (!Email.REGEX.test(normalized)) {
-      throw new Error(`Invalid email: ${raw}`);
+      throw new Error('Invalid email address');
     }
     return new Email(normalized);
   }

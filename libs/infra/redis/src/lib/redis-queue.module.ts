@@ -44,7 +44,7 @@ export class RedisQueueClientProvider implements OnModuleDestroy {
   }
 
   async onModuleDestroy(): Promise<void> {
-    await this.client.quit().catch(() => undefined);
+    await this.client.quit().catch(() => this.client.disconnect());
   }
 }
 

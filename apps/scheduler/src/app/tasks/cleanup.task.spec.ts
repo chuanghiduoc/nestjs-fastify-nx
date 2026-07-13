@@ -23,7 +23,7 @@ describe('CleanupTask', () => {
 
   beforeEach(() => {
     prisma = makePrismaMock();
-    task = new CleanupTask(prisma);
+    task = new CleanupTask(prisma, { isLeader: () => true } as never);
   });
 
   // ── purgeInactiveUsers ──────────────────────────────────────────────────────
@@ -66,7 +66,11 @@ describe('CleanupTask', () => {
       expect(prisma.db.user.findMany).toHaveBeenCalledOnce();
       expect(prisma.db.user.deleteMany).toHaveBeenCalledOnce();
       expect(prisma.db.user.deleteMany).toHaveBeenCalledWith({
-        where: { id: { in: ['u1', 'u2'] } },
+        where: {
+          id: { in: ['u1', 'u2'] },
+          status: 'INACTIVE',
+          updatedAt: { lt: expect.any(Date) },
+        },
       });
     });
 
@@ -124,15 +128,15 @@ describe('CleanupTask', () => {
 
   describe('ensureAuditLogPartitions', () => {
     it('invokes ensure_audit_log_partition for current and next two months', async () => {
-      vi.mocked(prisma.db.$executeRaw).mockResolvedValue(0);
+      vi.mocked(prisma.db.$queryRaw).mockResolvedValue([]);
 
       await task.ensureAuditLogPartitions();
 
-      expect(prisma.db.$executeRaw).toHaveBeenCalledTimes(3);
+      expect(prisma.db.$queryRaw).toHaveBeenCalledTimes(3);
     });
 
-    it('does not throw when $executeRaw fails (error is only logged)', async () => {
-      vi.mocked(prisma.db.$executeRaw).mockRejectedValue(new Error('partition create failed'));
+    it('does not throw when $queryRaw fails (error is only logged)', async () => {
+      vi.mocked(prisma.db.$queryRaw).mockRejectedValue(new Error('partition create failed'));
 
       await expect(task.ensureAuditLogPartitions()).resolves.toBeUndefined();
     });
@@ -150,10 +154,10 @@ describe('CleanupTask', () => {
       const currentYear = now.getUTCFullYear();
       const currentMonth = now.getUTCMonth() + 1;
 
-      // Default retention = 12 months. Cutoff = current month - 12. Names
+      // Default retention = 12 months including current. Cutoff = current month - 11. Names
       // older than the cutoff month are dropped; names equal to or newer
       // than cutoff are kept.
-      const cutoff = new Date(Date.UTC(currentYear, currentMonth - 1 - 12, 1));
+      const cutoff = new Date(Date.UTC(currentYear, currentMonth - 1 - 11, 1));
       const oldName = fmtPartition(cutoff.getUTCFullYear(), cutoff.getUTCMonth()); // strictly older
       const cutoffName = fmtPartition(cutoff.getUTCFullYear(), cutoff.getUTCMonth() + 1); // == cutoff, keep
       const recentName = fmtPartition(currentYear, currentMonth);
@@ -195,6 +199,9 @@ describe('CleanupTask', () => {
       // we don't crash on weird names and don't drop the archive table.
       expect(prisma.db.$executeRawUnsafe).not.toHaveBeenCalledWith(
         expect.stringContaining('audit_logs_archive'),
+      );
+      expect(prisma.db.$executeRawUnsafe).not.toHaveBeenCalledWith(
+        expect.stringContaining('audit_logs_2010_99'),
       );
     });
 

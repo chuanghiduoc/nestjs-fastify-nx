@@ -15,7 +15,7 @@ ENABLE_METRICS=true                                 # exposes /metrics for Prome
 METRICS_ALLOW_CIDRS=172.16.0.0/12                   # let the Prometheus container scrape /metrics
 ```
 
-Bring the whole stack up (app + OTel Collector + Jaeger + Prometheus + Grafana), all UIs bound to
+Bring the whole stack up (app + OTel Collector + Jaeger + Prometheus + Loki + Alloy + Grafana), all UIs bound to
 `127.0.0.1` only:
 
 ```bash
@@ -121,7 +121,9 @@ handlers, repositories, listeners — not just the HTTP access log. Add a field 
 `RequestContextStore` + set it in the CLS setup (`logging.module.ts`); the mixin picks it up.
 
 **Never** log a raw client-supplied id without validation (`sanitizeClientId`, `request-id.ts`) —
-newlines enable log injection. Add sensitive keys to `SENSITIVE_REDACT_PATHS`
+newlines enable log injection and repeated values corrupt correlation. Keep
+`TRUST_INBOUND_REQUEST_ID=false` at a public edge; use `X-Correlation-Id` for caller-owned flows.
+Add sensitive keys to `SENSITIVE_REDACT_PATHS`
 (`libs/shared/src/lib/logger-redact.ts`); it is a **deny-list**, so a new secret field is logged in
 clear until its path is added.
 
@@ -163,9 +165,9 @@ curl -s http://localhost:9090/api/v1/rules | grep -o '"health":"[a-z]*"'
 
 ## 9. Production notes
 
-- **Sampling**: keep a low head ratio (`OTEL_TRACES_SAMPLER_RATIO`, e.g. `0.05`) and let the
-  Collector's `tail_sampling` keep 100% of error/slow traces (`docker/otel-collector/config.yaml`).
-  ParentBased is already wired, so child spans honor the parent's decision.
+- **Sampling**: when using Collector `tail_sampling`, keep `OTEL_TRACES_SAMPLER_RATIO=1`; a
+  collector cannot recover traces discarded by head sampling. Scale the collector and adjust its
+  baseline policy instead. ParentBased remains useful so child spans honor the parent's decision.
 - **Edge trust**: keep `OTEL_TRUST_INBOUND_TRACEPARENT=false` on a public edge so clients can't
   inject or collide trace ids; set `true` only behind a trusted mesh/gateway.
 - **Retention & PII**: `userId`/IP appear in logs (personal data). Set retention at the backend

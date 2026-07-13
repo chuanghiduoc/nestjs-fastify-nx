@@ -13,6 +13,14 @@
     "lead": "Vui lòng xác nhận địa chỉ email bằng cách bấm vào liên kết dưới đây:",
     "expiry": "Liên kết sẽ hết hạn sau 24 giờ."
   },
+  "email_change": {
+    "subject": "Xác nhận thay đổi email",
+    "greeting": "Chào bạn,",
+    "greeting_named": "Chào {name},",
+    "lead": "Chúng tôi nhận được yêu cầu thay đổi địa chỉ email của tài khoản. Hãy xác nhận bằng liên kết dưới đây:",
+    "target": "Email mới: {newEmail}",
+    "not_you": "Nếu đây không phải bạn, hãy đổi mật khẩu và thu hồi các phiên đăng nhập khác ngay lập tức."
+  },
   "account_deletion": {
     "subject": "Xác nhận xóa tài khoản",
     "greeting": "Chào bạn,",

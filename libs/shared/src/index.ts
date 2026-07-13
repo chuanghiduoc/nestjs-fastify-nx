@@ -12,3 +12,4 @@ export { ALLOWED_MIME_TYPES, detectFileType, type DetectedFileType } from './lib
 export { intEnv, positiveIntEnv, boolEnv } from './lib/env-readers';
 export { encodeCursor, decodeCursor } from './lib/cursor-pagination';
 export { injectDatabasePassword } from './lib/db-password-file';
+export { STORED_FILE_STATUS, type StoredFileStatus } from './lib/stored-file-status';

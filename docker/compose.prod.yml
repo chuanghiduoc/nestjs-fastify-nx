@@ -230,18 +230,15 @@ services:
       REDIS_CACHE_HOST: redis-cache
       REDIS_QUEUE_HOST: redis-queue
       REDIS_QUEUE_PORT: '6380'
-    # Scheduler MUST run as a single replica — multiple instances duplicate
-    # cron firings. Enforced via deploy.replicas for swarm; under plain
-    # compose, never run `--scale scheduler=N` with N>1.
-    # stop-first update order: old scheduler stops before new one starts.
-    # A brief cron gap is acceptable; a double-fire window (start-first) is not.
+    # Every cron and the outbox relay are guarded by a Redis ownership lease.
+    # Multiple replicas provide failover; only the elected instance executes.
     # 30s grace period: VACUUM and partition DDL jobs can run up to ~20s;
     # the Docker default of 10s would SIGKILL them mid-operation.
     stop_grace_period: 30s
     deploy:
-      replicas: 1
+      replicas: ${SCHEDULER_REPLICAS:-1}
       update_config:
-        order: stop-first
+        order: start-first
         parallelism: 1
       placement:
         max_replicas_per_node: 1

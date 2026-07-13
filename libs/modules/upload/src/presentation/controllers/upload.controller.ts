@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Body,
+  ConflictException,
   Controller,
   HttpCode,
   HttpStatus,
@@ -9,8 +10,9 @@ import {
   Logger,
   NotFoundException,
   Post,
-  UseGuards,
+  Req,
 } from '@nestjs/common';
+import { createHash } from 'node:crypto';
 import { InjectQueue } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
 import { Throttle } from '@nestjs/throttler';
@@ -25,15 +27,20 @@ import {
 } from '@nestjs/swagger';
 import { ApiCommonErrors } from '@nestjs-fastify-nx/contracts';
 import { I18N_KEYS } from '@nestjs-fastify-nx/infra-i18n';
+import { PrismaService } from '@nestjs-fastify-nx/infra-database';
 import { STORAGE_PORT } from '@nestjs-fastify-nx/infra-storage';
 import type { PresignedUpload, StoragePort, StoredFile } from '@nestjs-fastify-nx/infra-storage';
-import { BetterAuthGuard } from '@nestjs-fastify-nx/infra-auth';
+import type { AuthenticatedSession } from '@nestjs-fastify-nx/infra-auth';
+import type { FastifyRequest } from 'fastify';
 import {
   ALLOWED_MIME_TYPES,
   detectFileType,
   generateId,
   positiveIntEnv,
+  STORED_FILE_STATUS,
 } from '@nestjs-fastify-nx/shared';
+
+import type { StoredFile as StoredFileRecord } from '@prisma/client';
 import { PresignUploadDto } from '../dto/presign-upload.dto';
 import { ConfirmUploadDto } from '../dto/confirm-upload.dto';
 import { PresignedUploadDto } from '../dto/presigned-upload.dto';
@@ -42,10 +49,14 @@ import { StoredFileDto } from '../dto/stored-file.dto';
 const MAGIC_BYTES_TO_READ = 16;
 
 const DEFAULT_MAX_FILE_SIZE = 10 * 1024 * 1024;
-const PRESIGN_EXPIRES_SECONDS = 5 * 60;
-
 const PRESIGN_LIMIT = { default: { limit: 10, ttl: 60_000 } };
 const CONFIRM_LIMIT = { default: { limit: 30, ttl: 60_000 } };
+
+export function verificationJobId(storageKey: string): string {
+  // A delimiter replacement is not injective (`a/b_c` and `a_b/c` collide). Hash the complete
+  // object key so retries deduplicate while distinct uploads can never share a BullMQ job id.
+  return `verify__${createHash('sha256').update(storageKey).digest('hex')}`;
+}
 
 const MIME_EXTENSIONS: Record<string, string> = {
   'image/jpeg': 'jpg',
@@ -57,18 +68,20 @@ const MIME_EXTENSIONS: Record<string, string> = {
 
 @ApiTags('upload')
 @Controller('upload')
-@UseGuards(BetterAuthGuard)
 @ApiCookieAuth('session')
 export class UploadController {
   private readonly logger = new Logger(UploadController.name);
   // Must mirror @fastify/multipart cap in main.ts so both layers reject at the same threshold.
   private readonly maxFileSize: number;
+  private readonly presignExpiresSeconds: number;
 
   constructor(
     @Inject(STORAGE_PORT) private readonly storage: StoragePort,
     @InjectQueue(QUEUE_NAMES.UPLOAD_VERIFICATION) private readonly verifyQueue: Queue,
+    private readonly prisma: PrismaService,
   ) {
     this.maxFileSize = positiveIntEnv('UPLOAD_MAX_FILE_BYTES', DEFAULT_MAX_FILE_SIZE);
+    this.presignExpiresSeconds = positiveIntEnv('UPLOAD_PRESIGN_EXPIRES_SECONDS', 300);
   }
 
   @Post('presign')
@@ -82,7 +95,10 @@ export class UploadController {
   @ApiBody({ type: PresignUploadDto })
   @ApiCreatedResponse({ type: PresignedUploadDto, description: 'Presigned upload policy issued.' })
   @ApiCommonErrors({ auth: true, forbidden: false })
-  async presign(@Body() dto: PresignUploadDto): Promise<PresignedUpload> {
+  async presign(
+    @Req() req: FastifyRequest & { user: AuthenticatedSession },
+    @Body() dto: PresignUploadDto,
+  ): Promise<PresignedUpload> {
     const extension = MIME_EXTENSIONS[dto.contentType];
     if (!extension) {
       throw new BadRequestException({
@@ -93,11 +109,12 @@ export class UploadController {
       });
     }
 
-    const key = `uploads/${generateId()}.${extension}`;
+    // The user id in the prefix makes the otherwise bearer-like storage key tenant-scoped.
+    const key = `uploads/${req.user.userId}/${generateId()}.${extension}`;
     return this.storage.presignUpload(key, {
       contentType: dto.contentType,
       maxBytes: this.maxFileSize,
-      expiresInSeconds: PRESIGN_EXPIRES_SECONDS,
+      expiresInSeconds: this.presignExpiresSeconds,
     });
   }
 
@@ -112,17 +129,24 @@ export class UploadController {
   @ApiBody({ type: ConfirmUploadDto })
   @ApiOkResponse({ type: StoredFileDto, description: 'Object verified.' })
   @ApiCommonErrors({ auth: true, forbidden: false, notFound: true })
-  async confirm(@Body() dto: ConfirmUploadDto): Promise<StoredFile> {
-    // Key shape (uploads/<id>.<ext>, no path traversal) is enforced by ConfirmUploadDto's
-    // @Matches regex at the validation pipe, so head() only ever sees a legitimate key.
+  async confirm(
+    @Req() req: FastifyRequest & { user: AuthenticatedSession },
+    @Body() dto: ConfirmUploadDto,
+  ): Promise<StoredFile> {
+    // Treat a cross-user key as missing so object existence is not disclosed. Shape validation
+    // happens in ConfirmUploadDto; this ownership check must run before any S3 request.
+    if (!dto.key.startsWith(`uploads/${req.user.userId}/`)) {
+      throw this.objectNotFound(dto.key);
+    }
+
+    const existing = await this.prisma.db.storedFile.findUnique({
+      where: { sourceKey: dto.key },
+    });
+    if (existing) return this.recoverExisting(existing);
+
     const meta = await this.storage.head(dto.key);
     if (!meta) {
-      throw new NotFoundException({
-        statusCode: HttpStatus.NOT_FOUND,
-        messageKey: I18N_KEYS.errors.upload.object_not_found,
-        args: { key: dto.key },
-        message: `No object stored at "${dto.key}"`,
-      });
+      throw this.objectNotFound(dto.key);
     }
 
     if (!ALLOWED_MIME_TYPES.has(meta.contentType)) {
@@ -167,26 +191,69 @@ export class UploadController {
       );
     }
 
-    // Uncommitted (committed=false) objects auto-expire in 24h — fail explicitly so the client retries.
+    // Publish to a fresh immutable key. The ETag precondition binds the copy to the exact object
+    // version checked above, closing the HEAD/read/copy race. A replay can create another file but
+    // can never overwrite a key already returned to a client.
+    const extension = dto.key.slice(dto.key.lastIndexOf('.'));
+    const fileId = generateId();
+    const finalKey = `files/${req.user.userId}/${fileId}${extension}`;
+    // Signing is offline and does not require the destination to exist. Do it before the
+    // destructive finalize step so a signing/configuration failure leaves staging retryable.
+    const url = await this.storage.getSignedUrl(finalKey, undefined, meta.bucket);
     try {
-      await this.storage.commit(dto.key);
+      await this.prisma.db.storedFile.create({
+        data: {
+          id: fileId,
+          userId: req.user.userId,
+          sourceKey: dto.key,
+          key: finalKey,
+          bucket: meta.bucket,
+          contentType: meta.contentType,
+          size: meta.size,
+          etag: meta.etag,
+          status: STORED_FILE_STATUS.FINALIZING,
+        },
+      });
     } catch (err) {
-      this.logger.error({ err, key: dto.key }, 'commit tag failed — lifecycle will expire object');
+      if ((err as { code?: string }).code === 'P2002') {
+        const concurrent = await this.prisma.db.storedFile.findUnique({
+          where: { sourceKey: dto.key },
+        });
+        if (concurrent) return this.recoverExisting(concurrent);
+      }
+      throw err;
+    }
+
+    try {
+      await this.storage.finalize(dto.key, finalKey, meta.etag, meta.bucket);
+    } catch (err) {
+      await this.prisma.db.storedFile
+        .deleteMany({ where: { id: fileId, status: STORED_FILE_STATUS.FINALIZING } })
+        .catch(() => undefined);
+      this.logger.error(
+        { err, sourceKey: dto.key, finalKey },
+        'upload finalize failed — staging object remains lifecycle-managed',
+      );
       throw new InternalServerErrorException({
         statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
         messageKey: I18N_KEYS.errors.upload.commit_failed,
-        message: 'Failed to commit upload; please retry',
+        message: 'Failed to finalize upload; please retry',
       });
     }
 
-    // Async deep verification (virus scan, EXIF strip) — best-effort; inline check already blocked tampering.
+    await this.prisma.db.storedFile.update({
+      where: { id: fileId },
+      data: { status: STORED_FILE_STATUS.VERIFYING },
+    });
+
+    // Asynchronous defense-in-depth recheck on the immutable final object. Future scanners can
+    // extend this queue, but the current worker intentionally verifies magic bytes only.
     await this.verifyQueue
       .add(
         'verify-magic-bytes',
-        { key: dto.key, declaredContentType: meta.contentType, bucket: meta.bucket },
+        { key: finalKey, declaredContentType: meta.contentType, bucket: meta.bucket },
         {
-          // BullMQ rejects ':' in jobIds — '__' separator; '/' normalised to '_'.
-          jobId: `verify__${dto.key.replace(/\//g, '_')}`,
+          jobId: verificationJobId(finalKey),
           attempts: 3,
           backoff: { type: 'exponential', delay: 5_000 },
           removeOnComplete: { count: 100 },
@@ -194,11 +261,54 @@ export class UploadController {
         },
       )
       .catch((err) => {
-        this.logger.warn({ err, key: dto.key }, 'enqueue verify-magic-bytes failed');
+        this.logger.error({ err, key: finalKey }, 'enqueue verify-magic-bytes failed');
+        throw err;
       });
 
-    const url = await this.storage.getSignedUrl(dto.key);
-    return { key: dto.key, url, bucket: meta.bucket, size: meta.size };
+    return { key: finalKey, url, bucket: meta.bucket, size: meta.size };
+  }
+
+  private async recoverExisting(record: StoredFileRecord): Promise<StoredFile> {
+    if (record.status === STORED_FILE_STATUS.REJECTED) {
+      throw this.objectNotFound(record.sourceKey);
+    }
+
+    const finalMeta = await this.storage.head(record.key, record.bucket);
+    if (!finalMeta) {
+      throw new ConflictException({
+        statusCode: HttpStatus.CONFLICT,
+        message: 'Upload confirmation is still in progress; retry shortly',
+      });
+    }
+
+    if (record.status === STORED_FILE_STATUS.FINALIZING) {
+      await this.prisma.db.storedFile.updateMany({
+        where: { id: record.id, status: STORED_FILE_STATUS.FINALIZING },
+        data: { status: STORED_FILE_STATUS.VERIFYING },
+      });
+    }
+
+    if (record.status !== STORED_FILE_STATUS.READY) {
+      await this.verifyQueue
+        .add(
+          'verify-magic-bytes',
+          { key: record.key, declaredContentType: record.contentType, bucket: record.bucket },
+          {
+            jobId: verificationJobId(record.key),
+            attempts: 3,
+            backoff: { type: 'exponential', delay: 5_000 },
+            removeOnComplete: { count: 100 },
+            removeOnFail: { count: 50 },
+          },
+        )
+        .catch((err) => {
+          this.logger.error({ err, key: record.key }, 'enqueue verify-magic-bytes failed');
+          throw err;
+        });
+    }
+
+    const url = await this.storage.getSignedUrl(record.key, undefined, record.bucket);
+    return { key: record.key, url, bucket: record.bucket, size: record.size };
   }
 
   // Best-effort cleanup of a rejected upload. A failed delete must not mask the
@@ -210,6 +320,15 @@ export class UploadController {
         { err, key },
         'cleanup delete failed — object orphaned until lifecycle expiry',
       );
+    });
+  }
+
+  private objectNotFound(key: string): NotFoundException {
+    return new NotFoundException({
+      statusCode: HttpStatus.NOT_FOUND,
+      messageKey: I18N_KEYS.errors.upload.object_not_found,
+      args: { key },
+      message: `No object stored at "${key}"`,
     });
   }
 }

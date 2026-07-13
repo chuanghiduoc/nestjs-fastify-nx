@@ -4,7 +4,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { MetricsService } from './metrics.service';
 
 const ROUTE_UNKNOWN = 'unmatched';
-const REQUEST_START_KEY = '__metricsStartedAt';
+const REQUEST_START_KEY = Symbol('metricsStartedAt');
 
 // Uses Fastify onResponse (not NestInterceptor) so the recorded status reflects
 // exception-filter rewrites. Route template keeps label cardinality bounded.
@@ -25,7 +25,7 @@ export class HttpMetricsHook implements OnApplicationBootstrap {
     }
 
     fastify.addHook('onRequest', (request, _reply, done) => {
-      (request as unknown as Record<string, number>)[REQUEST_START_KEY] = Date.now();
+      (request as unknown as Record<symbol, bigint>)[REQUEST_START_KEY] = process.hrtime.bigint();
       done();
     });
 
@@ -40,10 +40,11 @@ export class HttpMetricsHook implements OnApplicationBootstrap {
   }
 
   private record(request: FastifyRequest, reply: FastifyReply): void {
-    const startedAt = (request as unknown as Record<string, number>)[REQUEST_START_KEY];
-    if (typeof startedAt !== 'number') return;
+    const startedAt = (request as unknown as Record<symbol, bigint>)[REQUEST_START_KEY];
+    if (typeof startedAt !== 'bigint') return;
 
-    const durationSeconds = (Date.now() - startedAt) / 1000;
+    // Monotonic time is unaffected by NTP/system-clock corrections during a request.
+    const durationSeconds = Number(process.hrtime.bigint() - startedAt) / 1_000_000_000;
     const method = request.method.toUpperCase();
     const route = request.routeOptions?.url ?? ROUTE_UNKNOWN;
     const statusCode = String(reply.statusCode);

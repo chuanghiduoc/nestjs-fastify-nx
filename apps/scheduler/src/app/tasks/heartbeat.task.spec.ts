@@ -17,7 +17,7 @@ describe('HeartbeatTask', () => {
 
   beforeEach(() => {
     prisma = makePrismaMock();
-    task = new HeartbeatTask(prisma);
+    task = new HeartbeatTask(prisma, { isLeader: () => true } as never);
   });
 
   it('calls $queryRaw to ping the database', async () => {

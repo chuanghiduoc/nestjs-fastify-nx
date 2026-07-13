@@ -8,7 +8,7 @@
 
 services:
   mailpit:
-    image: axllent/mailpit:v1.27.11
+    image: axllent/mailpit:v1.30.4
     restart: unless-stopped
     ports:
       # Loopback-only (matches the observability overlay): the UI is a dev convenience,
@@ -16,12 +16,6 @@ services:
       # binds 1025/8025 (e.g. another project's mailpit).
       - '127.0.0.1:${MAILPIT_SMTP_PORT:-1025}:1025'
       - '127.0.0.1:${MAILPIT_HTTP_PORT:-8025}:8025'
-    healthcheck:
-      test: ['CMD', '/mailpit', '--help']
-      interval: 10s
-      timeout: 3s
-      retries: 5
-      start_period: 5s
 
   # Align MinIO root creds with STORAGE_ACCESS_KEY/SECRET_KEY below — base
   # compose.yml falls back to `minioadmin` which the apps' overrides reject,
@@ -30,6 +24,41 @@ services:
     environment:
       MINIO_ROOT_USER: localtest-access-key
       MINIO_ROOT_PASSWORD: localtest-secret-key-min-16
+    # The production overlay strips all data-tier host ports. Re-enable MinIO only for this
+    # explicitly local smoke overlay, loopback-bound so the script's advertised UI is reachable.
+    ports: !override
+      - '127.0.0.1:${MINIO_PORT:-9000}:9000'
+      - '127.0.0.1:${MINIO_CONSOLE_PORT:-9001}:9001'
+
+  minio-init:
+    image: minio/mc:RELEASE.2025-05-21T01-59-54Z
+    environment:
+      MINIO_ROOT_USER: localtest-access-key
+      MINIO_ROOT_PASSWORD: localtest-secret-key-min-16
+      STORAGE_BUCKET: uploads
+      MINIO_ORPHAN_EXPIRY_DAYS: ${MINIO_ORPHAN_EXPIRY_DAYS:-1}
+    depends_on:
+      minio:
+        condition: service_healthy
+    restart: 'no'
+    deploy:
+      restart_policy:
+        condition: none
+    entrypoint: >
+      /bin/sh -c "
+        set -eu;
+        case "$$MINIO_ORPHAN_EXPIRY_DAYS" in ''|*[!0-9]*|0) echo 'minio-init: MINIO_ORPHAN_EXPIRY_DAYS must be a positive integer'; exit 1;; esac;
+        connected=0;
+        for i in $$(seq 1 15); do
+          if mc alias set local http://minio:9000 \"$$MINIO_ROOT_USER\" \"$$MINIO_ROOT_PASSWORD\"; then connected=1; break; fi;
+          echo 'waiting for minio... attempt '$$i; sleep 2;
+        done;
+        [ "$$connected" = 1 ] || { echo 'minio-init: cannot reach minio after 30s'; exit 1; };
+        mc mb --ignore-existing \"local/$$STORAGE_BUCKET\";
+        mc ilm rule remove --all --force \"local/$$STORAGE_BUCKET\" 2>/dev/null || true;
+        mc ilm rule add --expire-days "$$MINIO_ORPHAN_EXPIRY_DAYS" --tags 'committed=false' \"local/$$STORAGE_BUCKET\";
+        echo 'bucket ready: '$$STORAGE_BUCKET
+      "
 
   api:
     environment:
@@ -38,8 +67,6 @@ services:
       STORAGE_SECRET_KEY: localtest-secret-key-min-16
       STORAGE_ENDPOINT: http://minio:9000
       STORAGE_BUCKET: uploads
-      BULL_BOARD_PASSWORD: localtest-bullboard-pwd
-      BULL_BOARD_USERNAME: admin
       MAIL_HOST: mailpit
       MAIL_PORT: '1025'
       MAIL_DEFAULT_EMAIL: test@localtest.local
@@ -47,6 +74,9 @@ services:
       BETTER_AUTH_SECRET: localtest-better-auth-secret-min-32-chars
       FRONTEND_BASE_URL: http://localhost:3000
       CORS_ORIGINS: http://localhost:3000
+    depends_on:
+      minio-init:
+        condition: service_completed_successfully
 
   worker:
     environment:
@@ -58,6 +88,9 @@ services:
       MAIL_HOST: mailpit
       MAIL_PORT: '1025'
       MAIL_DEFAULT_EMAIL: test@localtest.local
+    depends_on:
+      minio-init:
+        condition: service_completed_successfully
 
   scheduler:
     environment:
@@ -66,7 +99,9 @@ services:
       STORAGE_SECRET_KEY: localtest-secret-key-min-16
       STORAGE_ENDPOINT: http://minio:9000
       STORAGE_BUCKET: uploads
-      BULL_BOARD_PASSWORD: localtest-bullboard-pwd
       MAIL_HOST: mailpit
       MAIL_PORT: '1025'
       MAIL_DEFAULT_EMAIL: test@localtest.local
+    depends_on:
+      minio-init:
+        condition: service_completed_successfully

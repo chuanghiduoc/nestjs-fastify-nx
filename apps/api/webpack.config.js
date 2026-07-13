@@ -20,8 +20,12 @@ module.exports = {
       optimization: false,
       outputHashing: 'none',
       generatePackageJson: true,
-      // tslib import is invisible to webpack's source graph; declare so pruned package.json lists it.
-      runtimeDependencies: ['tslib'],
+      // tslib is invisible to webpack's source graph. Swagger's converter is
+      // intentionally dev-only but must be present when the dev image serves docs.
+      runtimeDependencies: [
+        'tslib',
+        ...(process.env.NODE_ENV !== 'production' ? ['@apiture/openapi-down-convert'] : []),
+      ],
       sourceMap: true,
     }),
     new SwcEs2022TargetPlugin(),

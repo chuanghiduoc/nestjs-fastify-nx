@@ -3,6 +3,8 @@ import { Inject, Logger } from '@nestjs/common';
 import type { Job } from 'bullmq';
 import { QUEUE_NAMES, detectFileType, positiveIntEnv } from '@nestjs-fastify-nx/shared';
 import { STORAGE_PORT, type StoragePort } from '@nestjs-fastify-nx/infra-storage';
+import { PrismaService } from '@nestjs-fastify-nx/infra-database';
+import { STORED_FILE_STATUS } from '@nestjs-fastify-nx/shared';
 
 export interface UploadVerificationPayload {
   key: string;
@@ -17,7 +19,10 @@ const UPLOAD_CONCURRENCY = positiveIntEnv('WORKER_UPLOAD_CONCURRENCY', 5);
 export class UploadVerificationProcessor extends WorkerHost {
   private readonly logger = new Logger(UploadVerificationProcessor.name);
 
-  constructor(@Inject(STORAGE_PORT) private readonly storage: StoragePort) {
+  constructor(
+    @Inject(STORAGE_PORT) private readonly storage: StoragePort,
+    private readonly prisma: PrismaService,
+  ) {
     super();
   }
 
@@ -32,7 +37,7 @@ export class UploadVerificationProcessor extends WorkerHost {
         { key, declaredContentType },
         `verify-magic-bytes: no signature match — deleting object as unrecognized binary`,
       );
-      await this.storage.delete(key, bucket).catch(() => undefined);
+      await this.reject(key, bucket, 'Unrecognized binary signature');
       return;
     }
 
@@ -41,10 +46,27 @@ export class UploadVerificationProcessor extends WorkerHost {
         { key, declaredContentType, detected: detected.mimeType },
         `verify-magic-bytes: MIME mismatch — deleting tampered upload`,
       );
-      await this.storage.delete(key, bucket).catch(() => undefined);
+      await this.reject(
+        key,
+        bucket,
+        `MIME mismatch: declared=${declaredContentType} detected=${detected.mimeType}`,
+      );
       return;
     }
 
+    await this.prisma.db.storedFile.updateMany({
+      where: { key, status: STORED_FILE_STATUS.VERIFYING },
+      data: { status: STORED_FILE_STATUS.READY, verifiedAt: new Date(), failureReason: null },
+    });
+
     this.logger.log(`verify-magic-bytes: ${key} matches declared ${declaredContentType}`);
+  }
+
+  private async reject(key: string, bucket: string, failureReason: string): Promise<void> {
+    await this.prisma.db.storedFile.updateMany({
+      where: { key },
+      data: { status: STORED_FILE_STATUS.REJECTED, failureReason },
+    });
+    await this.storage.delete(key, bucket);
   }
 }

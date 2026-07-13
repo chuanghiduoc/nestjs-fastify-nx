@@ -25,6 +25,20 @@ class FakeRedis {
     return this.store.delete(key) ? 1 : 0;
   }
 
+  async eval(_script: string, _numKeys: number, key: string, ...args: string[]): Promise<number> {
+    this.gc();
+    const current = this.store.get(key);
+    if (!current) return 0;
+    const record = JSON.parse(current.value) as { state: string; ownerToken?: string };
+    if (record.state !== 'pending' || record.ownerToken !== args[0]) return 0;
+
+    if (args.length >= 3) {
+      this.store.set(key, { value: args[1], expireAt: Date.now() + Number(args[2]) });
+      return 1;
+    }
+    return this.del(key);
+  }
+
   private gc(): void {
     const now = Date.now();
     for (const [key, entry] of this.store) {
@@ -57,6 +71,10 @@ async function buildApp(redis: Redis): Promise<AppSetup> {
   app.post('/api/v1/fail', async (_req, reply) => {
     calls += 1;
     return reply.status(500).send({ calls, failed: true });
+  });
+  app.post('/api/v1/timeout', async (_req, reply) => {
+    calls += 1;
+    return reply.status(504).send({ calls, timeout: true });
   });
 
   registerIdempotency(app, {
@@ -98,6 +116,30 @@ describe('registerIdempotency', () => {
     expect(second.payload).toBe(first.payload);
     expect(first.headers['idempotent-replayed']).toBeUndefined();
     expect(second.headers['idempotent-replayed']).toBe('true');
+    expect(second.headers['x-request-id']).toMatch(/^[a-f0-9]{32}$/);
+    expect(second.headers['x-correlation-id']).toBe(second.headers['x-request-id']);
+    expect(callCount()).toBe(1);
+  });
+
+  it('treats JSON objects with different key order as the same payload', async () => {
+    const { app, callCount } = await buildApp(redis);
+
+    const first = await app.inject({
+      method: 'POST',
+      url: '/api/v1/echo',
+      headers: KEY_HEADER,
+      payload: { outer: { a: 1, b: 2 }, items: [{ x: 1, y: 2 }] },
+    });
+    const second = await app.inject({
+      method: 'POST',
+      url: '/api/v1/echo',
+      headers: KEY_HEADER,
+      payload: { items: [{ y: 2, x: 1 }], outer: { b: 2, a: 1 } },
+    });
+
+    expect(first.statusCode).toBe(200);
+    expect(second.statusCode).toBe(200);
+    expect(second.headers['idempotent-replayed']).toBe('true');
     expect(callCount()).toBe(1);
   });
 
@@ -109,6 +151,50 @@ describe('registerIdempotency', () => {
     await app.inject({ method: 'POST', url: '/api/v1/echo', headers, payload: { a: 1 } });
 
     expect(callCount()).toBe(2);
+  });
+
+  it('scopes secure production session cookies independently for users behind the same IP', async () => {
+    const { app, callCount } = await buildApp(redis);
+
+    const first = await app.inject({
+      method: 'POST',
+      url: '/api/v1/echo',
+      headers: { ...KEY_HEADER, cookie: '__Secure-better-auth.session_token=user-a' },
+      payload: { a: 1 },
+    });
+    const second = await app.inject({
+      method: 'POST',
+      url: '/api/v1/echo',
+      headers: { ...KEY_HEADER, cookie: '__Secure-better-auth.session_token=user-b' },
+      payload: { a: 1 },
+    });
+
+    expect(first.json().calls).toBe(1);
+    expect(second.json().calls).toBe(2);
+    expect(second.headers['idempotent-replayed']).toBeUndefined();
+    expect(callCount()).toBe(2);
+  });
+
+  it('keeps the lock on 504 because timed-out handler work may still be running', async () => {
+    const { app, callCount } = await buildApp(redis);
+
+    const first = await app.inject({
+      method: 'POST',
+      url: '/api/v1/timeout',
+      headers: KEY_HEADER,
+      payload: { a: 1 },
+    });
+    const second = await app.inject({
+      method: 'POST',
+      url: '/api/v1/timeout',
+      headers: KEY_HEADER,
+      payload: { a: 1 },
+    });
+
+    expect(first.statusCode).toBe(504);
+    expect(second.statusCode).toBe(409);
+    expect(second.json().code).toBe('idempotency_key_conflict');
+    expect(callCount()).toBe(1);
   });
 
   it('ignores safe methods even when a key is present', async () => {

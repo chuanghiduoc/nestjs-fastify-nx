@@ -13,6 +13,14 @@
     "lead": "Please confirm your email address by clicking the link below:",
     "expiry": "This link expires in 24 hours."
   },
+  "email_change": {
+    "subject": "Confirm your email change",
+    "greeting": "Hi,",
+    "greeting_named": "Hi {name},",
+    "lead": "We received a request to change the email address on your account. Confirm it using the link below:",
+    "target": "New email: {newEmail}",
+    "not_you": "If this was not you, change your password and revoke other sessions immediately."
+  },
   "account_deletion": {
     "subject": "Confirm account deletion",
     "greeting": "Hi,",

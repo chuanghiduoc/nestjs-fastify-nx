@@ -76,6 +76,20 @@ describe('BetterAuthGuard', () => {
     expect(request['user']).toMatchObject({ userId: 'u1', email: 'a@b.com', role: 'USER' });
   });
 
+  it('bypasses the cookie cache for fresh role and account-status checks', async () => {
+    const auth = makeAuth({
+      user: { id: 'u1', email: 'a@b.com', name: 'A', role: 'USER', status: 'ACTIVE' },
+      session: { id: 's1', token: 'tok' },
+    });
+    const guard = new BetterAuthGuard(auth, makeReflector(), makeCls());
+
+    await guard.canActivate(makeContext({ cookie: 'better-auth.session_token=tok' }));
+
+    expect(auth.api.getSession).toHaveBeenCalledWith(
+      expect.objectContaining({ query: { disableCookieCache: true } }),
+    );
+  });
+
   it('seeds the CLS store and Sentry scope with the resolved userId', async () => {
     const session = {
       user: { id: 'u1', email: 'a@b.com', name: 'Alice', role: 'USER', status: 'ACTIVE' },

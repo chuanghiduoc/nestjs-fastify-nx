@@ -28,7 +28,7 @@ if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
   exit 0
 fi
 
-sec::source_env
+sec::source_env IMAGE_REGISTRY IMAGE_NAMESPACE IMAGE_TAG
 cd "$(sec::repo_root)"
 
 TRIVY_VERSION="${TRIVY_VERSION:-0.62.0}"

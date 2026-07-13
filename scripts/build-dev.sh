@@ -10,7 +10,8 @@
 #
 # Env flags:
 #   NO_CACHE=1       full clean rebuild (default: incremental)
-#   BUILD_PARALLEL=1 build all services concurrently (default: serial)
+#   BUILD_PARALLEL=0 build services serially on memory-constrained hosts
+#   BUILD_PARALLEL_LIMIT=2 cap concurrent Compose build tasks (default: 2)
 #
 # Security scanning (Trivy/SBOM/etc.) is intentionally NOT run here — it lives in
 # CI (.github/workflows). Local builds stay fast; run scripts/security/*.sh
@@ -25,6 +26,7 @@ source "${SCRIPT_DIR}/security/_lib.sh"
 
 # Always run from project root regardless of where the script is called from.
 cd "$(sec::repo_root)"
+sec::source_env COMPOSE_PROJECT_NAME API_PORT API_REPLICAS WORKER_REPLICAS
 
 if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
   echo "Usage: ./scripts/build-dev.sh [SERVICE...] [--with-obs] [--help]"
@@ -35,7 +37,8 @@ if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
   echo ""
   echo "Env flags:"
   echo "  NO_CACHE=1        Full clean rebuild"
-  echo "  BUILD_PARALLEL=1  Build all services concurrently (default: serial)"
+  echo "  BUILD_PARALLEL=0       Build services serially (default: batched)"
+  echo "  BUILD_PARALLEL_LIMIT=2 Concurrent Compose build cap"
   echo ""
   echo "Examples:"
   echo "  ./scripts/build-dev.sh"
@@ -73,14 +76,14 @@ fi
 # `${VAR:-default}` interpolation falls back to its default. The same .env
 # is also injected into containers via `env_file: ../.env`; the CLI flag
 # covers the host-side substitution that env_file cannot.
-COMPOSE_BASE="--env-file .env -f docker/compose.yml -f docker/compose.dev.yml"
+COMPOSE_ARGS=(--env-file .env -f docker/compose.yml -f docker/compose.dev.yml)
 if [[ $WITH_OBS -eq 1 ]]; then
-  COMPOSE_BASE="${COMPOSE_BASE} -f docker/compose.observability.yml"
+  COMPOSE_ARGS+=(-f docker/compose.observability.yml)
   sec::log "Observability overlay enabled (Prometheus + Grafana + Jaeger + OTel)"
 fi
 
 # --no-cache invalidates every layer (incl. pnpm install) and rebuilds the
-# 3 images from scratch. Default to incremental; set NO_CACHE=1 to force.
+# images from scratch. Default to incremental; set NO_CACHE=1 to force.
 BUILD_FLAGS=()
 if [[ "${NO_CACHE:-0}" = "1" ]]; then
   BUILD_FLAGS+=(--no-cache)
@@ -95,17 +98,17 @@ export BUILDX_NO_DEFAULT_ATTESTATIONS=1
 
 sec::log "Building dev images: ${SERVICES[*]}"
 BUILD_START=$(date +%s)
-# Serial per-service build — parallel buildx fans out tsc + webpack +
-# fork-ts-checker per service, which can OOM Docker Desktop's VM.
-# Override with BUILD_PARALLEL=1 if the host has enough headroom.
-if [[ "${BUILD_PARALLEL:-0}" = "1" ]]; then
+# A single Compose invocation lets BuildKit deduplicate the common stages.
+# Limit scheduling to avoid fanning out every dependency stage at once.
+if [[ "${BUILD_PARALLEL:-1}" = "1" ]]; then
   # shellcheck disable=SC2086
-  docker compose $COMPOSE_BASE build "${BUILD_FLAGS[@]+"${BUILD_FLAGS[@]}"}" "${SERVICES[@]}"
+  COMPOSE_PARALLEL_LIMIT="${BUILD_PARALLEL_LIMIT:-2}" \
+    docker compose "${COMPOSE_ARGS[@]}" build "${BUILD_FLAGS[@]+"${BUILD_FLAGS[@]}"}" "${SERVICES[@]}"
 else
   for svc in "${SERVICES[@]}"; do
     sec::log "  → $svc"
     # shellcheck disable=SC2086
-    docker compose $COMPOSE_BASE build "${BUILD_FLAGS[@]+"${BUILD_FLAGS[@]}"}" "$svc"
+    docker compose "${COMPOSE_ARGS[@]}" build "${BUILD_FLAGS[@]+"${BUILD_FLAGS[@]}"}" "$svc"
   done
 fi
 BUILD_END=$(date +%s)
@@ -123,8 +126,7 @@ export COMPOSE_PROJECT_NAME
 # already in use" when a previous run left containers compose no longer tracks
 # (project renamed, label drift, crash mid-deploy). `rm -sf` is a no-op when
 # the service is unknown; `docker rm -f` covers the unlabelled-orphan case.
-# shellcheck disable=SC2086
-docker compose $COMPOSE_BASE rm -sf "${SERVICES[@]}" 2>/dev/null || true
+docker compose "${COMPOSE_ARGS[@]}" rm -sf "${SERVICES[@]}" 2>/dev/null || true
 for svc in "${SERVICES[@]}"; do
   # Match all replicas, not just -1, in case API_REPLICAS / WORKER_REPLICAS > 1.
   # Docker's --filter name uses Go RE2, where `+` is the quantifier — GNU BRE's
@@ -138,13 +140,19 @@ done
 # ignored by plain `docker compose up`); the passthrough keeps them visible in
 # the process environment without changing dev behaviour.
 # shellcheck disable=SC2086
-API_REPLICAS="${API_REPLICAS:-1}" WORKER_REPLICAS="${WORKER_REPLICAS:-1}" \
-  docker compose $COMPOSE_BASE up -d --force-recreate --remove-orphans "${SERVICES[@]}"
+if ! API_REPLICAS="${API_REPLICAS:-1}" WORKER_REPLICAS="${WORKER_REPLICAS:-1}" \
+  docker compose "${COMPOSE_ARGS[@]}" up -d --force-recreate --remove-orphans "${SERVICES[@]}"; then
+  sec::err "Compose startup failed. Container status and recent dependency logs follow."
+  docker compose "${COMPOSE_ARGS[@]}" ps -a || true
+  docker compose "${COMPOSE_ARGS[@]}" logs --tail=100 \
+    postgres redis-cache redis-queue minio minio-init mailpit migration "${SERVICES[@]}" || true
+  exit 1
+fi
 
 echo ""
 sec::log "Container status:"
 # shellcheck disable=SC2086
-docker compose $COMPOSE_BASE ps
+docker compose "${COMPOSE_ARGS[@]}" ps
 
 # Smoke test only meaningful when api is part of this build run.
 if printf '%s\n' "${SERVICES[@]}" | grep -qx api; then
@@ -153,7 +161,7 @@ if printf '%s\n' "${SERVICES[@]}" | grep -qx api; then
   # Use 127.0.0.1: on Windows / dual-stack hosts `localhost` resolves to ::1 first
   # and curl hangs if the listener is bound only on IPv4. -m caps each attempt; we
   # retry for ~30s while Nest finishes wiring up its providers.
-  SMOKE_URL="http://127.0.0.1:3000/api/v1/health/live"
+  SMOKE_URL="http://127.0.0.1:${API_PORT:-3000}/api/v1/health/live"
   SMOKE_OUT=""
   for _ in $(seq 1 15); do
     if SMOKE_OUT=$(curl -sf -m 2 "$SMOKE_URL" 2>/dev/null); then
@@ -165,7 +173,10 @@ if printf '%s\n' "${SERVICES[@]}" | grep -qx api; then
     echo "$SMOKE_OUT" | python3 -m json.tool 2>/dev/null || echo "$SMOKE_OUT"
     sec::ok "API health check passed"
   else
-    sec::warn "Smoke test: API did not respond at $SMOKE_URL within 30s"
+    sec::err "Smoke test: API did not respond at $SMOKE_URL within 30s"
+    docker compose "${COMPOSE_ARGS[@]}" ps -a api worker scheduler migration || true
+    docker compose "${COMPOSE_ARGS[@]}" logs --tail=100 api worker scheduler migration || true
+    exit 1
   fi
 fi
 

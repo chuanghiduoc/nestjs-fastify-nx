@@ -10,7 +10,5 @@
  */
 import { startTracing } from '@nestjs-fastify-nx/infra-observability';
 
-// Hardcode the service name so a shared .env between api and worker still
-// produces distinct traces. Override via OTEL_SERVICE_NAME only when running
-// outside the standard layout.
+// Process-specific fallback; OTEL_SERVICE_NAME overrides it when explicitly configured.
 startTracing({ serviceName: 'nestjs-fastify-api' });

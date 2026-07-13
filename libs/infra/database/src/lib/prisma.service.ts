@@ -1,11 +1,12 @@
 import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 import type { Prisma } from '@prisma/client';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { injectDatabasePassword, intEnv } from '@nestjs-fastify-nx/shared';
 
 // Derived from the $transaction overload to avoid importing @prisma/client/runtime internals.
-type TransactionClient = Parameters<PrismaClient['$transaction']>[0] extends (
+export type TransactionClient = Parameters<PrismaClient['$transaction']>[0] extends (
   client: infer TX,
 ) => Promise<unknown>
   ? TX
@@ -51,6 +52,7 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
   private readonly _writeClient: PrismaClient;
   private readonly _readClient: PrismaClient;
   private readonly _hasReplica: boolean;
+  private readonly transactionContext = new AsyncLocalStorage<TransactionClient>();
 
   constructor() {
     const passwordFile = process.env['DB_PASSWORD_FILE'];
@@ -116,12 +118,19 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
     return this._hasReplica;
   }
 
+  get currentTransaction(): TransactionClient | undefined {
+    return this.transactionContext.getStore();
+  }
+
   // Always on primary — replicas can't coordinate interactive transactions (write serialization).
   async transaction<R>(
     fn: (client: TransactionClient) => Promise<R>,
     options?: { maxWait?: number; timeout?: number },
   ): Promise<R> {
-    return this._writeClient.$transaction(fn, options);
+    return this._writeClient.$transaction(
+      (client) => this.transactionContext.run(client, () => fn(client)),
+      options,
+    );
   }
 
   async onModuleInit(): Promise<void> {
@@ -130,17 +139,25 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
       if (this._hasReplica) await this._readClient.$connect();
       this.logger.log('Database connection established');
     } catch (err) {
+      const clients = this._hasReplica
+        ? [this._writeClient, this._readClient]
+        : [this._writeClient];
+      await Promise.allSettled(clients.map((client) => client.$disconnect()));
       throw new Error(`DatabaseModule: failed to connect — ${String(err)}`, { cause: err });
     }
   }
 
   async onModuleDestroy(): Promise<void> {
-    try {
-      await this._writeClient.$disconnect();
-      if (this._hasReplica) await this._readClient.$disconnect();
+    const clients = this._hasReplica ? [this._writeClient, this._readClient] : [this._writeClient];
+    const results = await Promise.allSettled(clients.map((client) => client.$disconnect()));
+    const failures = results.filter((result) => result.status === 'rejected');
+    if (failures.length === 0) {
       this.logger.log('Database connection closed');
-    } catch (err) {
-      this.logger.error('DatabaseModule: error during disconnect', String(err));
+    } else {
+      this.logger.error(
+        `DatabaseModule: ${failures.length} client(s) failed during disconnect`,
+        failures.map((failure) => String(failure.reason)).join('; '),
+      );
     }
   }
 }

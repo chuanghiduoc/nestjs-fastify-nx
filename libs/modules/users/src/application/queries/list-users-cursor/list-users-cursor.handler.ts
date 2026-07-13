@@ -1,6 +1,6 @@
-import { Inject } from '@nestjs/common';
+import { BadRequestException, Inject } from '@nestjs/common';
 import { QueryHandler, type IQueryHandler } from '@nestjs/cqrs';
-import { encodeCursor } from '@nestjs-fastify-nx/shared';
+import { decodeCursor, encodeCursor } from '@nestjs-fastify-nx/shared';
 import { USER_REPOSITORY_PORT } from '../../../domain/ports/user-repository.port';
 import type { UserRepositoryPort } from '../../../domain/ports/user-repository.port';
 import type { UserListItemDto } from '../../dtos/user-list-item.dto';
@@ -14,6 +14,14 @@ export class ListUsersCursorHandler implements IQueryHandler<
   constructor(@Inject(USER_REPOSITORY_PORT) private readonly users: UserRepositoryPort) {}
 
   async execute(query: ListUsersCursorQuery): Promise<ListUsersCursorResult> {
+    if (query.startingAfter && !decodeCursor(query.startingAfter)) {
+      throw new BadRequestException({
+        statusCode: 400,
+        code: 'invalid_cursor',
+        message: 'startingAfter is not a valid cursor',
+      });
+    }
+
     const { items, hasMore } = await this.users.findAllCursor({
       startingAfter: query.startingAfter,
       limit: query.limit,

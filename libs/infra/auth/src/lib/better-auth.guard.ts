@@ -37,6 +37,9 @@ export class BetterAuthGuard implements CanActivate {
     const request = this.getRequest(context);
 
     const session = await this.auth.api.getSession({
+      // role/status are authorization inputs. Cookie-cache values may remain valid after an
+      // admin deactivates or demotes a user, so always revalidate them here.
+      query: { disableCookieCache: true },
       headers: fromNodeHeaders(request.headers as Record<string, string | string[]>),
     });
 

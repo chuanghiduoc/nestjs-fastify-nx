@@ -12,7 +12,9 @@ interface OutboxPayload extends Prisma.InputJsonObject {
   payload: Prisma.InputJsonValue;
 }
 
-// Call publishAll() inside a Prisma $transaction to keep outbox writes atomic with aggregate state changes.
+// PrismaService propagates its interactive transaction through AsyncLocalStorage, so calls made
+// inside prisma.transaction(...) use that transaction client. Outside one, this is an event-only
+// durable write; producers changing aggregate state must use a trigger or PrismaService.transaction.
 @Injectable()
 export class OutboxPublisher implements EventPublisherPort {
   private readonly logger = new Logger(OutboxPublisher.name);
@@ -37,7 +39,8 @@ export class OutboxPublisher implements EventPublisherPort {
     }));
 
     try {
-      await this.prisma.db.outboxEvent.createMany({ data: rows });
+      const client = this.prisma.currentTransaction ?? this.prisma.db;
+      await client.outboxEvent.createMany({ data: rows });
     } catch (err) {
       this.logger.error(`Outbox persist failed for ${events.length} event(s) — ${String(err)}`);
       throw err;

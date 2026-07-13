@@ -21,11 +21,14 @@ function makeMockMailAdapter(): MailAdapter {
   return { send: vi.fn().mockResolvedValue(undefined) } as unknown as MailAdapter;
 }
 
-/** Build a Redis mock whose SETNX (set NX EX) returns 'OK' by default (slot unclaimed). */
-function makeMockRedis(setnxResult: 'OK' | null = 'OK'): Redis {
+function makeMockRedis(alreadySent = false): Redis {
+  let value: string | null = alreadySent ? '1' : null;
   return {
-    set: vi.fn().mockResolvedValue(setnxResult),
-    del: vi.fn().mockResolvedValue(1),
+    get: vi.fn().mockImplementation(async () => value),
+    set: vi.fn().mockImplementation(async (_key: string, next: string) => {
+      value = next;
+      return 'OK';
+    }),
   } as unknown as Redis;
 }
 
@@ -48,6 +51,8 @@ describe('EmailNotificationProcessor', () => {
       to: 'user@example.com',
       subject: 'Hello',
       html: '<p>World</p>',
+      messageId:
+        '<6b86b273ff34fce19d6b804eff5a3f5747ada4eaa22f1d49c01e52ddb7875b4b@nestjs-fastify-nx.local>',
     });
   });
 
@@ -75,7 +80,7 @@ describe('EmailNotificationProcessor', () => {
     await expect(processor.process(job)).rejects.toThrow('SMTP connection refused');
   });
 
-  it('clears idempotency marker and re-throws when mail.send fails', async () => {
+  it('does not persist the sent marker when mail.send fails', async () => {
     const sendError = new Error('Timeout');
     vi.mocked(mail.send).mockRejectedValue(sendError);
     const job = makeJob(
@@ -84,7 +89,7 @@ describe('EmailNotificationProcessor', () => {
     );
     await expect(processor.process(job)).rejects.toThrow();
     // Marker must be cleared so the next BullMQ retry can attempt delivery.
-    expect(redis.del).toHaveBeenCalledWith('email:sent:99');
+    expect(redis.set).not.toHaveBeenCalled();
   });
 
   it('handles retry attempts (attemptsMade > 0) correctly', async () => {
@@ -103,11 +108,7 @@ describe('EmailNotificationProcessor', () => {
         { id: 'job-x' },
       );
 
-      // First fire — slot unclaimed (redis.set returns 'OK').
       await processor.process(job);
-
-      // Second fire — slot already claimed (redis.set returns null).
-      vi.mocked(redis.set).mockResolvedValueOnce(null);
       await processor.process(job);
 
       // mail.send must have been invoked exactly once across both calls.
@@ -115,7 +116,7 @@ describe('EmailNotificationProcessor', () => {
     });
 
     it('returns early without calling mail.send when slot is already claimed', async () => {
-      redis = makeMockRedis(null); // pre-claimed slot
+      redis = makeMockRedis(true);
       processor = new EmailNotificationProcessor(mail, redis);
 
       const job = makeJob(
@@ -127,11 +128,19 @@ describe('EmailNotificationProcessor', () => {
       expect(mail.send).not.toHaveBeenCalled();
     });
 
-    it('sets idempotency key with correct NX + EX args', async () => {
+    it('sets a post-delivery marker with the expected TTL', async () => {
       const job = makeJob({ to: 'key@example.com', subject: 'K', body: 'B' }, { id: 'job-z' });
       await processor.process(job);
 
-      expect(redis.set).toHaveBeenCalledWith('email:sent:job-z', '1', 'EX', 86_400, 'NX');
+      expect(redis.set).toHaveBeenCalledWith('email:sent:job-z', '1', 'EX', 2_592_000);
+    });
+
+    it('does not retry an accepted email solely because marker persistence failed', async () => {
+      vi.mocked(redis.set).mockRejectedValueOnce(new Error('redis unavailable'));
+      const job = makeJob({ to: 'sent@example.com', subject: 'Sent', body: 'Body' });
+
+      await expect(processor.process(job)).resolves.toBeUndefined();
+      expect(mail.send).toHaveBeenCalledOnce();
     });
   });
 });

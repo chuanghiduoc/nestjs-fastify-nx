@@ -16,28 +16,32 @@ import Redis from 'ioredis';
 import { ConfigService } from '@nestjs/config';
 import { BETTER_AUTH_INSTANCE } from '@nestjs-fastify-nx/infra-auth';
 import type { BetterAuthInstance } from '@nestjs-fastify-nx/infra-auth';
-import { createWsAuthMiddleware } from './ws-auth.adapter';
+import {
+  createWsAuthMiddleware,
+  renewWsConnectionLease,
+  revalidateWsSession,
+} from './ws-auth.adapter';
 
 interface WsRedisEnv {
   REDIS_CACHE_HOST: string;
   REDIS_CACHE_PORT: number;
   REDIS_PUBSUB_DB: number;
   WS_CONNECTION_LIMIT_PER_IP: number;
+  WS_SESSION_REVALIDATE_MS: number;
+  TRUST_PROXY_HOPS: number;
 }
 
-// Read at module-load time so the synchronous decorator can hand a CORS function to socket.io.
 // Empty allowlist in production rejects all cross-origin upgrades — never use origin: true with credentials.
-const wsOrigins = (process.env['CORS_ORIGINS'] ?? '')
-  .split(',')
-  .map((s) => s.trim())
-  .filter(Boolean);
-
-const isProd = process.env['NODE_ENV'] === 'production';
-
 const wsCorsOrigin: (
   origin: string | undefined,
   cb: (err: Error | null, allow?: boolean) => void,
 ) => void = (origin, cb) => {
+  // Resolve per handshake because ConfigModule may load `.env` after this module is imported.
+  const wsOrigins = (process.env['CORS_ORIGINS'] ?? '')
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean);
+  const isProd = process.env['NODE_ENV'] === 'production';
   if (!origin) return cb(null, true); // same-origin / non-browser
   if (wsOrigins.length > 0) return cb(null, wsOrigins.includes(origin));
   return cb(null, !isProd); // dev: allow all; prod: require explicit allowlist
@@ -58,6 +62,8 @@ export class NotificationGateway
   private pubClient!: Redis;
   private subClient!: Redis;
   private rateLimitClient!: Redis;
+  private revalidationTimer?: NodeJS.Timeout;
+  private revalidationInFlight?: Promise<void>;
 
   constructor(
     private readonly config: ConfigService<WsRedisEnv, true>,
@@ -102,13 +108,25 @@ export class NotificationGateway
       createWsAuthMiddleware(this.auth, {
         redis: this.rateLimitClient,
         maxConcurrentPerIp: this.config.get('WS_CONNECTION_LIMIT_PER_IP', { infer: true }),
+        trustProxyHops: this.config.get('TRUST_PROXY_HOPS', { infer: true }),
       }),
     );
+
+    const revalidateMs = this.config.get('WS_SESSION_REVALIDATE_MS', { infer: true });
+    this.revalidationTimer = setInterval(() => {
+      if (this.revalidationInFlight) return;
+      this.revalidationInFlight = this.revalidateConnectedSockets().finally(() => {
+        this.revalidationInFlight = undefined;
+      });
+    }, revalidateMs);
+    this.revalidationTimer.unref();
 
     this.logger.log('NotificationGateway initialized with Redis adapter');
   }
 
   async onApplicationShutdown(): Promise<void> {
+    if (this.revalidationTimer) clearInterval(this.revalidationTimer);
+    await this.revalidationInFlight;
     // Guard the optional chaining — shutdown can fire before afterInit() ran.
     const closes: Promise<unknown>[] = [];
     if (this.pubClient) closes.push(this.pubClient.quit().catch(() => this.pubClient.disconnect()));
@@ -118,13 +136,44 @@ export class NotificationGateway
     await Promise.allSettled(closes);
   }
 
-  handleConnection(socket: Socket): void {
+  private async revalidateConnectedSockets(): Promise<void> {
+    const sockets = [...this.server.sockets.sockets.values()];
+    await Promise.allSettled(
+      sockets.map(async (socket) => {
+        try {
+          await revalidateWsSession(this.auth, socket);
+          await renewWsConnectionLease(this.rateLimitClient, socket).catch((err) => {
+            this.logger.warn(
+              `WebSocket connection lease renewal failed: socketId=${socket.id} error=${String(err)}`,
+            );
+          });
+        } catch (err) {
+          const user = socket.data['user'] as { userId?: string } | undefined;
+          this.logger.warn(
+            `Disconnecting revoked WebSocket: userId=${user?.userId ?? 'unknown'} socketId=${socket.id} reason=${String(err)}`,
+          );
+          socket.disconnect(true);
+        }
+      }),
+    );
+  }
+
+  async handleConnection(socket: Socket): Promise<void> {
     const user = socket.data['user'] as { userId: string; email: string } | undefined;
     if (!user) {
       socket.disconnect(true);
       return;
     }
-    void socket.join(`user:${user.userId}`);
+
+    try {
+      await socket.join(`user:${user.userId}`);
+    } catch (err) {
+      this.logger.error(
+        `Failed to join user room: userId=${user.userId} socketId=${socket.id} error=${String(err)}`,
+      );
+      socket.disconnect(true);
+      return;
+    }
     this.logger.log(`Client connected: userId=${user.userId} socketId=${socket.id}`);
   }
 

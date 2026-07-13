@@ -93,6 +93,14 @@ describe('OutboxRelayService', () => {
     expect(dbExecuteCalls).toHaveLength(0);
   });
 
+  it('does not claim rows while this scheduler replica is a follower', async () => {
+    const { prisma } = buildPrisma({ claim: () => [buildRow()] });
+    const relay = new OutboxRelayService(prisma, buildBus(), { isLeader: () => false });
+
+    expect(await relay.tick()).toBe(0);
+    expect(prisma.transaction).not.toHaveBeenCalled();
+  });
+
   it('publishes claimed rows and marks them processed outside the claim transaction', async () => {
     const { prisma, dbExecuteCalls } = buildPrisma({ claim: () => [buildRow()] });
     const bus = buildBus();
@@ -180,6 +188,24 @@ describe('OutboxRelayService', () => {
     );
   });
 
+  it('records a malformed envelope and continues dispatching the rest of the batch', async () => {
+    const malformed = buildRow({
+      id: 'row-bad',
+      payload: null as unknown as OutboxRow['payload'],
+    });
+    const valid = buildRow({ id: 'row-good' });
+    const { prisma, dbExecuteCalls } = buildPrisma({ claim: () => [malformed, valid] });
+    const bus = buildBus();
+    const relay = new OutboxRelayService(prisma, bus);
+
+    expect(await relay.tick()).toBe(1);
+    expect(bus.publish).toHaveBeenCalledOnce();
+    expect(dbExecuteCalls).toHaveLength(2);
+    expect(dbExecuteCalls[0].sql).toMatch(/lastError/);
+    expect(dbExecuteCalls[0].args[0]).toBe('Invalid outbox payload envelope');
+    expect(dbExecuteCalls[1].sql).toMatch(/processedAt/);
+  });
+
   it('does not hold the claim transaction across the publish call', async () => {
     // Build prisma where the tx callback resolves before publish is awaited.
     // We assert ordering by recording the sequence in which the two side
@@ -232,6 +258,24 @@ describe('OutboxRelayService', () => {
     expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('2 permanently-stuck'));
   });
 
+  it('checks for stuck rows at most once per minute', async () => {
+    vi.useFakeTimers();
+    try {
+      const { prisma } = buildPrisma({ claim: () => [] });
+      const relay = new OutboxRelayService(prisma, buildBus());
+
+      await relay.tick();
+      await relay.tick();
+      expect(prisma.db.$queryRawUnsafe).toHaveBeenCalledTimes(1);
+
+      await vi.advanceTimersByTimeAsync(60_000);
+      await relay.tick();
+      expect(prisma.db.$queryRawUnsafe).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('skips overlapping ticks while a previous cycle is still running', async () => {
     let claimCalls = 0;
     let publishEntered!: () => void;
@@ -260,5 +304,28 @@ describe('OutboxRelayService', () => {
 
     releasePublish();
     expect(await first).toBe(1);
+  });
+
+  it('contains scheduled tick failures so a database outage cannot crash the process', async () => {
+    vi.useFakeTimers();
+    try {
+      const { prisma } = buildPrisma({ claim: () => [] });
+      (prisma.transaction as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+        new Error('database unavailable'),
+      );
+      const relay = new OutboxRelayService(prisma, buildBus());
+      const errorSpy = vi.spyOn(
+        (relay as unknown as { logger: { error: (message: string) => void } }).logger,
+        'error',
+      );
+
+      relay.onModuleInit();
+      await vi.advanceTimersByTimeAsync(60_000);
+      await relay.onModuleDestroy();
+
+      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('database unavailable'));
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

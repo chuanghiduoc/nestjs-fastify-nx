@@ -74,6 +74,64 @@ describe('isSlowQuery', () => {
   });
 });
 
+describe('PrismaService lifecycle cleanup', () => {
+  const originalEnv = process.env;
+
+  beforeEach(() => {
+    process.env = {
+      ...originalEnv,
+      DATABASE_URL: 'postgresql://test:test@localhost:5432/test',
+      DATABASE_REPLICA_URL: 'postgresql://test:test@replica:5432/test',
+    };
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
+    vi.restoreAllMocks();
+  });
+
+  it('disconnects both clients when replica connection fails during startup', async () => {
+    const svc = new PrismaService();
+    vi.spyOn(svc.db, '$connect').mockResolvedValue();
+    vi.spyOn(svc.dbRead, '$connect').mockRejectedValue(new Error('replica unavailable'));
+    const disconnectWrite = vi.spyOn(svc.db, '$disconnect').mockResolvedValue();
+    const disconnectRead = vi.spyOn(svc.dbRead, '$disconnect').mockResolvedValue();
+
+    await expect(svc.onModuleInit()).rejects.toThrow('replica unavailable');
+    expect(disconnectWrite).toHaveBeenCalledOnce();
+    expect(disconnectRead).toHaveBeenCalledOnce();
+  });
+
+  it('attempts replica disconnect even when primary disconnect fails', async () => {
+    const svc = new PrismaService();
+    vi.spyOn(svc.db, '$disconnect').mockRejectedValue(new Error('primary close failed'));
+    const disconnectRead = vi.spyOn(svc.dbRead, '$disconnect').mockResolvedValue();
+
+    await expect(svc.onModuleDestroy()).resolves.toBeUndefined();
+    expect(disconnectRead).toHaveBeenCalledOnce();
+  });
+});
+
+describe('PrismaService transaction context', () => {
+  it('exposes the transaction client only inside the matching async transaction', async () => {
+    process.env['DATABASE_URL'] = 'postgresql://test:test@localhost:5432/test';
+    delete process.env['DATABASE_REPLICA_URL'];
+    const svc = new PrismaService();
+    const txClient = { outboxEvent: { createMany: vi.fn() } };
+    vi.spyOn(svc.db, '$transaction').mockImplementationOnce((async (
+      callback: (tx: typeof txClient) => Promise<unknown>,
+    ) => callback(txClient)) as unknown as typeof svc.db.$transaction);
+
+    expect(svc.currentTransaction).toBeUndefined();
+    await svc.transaction(async () => {
+      expect(svc.currentTransaction).toBe(txClient);
+      await Promise.resolve();
+      expect(svc.currentTransaction).toBe(txClient);
+    });
+    expect(svc.currentTransaction).toBeUndefined();
+  });
+});
+
 describe('PrismaService — slow query logging', () => {
   const originalEnv = process.env;
 

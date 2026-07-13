@@ -168,7 +168,7 @@ export class UserRegistered implements DomainEvent {
 **Rules**: for `users`, the outbox row is written by a **Postgres trigger**,
 not application code (Better Auth writes outside the Nest pipeline). If your
 event instead originates from a command handler, publish it via
-`EventPublisherPort.publishAll(...)` inside the same `$transaction` as the
+an outbox write through the same transaction-scoped Prisma client as the
 aggregate write. Never call `eventEmitter.emit()` or `queue.add()` directly
 from a command handler — anything not written through the outbox is lost on
 rollback.

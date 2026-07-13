@@ -81,6 +81,28 @@ model Verification {
   @@map("verifications")
 }
 
+// Durable ownership and lifecycle state for finalized uploads. `userId` deliberately has no
+// foreign key: the scheduler must still see and delete S3 objects after a user row is purged.
+model StoredFile {
+  id            String    @id @db.Uuid
+  userId        String    @db.Uuid
+  sourceKey     String    @unique
+  key           String    @unique
+  bucket        String
+  contentType   String
+  size          Int
+  etag          String
+  status        String    @default("FINALIZING")
+  failureReason String?
+  verifiedAt    DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([userId, status])
+  @@index([status, updatedAt])
+  @@map("stored_files")
+}
+
 // `id` is application-stamped UUIDv7 — producer needs the value inside the
 // same transaction to correlate aggregate writes with the outbox row.
 model OutboxEvent {

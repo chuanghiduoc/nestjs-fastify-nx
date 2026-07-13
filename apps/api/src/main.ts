@@ -1,6 +1,5 @@
 import './tracing';
 import * as Sentry from '@sentry/nestjs';
-import { nodeProfilingIntegration } from '@sentry/profiling-node';
 import { NestFactory } from '@nestjs/core';
 import { HttpStatus, VersioningType } from '@nestjs/common';
 import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify';
@@ -13,80 +12,42 @@ import fastifyMultipart from '@fastify/multipart';
 import fastifyCompress from '@fastify/compress';
 import fastifyUnderPressure from '@fastify/under-pressure';
 import { Redis } from 'ioredis';
+import { createHash } from 'node:crypto';
 import { toNodeHandler } from 'better-auth/node';
 import { BETTER_AUTH_INSTANCE, type BetterAuthInstance } from '@nestjs-fastify-nx/infra-auth';
-import { positiveIntEnv } from '@nestjs-fastify-nx/shared';
+import { intEnv, positiveIntEnv } from '@nestjs-fastify-nx/shared';
 import { ERROR_CODES } from '@nestjs-fastify-nx/contracts';
+import { reportFatalError, startSentry } from '@nestjs-fastify-nx/infra-observability';
 import { AppModule } from './app/app.module';
-import { applyFastifyErrorHandler } from './common/filters/fastify-error-handler';
-import { resolveRequestId } from './common/logging/request-id';
+import { resolveCorrelationId, resolveRequestId } from './common/logging/request-id';
 import { ProblemDetailsValidationPipe } from './common/pipes';
 import { setupSwagger } from './common/swagger/swagger.config';
 import { createBullBoardPlugin } from './common/bull-board/create-bull-board-plugin';
 import { registerIdempotency } from './common/idempotency/register-idempotency';
+import { applyFastifyProblemDetailsHook } from './common/filters/fastify-error-handler';
 import type { EnvConfig } from './config/env.validation';
 
-const sentryDsn = process.env['SENTRY_DSN'];
-if (sentryDsn) {
-  const isProduction = process.env['NODE_ENV'] === 'production';
-  // Cap prod sample rates to avoid burning through Sentry quota.
-  const sampleRateCap = isProduction ? 0.1 : 1;
-  const parsedRate = Number(process.env['SENTRY_TRACES_SAMPLE_RATE'] ?? 0.01);
-  const tracesSampleRate = Math.min(Number.isFinite(parsedRate) ? parsedRate : 0.01, sampleRateCap);
-  const profilesSampleRate = Math.min(0.1, sampleRateCap);
+const STRICT_AUTH_PATHS = new Set([
+  '/api/auth/sign-in/email',
+  '/api/auth/sign-up/email',
+  '/api/auth/request-password-reset',
+  '/api/auth/reset-password',
+]);
 
-  Sentry.init({
-    dsn: sentryDsn,
-    environment: process.env['SENTRY_ENVIRONMENT'] ?? 'development',
-    tracesSampleRate,
-    profilesSampleRate,
-    integrations: [nodeProfilingIntegration()],
-    sendDefaultPii: false,
-    beforeSend(event) {
-      if (event.request) {
-        delete event.request.cookies;
-        delete event.request.data;
-        if (event.request.headers) {
-          delete event.request.headers['authorization'];
-          delete event.request.headers['cookie'];
-          delete event.request.headers['set-cookie'];
-        }
-      }
+const AUTH_ACCOUNT_RATE_LIMIT_SCRIPT = `
+local count = redis.call('incr', KEYS[1])
+if count == 1 then redis.call('pexpire', KEYS[1], ARGV[1]) end
+return {count, redis.call('pttl', KEYS[1])}`;
 
-      const sensitiveKeys = /password|token|secret|cookie/i;
-      const scrubObject = (obj: Record<string, unknown>): void => {
-        for (const key of Object.keys(obj)) {
-          if (sensitiveKeys.test(key)) {
-            obj[key] = '[Filtered]';
-          }
-        }
-      };
-
-      if (event.extra) scrubObject(event.extra as Record<string, unknown>);
-      if (event.contexts) {
-        for (const ctx of Object.values(event.contexts)) {
-          if (ctx && typeof ctx === 'object') scrubObject(ctx as Record<string, unknown>);
-        }
-      }
-      const breadcrumbList = (event.breadcrumbs as { values?: unknown[] } | undefined)?.values;
-      if (Array.isArray(breadcrumbList)) {
-        for (const crumb of breadcrumbList) {
-          const data = (crumb as { data?: unknown })?.data;
-          if (data && typeof data === 'object') {
-            scrubObject(data as Record<string, unknown>);
-          }
-        }
-      }
-
-      return event;
-    },
-  });
-}
+startSentry({ serviceName: 'nestjs-fastify-api', profiling: true });
 
 async function bootstrap() {
   // trustProxy depth must match proxy topology — wrong value lets XFF spoofing bypass IP rate limits.
   const bodyLimitBytes = positiveIntEnv('HTTP_BODY_LIMIT_BYTES', 1_048_576);
-  const trustProxyHops = positiveIntEnv('TRUST_PROXY_HOPS', 1);
+  const configuredProxyHops = intEnv('TRUST_PROXY_HOPS', 0);
+  // Keep adapter construction safe so ConfigModule can report the original invalid value cleanly.
+  const trustProxyHops =
+    configuredProxyHops >= 0 && configuredProxyHops <= 10 ? configuredProxyHops : 0;
 
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
@@ -104,6 +65,33 @@ async function bootstrap() {
   app.enableVersioning({ type: VersioningType.URI, defaultVersion: '1' });
 
   const fastify = app.getHttpAdapter().getInstance();
+  // Register CORS before any direct Fastify routes (Better Auth/Bull Board). Fastify hooks are
+  // order-sensitive; registering this near the end would leave earlier routes without CORS headers.
+  const corsOrigins = config.get('CORS_ORIGINS', { infer: true });
+  const DEV_ALLOWED_ORIGINS = [
+    'http://localhost:3000',
+    'http://localhost:4200',
+    'http://localhost:5173',
+    'http://localhost:8080',
+    'http://127.0.0.1:3000',
+    'http://127.0.0.1:4200',
+    'http://127.0.0.1:5173',
+  ];
+  app.enableCors({
+    origin: corsOrigins.length > 0 ? corsOrigins : isProduction ? [] : DEV_ALLOWED_ORIGINS,
+    credentials: true,
+    methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: [
+      'Authorization',
+      'Content-Type',
+      'Idempotency-Key',
+      'X-Request-Id',
+      'X-Correlation-Id',
+    ],
+    exposedHeaders: ['Idempotent-Replayed', 'X-Request-Id', 'X-Correlation-Id'],
+    maxAge: 600,
+  });
+
   // CSP disabled in dev so Scalar/Bull Board can load CDN assets.
   await fastify.register(fastifyHelmet, {
     contentSecurityPolicy: isProduction
@@ -217,7 +205,9 @@ async function bootstrap() {
 
   // Must register before betterAuthHandler — reply.hijack() bypasses NestJS ThrottlerGuard.
   const authRateLimitMax = config.get('AUTH_RATE_LIMIT_MAX', { infer: true });
+  const authIpRateLimitMax = config.get('AUTH_IP_RATE_LIMIT_MAX', { infer: true });
   const authRateLimitWindowMs = config.get('AUTH_RATE_LIMIT_WINDOW_MS', { infer: true });
+  const authRateLimitFailOpen = config.get('AUTH_RATE_LIMIT_FAIL_OPEN', { infer: true });
 
   // db=4 isolated from cache (db=0), throttler (db=1), and queue databases.
   const rateLimitRedis = new Redis({
@@ -231,9 +221,8 @@ async function bootstrap() {
   rateLimitRedis.on('error', (err: Error) => {
     app.get(Logger).warn(`Rate-limit Redis error: ${err.message}`);
   });
-  // Nest shutdown only tears down DI providers; close this connection manually.
-  process.once('SIGTERM', () => {
-    void rateLimitRedis.quit().catch(() => rateLimitRedis.disconnect());
+  fastify.addHook('onClose', async () => {
+    await rateLimitRedis.quit().catch(() => rateLimitRedis.disconnect());
   });
 
   await fastify.register(fastifyRateLimit, {
@@ -243,14 +232,9 @@ async function bootstrap() {
     hook: 'preHandler',
     max: authRateLimitMax,
     timeWindow: authRateLimitWindowMs,
-    // Key by IP+email — prevents same-NAT users sharing a bucket while still capping per-account abuse.
-    keyGenerator: (req) => {
-      const body = req.body as Record<string, unknown> | undefined;
-      const email = body && typeof body['email'] === 'string' ? body['email'].toLowerCase() : '';
-      return `${req.ip}:${email}`;
-    },
+    keyGenerator: (req) => req.ip,
     errorResponseBuilder: (req, context) => {
-      // Stamp req.raw so applyFastifyErrorHandler echoes the SAME id on the x-request-id
+      // Stamp req.raw so the global exception filter echoes the SAME id on the x-request-id
       // header (rate-limit throws this body into setErrorHandler).
       const requestId = resolveRequestId(req.headers);
       (req.raw as { requestId?: string }).requestId = requestId;
@@ -275,36 +259,88 @@ async function bootstrap() {
     },
   });
 
-  // @fastify/rate-limit emits application/json; rewrite to problem+json for RFC 9457 contract.
-  fastify.addHook('onSend', (_req, reply, _payload, done) => {
-    if (
-      reply.statusCode === 429 &&
-      !reply.getHeader('content-type')?.toString().includes('problem+json')
-    ) {
-      reply.header('content-type', 'application/problem+json');
-    }
-    done();
-  });
+  // Normalize parser/plugin failures that occur before Nest's exception filter without
+  // installing a second Fastify error handler in the same scope (which triggers FSTWRN004).
+  applyFastifyProblemDetailsHook(fastify);
 
-  applyFastifyErrorHandler(fastify);
+  // A second, account-wide bucket complements the per-IP route bucket. Without both, attackers
+  // can spray many accounts from one IP or distribute guesses for one account across many IPs.
+  fastify.addHook('preHandler', async (req, reply) => {
+    const path = req.url.split('?', 1)[0];
+    if (!STRICT_AUTH_PATHS.has(path)) return;
+    const body = req.body as Record<string, unknown> | undefined;
+    const email = typeof body?.['email'] === 'string' ? body['email'].trim().toLowerCase() : '';
+    if (!email) return;
+
+    try {
+      const key = `auth:account:${createHash('sha256').update(email).digest('hex')}`;
+      const [countRaw, ttlRaw] = (await rateLimitRedis.eval(
+        AUTH_ACCOUNT_RATE_LIMIT_SCRIPT,
+        1,
+        key,
+        String(authRateLimitWindowMs),
+      )) as [number | string, number | string];
+      const count = Number(countRaw);
+      const ttl = Math.max(0, Number(ttlRaw));
+      if (count <= authRateLimitMax) return;
+
+      const retryAfter = Math.max(1, Math.ceil(ttl / 1000));
+      const requestId = resolveRequestId(req.headers);
+      (req.raw as { requestId?: string }).requestId = requestId;
+      return reply
+        .status(HttpStatus.TOO_MANY_REQUESTS)
+        .header('content-type', 'application/problem+json')
+        .header('retry-after', String(retryAfter))
+        .send({
+          type: 'https://tools.ietf.org/html/rfc6585#section-4',
+          title: 'Too Many Requests',
+          status: HttpStatus.TOO_MANY_REQUESTS,
+          code: ERROR_CODES.RATE_LIMITED,
+          detail: `Rate limit exceeded. Try again in ${retryAfter} seconds.`,
+          retryAfter,
+          requestId,
+          timestamp: new Date().toISOString(),
+        });
+    } catch (err) {
+      if (authRateLimitFailOpen) {
+        app.get(Logger).warn(`Account rate-limit Redis error (fail-open): ${String(err)}`);
+        return;
+      }
+
+      app.get(Logger).error(`Account rate-limit Redis error (fail-closed): ${String(err)}`);
+      const requestId = resolveRequestId(req.headers);
+      (req.raw as { requestId?: string }).requestId = requestId;
+      return reply
+        .status(HttpStatus.SERVICE_UNAVAILABLE)
+        .header('content-type', 'application/problem+json')
+        .header('retry-after', '5')
+        .send({
+          type: 'about:blank',
+          title: 'Service Unavailable',
+          status: HttpStatus.SERVICE_UNAVAILABLE,
+          code: ERROR_CODES.SERVICE_UNAVAILABLE,
+          detail: 'Authentication is temporarily unavailable. Retry shortly.',
+          requestId,
+          timestamp: new Date().toISOString(),
+        });
+    }
+  });
 
   const auth = app.get<BetterAuthInstance>(BETTER_AUTH_INSTANCE);
   const betterAuthHandler = toNodeHandler(auth.handler);
 
   // STRICT bucket: credential paths; LOOSE bucket: session ops.
-  const STRICT_AUTH_PATHS = [
-    '/api/auth/sign-in/email',
-    '/api/auth/sign-up/email',
-    '/api/auth/request-password-reset',
-    '/api/auth/reset-password',
-  ] as const;
   const authSessionRateLimitMax = config.get('AUTH_SESSION_RATE_LIMIT_MAX', { infer: true });
   const authSessionRateLimitWindowMs = config.get('AUTH_SESSION_RATE_LIMIT_WINDOW_MS', {
     infer: true,
   });
   const strictAuthRouteConfig: RouteShorthandOptions = {
     config: {
-      rateLimit: { max: authRateLimitMax, timeWindow: authRateLimitWindowMs },
+      rateLimit: {
+        max: authIpRateLimitMax,
+        timeWindow: authRateLimitWindowMs,
+        keyGenerator: (req) => req.ip,
+      },
     },
   };
   const looseAuthRouteConfig: RouteShorthandOptions = {
@@ -318,6 +354,14 @@ async function bootstrap() {
   };
 
   const authRouteHandler = async (req: FastifyRequest, reply: FastifyReply): Promise<void> => {
+    // These routes are registered directly on Fastify, so Nest middleware never seeds their
+    // request context. Establish the same IDs before hijacking the response lifecycle.
+    const requestId = resolveRequestId(req.headers);
+    const correlationId = resolveCorrelationId(req.headers, requestId);
+    Object.assign(req.raw, { requestId, correlationId });
+    reply.header('x-request-id', requestId);
+    reply.header('x-correlation-id', correlationId);
+
     // Propagate Fastify's parsed body to req.raw so Better Auth's toNodeHandler can read it.
     if (req.body !== undefined && (req.raw as unknown as { body?: unknown }).body === undefined) {
       (req.raw as unknown as { body: unknown }).body = req.body;
@@ -327,10 +371,11 @@ async function bootstrap() {
       await betterAuthHandler(req.raw, reply.raw);
     } catch (err) {
       // After hijack(), Fastify's error handler won't run — close manually to prevent slowloris hang.
-      Sentry.captureException(err);
+      Sentry.captureException(err, { tags: { requestId, correlationId } });
       const logger = app.get(Logger);
       logger.error(
-        `Better Auth handler threw unexpectedly: ${err instanceof Error ? err.message : String(err)}`,
+        { err, requestId, correlationId, url: req.url },
+        'Better Auth handler threw unexpectedly',
       );
       if (!reply.raw.headersSent) {
         const body = JSON.stringify({
@@ -338,14 +383,22 @@ async function bootstrap() {
           title: 'Internal Server Error',
           status: HttpStatus.INTERNAL_SERVER_ERROR,
           code: ERROR_CODES.INTERNAL_SERVER_ERROR,
+          instance: req.url,
+          requestId,
+          timestamp: new Date().toISOString(),
         });
         reply.raw.writeHead(HttpStatus.INTERNAL_SERVER_ERROR, {
           'Content-Type': 'application/problem+json',
           'Content-Length': Buffer.byteLength(body),
+          'X-Request-Id': requestId,
+          'X-Correlation-Id': correlationId,
         });
         reply.raw.end(body);
+      } else if (!reply.raw.writableEnded) {
+        // The delegated handler may have started a response before throwing. It is too late to
+        // replace the status/body, but ending the stream avoids leaving a half-open connection.
+        reply.raw.end();
       }
-      reply.raw.socket?.destroy(); // Destroy half-open socket.
     }
   };
 
@@ -369,25 +422,6 @@ async function bootstrap() {
   }
 
   // Never reflect arbitrary origins with credentials:true — prevents CSRF via cross-site authenticated requests.
-  const corsOrigins = config.get('CORS_ORIGINS', { infer: true });
-  const DEV_ALLOWED_ORIGINS = [
-    'http://localhost:3000',
-    'http://localhost:4200',
-    'http://localhost:5173',
-    'http://localhost:8080',
-    'http://127.0.0.1:3000',
-    'http://127.0.0.1:4200',
-    'http://127.0.0.1:5173',
-  ];
-  app.enableCors({
-    origin: corsOrigins.length > 0 ? corsOrigins : isProduction ? [] : DEV_ALLOWED_ORIGINS,
-    credentials: true,
-    methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Authorization', 'Content-Type', 'X-Request-Id', 'X-Correlation-Id'],
-    exposedHeaders: ['X-Request-Id', 'X-Correlation-Id'],
-    maxAge: 600,
-  });
-
   app.useGlobalPipes(new ProblemDetailsValidationPipe());
 
   if (!isProduction) {
@@ -396,7 +430,7 @@ async function bootstrap() {
 
   const port = config.get('PORT', { infer: true });
   await app.listen(port, '0.0.0.0');
-  app.get(Logger).log(`API running on: ${await app.getUrl()}`);
+  app.get(Logger).log(`API listening at: ${await app.getUrl()}`);
 }
 
-void bootstrap();
+void bootstrap().catch((error: unknown) => reportFatalError(error, 'nestjs-fastify-api'));

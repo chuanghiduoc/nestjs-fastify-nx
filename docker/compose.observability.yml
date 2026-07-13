@@ -16,21 +16,41 @@
 #   ssh -L 16686:localhost:16686 -L 3001:localhost:3001 -L 9090:localhost:9090 user@host
 #   16686  Jaeger UI         http://localhost:16686
 #   9090   Prometheus        http://localhost:9090
-#   3001   Grafana           http://localhost:3001  (admin / admin)
-#   4317   OTLP gRPC         (set OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317)
+#   3001   Grafana           http://localhost:3001  (admin / GRAFANA_ADMIN_PASSWORD)
+#   3100   Loki API          http://localhost:3100
+#   4317   OTLP gRPC         (for gRPC exporters; this app uses OTLP HTTP)
 #   4318   OTLP HTTP         (set OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318)
 #
-# Enable in the api container:
-#   OTEL_ENABLED=true
-#   OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
-#   ENABLE_METRICS=true
-#   METRICS_ALLOW_CIDRS=172.0.0.0/8   # docker bridge CIDR so prometheus can scrape
+# The overlay enables OTEL for api/worker/scheduler and API metrics automatically. Override
+# METRICS_ALLOW_CIDRS when Docker uses a custom bridge pool outside 172.16.0.0/12.
 
 services:
+  api:
+    environment:
+      ENABLE_METRICS: 'true'
+      # Docker's default bridge pools live in 172.16.0.0/12. Override this for custom networks.
+      METRICS_ALLOW_CIDRS: ${METRICS_ALLOW_CIDRS:-172.16.0.0/12}
+      OTEL_ENABLED: 'true'
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      OTEL_METRICS_EXPORT_ENABLED: 'false'
+
+  worker:
+    environment:
+      OTEL_ENABLED: 'true'
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      OTEL_METRICS_EXPORT_ENABLED: 'true'
+
+  scheduler:
+    environment:
+      OTEL_ENABLED: 'true'
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      OTEL_METRICS_EXPORT_ENABLED: 'true'
+
   otel-collector:
     image: otel/opentelemetry-collector-contrib:0.123.0
     restart: unless-stopped
     command: ['--config=/etc/otel/config.yaml']
+    mem_limit: 512m
     volumes:
       - ./otel-collector/config.yaml:/etc/otel/config.yaml:ro
     ports:
@@ -64,11 +84,34 @@ services:
     ports:
       - '127.0.0.1:9090:9090'
 
+  loki:
+    image: grafana/loki:3.4.3
+    restart: unless-stopped
+    command: ['-config.file=/etc/loki/config.yaml']
+    volumes:
+      - ./loki/config.yaml:/etc/loki/config.yaml:ro
+      - loki_data:/loki
+    ports:
+      - '127.0.0.1:3100:3100'
+
+  alloy:
+    image: grafana/alloy:v1.8.3
+    restart: unless-stopped
+    command: ['run', '/etc/alloy/config.alloy', '--storage.path=/var/lib/alloy/data']
+    environment:
+      COMPOSE_PROJECT_NAME: ${COMPOSE_PROJECT_NAME:-nestjs-fastify-nx}
+    volumes:
+      - ./alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - alloy_data:/var/lib/alloy/data
+    depends_on:
+      - loki
+
   grafana:
     image: grafana/grafana:11.6.0
     restart: unless-stopped
     environment:
-      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
       GF_USERS_ALLOW_SIGN_UP: 'false'
       GF_SERVER_HTTP_PORT: '3001'
     volumes:
@@ -78,7 +121,11 @@ services:
       - '127.0.0.1:3001:3001'
     depends_on:
       - prometheus
+      - jaeger
+      - loki
 
 volumes:
   prometheus_data:
   grafana_data:
+  loki_data:
+  alloy_data:
