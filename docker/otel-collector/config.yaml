@@ -7,6 +7,39 @@ receivers:
         endpoint: 0.0.0.0:4318
 
 processors:
+  # First in every pipeline — sheds data before the collector OOMs under a
+  # traffic spike instead of being OOM-killed and losing everything.
+  memory_limiter:
+    check_interval: 1s
+    limit_percentage: 80
+    spike_limit_percentage: 25
+
+  # Tail sampling decides AFTER seeing a whole trace, so it can keep every error
+  # and slow trace while sampling the rest — the signal head sampling in the app
+  # (OTEL_TRACES_SAMPLER_RATIO) can't preserve because it decides up front. In prod
+  # set a low head ratio (e.g. 0.05) and let this keep the interesting traces.
+  #
+  # NOTE: tail sampling needs all spans of a trace to reach the SAME collector. For a
+  # horizontally scaled collector, put a trace-id-aware loadbalancing exporter in front
+  # (a two-tier collector layout). Single-instance here, so no fan-in needed.
+  tail_sampling:
+    decision_wait: 10s
+    num_traces: 50000
+    expected_new_traces_per_sec: 1000
+    policies:
+      - name: errors
+        type: status_code
+        status_code:
+          status_codes: [ERROR]
+      - name: slow
+        type: latency
+        latency:
+          threshold_ms: 1000
+      - name: baseline
+        type: probabilistic
+        probabilistic:
+          sampling_percentage: 5
+
   batch:
     timeout: 1s
     send_batch_size: 1024
@@ -31,10 +64,10 @@ service:
   pipelines:
     traces:
       receivers: [otlp]
-      processors: [batch]
+      processors: [memory_limiter, tail_sampling, batch]
       exporters: [otlp/jaeger, debug]
 
     metrics:
       receivers: [otlp]
-      processors: [batch]
+      processors: [memory_limiter, batch]
       exporters: [prometheus, debug]

@@ -16,6 +16,7 @@ import { MetricsIpAllowGuard } from './metrics-ip-allow.guard';
 import { QueueDepthCollector } from './queue-depth.collector';
 import { OutboxLagCollector } from './outbox-lag.collector';
 import { MetricsCqrsRecorderAdapter } from './cqrs-metrics-recorder.adapter';
+import { MetricsLeaderService } from './metrics-leader.service';
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { MetricsCqrsRecorderAdapter } from './cqrs-metrics-recorder.adapter';
   controllers: [MetricsController],
   providers: [
     MetricsService,
+    MetricsLeaderService,
     HttpMetricsHook,
     EmailNotificationMetricsListener,
     UploadVerificationMetricsListener,

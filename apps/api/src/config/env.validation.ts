@@ -9,7 +9,8 @@ const envSchema = z
     // Physical replica for read-only queries. When unset, dbRead aliases to db.
     DATABASE_REPLICA_URL: z.string().trim().min(1).optional(),
     DATABASE_REPLICA_POOL_MAX: z.coerce.number().int().min(1).max(1000).default(10),
-    // Flips /health/ready to 503 when exceeded. 30s suits most streaming replication topologies.
+    // Flips /health/dependencies to 503 when exceeded (NOT the readiness probe — see HealthController).
+    // 30s suits most streaming replication topologies.
     DB_REPLICATION_LAG_THRESHOLD_MS: z.coerce.number().int().min(1_000).default(30_000),
     DATABASE_POOL_MAX: z.coerce.number().int().min(1).max(1000).default(20),
     DATABASE_POOL_MIN: z.coerce.number().int().min(0).max(1000).default(0),
@@ -125,6 +126,20 @@ const envSchema = z
     OTEL_EXPORTER_OTLP_ENDPOINT: z.string().default('http://localhost:4318'),
     OTEL_EXPORTER_OTLP_HEADERS: z.string().default(''),
     OTEL_TRACES_SAMPLER_RATIO: z.coerce.number().min(0).max(1).default(1),
+    // Trust inbound W3C traceparent/baggage. Keep false on a public edge so clients can't inject or
+    // collide trace ids / force sampling; set true only behind a trusted mesh/gateway that owns the
+    // root span. Read by startTracing() via process.env; declared here for .env.example parity.
+    OTEL_TRUST_INBOUND_TRACEPARENT: z
+      .string()
+      .default('false')
+      .transform((v) => v === 'true'),
+    // Push OTLP metrics from this process. Keep false in the API — prom-client (/metrics) is the
+    // metrics source of truth, so enabling both would double-count. Enable only in processes with no
+    // prom-client scrape endpoint (worker, scheduler). Read by startTracing() via process.env.
+    OTEL_METRICS_EXPORT_ENABLED: z
+      .string()
+      .default('false')
+      .transform((v) => v === 'true'),
 
     // Domain event publisher
     EVENT_PUBLISHER_DRIVER: z.enum(['inprocess', 'outbox']).default('inprocess'),
@@ -261,22 +276,28 @@ const envSchema = z
       });
     }
 
-    // SMTP runs in the worker, but api and worker share one .env in prod, so
-    // both validators enforce TLS to keep credentials off the wire.
-    if (data.MAIL_IGNORE_TLS) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['MAIL_IGNORE_TLS'],
-        message:
-          'MAIL_IGNORE_TLS must be false in production — sending SMTP credentials without TLS exposes them in plaintext',
-      });
-    }
-    if (!data.MAIL_SECURE && !data.MAIL_REQUIRE_TLS) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['MAIL_REQUIRE_TLS'],
-        message: 'Enable MAIL_SECURE or MAIL_REQUIRE_TLS in production so SMTP negotiates TLS',
-      });
+    // SMTP runs in the worker, but api and worker share one .env in prod, so both
+    // validators enforce TLS. The rule's intent is to keep CREDENTIALS off the wire,
+    // so it only applies when auth is actually used (MAIL_USER set). A relay without
+    // auth (e.g. a local mailpit in a prod-parity smoke) sends nothing secret in
+    // plaintext, so requiring TLS there adds no security — only friction.
+    if (data.MAIL_USER) {
+      if (data.MAIL_IGNORE_TLS) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['MAIL_IGNORE_TLS'],
+          message:
+            'MAIL_IGNORE_TLS must be false in production when MAIL_USER is set — sending SMTP credentials without TLS exposes them in plaintext',
+        });
+      }
+      if (!data.MAIL_SECURE && !data.MAIL_REQUIRE_TLS) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['MAIL_REQUIRE_TLS'],
+          message:
+            'Enable MAIL_SECURE or MAIL_REQUIRE_TLS in production when MAIL_USER is set so SMTP credentials negotiate TLS',
+        });
+      }
     }
 
     if (data.CORS_ORIGINS.length === 0) {

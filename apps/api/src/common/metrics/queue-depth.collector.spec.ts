@@ -1,7 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { QueueDepthCollector } from './queue-depth.collector';
 import type { MetricsService } from './metrics.service';
+import type { MetricsLeaderService } from './metrics-leader.service';
 import type { Queue } from 'bullmq';
+
+function makeLeader(isLeader: boolean): MetricsLeaderService {
+  return { isLeader: () => isLeader } as unknown as MetricsLeaderService;
+}
 
 function makeMockQueue(name: string, counts: Record<string, number>): Queue {
   return {
@@ -32,7 +37,16 @@ describe('QueueDepthCollector', () => {
     emailQ = makeMockQueue('email-notification', EMAIL_COUNTS);
     uploadQ = makeMockQueue('upload-verification', UPLOAD_COUNTS);
     metrics = makeMockMetrics();
-    collector = new QueueDepthCollector(emailQ, uploadQ, metrics);
+    collector = new QueueDepthCollector(emailQ, uploadQ, metrics, makeLeader(true));
+  });
+
+  it('records nothing when this replica is not the collector leader', async () => {
+    collector = new QueueDepthCollector(emailQ, uploadQ, metrics, makeLeader(false));
+
+    await collector.collect();
+
+    expect(emailQ.getJobCounts).not.toHaveBeenCalled();
+    expect(metrics.bullmqQueueDepth.labels).not.toHaveBeenCalled();
   });
 
   it('calls getJobCounts for every requested state on both queues', async () => {

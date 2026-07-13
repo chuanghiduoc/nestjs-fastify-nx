@@ -46,7 +46,7 @@ class HealthCheckResultDto {
 
   @ApiProperty({
     description:
-      'Per-indicator status. Keys depend on the endpoint — `/health` reports `database`, `memory_heap`, `redis_cache`, `redis_queue`; `/health/ready` adds `bullmq`, `pgbouncer`, `replication_lag`.',
+      'Per-indicator status. Keys depend on the endpoint — `/health` reports `database`, `memory_heap`, `redis_cache`, `redis_queue`; `/health/ready` reports the subset a pod needs to serve traffic (`database`, `redis_cache`, `redis_queue`); `/health/dependencies` reports the deep checks (`bullmq`, `pgbouncer`, `replication_lag`).',
     type: 'object',
     additionalProperties: INDICATOR_STATUS_SCHEMA,
     example: { database: { status: 'up' }, memory_heap: { status: 'up' } },
@@ -124,17 +124,22 @@ export class HealthController {
   @Get('ready')
   @HealthCheck()
   @ApiOperation({
-    summary: 'Readiness probe (DB + Redis cache + Redis queue + BullMQ).',
+    summary: 'Readiness probe (DB primary + Redis cache + Redis queue).',
     description:
-      'Use as the Kubernetes readiness probe. Returns 503 when any critical dependency is unreachable so the orchestrator removes the pod from the load balancer.',
+      'Use as the Kubernetes readiness probe. Checks ONLY what this pod needs to serve its core traffic. ' +
+      'Shared-but-non-blocking dependencies (replica lag, queue depth, pgbouncer) are deliberately excluded: ' +
+      'because every replica shares the same Postgres/Redis, wiring them here would flip all pods to NotReady ' +
+      'at once on a single dependency blip — a correlated, cluster-wide outage even though the app is healthy. ' +
+      'Those live on /health/dependencies for dashboards/alerting instead. Returns 503 so the orchestrator ' +
+      'removes the pod from the load balancer when a core dependency is unreachable.',
   })
   @ApiOkResponse({
     type: HealthCheckResultDto,
-    description: 'All critical dependencies reachable.',
+    description: 'Core dependencies reachable — pod can serve traffic.',
   })
   @ApiResponse({
     status: HttpStatus.SERVICE_UNAVAILABLE,
-    description: 'A critical dependency is unreachable.',
+    description: 'A core dependency is unreachable.',
     content: {
       [PROBLEM_JSON]: { schema: { $ref: '#/components/schemas/ProblemDetailsDto' } },
     },
@@ -145,6 +150,29 @@ export class HealthController {
       () => this.prismaIndicator.isHealthy('database'),
       () => this.redisCache.isHealthy('redis_cache'),
       () => this.redisQueue.isHealthy('redis_queue'),
+    ]);
+  }
+
+  @Get('dependencies')
+  @HealthCheck()
+  @ApiOperation({
+    summary: 'Deep dependency check (BullMQ + pgbouncer + replica lag).',
+    description:
+      'Deep health of shared infrastructure — meant for dashboards and alerting, NOT for the Kubernetes ' +
+      'readiness/liveness probes. Wiring these into a probe would remove every replica from the load balancer ' +
+      'at once when a shared dependency degrades. Returns 503 when a deep check fails so alert rules can fire.',
+  })
+  @ApiOkResponse({ type: HealthCheckResultDto, description: 'All deep dependencies healthy.' })
+  @ApiResponse({
+    status: HttpStatus.SERVICE_UNAVAILABLE,
+    description: 'A deep dependency is degraded or unreachable.',
+    content: {
+      [PROBLEM_JSON]: { schema: { $ref: '#/components/schemas/ProblemDetailsDto' } },
+    },
+  })
+  @ApiCommonErrors({ auth: false, forbidden: false, validation: false })
+  dependencies() {
+    return this.health.check([
       () => this.bullmq.isHealthy('bullmq'),
       // no-op when DATABASE_DIRECT_URL unset
       () => this.pgbouncer.isHealthy('pgbouncer'),

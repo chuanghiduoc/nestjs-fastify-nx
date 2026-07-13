@@ -1,7 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { OutboxLagCollector } from './outbox-lag.collector';
 import type { MetricsService } from './metrics.service';
+import type { MetricsLeaderService } from './metrics-leader.service';
 import type { PrismaService } from '@nestjs-fastify-nx/infra-database';
+
+function makeLeader(isLeader: boolean): MetricsLeaderService {
+  return { isLeader: () => isLeader } as unknown as MetricsLeaderService;
+}
 
 function makeMockPrisma(lagSeconds: number | null): PrismaService {
   return {
@@ -25,7 +30,16 @@ describe('OutboxLagCollector', () => {
   beforeEach(() => {
     prisma = makeMockPrisma(42.5);
     metrics = makeMockMetrics();
-    collector = new OutboxLagCollector(prisma, metrics);
+    collector = new OutboxLagCollector(prisma, metrics, makeLeader(true));
+  });
+
+  it('records nothing when this replica is not the collector leader', async () => {
+    collector = new OutboxLagCollector(prisma, metrics, makeLeader(false));
+
+    await collector.collect();
+
+    expect(prisma.db.$queryRawUnsafe).not.toHaveBeenCalled();
+    expect(metrics.outboxLagSeconds.set).not.toHaveBeenCalled();
   });
 
   it('sets the gauge to the lag_seconds returned by the query', async () => {
@@ -36,7 +50,7 @@ describe('OutboxLagCollector', () => {
 
   it('sets the gauge to 0 when lag_seconds is null (no unprocessed events)', async () => {
     prisma = makeMockPrisma(null);
-    collector = new OutboxLagCollector(prisma, metrics);
+    collector = new OutboxLagCollector(prisma, metrics, makeLeader(true));
 
     await collector.collect();
 
