@@ -6,10 +6,8 @@
   "tags": ["scope:infra"],
   "targets": {
     "lint": {
-      "executor": "@nx/eslint:lint",
-      "outputs": ["{options.outputFile}"],
       "options": {
-        "lintFilePatterns": ["libs/infra/i18n/**/*.ts"]
+        "args": ["**/*.ts"]
       }
     },
     "test": {
