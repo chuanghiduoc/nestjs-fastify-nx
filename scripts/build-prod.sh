@@ -75,7 +75,10 @@ build() {
   [[ -n "$target" ]] && target_args=(--target "$target")
   echo ""
   echo "--- ${app} ---"
-  docker buildx build -f "$dockerfile" "${target_args[@]}" \
+  # `"${arr[@]+"${arr[@]}"}"` — expanding an empty array under `set -u` is an
+  # "unbound variable" error on bash < 4.4 (macOS ships 3.2). This idiom is a
+  # no-op on modern bash and safe everywhere.
+  docker buildx build -f "$dockerfile" "${target_args[@]+"${target_args[@]}"}" \
     --load -t "${PREFIX}/${app}:${IMAGE_TAG}" .
 }
 

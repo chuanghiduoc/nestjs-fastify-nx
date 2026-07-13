@@ -85,6 +85,8 @@ BUILD_FLAGS=()
 if [[ "${NO_CACHE:-0}" = "1" ]]; then
   BUILD_FLAGS+=(--no-cache)
 fi
+# Expand BUILD_FLAGS via `"${arr[@]+"${arr[@]}"}"` below — expanding an empty array
+# under `set -u` is an "unbound variable" error on bash < 4.4 (macOS ships 3.2).
 
 # Skip BuildKit attestations (provenance + sbom) for dev images. Each one
 # adds a parallel manifest that has to be exported and unpacked, doubling
@@ -98,12 +100,12 @@ BUILD_START=$(date +%s)
 # Override with BUILD_PARALLEL=1 if the host has enough headroom.
 if [[ "${BUILD_PARALLEL:-0}" = "1" ]]; then
   # shellcheck disable=SC2086
-  docker compose $COMPOSE_BASE build "${BUILD_FLAGS[@]}" "${SERVICES[@]}"
+  docker compose $COMPOSE_BASE build "${BUILD_FLAGS[@]+"${BUILD_FLAGS[@]}"}" "${SERVICES[@]}"
 else
   for svc in "${SERVICES[@]}"; do
     sec::log "  → $svc"
     # shellcheck disable=SC2086
-    docker compose $COMPOSE_BASE build "${BUILD_FLAGS[@]}" "$svc"
+    docker compose $COMPOSE_BASE build "${BUILD_FLAGS[@]+"${BUILD_FLAGS[@]}"}" "$svc"
   done
 fi
 BUILD_END=$(date +%s)
@@ -125,7 +127,10 @@ export COMPOSE_PROJECT_NAME
 docker compose $COMPOSE_BASE rm -sf "${SERVICES[@]}" 2>/dev/null || true
 for svc in "${SERVICES[@]}"; do
   # Match all replicas, not just -1, in case API_REPLICAS / WORKER_REPLICAS > 1.
-  stale=$(docker ps -aq --filter "name=^${COMPOSE_PROJECT_NAME}-${svc}-[0-9]\+$" 2>/dev/null || true)
+  # Docker's --filter name uses Go RE2, where `+` is the quantifier — GNU BRE's
+  # `\+` would match a literal '+' here and silently never match a real container.
+  stale=$(docker ps -aq --filter "name=^${COMPOSE_PROJECT_NAME}-${svc}-[0-9]+$" 2>/dev/null || true)
+  # shellcheck disable=SC2086  # intentional word-split: $stale is a space-separated id list
   [[ -n "$stale" ]] && docker rm -f $stale 2>/dev/null || true
 done
 

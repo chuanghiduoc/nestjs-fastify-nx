@@ -58,7 +58,7 @@ sec::docker_run --rm \
   -w /src \
   "${SEMGREP_IMAGE}" semgrep scan \
   "${RULES[@]}" \
-  "${GATE[@]}" \
+  "${GATE[@]+"${GATE[@]}"}" \
   --metrics=off \
   --exclude=node_modules \
   --exclude=dist \

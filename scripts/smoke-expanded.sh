@@ -7,6 +7,12 @@ BASE="${BASE_URL:-http://localhost:3000}"
 PASS_COUNT=0
 FAIL_COUNT=0
 
+# Per-run temp dir (mktemp -d is portable across BSD/macOS + GNU). Hardcoded
+# /tmp/*.json paths collide between concurrent runs and multi-user hosts and
+# never get cleaned up; a trap removes this on every exit path.
+TMP_DIR="$(mktemp -d)"
+trap 'rm -rf "$TMP_DIR"' EXIT
+
 check() {
   local name="$1" expected="$2" actual="$3"
   if [ "$actual" = "$expected" ]; then
@@ -59,7 +65,7 @@ CP=$(curl -s -o /dev/null --max-time 10 -w '%{http_code}' -X POST "$BASE/api/aut
   -d "{\"currentPassword\":\"$PASS\",\"newPassword\":\"$NEW_PASS\"}")
 check "POST /api/auth/change-password" "200" "$CP"
 
-LS=$(curl -s -o /tmp/ls.json --max-time 10 -w '%{http_code}' -H "Cookie: $COOKIE" "$BASE/api/auth/list-sessions")
+LS=$(curl -s -o "$TMP_DIR/ls.json" --max-time 10 -w '%{http_code}' -H "Cookie: $COOKIE" "$BASE/api/auth/list-sessions")
 check "GET /api/auth/list-sessions" "200" "$LS"
 
 UU=$(curl -s -o /dev/null --max-time 10 -w '%{http_code}' -X POST "$BASE/api/auth/update-user" \
@@ -100,12 +106,12 @@ RESI=$(curl -s -i --max-time 10 -X POST "$BASE/api/auth/sign-in/email" \
   -d "{\"email\":\"$EMAIL\",\"password\":\"$NEW_PASS\"}")
 COOKIE=$(echo "$RESI" | grep -i '^set-cookie:' | sed -E 's/^[Ss]et-[Cc]ookie: ([^;]+);.*/\1/' | paste -sd '; ' -)
 
-GQL_ME=$(curl -s -o /tmp/gql-me.json --max-time 10 -w '%{http_code}' -X POST "$BASE/graphql" \
+GQL_ME=$(curl -s -o "$TMP_DIR/gql-me.json" --max-time 10 -w '%{http_code}' -X POST "$BASE/graphql" \
   -H "Content-Type: application/json" -H "Cookie: $COOKIE" \
   -d '{"query":"query { me { id email name role status } }"}')
 check "POST /graphql query me (cookie)" "200" "$GQL_ME"
 
-GQL_USERS=$(curl -s -o /tmp/gql-users.json --max-time 10 -w '%{http_code}' -X POST "$BASE/graphql" \
+GQL_USERS=$(curl -s -o "$TMP_DIR/gql-users.json" --max-time 10 -w '%{http_code}' -X POST "$BASE/graphql" \
   -H "Content-Type: application/json" -H "Cookie: $COOKIE" \
   -d '{"query":"query { users(page:1,pageSize:5) { data { id email } meta { page pageSize total } } }"}')
 check "POST /graphql query users (USER cookie)" "200" "$GQL_USERS"
@@ -114,7 +120,7 @@ echo "=== BATCH D: Socket.io WebSocket ==="
 # Gateway is mounted at `/ws` (notification.gateway.ts:50), not the default
 # `/socket.io/`. The engine.io polling handshake therefore lives at /ws/.
 
-WS_OK=$(curl -s -o /tmp/ws-ok.txt --max-time 10 -w '%{http_code}' \
+WS_OK=$(curl -s -o "$TMP_DIR/ws-ok.txt" --max-time 10 -w '%{http_code}' \
   -H "Cookie: $COOKIE" "$BASE/ws/?EIO=4&transport=polling")
 check "GET /ws/ handshake (cookie)" "200" "$WS_OK"
 
