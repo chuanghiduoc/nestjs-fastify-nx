@@ -2,6 +2,11 @@ import { defineConfig } from 'vitest/config';
 import tsconfigPaths from 'vite-tsconfig-paths';
 
 export default defineConfig({
+  // Test-file resolution (include, globalSetup) is anchored to this dir so it works
+  // regardless of the shell cwd. The app itself resolves i18n/asset paths from
+  // process.cwd(), which must stay the workspace root — the e2e target runs from
+  // there (no `cwd` override), matching how the app runs under nx serve / prod.
+  root: __dirname,
   plugins: [tsconfigPaths()],
   test: {
     globals: true,

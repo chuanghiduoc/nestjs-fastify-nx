@@ -4,13 +4,5 @@
   "sourceRoot": "libs/modules/users/src",
   "projectType": "library",
   "tags": ["scope:modules"],
-  "targets": {
-    "test": {
-      "executor": "@nx/vitest:test",
-      "outputs": ["{options.reportsDirectory}"],
-      "options": {
-        "reportsDirectory": "coverage/libs/modules/users"
-      }
-    }
-  }
+  "targets": {}
 }

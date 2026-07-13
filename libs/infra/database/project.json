@@ -4,13 +4,5 @@
   "sourceRoot": "libs/infra/database/src",
   "projectType": "library",
   "tags": ["scope:infra"],
-  "targets": {
-    "test": {
-      "executor": "@nx/vitest:test",
-      "outputs": ["{options.reportsDirectory}"],
-      "options": {
-        "reportsDirectory": "coverage/libs/infra/database"
-      }
-    }
-  }
+  "targets": {}
 }

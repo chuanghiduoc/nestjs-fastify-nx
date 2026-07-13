@@ -1,7 +1,8 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { Create<%= className %>Command } from './create-<%= fileName %>.command';
-import { <%= constantName %>_REPOSITORY, <%= className %>RepositoryPort } from '../../domain';
-import { <%= className %> } from '../../domain';
+import { <%= constantName %>_REPOSITORY } from '../../../domain';
+import type { <%= className %>RepositoryPort } from '../../../domain';
+import { <%= className %> } from '../../../domain';
 
 @Injectable()
 export class Create<%= className %>Handler {

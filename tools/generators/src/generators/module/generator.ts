@@ -46,25 +46,17 @@ export async function moduleGenerator(tree: Tree, options: ModuleGeneratorSchema
   const projectName = `${rawDir}-${moduleNames.fileName}`;
   const scopeTag = `scope:${rawDir}`;
 
-  // `build` and `typecheck` targets are auto-inferred by `@nx/js/typescript`
-  // from `tsconfig.lib.json`; `lint` is inferred by `@nx/eslint/plugin` from
-  // the workspace eslint config. We only need to declare the test target
-  // explicitly because the executor takes module-specific options.
+  // All targets are inferred from config files by the workspace plugins:
+  // `build`/`typecheck` by `@nx/js/typescript` (tsconfig.lib.json), `lint` by
+  // `@nx/eslint/plugin`, and `test` by `@nx/vitest` (vitest.config.mts — see the
+  // template in files/). No explicit target is declared, so the module needs no
+  // hand-maintained `nx.json` include entry.
   addProjectConfiguration(tree, projectName, {
     root: projectRoot,
     projectType: 'library',
     sourceRoot: `${projectRoot}/src`,
     tags: [scopeTag, `type:feature`],
-    targets: {
-      test: {
-        executor: '@nx/vitest:test',
-        outputs: ['{options.reportsDirectory}'],
-        options: {
-          passWithNoTests: true,
-          reportsDirectory: `coverage/${projectRoot}`,
-        },
-      },
-    },
+    targets: {},
   });
 
   // Import path mirrors the project name so consumers can tell at a glance

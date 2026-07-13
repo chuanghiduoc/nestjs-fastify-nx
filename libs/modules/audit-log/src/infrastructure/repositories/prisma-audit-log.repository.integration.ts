@@ -1,6 +1,9 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
-import { execSync } from 'child_process';
-import { createTestContainers, DatabaseCleaner } from '@nestjs-fastify-nx/testing';
+import {
+  createTestContainers,
+  DatabaseCleaner,
+  deployTestMigrations,
+} from '@nestjs-fastify-nx/testing';
 import type { TestContainers } from '@nestjs-fastify-nx/testing';
 import { PrismaService } from '@nestjs-fastify-nx/infra-database';
 import { PrismaAuditLogRepository } from './prisma-audit-log.repository';
@@ -18,10 +21,7 @@ describe('PrismaAuditLogRepository (integration)', () => {
 
     process.env['DATABASE_URL'] = dbUrl;
 
-    execSync('pnpm prisma migrate deploy', {
-      cwd: process.cwd(),
-      env: { ...process.env, DATABASE_URL: dbUrl },
-    });
+    deployTestMigrations(dbUrl);
 
     prismaService = new PrismaService();
     await prismaService.onModuleInit();

@@ -1,11 +1,10 @@
 import { defineConfig } from 'vitest/config';
-import { nxViteTsPaths } from '@nx/vite/plugins/nx-tsconfig-paths.plugin';
-import { nxCopyAssetsPlugin } from '@nx/vite/plugins/nx-copy-assets.plugin';
+import tsconfigPaths from 'vite-tsconfig-paths';
 
 export default defineConfig(() => ({
   root: __dirname,
   cacheDir: '<%= offsetFromRoot %>node_modules/.vite/<%= projectRoot %>',
-  plugins: [nxViteTsPaths(), nxCopyAssetsPlugin(['*.md'])],
+  plugins: [tsconfigPaths()],
   test: {
     name: 'modules-<%= fileName %>',
     watch: false,
@@ -15,6 +14,7 @@ export default defineConfig(() => ({
     testTimeout: 60_000,
     hookTimeout: 60_000,
     reporters: ['default'],
+    setupFiles: ['<%= offsetFromRoot %>vitest.setup.ts'],
     passWithNoTests: true,
     coverage: {
       reportsDirectory: '<%= offsetFromRoot %>coverage/<%= projectRoot %>',

@@ -101,7 +101,11 @@ jobs:
       - uses: nrwl/nx-set-shas@v5
 
       - name: Integration tests
-        run: pnpm nx affected --target=test --base=$NX_BASE --head=$NX_HEAD --testPathPattern=integration --parallel=1
+        # `integration` is a vitest positional filename filter (substring match) — the
+        # inferred @nx/vitest target runs vitest directly, which has no Jest-style
+        # `--testPathPattern`. Only `*.integration.ts` files match; unit-only projects
+        # match nothing and pass via `passWithNoTests`.
+        run: pnpm nx affected --target=test --base=$NX_BASE --head=$NX_HEAD --parallel=1 -- integration
 
       - name: E2E tests
         run: pnpm nx affected --target=e2e --base=$NX_BASE --head=$NX_HEAD --parallel=1

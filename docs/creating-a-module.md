@@ -93,6 +93,29 @@ The `@nx/enforce-module-boundaries` rule enforces this: `scope:modules` libs can
 other, but `scope:composition` can import from `scope:modules`. If you find yourself needing
 cross-module imports inside a `scope:modules` lib, extract a composition lib instead.
 
+## Targets are inferred — no config to edit
+
+The generator writes **no explicit targets** into `project.json`. `build`/`typecheck` (from
+`tsconfig.lib.json`), `lint` (from the workspace ESLint config), and `test` (from
+`vitest.config.mts`) are all inferred by the workspace Nx plugins. A freshly generated module is
+picked up automatically — you never hand-edit `nx.json` or add a `test` target. Run `nx test <name>`,
+`nx lint <name>`, etc. immediately.
+
+## Infrastructure & generic libraries
+
+There is **no `gen:infra`** command — `libs/infra/*` are technical adapters (auth, database, redis,
+storage…), not DDD bounded contexts, so the DDD module generator doesn't apply (it only accepts
+`--directory=modules|composition`). To add one:
+
+- **Preferred:** copy the closest existing infra lib (e.g. `libs/infra/redis`) and rename — it already
+  matches the workspace conventions (inferred targets, `vite-tsconfig-paths` in the vitest config,
+  `scope:infra` tag).
+- `pnpm gen:lib` / `pnpm gen:app` are raw `@nx/js:library` / `@nx/nest:application` passthroughs.
+  Their Nx-default output drifts from this repo (it emits an explicit `build` target and the
+  deprecated `nxViteTsPaths`/`nxCopyAssetsPlugin` vite plugins), so align it afterwards: delete the
+  explicit targets and swap the vitest plugins to `vite-tsconfig-paths`. Also add the correct
+  `scope:*` / `type:*` tags so `@nx/enforce-module-boundaries` applies.
+
 ## After Generating
 
 1. **Add Prisma model** to `prisma/schema.prisma`
