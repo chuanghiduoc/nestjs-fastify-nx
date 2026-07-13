@@ -485,6 +485,78 @@ export type HealthReadiness503 = {
   details?: HealthReadiness503Details;
 };
 
+/**
+ * @nullable
+ */
+export type HealthDependencies200Info = {
+  [key: string]: {
+    status: string;
+    [key: string]: unknown;
+  };
+} | null;
+
+/**
+ * @nullable
+ */
+export type HealthDependencies200Error = {
+  [key: string]: {
+    status: string;
+    [key: string]: unknown;
+  };
+} | null;
+
+export type HealthDependencies200Details = {
+  [key: string]: {
+    status: string;
+    [key: string]: unknown;
+  };
+};
+
+export type HealthDependencies200 = {
+  status?: string;
+  /** @nullable */
+  info?: HealthDependencies200Info;
+  /** @nullable */
+  error?: HealthDependencies200Error;
+  details?: HealthDependencies200Details;
+};
+
+/**
+ * @nullable
+ */
+export type HealthDependencies503Info = {
+  [key: string]: {
+    status: string;
+    [key: string]: unknown;
+  };
+} | null;
+
+/**
+ * @nullable
+ */
+export type HealthDependencies503Error = {
+  [key: string]: {
+    status: string;
+    [key: string]: unknown;
+  };
+} | null;
+
+export type HealthDependencies503Details = {
+  [key: string]: {
+    status: string;
+    [key: string]: unknown;
+  };
+};
+
+export type HealthDependencies503 = {
+  status?: string;
+  /** @nullable */
+  info?: HealthDependencies503Info;
+  /** @nullable */
+  error?: HealthDependencies503Error;
+  details?: HealthDependencies503Details;
+};
+
 export type AdminUsersListParams = {
   /**
    * Items per page (1–100).

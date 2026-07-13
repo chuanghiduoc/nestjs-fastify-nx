@@ -18,7 +18,12 @@
  * Every response carries an `X-Request-Id` header (also mirrored as `requestId` in error bodies). Quote it when filing support tickets.
  * OpenAPI spec version: 1.0.0
  */
-import type { HealthCheck200, HealthReadiness200, LivenessResponseDto } from './api.schemas';
+import type {
+  HealthCheck200,
+  HealthDependencies200,
+  HealthReadiness200,
+  LivenessResponseDto,
+} from './api.schemas';
 
 import { customAxiosInstance } from '../lib/axios-instance';
 
@@ -31,11 +36,21 @@ export const getHealth = () => {
     return customAxiosInstance<HealthCheck200>({ url: `/api/v1/health`, method: 'GET' });
   };
   /**
-   * Use as the Kubernetes readiness probe. Returns 503 when any critical dependency is unreachable so the orchestrator removes the pod from the load balancer.
-   * @summary Readiness probe (DB + Redis cache + Redis queue + BullMQ).
+   * Use as the Kubernetes readiness probe. Checks ONLY what this pod needs to serve its core traffic. Shared-but-non-blocking dependencies (replica lag, queue depth, pgbouncer) are deliberately excluded: because every replica shares the same Postgres/Redis, wiring them here would flip all pods to NotReady at once on a single dependency blip — a correlated, cluster-wide outage even though the app is healthy. Those live on /health/dependencies for dashboards/alerting instead. Returns 503 so the orchestrator removes the pod from the load balancer when a core dependency is unreachable.
+   * @summary Readiness probe (DB primary + Redis cache + Redis queue).
    */
   const healthReadiness = () => {
     return customAxiosInstance<HealthReadiness200>({ url: `/api/v1/health/ready`, method: 'GET' });
+  };
+  /**
+   * Deep health of shared infrastructure — meant for dashboards and alerting, NOT for the Kubernetes readiness/liveness probes. Wiring these into a probe would remove every replica from the load balancer at once when a shared dependency degrades. Returns 503 when a deep check fails so alert rules can fire.
+   * @summary Deep dependency check (BullMQ + pgbouncer + replica lag).
+   */
+  const healthDependencies = () => {
+    return customAxiosInstance<HealthDependencies200>({
+      url: `/api/v1/health/dependencies`,
+      method: 'GET',
+    });
   };
   /**
    * Use as the Kubernetes liveness probe. Does not check dependencies.
@@ -44,13 +59,16 @@ export const getHealth = () => {
   const healthLiveness = () => {
     return customAxiosInstance<LivenessResponseDto>({ url: `/api/v1/health/live`, method: 'GET' });
   };
-  return { healthCheck, healthReadiness, healthLiveness };
+  return { healthCheck, healthReadiness, healthDependencies, healthLiveness };
 };
 export type HealthCheckResult = NonNullable<
   Awaited<ReturnType<ReturnType<typeof getHealth>['healthCheck']>>
 >;
 export type HealthReadinessResult = NonNullable<
   Awaited<ReturnType<ReturnType<typeof getHealth>['healthReadiness']>>
+>;
+export type HealthDependenciesResult = NonNullable<
+  Awaited<ReturnType<ReturnType<typeof getHealth>['healthDependencies']>>
 >;
 export type HealthLivenessResult = NonNullable<
   Awaited<ReturnType<ReturnType<typeof getHealth>['healthLiveness']>>

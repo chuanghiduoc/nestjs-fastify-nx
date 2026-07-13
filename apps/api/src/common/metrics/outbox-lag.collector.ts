@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
 import { PrismaService } from '@nestjs-fastify-nx/infra-database';
 import { MetricsService } from './metrics.service';
+import { MetricsLeaderService } from './metrics-leader.service';
 
 @Injectable()
 export class OutboxLagCollector {
@@ -10,10 +11,15 @@ export class OutboxLagCollector {
   constructor(
     private readonly prisma: PrismaService,
     private readonly metrics: MetricsService,
+    private readonly leader: MetricsLeaderService,
   ) {}
 
   @Interval(30_000)
   async collect(): Promise<void> {
+    // Outbox lag is one global truth read from Postgres — only the leader records it, else every
+    // replica sets the same gauge to the same value.
+    if (!this.leader.isLeader()) return;
+
     try {
       const rows = await this.prisma.db.$queryRawUnsafe<[{ lag_seconds: number | null }]>(
         `SELECT EXTRACT(EPOCH FROM NOW() - MIN("createdAt"))::float AS lag_seconds

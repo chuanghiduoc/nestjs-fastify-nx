@@ -5,7 +5,7 @@ import type { IncomingMessage } from 'http';
 import { buildPinoLoggerConfig } from '@nestjs-fastify-nx/infra-observability';
 import { REQUEST_CONTEXT_KEYS } from '@nestjs-fastify-nx/core';
 import { CorrelationIdMiddleware } from './correlation-id.middleware';
-import { resolveRequestId } from './request-id';
+import { resolveRequestId, sanitizeClientId } from './request-id';
 
 @Module({
   imports: [
@@ -20,21 +20,16 @@ import { resolveRequestId } from './request-id';
         mount: true,
         setup: (cls, req: IncomingMessage) => {
           const requestId = resolveRequestId(req.headers as Record<string, unknown>);
-          const correlationId = (req.headers['x-correlation-id'] as string) || requestId;
+          const correlationId = sanitizeClientId(req.headers['x-correlation-id']) ?? requestId;
           cls.set(REQUEST_CONTEXT_KEYS.requestId, requestId);
           cls.set(REQUEST_CONTEXT_KEYS.correlationId, correlationId);
         },
       },
     }),
-    LoggerModule.forRoot(
-      buildPinoLoggerConfig({
-        customProps: (req: IncomingMessage & { correlationId?: string; requestId?: string }) =>
-          ({
-            correlationId: req.correlationId,
-            requestId: req.requestId,
-          }) as Record<string, unknown>,
-      }),
-    ),
+    // No `customProps` for requestId/correlationId — the pino `mixin` in
+    // buildPinoLoggerConfig already injects them (from the CLS store) on every log
+    // line app-wide. Adding them here too duplicated the keys on each request log.
+    LoggerModule.forRoot(buildPinoLoggerConfig()),
   ],
 })
 export class LoggingModule implements NestModule {

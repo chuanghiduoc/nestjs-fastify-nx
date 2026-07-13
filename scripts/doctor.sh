@@ -51,8 +51,12 @@ version_gte() {
   local actual="$1" required="$2"
   # Strip leading 'v' if present.
   actual="${actual#v}"; required="${required#v}"
-  # Use sort -V (version sort) to compare.
-  [[ "$(printf '%s\n%s' "$required" "$actual" | sort -V | head -1)" == "$required" ]]
+  # Numeric field sort on MAJ.MIN.PATCH — portable across BSD (macOS) and GNU.
+  # `sort -V` is GNU-only and aborts on stock macOS `sort`, which would crash every
+  # Node/pnpm version check on a Mac without coreutils installed.
+  local lowest
+  lowest="$(printf '%s\n%s\n' "$required" "$actual" | sort -t. -k1,1n -k2,2n -k3,3n | head -1)"
+  [[ "$lowest" == "$required" ]]
 }
 
 # ---------------------------------------------------------------------------

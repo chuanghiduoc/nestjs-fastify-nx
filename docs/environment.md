@@ -149,6 +149,8 @@ safe because command handlers roll back their transaction on error.
 | `MAIL_DEFAULT_EMAIL` | `noreply@example.com` | Yes (real address in prod) | Default `From:` address                              |
 | `MAIL_DEFAULT_NAME`  | `No Reply`            | No                         | Default `From:` display name                         |
 
+> **Prod TLS rule.** In production the env validator requires TLS (`MAIL_IGNORE_TLS=false` **and** one of `MAIL_SECURE`/`MAIL_REQUIRE_TLS`) **only when `MAIL_USER` is set** — the rule protects SMTP credentials, and a no-auth relay (e.g. a local Mailpit in the prod-parity smoke) sends nothing secret in plaintext. Set real credentials + TLS for any production SMTP that authenticates.
+
 ## Seeding
 
 | Variable              | Default | Required     | Description                                                                        |
@@ -177,21 +179,23 @@ safe because command handlers roll back their transaction on error.
 
 ## Observability
 
-| Variable                      | Default                 | Required | Description                                                          |
-| ----------------------------- | ----------------------- | -------- | -------------------------------------------------------------------- |
-| `LOG_LEVEL`                   | `info`                  | No       | pino log level: `trace`, `debug`, `info`, `warn`, `error`            |
-| `ENABLE_METRICS`              | `false`                 | No       | Expose `/metrics` for Prometheus (excluded from `api/v1` prefix)     |
-| `METRICS_ALLOW_CIDRS`         | —                       | No       | Comma-separated CIDR ranges allowed to hit `/metrics` (empty=closed) |
-| `OTEL_ENABLED`                | `false`                 | No       | Bootstrap the OpenTelemetry SDK                                      |
-| `OTEL_SERVICE_NAME`           | `nestjs-fastify-api`    | No       | Reported service name                                                |
-| `OTEL_SERVICE_NAMESPACE`      | `app`                   | No       | Reported service namespace                                           |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://localhost:4318` | No       | OTLP/HTTP collector endpoint                                         |
-| `OTEL_EXPORTER_OTLP_HEADERS`  | —                       | No       | Optional collector auth headers                                      |
-| `OTEL_TRACES_SAMPLER_RATIO`   | `1`                     | No       | Trace sampling ratio                                                 |
-| `OTEL_DEBUG`                  | `false`                 | No       | Verbose SDK logging                                                  |
-| `SENTRY_DSN`                  | —                       | No       | Sentry DSN; leave empty to disable                                   |
-| `SENTRY_TRACES_SAMPLE_RATE`   | `0.1`                   | No       | Sentry tracing sample rate                                           |
-| `SENTRY_ENVIRONMENT`          | `development`           | No       | Reported Sentry environment tag                                      |
+| Variable                         | Default                 | Required | Description                                                                                                                                                          |
+| -------------------------------- | ----------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `LOG_LEVEL`                      | `info`                  | No       | pino log level: `trace`, `debug`, `info`, `warn`, `error`                                                                                                            |
+| `ENABLE_METRICS`                 | `false`                 | No       | Expose `/metrics` for Prometheus (excluded from `api/v1` prefix)                                                                                                     |
+| `METRICS_ALLOW_CIDRS`            | —                       | No       | Comma-separated CIDR ranges allowed to hit `/metrics` (empty=closed)                                                                                                 |
+| `OTEL_ENABLED`                   | `false`                 | No       | Bootstrap the OpenTelemetry SDK                                                                                                                                      |
+| `OTEL_SERVICE_NAME`              | `nestjs-fastify-api`    | No       | Reported service name                                                                                                                                                |
+| `OTEL_SERVICE_NAMESPACE`         | `app`                   | No       | Reported service namespace                                                                                                                                           |
+| `OTEL_EXPORTER_OTLP_ENDPOINT`    | `http://localhost:4318` | No       | OTLP/HTTP collector endpoint                                                                                                                                         |
+| `OTEL_EXPORTER_OTLP_HEADERS`     | —                       | No       | Optional collector auth headers                                                                                                                                      |
+| `OTEL_TRACES_SAMPLER_RATIO`      | `1`                     | No       | Head sampling ratio for **new** traces (wrapped in ParentBased — children honor the parent). Prod: low ratio + Collector tail sampling                               |
+| `OTEL_TRUST_INBOUND_TRACEPARENT` | `false`                 | No       | Trust client `traceparent`/`baggage`. Keep `false` on a public edge; `true` only behind a trusted mesh/gateway                                                       |
+| `OTEL_METRICS_EXPORT_ENABLED`    | `false`                 | No       | Push OTLP metrics from this process. Keep `false` for the API (prom-client `/metrics` is source of truth); `true` for worker/scheduler which have no scrape endpoint |
+| `OTEL_DEBUG`                     | `false`                 | No       | Verbose SDK logging                                                                                                                                                  |
+| `SENTRY_DSN`                     | —                       | No       | Sentry DSN; leave empty to disable                                                                                                                                   |
+| `SENTRY_TRACES_SAMPLE_RATE`      | `0.1`                   | No       | Sentry tracing sample rate                                                                                                                                           |
+| `SENTRY_ENVIRONMENT`             | `development`           | No       | Reported Sentry environment tag                                                                                                                                      |
 
 ## CI / Nx Cloud
 

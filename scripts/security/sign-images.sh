@@ -40,8 +40,11 @@ PREFIX="${IMAGE_REGISTRY:-ghcr.io}/${IMAGE_NAMESPACE:?IMAGE_NAMESPACE required}"
 TAG="${IMAGE_TAG:-latest}"
 ACTION="${1:-verify}"
 shift || true
-APPS=("${@:-api worker scheduler migration}")
-read -r -a APPS <<< "${APPS[*]}"
+if [[ $# -gt 0 ]]; then
+  APPS=("$@")
+else
+  APPS=(api worker scheduler migration)
+fi
 
 cosign() { sec::docker_run --rm -e COSIGN_EXPERIMENTAL=1 "${COSIGN_IMAGE}" "$@"; }
 

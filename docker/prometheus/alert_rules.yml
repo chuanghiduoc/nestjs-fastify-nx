@@ -20,6 +20,17 @@ groups:
           summary: 'HTTP 5xx rate above 5%'
           description: '{{ $value | humanizePercentage }} of requests returned 5xx over the last 5m.'
 
+      - alert: HighRequestLatencyP95
+        # p95 across all replicas from the shared histogram. http_* is per-replica, so
+        # the le buckets sum correctly. 1s p95 is the latency SLO — tune per service.
+        expr: histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket[5m]))) > 1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'API p95 latency above 1s'
+          description: 'p95 request latency is {{ $value | humanizeDuration }} over the last 5m — check DB/queue pressure and slow-query logs.'
+
   - name: outbox
     rules:
       - alert: OutboxLagHigh
@@ -37,8 +48,9 @@ groups:
   - name: bullmq
     rules:
       - alert: QueueBacklogHigh
-        # max by() not sum by() — every API replica reports the same queue depth via its
-        # QueueEvents subscription, so summing double-counts. See docs/runbook.md.
+        # bullmq_queue_depth is recorded only by the collector-leader replica
+        # (MetricsLeaderService), so it's a single series. `max by (queue)` is a safe
+        # collapse if leadership hands over mid-scrape. See docs/observability.md.
         expr: max by (queue) (bullmq_queue_depth{state="waiting"}) > 1000
         for: 10m
         labels:

@@ -1,9 +1,20 @@
-import { diag, DiagConsoleLogger, DiagLogLevel } from '@opentelemetry/api';
+import {
+  diag,
+  DiagConsoleLogger,
+  DiagLogLevel,
+  type Context,
+  type TextMapPropagator,
+} from '@opentelemetry/api';
 import { NodeSDK } from '@opentelemetry/sdk-node';
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
 import { OTLPMetricExporter } from '@opentelemetry/exporter-metrics-otlp-http';
 import { PeriodicExportingMetricReader } from '@opentelemetry/sdk-metrics';
-import { TraceIdRatioBasedSampler } from '@opentelemetry/sdk-trace-base';
+import { ParentBasedSampler, TraceIdRatioBasedSampler } from '@opentelemetry/sdk-trace-base';
+import {
+  CompositePropagator,
+  W3CBaggagePropagator,
+  W3CTraceContextPropagator,
+} from '@opentelemetry/core';
 import { resourceFromAttributes } from '@opentelemetry/resources';
 import {
   ATTR_SERVICE_NAME,
@@ -39,6 +50,18 @@ function bool(value: string | undefined): boolean {
   return value === 'true';
 }
 
+// Public-edge default: keep injecting our trace context into downstream calls, but IGNORE any
+// inbound traceparent/baggage so external callers cannot inject or collide trace ids, force the
+// sampling decision, or smuggle baggage into our pipeline. Flip OTEL_TRUST_INBOUND_TRACEPARENT=true
+// only when the service sits behind a trusted mesh/gateway that owns the root span.
+function injectOnly(delegate: TextMapPropagator): TextMapPropagator {
+  return {
+    inject: (ctx, carrier, setter) => delegate.inject(ctx, carrier, setter),
+    extract: (ctx: Context) => ctx,
+    fields: () => delegate.fields(),
+  };
+}
+
 // Call before any other import so the SDK patches native modules (http, pg, etc.) first.
 export function startTracing(options: StartTracingOptions = {}): NodeSDK | null {
   if (!bool(process.env['OTEL_ENABLED'])) return null;
@@ -47,10 +70,33 @@ export function startTracing(options: StartTracingOptions = {}): NodeSDK | null 
     diag.setLogger(new DiagConsoleLogger(), DiagLogLevel.DEBUG);
   }
 
-  const endpoint = process.env['OTEL_EXPORTER_OTLP_ENDPOINT'] ?? 'http://localhost:4318';
+  const endpoint = (process.env['OTEL_EXPORTER_OTLP_ENDPOINT'] ?? 'http://localhost:4318').replace(
+    /\/$/,
+    '',
+  );
   const headers = parseHeaders(process.env['OTEL_EXPORTER_OTLP_HEADERS'] ?? '');
   const ratio = Number.parseFloat(process.env['OTEL_TRACES_SAMPLER_RATIO'] ?? '1');
-  const sampler = new TraceIdRatioBasedSampler(Number.isFinite(ratio) ? ratio : 1);
+
+  // ParentBased, not a bare ratio sampler: the root sampler only decides for a NEW trace; a child
+  // span MUST honor the parent's sampled flag, otherwise cross-service traces come back with holes
+  // (a downstream service dropping spans its parent kept). Client-forced sampling is still blocked
+  // because injectOnly() strips the inbound parent on the public edge — see textMapPropagator below.
+  const sampler = new ParentBasedSampler({
+    root: new TraceIdRatioBasedSampler(Number.isFinite(ratio) ? ratio : 1),
+  });
+
+  const basePropagator = new CompositePropagator({
+    propagators: [new W3CTraceContextPropagator(), new W3CBaggagePropagator()],
+  });
+  const textMapPropagator = bool(process.env['OTEL_TRUST_INBOUND_TRACEPARENT'])
+    ? basePropagator
+    : injectOnly(basePropagator);
+
+  // Prometheus (prom-client pull, /metrics) is the metrics source of truth for the API. This OTLP
+  // push reader is opt-in — enable it only where there is no prom-client scrape endpoint (worker,
+  // scheduler) so those processes still export runtime metrics. Leaving it on in the API would
+  // double-count the same series across two pipelines.
+  const metricsExportEnabled = bool(process.env['OTEL_METRICS_EXPORT_ENABLED']);
 
   const resource = resourceFromAttributes({
     [ATTR_SERVICE_NAME]:
@@ -63,17 +109,20 @@ export function startTracing(options: StartTracingOptions = {}): NodeSDK | null 
   const sdk = new NodeSDK({
     resource,
     sampler,
+    textMapPropagator,
     traceExporter: new OTLPTraceExporter({
-      url: `${endpoint.replace(/\/$/, '')}/v1/traces`,
+      url: `${endpoint}/v1/traces`,
       headers,
     }),
-    metricReader: new PeriodicExportingMetricReader({
-      exporter: new OTLPMetricExporter({
-        url: `${endpoint.replace(/\/$/, '')}/v1/metrics`,
-        headers,
-      }),
-      exportIntervalMillis: 60_000,
-    }),
+    metricReader: metricsExportEnabled
+      ? new PeriodicExportingMetricReader({
+          exporter: new OTLPMetricExporter({
+            url: `${endpoint}/v1/metrics`,
+            headers,
+          }),
+          exportIntervalMillis: 60_000,
+        })
+      : undefined,
     instrumentations: [
       getNodeAutoInstrumentations({
         '@opentelemetry/instrumentation-fs': { enabled: false },

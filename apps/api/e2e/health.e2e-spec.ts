@@ -69,6 +69,27 @@ describe('Health & Metrics E2E', () => {
     });
   });
 
+  describe('GET /api/v1/health/dependencies', () => {
+    it('returns 200 with deep dependencies healthy (bullmq up; pgbouncer/replica no-op when unset)', async () => {
+      const res = await request(ctx.app.getHttpServer())
+        .get('/api/v1/health/dependencies')
+        .expect(200);
+
+      expect(res.body.status).toBe('ok');
+      expect(res.body.info.bullmq.status).toBe('up');
+    });
+
+    it('does NOT report the deep indicators on the readiness probe', async () => {
+      // Readiness must stay lean so a shared-dependency blip can't flip every replica to NotReady
+      // at once. bullmq/pgbouncer/replication_lag live on /dependencies only.
+      const res = await request(ctx.app.getHttpServer()).get('/api/v1/health/ready').expect(200);
+
+      expect(res.body.info.bullmq).toBeUndefined();
+      expect(res.body.info.pgbouncer).toBeUndefined();
+      expect(res.body.info.replication_lag).toBeUndefined();
+    });
+  });
+
   describe('GET /api/v1/health', () => {
     it('returns 200 with overall status ok', async () => {
       const res = await request(ctx.app.getHttpServer()).get('/api/v1/health').expect(200);

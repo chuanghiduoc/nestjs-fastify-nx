@@ -2,6 +2,7 @@ import { OnQueueEvent, QueueEventsHost, QueueEventsListener } from '@nestjs/bull
 import { Injectable } from '@nestjs/common';
 import { QUEUE_NAMES } from '@nestjs-fastify-nx/shared';
 import { MetricsService } from './metrics.service';
+import { MetricsLeaderService } from './metrics-leader.service';
 
 interface ActiveEvent {
   jobId: string;
@@ -29,12 +30,15 @@ interface StalledEvent {
 const MAX_ACTIVE_AGE_MS = 60 * 60 * 1000;
 
 // @QueueEventsListener requires a literal name — one subclass per queue.
-// At API_REPLICAS > 1 every replica receives each event; divide counters in dashboards.
+// QueueEvents is a broadcast stream: at API_REPLICAS > 1 every replica receives every event, so
+// unguarded inc() would multiply counters by the replica count. Recording is gated on the collector
+// leader (single writer) so `sum()` over replicas equals the real job count.
 abstract class QueueMetricsListenerBase extends QueueEventsHost {
   private readonly activeAt = new Map<string, number>();
 
   constructor(
     private readonly metrics: MetricsService,
+    private readonly leader: MetricsLeaderService,
     private readonly queueLabel: string,
   ) {
     super();
@@ -42,23 +46,27 @@ abstract class QueueMetricsListenerBase extends QueueEventsHost {
 
   @OnQueueEvent('active')
   onActive(args: ActiveEvent): void {
+    if (!this.leader.isLeader()) return;
     this.activeAt.set(args.jobId, Date.now());
   }
 
   @OnQueueEvent('completed')
   onCompleted(args: CompletedEvent): void {
+    if (!this.leader.isLeader()) return;
     this.metrics.bullmqJobsTotal.inc({ queue: this.queueLabel, status: 'completed' });
     this.observeDuration(args.jobId, 'completed');
   }
 
   @OnQueueEvent('failed')
   onFailed(args: FailedEvent): void {
+    if (!this.leader.isLeader()) return;
     this.metrics.bullmqJobsTotal.inc({ queue: this.queueLabel, status: 'failed' });
     this.observeDuration(args.jobId, 'failed');
   }
 
   @OnQueueEvent('stalled')
   onStalled(args: StalledEvent): void {
+    if (!this.leader.isLeader()) return;
     this.metrics.bullmqJobsTotal.inc({ queue: this.queueLabel, status: 'stalled' });
     // Stalled jobs get re-claimed elsewhere — drop the local active entry so it can't leak.
     this.activeAt.delete(args.jobId);
@@ -67,6 +75,7 @@ abstract class QueueMetricsListenerBase extends QueueEventsHost {
 
   @OnQueueEvent('delayed')
   onDelayed(): void {
+    if (!this.leader.isLeader()) return;
     this.metrics.bullmqJobsTotal.inc({ queue: this.queueLabel, status: 'delayed' });
   }
 
@@ -94,15 +103,15 @@ abstract class QueueMetricsListenerBase extends QueueEventsHost {
 @QueueEventsListener(QUEUE_NAMES.EMAIL_NOTIFICATION)
 @Injectable()
 export class EmailNotificationMetricsListener extends QueueMetricsListenerBase {
-  constructor(metrics: MetricsService) {
-    super(metrics, QUEUE_NAMES.EMAIL_NOTIFICATION);
+  constructor(metrics: MetricsService, leader: MetricsLeaderService) {
+    super(metrics, leader, QUEUE_NAMES.EMAIL_NOTIFICATION);
   }
 }
 
 @QueueEventsListener(QUEUE_NAMES.UPLOAD_VERIFICATION)
 @Injectable()
 export class UploadVerificationMetricsListener extends QueueMetricsListenerBase {
-  constructor(metrics: MetricsService) {
-    super(metrics, QUEUE_NAMES.UPLOAD_VERIFICATION);
+  constructor(metrics: MetricsService, leader: MetricsLeaderService) {
+    super(metrics, leader, QUEUE_NAMES.UPLOAD_VERIFICATION);
   }
 }

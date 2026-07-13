@@ -71,7 +71,7 @@ if [[ -f .env ]]; then
   ENV_FILE_ARGS=(--env-file .env)
 fi
 
-docker compose "${ENV_FILE_ARGS[@]}" \
+docker compose "${ENV_FILE_ARGS[@]+"${ENV_FILE_ARGS[@]}"}" \
   -f docker/compose.yml \
   -f "${OVERLAY}" \
   down "${DOWN_FLAGS[@]}"

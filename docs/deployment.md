@@ -210,11 +210,16 @@ to verify a signed tag locally with `cosign verify`.
 
 ## Health Checks
 
-| Endpoint                   | Description                           |
-| -------------------------- | ------------------------------------- |
-| `GET /api/v1/health`       | Full check: DB + memory + Redis       |
-| `GET /api/v1/health/ready` | Readiness: DB connectivity only       |
-| `GET /api/v1/health/live`  | Liveness: always 200 if process is up |
+| Endpoint                          | Description                                                                    |
+| --------------------------------- | ------------------------------------------------------------------------------ |
+| `GET /api/v1/health`              | Full check: DB + memory + Redis (cache & queue)                                |
+| `GET /api/v1/health/ready`        | **Readiness probe**: core serving deps only — DB primary + Redis               |
+| `GET /api/v1/health/live`         | **Liveness probe**: always 200 if process is up                                |
+| `GET /api/v1/health/dependencies` | Deep check (BullMQ + pgbouncer + replica lag) — dashboards/alerts, not a probe |
+
+> Wire the readiness/liveness probes to `/health/ready` and `/health/live` only. Never point a
+> Kubernetes probe at `/health/dependencies`: it checks shared infrastructure, so a single
+> dependency blip would flip every replica to NotReady at once (see `docs/observability.md`).
 
 Worker and scheduler use file-based liveness probes (`/tmp/worker-alive`, `/tmp/scheduler-alive`), refreshed every 30 seconds.
 

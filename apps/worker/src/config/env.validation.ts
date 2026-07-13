@@ -67,6 +67,17 @@ const workerEnvSchema = z
     OTEL_EXPORTER_OTLP_ENDPOINT: z.string().default('http://localhost:4318'),
     OTEL_EXPORTER_OTLP_HEADERS: z.string().default(''),
     OTEL_TRACES_SAMPLER_RATIO: z.coerce.number().min(0).max(1).default(1),
+    // See api validator. Worker has no public HTTP surface, but the flag stays for .env.example parity.
+    OTEL_TRUST_INBOUND_TRACEPARENT: z
+      .string()
+      .default('false')
+      .transform((v) => v === 'true'),
+    // The worker has no prom-client /metrics endpoint, so OTLP push is how its runtime metrics leave
+    // the process — enable this (OTEL_METRICS_EXPORT_ENABLED=true) when OTEL_ENABLED is on in prod.
+    OTEL_METRICS_EXPORT_ENABLED: z
+      .string()
+      .default('false')
+      .transform((v) => v === 'true'),
 
     // Outbox event retention (validated here for .env.example parity; only the
     // scheduler's purge cron is the runtime consumer).
@@ -81,19 +92,24 @@ const workerEnvSchema = z
   })
   .superRefine((data, ctx) => {
     // The worker owns the SMTP transport, so the production TLS guard belongs here.
-    if (data.NODE_ENV !== 'production') return;
+    // Enforced only when auth is used (MAIL_USER set): the rule protects credentials,
+    // and a no-auth relay (e.g. a local mailpit prod-parity smoke) leaks nothing in
+    // plaintext. Keeps prod secure without forcing TLS gymnastics against mailpit.
+    if (data.NODE_ENV !== 'production' || !data.MAIL_USER) return;
     if (data.MAIL_IGNORE_TLS) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['MAIL_IGNORE_TLS'],
-        message: 'MAIL_IGNORE_TLS must be false in production — plaintext SMTP exposes credentials',
+        message:
+          'MAIL_IGNORE_TLS must be false in production when MAIL_USER is set — plaintext SMTP exposes credentials',
       });
     }
     if (!data.MAIL_SECURE && !data.MAIL_REQUIRE_TLS) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['MAIL_REQUIRE_TLS'],
-        message: 'Enable MAIL_SECURE or MAIL_REQUIRE_TLS in production so SMTP negotiates TLS',
+        message:
+          'Enable MAIL_SECURE or MAIL_REQUIRE_TLS in production when MAIL_USER is set so SMTP credentials negotiate TLS',
       });
     }
   });

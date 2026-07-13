@@ -85,6 +85,9 @@ services:
     restart: unless-stopped
     environment:
       TZ: ${TZ:-UTC}
+      # Self-identify in logs/metrics/traces. Without this the worker inherits the
+      # shared .env OTEL_SERVICE_NAME (nestjs-fastify-api) and mislabels itself as the API.
+      OTEL_SERVICE_NAME: nestjs-fastify-worker
     healthcheck:
       test:
         [
@@ -102,6 +105,8 @@ services:
     restart: unless-stopped
     environment:
       TZ: ${TZ:-UTC}
+      # Self-identify in logs/metrics/traces (see worker note above).
+      OTEL_SERVICE_NAME: nestjs-fastify-scheduler
     healthcheck:
       test:
         [

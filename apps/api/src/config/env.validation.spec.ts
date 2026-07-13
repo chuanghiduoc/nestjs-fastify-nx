@@ -97,16 +97,35 @@ describe('validateConfig', () => {
     expect(() => validateConfig({ ...baseProdEnv, MAIL_HOST: 'localhost' })).toThrow(/MAIL_HOST/);
   });
 
-  it('rejects MAIL_IGNORE_TLS=true in production', () => {
-    expect(() => validateConfig({ ...baseProdEnv, MAIL_IGNORE_TLS: 'true' })).toThrow(
-      /MAIL_IGNORE_TLS/,
-    );
+  it('rejects MAIL_IGNORE_TLS=true in production when MAIL_USER is set', () => {
+    expect(() =>
+      validateConfig({ ...baseProdEnv, MAIL_USER: 'smtp-user', MAIL_IGNORE_TLS: 'true' }),
+    ).toThrow(/MAIL_IGNORE_TLS/);
   });
 
-  it('requires MAIL_SECURE or MAIL_REQUIRE_TLS in production', () => {
+  it('requires MAIL_SECURE or MAIL_REQUIRE_TLS in production when MAIL_USER is set', () => {
     expect(() =>
-      validateConfig({ ...baseProdEnv, MAIL_SECURE: 'false', MAIL_REQUIRE_TLS: 'false' }),
+      validateConfig({
+        ...baseProdEnv,
+        MAIL_USER: 'smtp-user',
+        MAIL_SECURE: 'false',
+        MAIL_REQUIRE_TLS: 'false',
+      }),
     ).toThrow(/MAIL_REQUIRE_TLS/);
+  });
+
+  it('allows plaintext SMTP in production when MAIL_USER is unset (no credentials to leak)', () => {
+    // A no-auth relay (e.g. a local Mailpit in the prod-parity smoke) sends nothing
+    // secret in plaintext, so the TLS requirement does not apply.
+    expect(() =>
+      validateConfig({
+        ...baseProdEnv,
+        MAIL_USER: '',
+        MAIL_IGNORE_TLS: 'true',
+        MAIL_SECURE: 'false',
+        MAIL_REQUIRE_TLS: 'false',
+      }),
+    ).not.toThrow();
   });
 
   it('rejects default bull board password in production', () => {

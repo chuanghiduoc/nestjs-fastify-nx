@@ -237,7 +237,8 @@ pnpm rm:project <name>             # remove a lib/app + clean refs/tags (nx work
 
   If events hang: check `OutboxRelayService` liveness, raise `OUTBOX_TX_TIMEOUT_MS` or shrink `OUTBOX_BATCH_SIZE` in `libs/infra/messaging`.
 
-- **Health readiness BullMQ probe**: `/health/ready` now includes a `BullMqHealthIndicator` that pings the email-notification queue (2s timeout). If queue is not bootstrapped before probe, readiness fails.
+- **Health probe split (correlated-outage guard)**: `/health/ready` (the K8s readiness probe) checks ONLY core serving deps — DB primary + Redis cache + Redis queue. The deep checks (`BullMqHealthIndicator`, `PgBouncerHealthIndicator`, `PrismaReplicationLagHealthIndicator`) live on `/health/dependencies` for dashboards/alerting and are NOT wired to any probe. Rationale: every replica shares the same Postgres/Redis, so putting replica-lag/queue-depth/pgbouncer on the readiness probe would flip all pods to NotReady at once on a single shared-dependency blip → cluster-wide outage. Do not move them back onto readiness.
+- **Global-state metrics are single-writer (`MetricsLeaderService`)**: `bullmq_*`, `bullmq_queue_depth`, `outbox_lag_seconds` are recorded only by the API replica that holds the Redis collector-leader lease — every replica observes the same QueueEvents broadcast / global gauge, so unguarded recording inflates counters by the replica count. When adding a metric derived from shared Redis/DB state, gate it on `leader.isLeader()`; per-replica series (`http_*`, `cqrs_*`) stay ungated. OTLP metric push is off in the API (`OTEL_METRICS_EXPORT_ENABLED=false`) — prom-client `/metrics` is the source of truth; enable OTLP push only in worker/scheduler.
 - **Metrics endpoint IP allowlist**: `MetricsIpAllowGuard` reads `METRICS_ALLOW_CIDRS` (comma-separated CIDR ranges) and uses `socket.remoteAddress` (not `req.ip`, which is spoofable via X-Forwarded-For). Empty list fails closed (no metrics). Kubernetes typically needs `127.0.0.1/32` or pod CIDR.
 - **Better Auth body parser collision**: NestJS global `ProblemDetailsValidationPipe` would consume the request body before Better Auth can read it. Solved via `reply.hijack()` in `main.ts`. If adding new `/api/auth/*` endpoints, bypass the NestJS pipeline the same way.
 
@@ -252,6 +253,7 @@ pnpm rm:project <name>             # remove a lib/app + clean refs/tags (nx work
 - `docs/deployment.md` — Docker, GHCR, Cosign, Coolify
 - `docs/security.md` — five-layer scan pipeline (Gitleaks, OSV, Semgrep, Trivy, Cosign)
 - `docs/observability.md` — logging, tracing, metrics, correlation-id design, resilience
+- `docs/observability-guide.md` — how to enable, explore, and extend observability (add a metric/span/log field/alert/dashboard)
 - `docs/troubleshooting.md` — known failure modes
 - `docs/runbook.md` — ops runbook (outbox stuck, DLQ full, stuck queue workers, performance)
 - `docs/code-standards.md` — coding conventions enforced (logging, error handling, DTOs, boundaries)

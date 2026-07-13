@@ -4,6 +4,7 @@ import {
   UploadVerificationMetricsListener,
 } from './bullmq-metrics.listener';
 import type { MetricsService } from './metrics.service';
+import type { MetricsLeaderService } from './metrics-leader.service';
 
 function makeMockMetrics(): MetricsService {
   return {
@@ -12,13 +13,32 @@ function makeMockMetrics(): MetricsService {
   } as unknown as MetricsService;
 }
 
+function makeLeader(isLeader: boolean): MetricsLeaderService {
+  return { isLeader: () => isLeader } as unknown as MetricsLeaderService;
+}
+
 describe('EmailNotificationMetricsListener', () => {
   let listener: EmailNotificationMetricsListener;
   let metrics: MetricsService;
 
   beforeEach(() => {
     metrics = makeMockMetrics();
-    listener = new EmailNotificationMetricsListener(metrics);
+    listener = new EmailNotificationMetricsListener(metrics, makeLeader(true));
+  });
+
+  describe('collector-leader gating', () => {
+    it('records nothing when this replica is not the leader', () => {
+      const follower = new EmailNotificationMetricsListener(metrics, makeLeader(false));
+
+      follower.onActive({ jobId: 'j' });
+      follower.onCompleted({ jobId: 'j', returnvalue: '', prev: 'active' });
+      follower.onFailed({ jobId: 'j', failedReason: 'x', prev: 'active' });
+      follower.onStalled({ jobId: 'j' });
+      follower.onDelayed();
+
+      expect(metrics.bullmqJobsTotal.inc).not.toHaveBeenCalled();
+      expect(metrics.bullmqJobDurationSeconds.observe).not.toHaveBeenCalled();
+    });
   });
 
   describe('job counter increments', () => {
@@ -122,7 +142,7 @@ describe('UploadVerificationMetricsListener', () => {
 
   beforeEach(() => {
     metrics = makeMockMetrics();
-    listener = new UploadVerificationMetricsListener(metrics);
+    listener = new UploadVerificationMetricsListener(metrics, makeLeader(true));
   });
 
   it('tags counters with upload-verification queue label', () => {

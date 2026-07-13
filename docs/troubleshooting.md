@@ -285,9 +285,11 @@ docker compose config | grep -A5 'migration:'
 # Should show DATABASE_DIRECT_URL pointing at postgres:5432, not pgbouncer:6432
 ```
 
-### `/health/ready` returns 503 — pgbouncer probe failing
+### `/health/dependencies` returns 503 — pgbouncer probe failing
 
-Symptom: `GET /api/v1/health/ready` returns 503 with `pgbouncer: { status: 'down' }`.
+Symptom: `GET /api/v1/health/dependencies` returns 503 with `pgbouncer: { status: 'down' }`.
+(The pgbouncer check lives on `/health/dependencies`, not the readiness probe — see
+`docs/observability.md` for why deep dependencies are kept off `/health/ready`.)
 
 Cause: pgbouncer is unreachable on `DATABASE_URL`. The `PgBouncerHealthIndicator`
 opens an ephemeral pg Client to the pooler endpoint and reports unhealthy on any

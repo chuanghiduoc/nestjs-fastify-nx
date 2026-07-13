@@ -3,7 +3,7 @@ import { trace } from '@opentelemetry/api';
 import { ClsService } from 'nestjs-cls';
 import type { IncomingMessage, ServerResponse } from 'http';
 import { REQUEST_CONTEXT_KEYS, type RequestContextStore } from '@nestjs-fastify-nx/core';
-import { activeTraceId, resolveRequestId } from './request-id';
+import { activeTraceId, resolveRequestId, sanitizeClientId } from './request-id';
 
 interface RequestWithIds extends IncomingMessage {
   correlationId?: string;
@@ -21,7 +21,7 @@ export class CorrelationIdMiddleware implements NestMiddleware {
     const requestId = this.cls.get(REQUEST_CONTEXT_KEYS.requestId) ?? resolveRequestId(req.headers);
     const correlationId =
       this.cls.get(REQUEST_CONTEXT_KEYS.correlationId) ??
-      (req.headers['x-correlation-id'] as string) ??
+      sanitizeClientId(req.headers['x-correlation-id']) ??
       requestId;
 
     req.correlationId = correlationId;
