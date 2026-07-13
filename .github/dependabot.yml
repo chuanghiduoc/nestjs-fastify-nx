@@ -30,12 +30,17 @@ updates:
       # Mercurius/@nestjs GraphQL packages ship graphql 17 support.
       - dependency-name: graphql
         update-types: [version-update:semver-major]
-      # orval 8.20.0 ships an ESM config bundle that does `import yaml from
-      # "js-yaml"`, but js-yaml's `.mjs` build exports named-only (no default),
-      # so `pnpm codegen` crashes. Pin the exact broken release — a future
-      # patched orval (8.20.1+) will be proposed again.
-      - dependency-name: orval
-        versions: ['8.20.0']
+      # TypeScript 7 (the native/Go `@typescript/native` compiler) is not yet
+      # supported by the tools that bind to the TS 6 Compiler API — verified by
+      # bumping typescript 6.0.3 -> 7.0.2, which crashes eslint across every
+      # project with "Cannot read properties of undefined (reading 'Ts')" /
+      # "(reading 'Intrinsic')" (typescript-eslint 8.63). The repo already runs
+      # TS 7 for typecheck/build via the separate `@typescript/native` package,
+      # so the `typescript` npm package must stay on 6.x for orval codegen,
+      # typescript-eslint and vite. Remove this once typescript-eslint declares
+      # TS 7 in its supported-versions range (see docs/troubleshooting.md).
+      - dependency-name: typescript
+        update-types: [version-update:semver-major]
     groups:
       production-dependencies:
         dependency-type: production
