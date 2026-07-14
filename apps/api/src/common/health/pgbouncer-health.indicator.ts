@@ -1,5 +1,5 @@
 import { Injectable, Logger, Optional } from '@nestjs/common';
-import { HealthCheckError, HealthIndicator, HealthIndicatorResult } from '@nestjs/terminus';
+import { HealthIndicatorResult, HealthIndicatorService } from '@nestjs/terminus';
 import { Client, ClientConfig } from 'pg';
 import { injectDatabasePassword } from '@nestjs-fastify-nx/shared';
 
@@ -20,20 +20,23 @@ const defaultClientFactory: PgClientFactory = (config) => new Client(config);
 
 // Raw pg Client bypasses Prisma pool — a saturated pool cannot mask a crashed pgbouncer.
 @Injectable()
-export class PgBouncerHealthIndicator extends HealthIndicator {
+export class PgBouncerHealthIndicator {
   private readonly clientFactory: PgClientFactory;
   private readonly logger = new Logger(PgBouncerHealthIndicator.name);
 
   // @Optional() avoids UnknownDependenciesException; function types have no DI token.
-  constructor(@Optional() clientFactory: PgClientFactory = defaultClientFactory) {
-    super();
+  constructor(
+    private readonly healthIndicator: HealthIndicatorService,
+    @Optional() clientFactory: PgClientFactory = defaultClientFactory,
+  ) {
     this.clientFactory = clientFactory;
   }
 
   async isHealthy(key: string): Promise<HealthIndicatorResult> {
+    const indicator = this.healthIndicator.check(key);
     const directUrl = process.env['DATABASE_DIRECT_URL'];
     if (!directUrl) {
-      return this.getStatus(key, true, {
+      return indicator.up({
         skipped: true,
         message: 'no DATABASE_DIRECT_URL configured — pooler probe disabled',
       });
@@ -56,13 +59,10 @@ export class PgBouncerHealthIndicator extends HealthIndicator {
     try {
       await client.connect();
       await client.query('SELECT 1');
-      return this.getStatus(key, true);
+      return indicator.up();
     } catch (err) {
       this.logger.warn(`pgbouncer readiness probe failed: ${String(err)}`);
-      throw new HealthCheckError(
-        'PgBouncer unreachable',
-        this.getStatus(key, false, { error: SANITIZED_ERROR }),
-      );
+      return indicator.down({ error: SANITIZED_ERROR, message: 'PgBouncer unreachable' });
     } finally {
       await client.end().catch(() => undefined);
     }

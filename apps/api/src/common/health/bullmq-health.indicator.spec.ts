@@ -1,6 +1,6 @@
 /// <reference types="vitest/globals" />
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { HealthCheckError } from '@nestjs/terminus';
+import { HealthIndicatorService } from '@nestjs/terminus';
 import type { ConfigService } from '@nestjs/config';
 import type { EnvConfig } from '../../config/env.validation';
 
@@ -36,7 +36,7 @@ describe('BullMqHealthIndicator', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    indicator = new BullMqHealthIndicator(buildConfig());
+    indicator = new BullMqHealthIndicator(new HealthIndicatorService(), buildConfig());
   });
 
   it('reports up when the queue responds', async () => {
@@ -48,10 +48,13 @@ describe('BullMqHealthIndicator', () => {
     expect(mockQueue.getJobCounts).toHaveBeenCalledWith('waiting');
   });
 
-  it('throws HealthCheckError when the queue probe fails', async () => {
+  it('reports down when the queue probe fails', async () => {
     mockQueue.getJobCounts.mockRejectedValueOnce(new Error('redis down'));
 
-    await expect(indicator.isHealthy('bullmq')).rejects.toBeInstanceOf(HealthCheckError);
+    const result = await indicator.isHealthy('bullmq');
+
+    expect(result['bullmq'].status).toBe('down');
+    expect(result['bullmq']).toMatchObject({ error: expect.stringContaining('redis down') });
   });
 
   it('closes the queue on shutdown', async () => {

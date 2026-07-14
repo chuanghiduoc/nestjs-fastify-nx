@@ -85,21 +85,21 @@ const schedulerEnvSchema = z
   .superRefine((data, ctx) => {
     if (data.DATABASE_POOL_MIN > data.DATABASE_POOL_MAX) {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: 'custom',
         path: ['DATABASE_POOL_MIN'],
         message: 'DATABASE_POOL_MIN must be less than or equal to DATABASE_POOL_MAX',
       });
     }
     if (data.NODE_ENV === 'production' && data.STORAGE_ACCESS_KEY === 'minioadmin') {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: 'custom',
         path: ['STORAGE_ACCESS_KEY'],
         message: 'Must not use default value in production',
       });
     }
     if (data.NODE_ENV === 'production' && data.STORAGE_SECRET_KEY === 'minioadmin') {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: 'custom',
         path: ['STORAGE_SECRET_KEY'],
         message: 'Must not use default value in production',
       });

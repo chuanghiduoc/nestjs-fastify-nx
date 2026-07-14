@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { HealthIndicator, HealthIndicatorResult, HealthCheckError } from '@nestjs/terminus';
+import { HealthIndicatorResult, HealthIndicatorService } from '@nestjs/terminus';
 import { PrismaService } from '@nestjs-fastify-nx/infra-database';
 
 const PROBE_TIMEOUT_MS = 2_000;
@@ -14,20 +14,19 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 }
 
 @Injectable()
-export class PrismaHealthIndicator extends HealthIndicator {
-  constructor(private readonly prisma: PrismaService) {
-    super();
-  }
+export class PrismaHealthIndicator {
+  constructor(
+    private readonly healthIndicator: HealthIndicatorService,
+    private readonly prisma: PrismaService,
+  ) {}
 
   async isHealthy(key: string): Promise<HealthIndicatorResult> {
+    const indicator = this.healthIndicator.check(key);
     try {
       await withTimeout(this.prisma.db.$queryRaw`SELECT 1`, PROBE_TIMEOUT_MS);
-      return this.getStatus(key, true);
+      return indicator.up();
     } catch (error) {
-      throw new HealthCheckError(
-        'Prisma health check failed',
-        this.getStatus(key, false, { error: String(error) }),
-      );
+      return indicator.down({ error: String(error) });
     }
   }
 }

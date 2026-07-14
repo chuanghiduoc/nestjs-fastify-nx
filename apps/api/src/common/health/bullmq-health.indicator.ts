@@ -1,5 +1,5 @@
 import { Injectable, OnModuleDestroy } from '@nestjs/common';
-import { HealthCheckError, HealthIndicator, HealthIndicatorResult } from '@nestjs/terminus';
+import { HealthIndicatorResult, HealthIndicatorService } from '@nestjs/terminus';
 import { ConfigService } from '@nestjs/config';
 import { Queue } from 'bullmq';
 import type { EnvConfig } from '../../config/env.validation';
@@ -16,11 +16,13 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 }
 
 @Injectable()
-export class BullMqHealthIndicator extends HealthIndicator implements OnModuleDestroy {
+export class BullMqHealthIndicator implements OnModuleDestroy {
   private readonly queue: Queue;
 
-  constructor(config: ConfigService<EnvConfig, true>) {
-    super();
+  constructor(
+    private readonly healthIndicator: HealthIndicatorService,
+    config: ConfigService<EnvConfig, true>,
+  ) {
     this.queue = new Queue(QUEUE_NAMES.EMAIL_NOTIFICATION, {
       connection: {
         host: config.get('REDIS_QUEUE_HOST', { infer: true }),
@@ -41,17 +43,15 @@ export class BullMqHealthIndicator extends HealthIndicator implements OnModuleDe
   }
 
   async isHealthy(key: string): Promise<HealthIndicatorResult> {
+    const indicator = this.healthIndicator.check(key);
     try {
       // getJobCounts exercises the queue end-to-end (Redis connection + prefix
       // + queue key lookup) without touching BullMQ's IRedisClient internals —
       // 5.77.x narrowed that type so `ping` is no longer publicly exposed.
       await withTimeout(this.queue.getJobCounts('waiting'), PROBE_TIMEOUT_MS);
-      return this.getStatus(key, true);
+      return indicator.up();
     } catch (err) {
-      throw new HealthCheckError(
-        `${key} check failed`,
-        this.getStatus(key, false, { error: String(err) }),
-      );
+      return indicator.down({ error: String(err) });
     }
   }
 }
