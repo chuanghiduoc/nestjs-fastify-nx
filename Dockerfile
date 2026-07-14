@@ -44,8 +44,9 @@ RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
     pnpm config set store-dir /pnpm/store \
     && pnpm install --offline --frozen-lockfile
 COPY . .
-RUN --mount=type=cache,id=nx-cache,target=/app/.nx/cache \
-    pnpm prisma generate
+RUN --mount=type=cache,id=nx-cache-v23,target=/app/.nx/cache \
+    pnpm prisma generate \
+    && node tools/docker/prisma-runtime-artifact.js export /app/.generated-prisma-runtime
 
 # ===========================================================================
 # Single build pass — every shared lib compiles once, dist/apps/* feed every
@@ -55,41 +56,33 @@ RUN --mount=type=cache,id=nx-cache,target=/app/.nx/cache \
 FROM workspace AS build-prod
 ENV NODE_ENV=production \
     NX_DAEMON=false
-RUN --mount=type=cache,id=nx-cache,target=/app/.nx/cache \
+RUN --mount=type=cache,id=nx-cache-v23,target=/app/.nx/cache \
     --mount=type=cache,id=webpack-cache,target=/app/.cache/webpack \
     pnpm nx run-many \
       --target=build \
       --projects=api,worker,scheduler,migration \
       --configuration=production \
-      --parallel=2 \
-    && node scripts/strip-generated-overrides.mjs dist/apps/api \
-    && node scripts/strip-generated-overrides.mjs dist/apps/worker \
-    && node scripts/strip-generated-overrides.mjs dist/apps/scheduler \
-    && node scripts/strip-generated-overrides.mjs dist/apps/migration
+      --parallel=2
 
 FROM workspace AS build-dev
 ENV NODE_ENV=development \
     NX_DAEMON=false
-RUN --mount=type=cache,id=nx-cache,target=/app/.nx/cache \
+RUN --mount=type=cache,id=nx-cache-v23,target=/app/.nx/cache \
     --mount=type=cache,id=webpack-cache,target=/app/.cache/webpack \
     pnpm nx run-many \
       --target=build \
       --projects=api,worker,scheduler \
       --configuration=development \
-      --parallel=2 \
-    && node scripts/strip-generated-overrides.mjs dist/apps/api \
-    && node scripts/strip-generated-overrides.mjs dist/apps/worker \
-    && node scripts/strip-generated-overrides.mjs dist/apps/scheduler
+      --parallel=2
 
 # Dev compose needs the one-shot migration image as well, but should not pay for
 # a production build of every long-running service just to produce it.
 FROM workspace AS build-migration-dev
 ENV NODE_ENV=production \
     NX_DAEMON=false
-RUN --mount=type=cache,id=nx-cache,target=/app/.nx/cache \
+RUN --mount=type=cache,id=nx-cache-v23,target=/app/.nx/cache \
     --mount=type=cache,id=webpack-cache,target=/app/.cache/webpack \
-    pnpm nx build migration --configuration=production \
-    && node scripts/strip-generated-overrides.mjs dist/apps/migration
+    pnpm nx build migration --configuration=production
 
 # ===========================================================================
 # Dev images — single stage off build-dev. Drop privileges, keep devDeps.
@@ -98,29 +91,29 @@ RUN --mount=type=cache,id=nx-cache,target=/app/.nx/cache \
 FROM base AS api-dev-deps
 ENV NODE_ENV=production
 COPY --from=build-dev /app/dist/apps/api/package.json /app/dist/apps/api/pnpm-lock.yaml ./
-COPY prisma ./prisma
+COPY --from=workspace /app/.generated-prisma-runtime /tmp/prisma-runtime
 RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
     pnpm config set store-dir /pnpm/store \
     && pnpm install --prod --frozen-lockfile --ignore-scripts \
-    && pnpm prisma generate
+    && node /tmp/prisma-runtime/install.js install /tmp/prisma-runtime
 
 FROM base AS worker-dev-deps
 ENV NODE_ENV=production
 COPY --from=build-dev /app/dist/apps/worker/package.json /app/dist/apps/worker/pnpm-lock.yaml ./
-COPY prisma ./prisma
+COPY --from=workspace /app/.generated-prisma-runtime /tmp/prisma-runtime
 RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
     pnpm config set store-dir /pnpm/store \
     && pnpm install --prod --frozen-lockfile --ignore-scripts \
-    && pnpm prisma generate
+    && node /tmp/prisma-runtime/install.js install /tmp/prisma-runtime
 
 FROM base AS scheduler-dev-deps
 ENV NODE_ENV=production
 COPY --from=build-dev /app/dist/apps/scheduler/package.json /app/dist/apps/scheduler/pnpm-lock.yaml ./
-COPY prisma ./prisma
+COPY --from=workspace /app/.generated-prisma-runtime /tmp/prisma-runtime
 RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
     pnpm config set store-dir /pnpm/store \
     && pnpm install --prod --frozen-lockfile --ignore-scripts \
-    && pnpm prisma generate
+    && node /tmp/prisma-runtime/install.js install /tmp/prisma-runtime
 
 FROM runtime AS api-dev
 ENV NODE_ENV=development \
@@ -152,29 +145,29 @@ CMD ["node", "dist/main.js"]
 FROM base AS api-deps
 ENV NODE_ENV=production
 COPY --from=build-prod /app/dist/apps/api/package.json /app/dist/apps/api/pnpm-lock.yaml ./
-COPY prisma ./prisma
+COPY --from=workspace /app/.generated-prisma-runtime /tmp/prisma-runtime
 RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
     pnpm config set store-dir /pnpm/store \
     && pnpm install --prod --frozen-lockfile --ignore-scripts \
-    && pnpm prisma generate
+    && node /tmp/prisma-runtime/install.js install /tmp/prisma-runtime
 
 FROM base AS worker-deps
 ENV NODE_ENV=production
 COPY --from=build-prod /app/dist/apps/worker/package.json /app/dist/apps/worker/pnpm-lock.yaml ./
-COPY prisma ./prisma
+COPY --from=workspace /app/.generated-prisma-runtime /tmp/prisma-runtime
 RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
     pnpm config set store-dir /pnpm/store \
     && pnpm install --prod --frozen-lockfile --ignore-scripts \
-    && pnpm prisma generate
+    && node /tmp/prisma-runtime/install.js install /tmp/prisma-runtime
 
 FROM base AS scheduler-deps
 ENV NODE_ENV=production
 COPY --from=build-prod /app/dist/apps/scheduler/package.json /app/dist/apps/scheduler/pnpm-lock.yaml ./
-COPY prisma ./prisma
+COPY --from=workspace /app/.generated-prisma-runtime /tmp/prisma-runtime
 RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
     pnpm config set store-dir /pnpm/store \
     && pnpm install --prod --frozen-lockfile --ignore-scripts \
-    && pnpm prisma generate
+    && node /tmp/prisma-runtime/install.js install /tmp/prisma-runtime
 
 FROM base AS migration-deps
 ENV NODE_ENV=production
@@ -183,7 +176,7 @@ COPY prisma ./prisma
 COPY prisma.config.ts ./prisma.config.ts
 RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
     pnpm config set store-dir /pnpm/store \
-    && pnpm install --prod --no-frozen-lockfile --prefer-offline --ignore-scripts \
+    && pnpm install --prod --frozen-lockfile --ignore-scripts \
     && pnpm prisma generate
 
 FROM base AS migration-dev-deps
@@ -193,7 +186,7 @@ COPY prisma ./prisma
 COPY prisma.config.ts ./prisma.config.ts
 RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
     pnpm config set store-dir /pnpm/store \
-    && pnpm install --prod --no-frozen-lockfile --prefer-offline --ignore-scripts \
+    && pnpm install --prod --frozen-lockfile --ignore-scripts \
     && pnpm prisma generate
 
 # ===========================================================================
