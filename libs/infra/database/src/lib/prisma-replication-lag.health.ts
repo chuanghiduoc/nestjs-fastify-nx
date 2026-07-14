@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { HealthIndicatorResult, HealthIndicatorService } from '@nestjs/terminus';
+import type { HealthIndicatorResult } from '@nestjs/terminus';
+import { HealthIndicatorService } from '@nestjs/terminus';
 import { positiveIntEnv } from '@nestjs-fastify-nx/shared';
 import { PrismaService } from './prisma.service';
 

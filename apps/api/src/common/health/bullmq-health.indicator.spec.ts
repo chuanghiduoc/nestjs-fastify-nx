@@ -54,7 +54,8 @@ describe('BullMqHealthIndicator', () => {
     const result = await indicator.isHealthy('bullmq');
 
     expect(result['bullmq'].status).toBe('down');
-    expect(result['bullmq']).toMatchObject({ error: expect.stringContaining('redis down') });
+    // Raw error is sanitized out of the public response — only the fixed marker is exposed.
+    expect(result['bullmq']).toMatchObject({ error: 'probe_failed' });
   });
 
   it('closes the queue on shutdown', async () => {

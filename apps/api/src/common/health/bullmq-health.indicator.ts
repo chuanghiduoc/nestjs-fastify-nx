@@ -1,11 +1,15 @@
-import { Injectable, OnModuleDestroy } from '@nestjs/common';
-import { HealthIndicatorResult, HealthIndicatorService } from '@nestjs/terminus';
+import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
+import type { HealthIndicatorResult } from '@nestjs/terminus';
+import { HealthIndicatorService } from '@nestjs/terminus';
 import { ConfigService } from '@nestjs/config';
 import { Queue } from 'bullmq';
 import type { EnvConfig } from '../../config/env.validation';
 import { QUEUE_NAMES } from '../../app/constants/queue.constants';
 
 const PROBE_TIMEOUT_MS = 2_000;
+// Sanitized marker — Redis/BullMQ internals (host, prefix, key names) must not leak into the
+// public /health/dependencies response. Raw cause is logged server-side instead.
+const SANITIZED_ERROR = 'probe_failed';
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   let timer: NodeJS.Timeout | undefined;
@@ -18,6 +22,7 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 @Injectable()
 export class BullMqHealthIndicator implements OnModuleDestroy {
   private readonly queue: Queue;
+  private readonly logger = new Logger(BullMqHealthIndicator.name);
 
   constructor(
     private readonly healthIndicator: HealthIndicatorService,
@@ -51,7 +56,8 @@ export class BullMqHealthIndicator implements OnModuleDestroy {
       await withTimeout(this.queue.getJobCounts('waiting'), PROBE_TIMEOUT_MS);
       return indicator.up();
     } catch (err) {
-      return indicator.down({ error: String(err) });
+      this.logger.warn(`bullmq readiness probe failed: ${String(err)}`);
+      return indicator.down({ error: SANITIZED_ERROR });
     }
   }
 }

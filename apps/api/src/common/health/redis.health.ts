@@ -1,6 +1,7 @@
 import { Injectable, OnModuleDestroy } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { HealthIndicatorResult, HealthIndicatorService } from '@nestjs/terminus';
+import type { HealthIndicatorResult } from '@nestjs/terminus';
+import { HealthIndicatorService } from '@nestjs/terminus';
 import Redis from 'ioredis';
 import type { EnvConfig } from '../../config/env.validation';
 

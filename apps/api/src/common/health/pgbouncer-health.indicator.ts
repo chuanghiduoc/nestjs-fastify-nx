@@ -1,5 +1,6 @@
 import { Injectable, Logger, Optional } from '@nestjs/common';
-import { HealthIndicatorResult, HealthIndicatorService } from '@nestjs/terminus';
+import type { HealthIndicatorResult } from '@nestjs/terminus';
+import { HealthIndicatorService } from '@nestjs/terminus';
 import { Client, ClientConfig } from 'pg';
 import { injectDatabasePassword } from '@nestjs-fastify-nx/shared';
 
