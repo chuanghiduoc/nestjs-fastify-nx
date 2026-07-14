@@ -38,6 +38,11 @@ export default tseslint.config(
       },
     },
     rules: {
+      // No `any` in production code — the codebase is currently clean, keep it that way.
+      '@typescript-eslint/no-explicit-any': 'error',
+      // Unhandled promises are silent data-loss/ordering bugs in an async, event-driven
+      // service. Type-aware — relies on the parserOptions.project set above.
+      '@typescript-eslint/no-floating-promises': 'error',
       '@nx/enforce-module-boundaries': [
         'error',
         {
@@ -145,6 +150,33 @@ export default tseslint.config(
                 'scope:infra',
                 'scope:modules',
               ],
+            },
+          ],
+        },
+      ],
+    },
+  },
+
+  // Application layer stays framework-agnostic (docs/code-standards.md → DTOs): a
+  // use-case must be reusable from REST, GraphQL, or a queue consumer, so HTTP/
+  // serialization decorators must not leak in. Presentation DTOs own those.
+  {
+    files: ['**/application/**/*.ts'],
+    ignores: ['**/*.spec.ts', '**/*.integration.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: '@nestjs/swagger',
+              message:
+                'Swagger decorators belong in presentation/dto only — the application layer must stay framework-agnostic.',
+            },
+            {
+              name: 'class-validator',
+              message:
+                'Application DTOs are pure TS — class-validator decorators belong in presentation/dto only.',
             },
           ],
         },
