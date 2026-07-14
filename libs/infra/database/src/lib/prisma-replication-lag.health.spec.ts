@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { HealthCheckError } from '@nestjs/terminus';
+import { HealthIndicatorService } from '@nestjs/terminus';
 import { PrismaReplicationLagHealthIndicator } from './prisma-replication-lag.health';
 import type { PrismaService } from './prisma.service';
 
@@ -21,9 +21,13 @@ function makePrisma(overrides: {
   return { hasReplica, dbRead } as unknown as PrismaService;
 }
 
+function makeIndicator(prisma: PrismaService): PrismaReplicationLagHealthIndicator {
+  return new PrismaReplicationLagHealthIndicator(new HealthIndicatorService(), prisma);
+}
+
 describe('PrismaReplicationLagHealthIndicator', () => {
   it('returns healthy with replicaConfigured:false when hasReplica is false', async () => {
-    const indicator = new PrismaReplicationLagHealthIndicator(makePrisma({ hasReplica: false }));
+    const indicator = makeIndicator(makePrisma({ hasReplica: false }));
 
     const result = await indicator.isHealthy('replication_lag');
 
@@ -32,7 +36,7 @@ describe('PrismaReplicationLagHealthIndicator', () => {
   });
 
   it('returns healthy with lag when replica is in recovery and lag <= 30', async () => {
-    const indicator = new PrismaReplicationLagHealthIndicator(
+    const indicator = makeIndicator(
       makePrisma({ queryResult: [{ lag_seconds: 0.42, is_replica: true }] }),
     );
 
@@ -43,7 +47,7 @@ describe('PrismaReplicationLagHealthIndicator', () => {
   });
 
   it('treats null lag_seconds as 0 when replica has no transactions replayed yet', async () => {
-    const indicator = new PrismaReplicationLagHealthIndicator(
+    const indicator = makeIndicator(
       makePrisma({ queryResult: [{ lag_seconds: null, is_replica: true }] }),
     );
 
@@ -53,35 +57,39 @@ describe('PrismaReplicationLagHealthIndicator', () => {
     expect(result['replication_lag']).toMatchObject({ lag: 0 });
   });
 
-  it('throws HealthCheckError when is_replica is false (promoted node)', async () => {
-    const indicator = new PrismaReplicationLagHealthIndicator(
+  it('reports down when is_replica is false (promoted node)', async () => {
+    const indicator = makeIndicator(
       makePrisma({ queryResult: [{ lag_seconds: 0, is_replica: false }] }),
     );
 
-    await expect(indicator.isHealthy('replication_lag')).rejects.toThrow(HealthCheckError);
-    await expect(indicator.isHealthy('replication_lag')).rejects.toMatchObject({
+    const result = await indicator.isHealthy('replication_lag');
+
+    expect(result['replication_lag'].status).toBe('down');
+    expect(result['replication_lag']).toMatchObject({
       message: expect.stringContaining('no longer in recovery'),
     });
   });
 
-  it('throws HealthCheckError when lag exceeds 30 seconds', async () => {
-    const indicator = new PrismaReplicationLagHealthIndicator(
+  it('reports down when lag exceeds 30 seconds', async () => {
+    const indicator = makeIndicator(
       makePrisma({ queryResult: [{ lag_seconds: 45.1, is_replica: true }] }),
     );
 
-    await expect(indicator.isHealthy('replication_lag')).rejects.toThrow(HealthCheckError);
-    await expect(indicator.isHealthy('replication_lag')).rejects.toMatchObject({
+    const result = await indicator.isHealthy('replication_lag');
+
+    expect(result['replication_lag'].status).toBe('down');
+    expect(result['replication_lag']).toMatchObject({
       message: expect.stringContaining('lag too high'),
     });
   });
 
-  it('throws HealthCheckError when replica query throws (unreachable)', async () => {
-    const indicator = new PrismaReplicationLagHealthIndicator(
-      makePrisma({ queryThrows: new Error('ECONNREFUSED') }),
-    );
+  it('reports down when replica query throws (unreachable)', async () => {
+    const indicator = makeIndicator(makePrisma({ queryThrows: new Error('ECONNREFUSED') }));
 
-    await expect(indicator.isHealthy('replication_lag')).rejects.toThrow(HealthCheckError);
-    await expect(indicator.isHealthy('replication_lag')).rejects.toMatchObject({
+    const result = await indicator.isHealthy('replication_lag');
+
+    expect(result['replication_lag'].status).toBe('down');
+    expect(result['replication_lag']).toMatchObject({
       message: expect.stringContaining('unreachable'),
     });
   });

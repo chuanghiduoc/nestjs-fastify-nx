@@ -37,9 +37,9 @@ const envSchema = z
 
     // Without a stable secret, sessions reset on every restart.
     BETTER_AUTH_SECRET: z.string().trim().min(32).optional(),
-    BETTER_AUTH_URL: z.string().url().optional(),
+    BETTER_AUTH_URL: z.url().optional(),
     // SPA host that owns /reset, /verify-email, /delete-account pages. Required in production.
-    FRONTEND_BASE_URL: z.string().url().optional(),
+    FRONTEND_BASE_URL: z.url().optional(),
     // Social login — each provider activates only when BOTH id and secret are set.
     GOOGLE_CLIENT_ID: z.string().optional(),
     GOOGLE_CLIENT_SECRET: z.string().optional(),
@@ -90,14 +90,14 @@ const envSchema = z
       .string()
       .default('false')
       .transform((v) => v === 'true'),
-    MAIL_DEFAULT_EMAIL: z.string().email().default('noreply@example.com'),
+    MAIL_DEFAULT_EMAIL: z.email().default('noreply@example.com'),
     MAIL_DEFAULT_NAME: z.string().default('No Reply'),
 
     // App
     NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
     PORT: z.coerce.number().int().min(1).max(65535).default(3000),
     LOG_LEVEL: z.string().default('info'),
-    ERROR_DOCS_BASE_URL: z.string().url().optional(),
+    ERROR_DOCS_BASE_URL: z.url().optional(),
     HTTP_MAX_EVENT_LOOP_DELAY_MS: z.coerce.number().int().min(10).max(60_000).default(1_000),
     CORS_ORIGINS: z
       .string()
@@ -226,7 +226,7 @@ const envSchema = z
   .superRefine((data, ctx) => {
     if (data.DATABASE_POOL_MIN > data.DATABASE_POOL_MAX) {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: 'custom',
         path: ['DATABASE_POOL_MIN'],
         message: 'DATABASE_POOL_MIN must be less than or equal to DATABASE_POOL_MAX',
       });
@@ -240,7 +240,7 @@ const envSchema = z
       data.HTTP_REQUEST_TIMEOUT_MS >= data.IDEMPOTENCY_LOCK_TTL_SECONDS * 1000
     ) {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: 'custom',
         path: ['IDEMPOTENCY_LOCK_TTL_SECONDS'],
         message:
           'IDEMPOTENCY_LOCK_TTL_SECONDS (ms) must be greater than HTTP_REQUEST_TIMEOUT_MS so a timed-out request releases its lock in time',
@@ -251,42 +251,42 @@ const envSchema = z
 
     if (data.STORAGE_ACCESS_KEY === 'minioadmin') {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: 'custom',
         path: ['STORAGE_ACCESS_KEY'],
         message: 'Must not use default value in production',
       });
     }
     if (data.STORAGE_SECRET_KEY === 'minioadmin') {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: 'custom',
         path: ['STORAGE_SECRET_KEY'],
         message: 'Must not use default value in production',
       });
     }
     if (data.BULL_BOARD_PASSWORD === 'admin') {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: 'custom',
         path: ['BULL_BOARD_PASSWORD'],
         message: 'Must not use default password in production',
       });
     }
     if (!data.BETTER_AUTH_SECRET) {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: 'custom',
         path: ['BETTER_AUTH_SECRET'],
         message: 'BETTER_AUTH_SECRET must be set in production for stable session signing',
       });
     }
     if (!data.BETTER_AUTH_URL) {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: 'custom',
         path: ['BETTER_AUTH_URL'],
         message: 'BETTER_AUTH_URL must be set in production to a stable public API origin',
       });
     }
     if (!data.FRONTEND_BASE_URL) {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: 'custom',
         path: ['FRONTEND_BASE_URL'],
         message: 'FRONTEND_BASE_URL must be set in production for email action links',
       });
@@ -294,7 +294,7 @@ const envSchema = z
 
     if (!/^postgres(ql)?:\/\//.test(data.DATABASE_URL)) {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: 'custom',
         path: ['DATABASE_URL'],
         message: 'DATABASE_URL must use the postgres:// or postgresql:// scheme in production',
       });
@@ -302,7 +302,7 @@ const envSchema = z
 
     if (data.MAIL_HOST === 'localhost') {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: 'custom',
         path: ['MAIL_HOST'],
         message: 'MAIL_HOST must point to a real SMTP server in production',
       });
@@ -310,7 +310,7 @@ const envSchema = z
 
     if (data.MAIL_DEFAULT_EMAIL === 'noreply@example.com') {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: 'custom',
         path: ['MAIL_DEFAULT_EMAIL'],
         message: 'MAIL_DEFAULT_EMAIL must be set to a real address in production',
       });
@@ -324,7 +324,7 @@ const envSchema = z
     if (data.MAIL_USER) {
       if (data.MAIL_IGNORE_TLS) {
         ctx.addIssue({
-          code: z.ZodIssueCode.custom,
+          code: 'custom',
           path: ['MAIL_IGNORE_TLS'],
           message:
             'MAIL_IGNORE_TLS must be false in production when MAIL_USER is set — sending SMTP credentials without TLS exposes them in plaintext',
@@ -332,7 +332,7 @@ const envSchema = z
       }
       if (!data.MAIL_SECURE && !data.MAIL_REQUIRE_TLS) {
         ctx.addIssue({
-          code: z.ZodIssueCode.custom,
+          code: 'custom',
           path: ['MAIL_REQUIRE_TLS'],
           message:
             'Enable MAIL_SECURE or MAIL_REQUIRE_TLS in production when MAIL_USER is set so SMTP credentials negotiate TLS',
@@ -342,7 +342,7 @@ const envSchema = z
 
     if (data.CORS_ORIGINS.length === 0) {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: 'custom',
         path: ['CORS_ORIGINS'],
         message: 'CORS_ORIGINS must list at least one allowed origin in production',
       });

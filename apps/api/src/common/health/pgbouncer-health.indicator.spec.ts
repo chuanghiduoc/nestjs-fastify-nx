@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { HealthCheckError } from '@nestjs/terminus';
+import { HealthIndicatorService } from '@nestjs/terminus';
 import type { ClientConfig } from 'pg';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -31,7 +31,7 @@ describe('PgBouncerHealthIndicator', () => {
     clientStub = makeClientStub();
     factorySpy = vi.fn<PgClientFactory>(() => clientStub);
     // Inject a factory that always returns the same stub — no pg module needed.
-    indicator = new PgBouncerHealthIndicator(factorySpy);
+    indicator = new PgBouncerHealthIndicator(new HealthIndicatorService(), factorySpy);
   });
 
   afterEach(() => {
@@ -65,7 +65,7 @@ describe('PgBouncerHealthIndicator', () => {
     expect(clientStub.end).toHaveBeenCalledOnce();
   });
 
-  it('throws HealthCheckError when the pooler connection fails', async () => {
+  it('reports down when the pooler connection fails', async () => {
     process.env['DATABASE_DIRECT_URL'] = 'postgresql://postgres:postgres@postgres:5432/nestjs_db';
     process.env['DATABASE_URL'] = 'postgresql://postgres:postgres@pgbouncer:6432/nestjs_db';
 
@@ -73,12 +73,16 @@ describe('PgBouncerHealthIndicator', () => {
       new Error('ECONNREFUSED — pgbouncer is down'),
     );
 
-    await expect(indicator.isHealthy('pgbouncer')).rejects.toThrow(HealthCheckError);
+    const result = await indicator.isHealthy('pgbouncer');
+
+    expect(result).toMatchObject({
+      pgbouncer: { status: 'down', message: 'PgBouncer unreachable' },
+    });
     // end() must still be called in the finally block even when connect() throws.
     expect(clientStub.end).toHaveBeenCalledOnce();
   });
 
-  it('throws HealthCheckError when query fails after a successful connect', async () => {
+  it('reports down when query fails after a successful connect', async () => {
     process.env['DATABASE_DIRECT_URL'] = 'postgresql://postgres:postgres@postgres:5432/nestjs_db';
     process.env['DATABASE_URL'] = 'postgresql://postgres:postgres@pgbouncer:6432/nestjs_db';
 
@@ -87,11 +91,13 @@ describe('PgBouncerHealthIndicator', () => {
       new Error('prepared statement does not exist'),
     );
 
-    await expect(indicator.isHealthy('pgbouncer')).rejects.toThrow(HealthCheckError);
+    const result = await indicator.isHealthy('pgbouncer');
+
+    expect(result).toMatchObject({ pgbouncer: { status: 'down' } });
     expect(clientStub.end).toHaveBeenCalledOnce();
   });
 
-  it('does not surface end() errors — outer HealthCheckError takes precedence', async () => {
+  it('does not surface end() errors — the down result takes precedence', async () => {
     process.env['DATABASE_DIRECT_URL'] = 'postgresql://postgres:postgres@postgres:5432/nestjs_db';
     process.env['DATABASE_URL'] = 'postgresql://postgres:postgres@pgbouncer:6432/nestjs_db';
 
@@ -101,8 +107,10 @@ describe('PgBouncerHealthIndicator', () => {
       new Error('socket already closed'),
     );
 
-    // Must reject with HealthCheckError, not the end() error.
-    await expect(indicator.isHealthy('pgbouncer')).rejects.toThrow(HealthCheckError);
+    // Must resolve to a down result, not reject with the end() error.
+    const result = await indicator.isHealthy('pgbouncer');
+
+    expect(result).toMatchObject({ pgbouncer: { status: 'down' } });
   });
 
   // Docker-secrets / k8s deployments mount the password as a file and publish

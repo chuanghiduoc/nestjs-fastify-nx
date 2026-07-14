@@ -51,7 +51,7 @@ const workerEnvSchema = z
       .string()
       .default('false')
       .transform((v) => v === 'true'),
-    MAIL_DEFAULT_EMAIL: z.string().email().default('noreply@example.com'),
+    MAIL_DEFAULT_EMAIL: z.email().default('noreply@example.com'),
     MAIL_DEFAULT_NAME: z.string().default('No Reply'),
 
     // Per-queue worker concurrency. Processor decorators read these at module load,
@@ -106,7 +106,7 @@ const workerEnvSchema = z
   .superRefine((data, ctx) => {
     if (data.DATABASE_POOL_MIN > data.DATABASE_POOL_MAX) {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: 'custom',
         path: ['DATABASE_POOL_MIN'],
         message: 'DATABASE_POOL_MIN must be less than or equal to DATABASE_POOL_MAX',
       });
@@ -115,21 +115,21 @@ const workerEnvSchema = z
 
     if (data.STORAGE_ACCESS_KEY === 'minioadmin') {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: 'custom',
         path: ['STORAGE_ACCESS_KEY'],
         message: 'Must not use default value in production',
       });
     }
     if (data.STORAGE_SECRET_KEY === 'minioadmin') {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: 'custom',
         path: ['STORAGE_SECRET_KEY'],
         message: 'Must not use default value in production',
       });
     }
     if (data.MAIL_DEFAULT_EMAIL === 'noreply@example.com') {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: 'custom',
         path: ['MAIL_DEFAULT_EMAIL'],
         message: 'MAIL_DEFAULT_EMAIL must be set to a real address in production',
       });
@@ -139,7 +139,7 @@ const workerEnvSchema = z
     if (data.MAIL_USER) {
       if (data.MAIL_IGNORE_TLS) {
         ctx.addIssue({
-          code: z.ZodIssueCode.custom,
+          code: 'custom',
           path: ['MAIL_IGNORE_TLS'],
           message:
             'MAIL_IGNORE_TLS must be false in production when MAIL_USER is set — plaintext SMTP exposes credentials',
@@ -147,7 +147,7 @@ const workerEnvSchema = z
       }
       if (!data.MAIL_SECURE && !data.MAIL_REQUIRE_TLS) {
         ctx.addIssue({
-          code: z.ZodIssueCode.custom,
+          code: 'custom',
           path: ['MAIL_REQUIRE_TLS'],
           message:
             'Enable MAIL_SECURE or MAIL_REQUIRE_TLS in production when MAIL_USER is set so SMTP credentials negotiate TLS',

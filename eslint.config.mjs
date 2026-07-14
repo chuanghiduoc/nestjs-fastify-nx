@@ -40,6 +40,10 @@ export default tseslint.config(
     rules: {
       // No `any` in production code — the codebase is currently clean, keep it that way.
       '@typescript-eslint/no-explicit-any': 'error',
+      // Deprecated API usage is tech debt with a known migration path — fail the build so it
+      // never silently accumulates. Type-aware: reads @deprecated JSDoc from our own symbols and
+      // library .d.ts alike (Zod, NestJS, Prisma, …). Relies on parserOptions.project above.
+      '@typescript-eslint/no-deprecated': 'error',
       // Unhandled promises are silent data-loss/ordering bugs in an async, event-driven
       // service. Type-aware — relies on the parserOptions.project set above.
       '@typescript-eslint/no-floating-promises': 'error',

@@ -1,6 +1,7 @@
 import { Injectable, OnModuleDestroy } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { HealthCheckError, HealthIndicator, HealthIndicatorResult } from '@nestjs/terminus';
+import type { HealthIndicatorResult } from '@nestjs/terminus';
+import { HealthIndicatorService } from '@nestjs/terminus';
 import Redis from 'ioredis';
 import type { EnvConfig } from '../../config/env.validation';
 
@@ -20,11 +21,13 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
 
-abstract class BaseRedisHealthIndicator extends HealthIndicator implements OnModuleDestroy {
+abstract class BaseRedisHealthIndicator implements OnModuleDestroy {
   protected readonly redis: Redis;
 
-  constructor(target: RedisTarget) {
-    super();
+  constructor(
+    private readonly healthIndicator: HealthIndicatorService,
+    target: RedisTarget,
+  ) {
     this.redis = new Redis({
       host: target.host,
       port: target.port,
@@ -43,25 +46,23 @@ abstract class BaseRedisHealthIndicator extends HealthIndicator implements OnMod
   }
 
   async isHealthy(key: string): Promise<HealthIndicatorResult> {
+    const indicator = this.healthIndicator.check(key);
     try {
       const result = await withTimeout(this.redis.ping(), PROBE_TIMEOUT_MS);
-      const ok = result === 'PONG';
-      const status = this.getStatus(key, ok);
-      if (!ok) {
-        throw new HealthCheckError(`${key} ping returned ${result}`, status);
+      if (result !== 'PONG') {
+        return indicator.down({ message: `${key} ping returned ${result}` });
       }
-      return status;
-    } catch (err) {
-      if (err instanceof HealthCheckError) throw err;
-      throw new HealthCheckError(`${key} check failed`, this.getStatus(key, false));
+      return indicator.up();
+    } catch {
+      return indicator.down({ message: `${key} check failed` });
     }
   }
 }
 
 @Injectable()
 export class RedisCacheHealthIndicator extends BaseRedisHealthIndicator {
-  constructor(config: ConfigService<EnvConfig, true>) {
-    super({
+  constructor(healthIndicator: HealthIndicatorService, config: ConfigService<EnvConfig, true>) {
+    super(healthIndicator, {
       host: config.get('REDIS_CACHE_HOST', { infer: true }),
       port: config.get('REDIS_CACHE_PORT', { infer: true }),
     });
@@ -70,8 +71,8 @@ export class RedisCacheHealthIndicator extends BaseRedisHealthIndicator {
 
 @Injectable()
 export class RedisQueueHealthIndicator extends BaseRedisHealthIndicator {
-  constructor(config: ConfigService<EnvConfig, true>) {
-    super({
+  constructor(healthIndicator: HealthIndicatorService, config: ConfigService<EnvConfig, true>) {
+    super(healthIndicator, {
       host: config.get('REDIS_QUEUE_HOST', { infer: true }),
       port: config.get('REDIS_QUEUE_PORT', { infer: true }),
     });
