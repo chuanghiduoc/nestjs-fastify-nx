@@ -98,7 +98,7 @@ redis-cli -h $REDIS_QUEUE_HOST -p $REDIS_QUEUE_PORT
 5. Purge genuinely unrecoverable jobs (data from a bad deploy) after confirming replay is safe:
    Bull Board → "Clean" → select "failed" state → confirm.
 
-**Escalation:** If the queue fills faster than the worker can drain (sustained spike), scale the worker replicas via Coolify or increase `BULLMQ_CONCURRENCY`. Alert the team if a runaway job producer is suspected.
+**Escalation:** If the queue fills faster than the worker can drain (sustained spike), scale the worker replicas via your orchestrator or increase `BULLMQ_CONCURRENCY`. Alert the team if a runaway job producer is suspected.
 
 ---
 

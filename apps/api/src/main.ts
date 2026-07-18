@@ -295,14 +295,15 @@ async function bootstrap() {
         .header('content-type', 'application/problem+json')
         .header('retry-after', String(retryAfter))
         .send({
-          type: 'https://tools.ietf.org/html/rfc6585#section-4',
-          title: 'Too Many Requests',
-          status: HttpStatus.TOO_MANY_REQUESTS,
-          code: ERROR_CODES.RATE_LIMITED,
-          detail: `Rate limit exceeded. Try again in ${retryAfter} seconds.`,
+          ...buildProblemDetails({
+            status: HttpStatus.TOO_MANY_REQUESTS,
+            title: 'Too Many Requests',
+            detail: `Rate limit exceeded. Try again in ${retryAfter} seconds.`,
+            code: ERROR_CODES.RATE_LIMITED,
+            instance: req.url,
+            requestId,
+          }),
           retryAfter,
-          requestId,
-          timestamp: new Date().toISOString(),
         });
     } catch (err) {
       if (authRateLimitFailOpen) {
@@ -317,15 +318,16 @@ async function bootstrap() {
         .status(HttpStatus.SERVICE_UNAVAILABLE)
         .header('content-type', 'application/problem+json')
         .header('retry-after', '5')
-        .send({
-          type: 'about:blank',
-          title: 'Service Unavailable',
-          status: HttpStatus.SERVICE_UNAVAILABLE,
-          code: ERROR_CODES.SERVICE_UNAVAILABLE,
-          detail: 'Authentication is temporarily unavailable. Retry shortly.',
-          requestId,
-          timestamp: new Date().toISOString(),
-        });
+        .send(
+          buildProblemDetails({
+            status: HttpStatus.SERVICE_UNAVAILABLE,
+            title: 'Service Unavailable',
+            detail: 'Authentication is temporarily unavailable. Retry shortly.',
+            code: ERROR_CODES.SERVICE_UNAVAILABLE,
+            instance: req.url,
+            requestId,
+          }),
+        );
     }
   });
 
@@ -381,15 +383,15 @@ async function bootstrap() {
         'Better Auth handler threw unexpectedly',
       );
       if (!reply.raw.headersSent) {
-        const body = JSON.stringify({
-          type: 'https://tools.ietf.org/html/rfc7231#section-6.6.1',
-          title: 'Internal Server Error',
-          status: HttpStatus.INTERNAL_SERVER_ERROR,
-          code: ERROR_CODES.INTERNAL_SERVER_ERROR,
-          instance: req.url,
-          requestId,
-          timestamp: new Date().toISOString(),
-        });
+        const body = JSON.stringify(
+          buildProblemDetails({
+            status: HttpStatus.INTERNAL_SERVER_ERROR,
+            title: 'Internal Server Error',
+            code: ERROR_CODES.INTERNAL_SERVER_ERROR,
+            instance: req.url,
+            requestId,
+          }),
+        );
         reply.raw.writeHead(HttpStatus.INTERNAL_SERVER_ERROR, {
           'Content-Type': 'application/problem+json',
           'Content-Length': Buffer.byteLength(body),

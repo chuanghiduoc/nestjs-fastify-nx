@@ -262,7 +262,7 @@ pnpm rm:project <name>             # remove a lib/app + clean refs/tags (nx work
 - `docs/creating-a-module.md` — DDD generator walkthrough
 - `docs/domain-module-anatomy.md` — every file type in a module explained (what/why/when/how, beginner walkthrough)
 - `docs/environment.md` — every env var, defaults, validation
-- `docs/deployment.md` — Docker, GHCR, Cosign, Coolify
+- `docs/deployment.md` — Docker, GHCR, Cosign, rollout options
 - `docs/security.md` — five-layer scan pipeline (Gitleaks, OSV, Semgrep, Trivy, Cosign)
 - `docs/observability.md` — logging, tracing, metrics, correlation-id design, resilience
 - `docs/observability-guide.md` — how to enable, explore, and extend observability (add a metric/span/log field/alert/dashboard)

@@ -93,32 +93,32 @@ If you've ever shipped a Node service to production, you've written this code al
 
 ## Stack
 
-| Layer          | Technology                                                         |
-| -------------- | ------------------------------------------------------------------ |
-| Runtime        | Node.js 24, pnpm 10.33, TypeScript 6                               |
-| Framework      | NestJS 11 + Fastify 5                                              |
-| ORM            | Prisma 7 (driver adapter `@prisma/adapter-pg`)                     |
-| Database       | PostgreSQL 18 (native `uuidv7()`, async I/O via io_uring)          |
-| Cache          | Redis 8 + `cache-manager` + Keyv                                   |
-| Queues         | BullMQ + `@nestjs/bullmq`, Bull Board UI                           |
-| Authentication | Better Auth 1.6 (cookie sessions, argon2)                          |
-| API surfaces   | REST (`@nestjs/swagger`), GraphQL (`@nestjs/mercurius`), Socket.io |
-| Realtime       | Socket.io 4 + `@socket.io/redis-adapter`                           |
-| Object storage | AWS S3 SDK v3 + presigned URLs (MinIO compatible in dev)           |
-| Email          | Nodemailer (SMTP) — Mailpit in dev                                 |
-| Validation     | Zod 4 + class-validator + class-transformer                        |
-| Observability  | OpenTelemetry SDK + Sentry NestJS + Prometheus (`prom-client`)     |
-| Logging        | nestjs-pino (structured JSON, pino-http)                           |
-| Scheduling     | `@nestjs/schedule` + cron in the dedicated `scheduler` app         |
-| Monorepo       | Nx 23 (`@nx/nest`, `@nx/webpack`, `@nx/vite`, `@nx/vitest`)        |
-| Bundler        | Webpack 5 (NestJS-correct decorator metadata via `tsc` compiler)   |
-| Test runner    | Vitest 4 + Testcontainers + Supertest                              |
-| API codegen    | Orval 8 → `libs/api-client`                                        |
-| Lint / format  | ESLint 10 + typescript-eslint, Prettier 3.6                        |
-| Git hygiene    | Lefthook + commitlint (Conventional Commits)                       |
-| Container      | Multi-stage Alpine, Buildx, SBOM + SLSA provenance                 |
-| Security       | Gitleaks + OSV-Scanner + Semgrep + Trivy + Cosign                  |
-| CI / CD        | GitHub Actions, GHCR, Coolify webhook                              |
+| Layer          | Technology                                                          |
+| -------------- | ------------------------------------------------------------------- |
+| Runtime        | Node.js 24, pnpm 10.33, TypeScript 6                                |
+| Framework      | NestJS 11 + Fastify 5                                               |
+| ORM            | Prisma 7 (driver adapter `@prisma/adapter-pg`)                      |
+| Database       | PostgreSQL 18 (native `uuidv7()`, async I/O via io_uring)           |
+| Cache          | Redis 8 + `cache-manager` + Keyv                                    |
+| Queues         | BullMQ + `@nestjs/bullmq`, Bull Board UI                            |
+| Authentication | Better Auth 1.6 (cookie sessions, argon2)                           |
+| API surfaces   | REST (`@nestjs/swagger`), GraphQL (`@nestjs/mercurius`), Socket.io  |
+| Realtime       | Socket.io 4 + `@socket.io/redis-adapter`                            |
+| Object storage | AWS S3 SDK v3 + presigned URLs (MinIO compatible in dev)            |
+| Email          | Nodemailer (SMTP) — Mailpit in dev                                  |
+| Validation     | Zod 4 + class-validator + class-transformer                         |
+| Observability  | OpenTelemetry SDK + Sentry NestJS + Prometheus (`prom-client`)      |
+| Logging        | nestjs-pino (structured JSON, pino-http)                            |
+| Scheduling     | `@nestjs/schedule` + cron in the dedicated `scheduler` app          |
+| Monorepo       | Nx 23 (`@nx/nest`, `@nx/webpack`, `@nx/vite`, `@nx/vitest`)         |
+| Bundler        | Webpack 5 (NestJS-correct decorator metadata via `tsc` compiler)    |
+| Test runner    | Vitest 4 + Testcontainers + Supertest                               |
+| API codegen    | Orval 8 → `libs/api-client`                                         |
+| Lint / format  | ESLint 10 + typescript-eslint, Prettier 3.6                         |
+| Git hygiene    | Lefthook + commitlint (Conventional Commits)                        |
+| Container      | Multi-stage Alpine, Buildx, SBOM + SLSA provenance                  |
+| Security       | Gitleaks + OSV-Scanner + Semgrep + Trivy + Cosign                   |
+| CI / CD        | GitHub Actions → GHCR (deploy is yours to wire — see deployment.md) |
 
 ## Architecture
 
@@ -342,7 +342,7 @@ Full flow: [docs/deployment.md](docs/deployment.md).
 - [Domain Module Anatomy](docs/domain-module-anatomy.md) — every file in a module explained file-by-file (beginner-friendly)
 - [Creating a Module](docs/creating-a-module.md) — DDD/CQRS scaffold walkthrough
 - [Environment Variables](docs/environment.md) — every env var, defaults, validation
-- [Deployment](docs/deployment.md) — Docker, GHCR, Coolify, migrations
+- [Deployment](docs/deployment.md) — Docker, GHCR, Cosign verification, migrations
 - [Security Scanning](docs/security.md) — five-layer pipeline, local + CI parity
 - [Troubleshooting](docs/troubleshooting.md) — known issues, debug tips
 - [Runbook](docs/runbook.md) — ops runbook: health, metrics, outbox, BullMQ, performance
