@@ -32,7 +32,10 @@ jobs:
 
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
-          node-version: 22
+          # Matches package.json engines (>=24), the Dockerfile base, and the other workflows.
+          # `engine-strict` is off, so a mismatch here does not fail — it just quietly validates the
+          # whole workspace against a Node major the project does not ship on.
+          node-version: 24
           cache: pnpm
 
       - name: Install dependencies

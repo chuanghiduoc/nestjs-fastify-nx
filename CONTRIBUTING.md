@@ -5,7 +5,7 @@ Welcome. This guide gets you from clone → first PR in under 30 minutes.
 ## Prerequisites
 
 - Docker Desktop / Docker Engine with Compose v2+
-- Node 22+, pnpm 10+
+- Node 24+, pnpm 10+
 - Git with conventional commits awareness
 - 2 GB free disk (for containers + node_modules)
 
@@ -19,7 +19,7 @@ pnpm install
 ./scripts/build-dev.sh             # 🚀 boots full dev stack
 
 # 2. Access the API
-open http://localhost:3000/api/docs
+open http://localhost:3000/docs
 ```
 
 Check the logs in another terminal:
@@ -107,7 +107,7 @@ Integration tests use real Postgres via Testcontainers (no mocks).
 ### 10. Verify boundaries
 
 ```bash
-pnpm nx affected -t lint --base=main
+pnpm nx affected -t lint --base=origin/main
 ```
 
 Full walkthrough: [docs/creating-a-module.md](./docs/creating-a-module.md)
@@ -123,8 +123,8 @@ Full walkthrough: [docs/creating-a-module.md](./docs/creating-a-module.md)
 | Scaffold composition | `pnpm gen:composition <name>`                     |
 | Remove a project     | `pnpm rm:project <name>`                          |
 | Run tests for module | `pnpm nx test modules-payments`                   |
-| Run all tests        | `pnpm nx affected -t test --base=main`            |
-| Check lint           | `pnpm nx affected -t lint --base=main`            |
+| Run all tests        | `pnpm nx affected -t test --base=origin/main`     |
+| Check lint           | `pnpm nx affected -t lint --base=origin/main`     |
 | Create migration     | `pnpm db:migrate --name add_field`                |
 | View DB              | `pnpm db:studio`                                  |
 | Seed DB              | `pnpm db:seed`                                    |
@@ -152,8 +152,8 @@ Enforced by ESLint + Lefthook + CI.
 ## Pull Request Checklist
 
 - [ ] Tests added/updated (`pnpm nx test`)
-- [ ] Lint pass (`pnpm nx affected -t lint --base=main`)
-- [ ] Build pass (`pnpm nx affected -t build --base=main`)
+- [ ] Lint pass (`pnpm nx affected -t lint --base=origin/main`)
+- [ ] Build pass (`pnpm nx affected -t build --base=origin/main`)
 - [ ] API docs updated (if endpoints changed)
 - [ ] CHANGELOG.md updated (if user-facing)
 - [ ] No TODOs in code
@@ -175,7 +175,7 @@ Enforced by ESLint + Lefthook + CI.
 ## Getting Help
 
 - **Architecture** → [docs/architecture.md](./docs/architecture.md)
-- **Environment / API** → [docs/environment.md](./docs/environment.md), `/api/docs` (Swagger)
+- **Environment / API** → [docs/environment.md](./docs/environment.md), `/docs` (Scalar API reference)
 - **Operations** → [docs/runbook.md](./docs/runbook.md)
 - **Known issues** → [docs/troubleshooting.md](./docs/troubleshooting.md)
 - **Security** → [docs/security.md](./docs/security.md)
@@ -186,8 +186,12 @@ Enforced by ESLint + Lefthook + CI.
 
 Push to `main`, tag with `v*.*.*`, GitHub Actions:
 
-- Builds multi-platform images
-- Signs with Cosign + SBOM
-- Deploys via Coolify webhook
+- Builds each image for `linux/amd64` (multi-arch is a one-line change in `release.yml`, not the default)
+- Gates on a Trivy scan **before** pushing — a fixable CRITICAL/HIGH publishes nothing
+- Pushes to GHCR with SBOM + SLSA provenance attestations, then signs the digest with Cosign
+
+The release **stops at a signed image on GHCR — it does not deploy.** Rollout is
+deployment-specific and intentionally left out of CI; pull the published tag, run the migration
+image against your database, then restart the services. See `docs/deployment.md`.
 
 See `.github/workflows/release.yml` for details.

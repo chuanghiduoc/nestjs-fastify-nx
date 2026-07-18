@@ -136,8 +136,9 @@ export class Email extends ValueObject<string> {
 `create()` validates untrusted input; `fromPersistence()` trusts a value
 already stored in the DB.
 
-**Rules**: `ValueObject<T>.equals()` compares by value (`JSON.stringify`), not
-`===`. Keep VOs immutable — no mutator methods.
+**Rules**: `ValueObject<T>.equals()` compares by value — `isDeepStrictEqual` from
+`node:util`, after checking the constructors match — not `===`. Keep VOs
+immutable: no mutator methods.
 
 ### `domain/events/` — domain events
 
@@ -274,7 +275,16 @@ export class GetUserProfileHandler implements IQueryHandler<GetUserProfileQuery,
   async execute(query: GetUserProfileQuery): Promise<UserProfileResult> {
     const user = await this.users.findById(query.userId);
     if (!user) {
-      throw new BusinessRuleException({ status: HttpStatus.NOT_FOUND, code: 'user_not_found', messageKey: I18N_KEYS.errors.users.not_found, violations: [...] });
+      // `title` is required for any non-422 status: the class titles itself with a business-rule
+      // literal that only reads right on its 422 default — and a literal is never translated,
+      // because the filter only translates dotted i18n keys.
+      throw new BusinessRuleException({
+        status: HttpStatus.NOT_FOUND,
+        title: I18N_KEYS.common.not_found,
+        code: 'user_not_found',
+        messageKey: I18N_KEYS.errors.users.not_found,
+        violations: [...],
+      });
     }
     return { id: user.id, email: user.email.toString(), name: user.name, role: user.role, status: user.status, createdAt: user.createdAt, updatedAt: user.updatedAt };
   }
@@ -348,7 +358,9 @@ process.
 export class UserRegisteredListener {
   constructor(@InjectQueue(QUEUE_NAMES.EMAIL_NOTIFICATION) private readonly emailQueue: Queue) {}
 
-  @OnEvent('users.registered', { async: true })
+  // promisify + suppressErrors:false so a throw propagates to EventBusService.publish — the outbox
+  // relay then records lastError and retries. Swallowed here, the event would look delivered.
+  @OnEvent('users.registered', { async: true, promisify: true, suppressErrors: false })
   async handle(event: UserRegistered): Promise<void> {
     const jobId = `welcome-email__${event.eventId}`; // BullMQ rejects ':' — use '__'
     await this.emailQueue.add(
@@ -426,9 +438,11 @@ per resource/route group.
 
 ```typescript
 // presentation/controllers/users.controller.ts
+// No @UseGuards here: BetterAuthGuard and RolesGuard are registered globally as APP_GUARD in
+// apps/api. Routes are authenticated by default — @Public() opts out, @Roles() narrows.
+// @ApiCookieAuth only documents that; it enforces nothing.
 @ApiTags('users')
 @Controller('users')
-@UseGuards(BetterAuthGuard)
 @ApiCookieAuth('session')
 export class UsersController {
   constructor(private readonly queryBus: QueryBus) {}

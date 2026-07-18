@@ -21,21 +21,21 @@ Pino logs are structured JSON, correlated with `X-Request-Id`, and automatically
 
 ### Choosing a status code
 
-The status is part of the API contract — clients branch on it. Pick by what the caller can *do*
+The status is part of the API contract — clients branch on it. Pick by what the caller can _do_
 about the answer, not by what is nearest to hand. `400` and `500` are not defaults.
 
-| Situation                                                                                                          | Status | How                                                             |
-| ------------------------------------------------------------------------------------------------------------------ | ------ | --------------------------------------------------------------- |
-| Request is malformed — bad JSON, an opaque cursor/token that will not decode, an unparseable header                  | `400`  | `BusinessRuleException` with `status: 400`                       |
-| Body or query failed `class-validator`                                                                               | `422`  | Nothing — `ProblemDetailsValidationPipe` owns it                 |
-| Request understood, but a domain rule says no, or the state it references violates policy                            | `422`  | `BusinessRuleException` (its default)                            |
-| No session, or the session expired — re-authenticating would fix it                                                  | `401`  | `UnauthorizedException`                                          |
-| Session is valid, but this principal may not do this — wrong role, deactivated/banned account                        | `403`  | `ForbiddenException`                                             |
-| Resource does not exist — or exists, but the caller must not learn that it does                                      | `404`  | `BusinessRuleException` with `status: 404` / `NotFoundException` |
-| State conflict a retry could resolve — duplicate key, concurrent update, work still in flight                        | `409`  | `BusinessRuleException` with `status: 409` / `ConflictException` |
-| The **request body itself** is over the size limit                                                                   | `413`  | Fastify body limit — never hand-rolled                           |
-| Rate limit hit                                                                                                       | `429`  | `@fastify/rate-limit` / `ThrottlerGuard`                         |
-| The server broke — DB down, S3 unreachable, a bug                                                                    | `500`  | `InternalServerErrorException`, with no specific `code`          |
+| Situation                                                                                           | Status | How                                                              |
+| --------------------------------------------------------------------------------------------------- | ------ | ---------------------------------------------------------------- |
+| Request is malformed — bad JSON, an opaque cursor/token that will not decode, an unparseable header | `400`  | `BusinessRuleException` with `status: 400`                       |
+| Body or query failed `class-validator`                                                              | `422`  | Nothing — `ProblemDetailsValidationPipe` owns it                 |
+| Request understood, but a domain rule says no, or the state it references violates policy           | `422`  | `BusinessRuleException` (its default)                            |
+| No session, or the session expired — re-authenticating would fix it                                 | `401`  | `UnauthorizedException`                                          |
+| Session is valid, but this principal may not do this — wrong role, deactivated/banned account       | `403`  | `ForbiddenException`                                             |
+| Resource does not exist — or exists, but the caller must not learn that it does                     | `404`  | `BusinessRuleException` with `status: 404` / `NotFoundException` |
+| State conflict a retry could resolve — duplicate key, concurrent update, work still in flight       | `409`  | `BusinessRuleException` with `status: 409` / `ConflictException` |
+| The **request body itself** is over the size limit                                                  | `413`  | Fastify body limit — never hand-rolled                           |
+| Rate limit hit                                                                                      | `429`  | `@fastify/rate-limit` / `ThrottlerGuard`                         |
+| The server broke — DB down, S3 unreachable, a bug                                                   | `500`  | `InternalServerErrorException`, with no specific `code`          |
 
 The three distinctions that actually get chosen wrong:
 

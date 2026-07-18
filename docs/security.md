@@ -10,7 +10,6 @@ and in **CI** (gate). A clean local run mirrors the CI gate.
 | --- | -------------- | ------------- | ---------------------------------- | -------------------------------------- |
 | 1   | Secrets        | Gitleaks      | `scripts/security/scan-secrets.sh` | `ci.yml` (`secret-scan` job, lefthook) |
 | 2   | Dependencies   | OSV-Scanner   | `scripts/security/scan-deps.sh`    | `ci.yml` (`dep-scan` job)              |
-| 2   | Dependencies   | `pnpm audit`  | (built-in)                         | `ci.yml` (main job)                    |
 | 3   | SAST           | Semgrep       | `scripts/security/scan-sast.sh`    | `release.yml` (`static-analysis`)      |
 | 4   | Container CVEs | Trivy         | `scripts/security/scan-images.sh`  | `release.yml` (`build-and-push`)       |
 | 5   | Supply chain   | Cosign + SLSA | `scripts/security/sign-images.sh`  | `release.yml` (sign step)              |
@@ -21,8 +20,10 @@ Run the whole stack locally: `./scripts/security/scan-all.sh`.
 
 ### Gitleaks — secrets
 
-API keys, tokens, private keys committed to the repo. Pre-commit hook scans
-staged hunks; pre-push hook scans full history; CI scans the entire diff.
+API keys, tokens, private keys committed to the repo. The pre-push hook scans the
+full history; CI scans the entire diff. There is deliberately no Gitleaks step on
+`pre-commit` — lefthook keeps that hook to `lint-staged` + `typecheck` so commits
+stay fast, and push is the last point before anything leaves the machine.
 
 ```bash
 ./scripts/security/scan-secrets.sh           # full repo + history
@@ -117,8 +118,8 @@ back to a specific commit, workflow run, and signing identity.
 ./scripts/security/scan-images.sh
 ```
 
-Lefthook wires Gitleaks into `pre-commit` (staged hunks) and `pre-push`
-(full history). To run hooks manually:
+Lefthook wires Gitleaks into `pre-push` (full history). `pre-commit` runs
+`lint-staged` + `typecheck`; `commit-msg` runs commitlint. To run hooks manually:
 
 ```bash
 pnpm exec lefthook run pre-commit
@@ -131,7 +132,7 @@ pnpm exec lefthook run pre-push
 PR / push
   ├── secret-scan        (gitleaks-action)
   ├── dep-scan           (osv-scanner-action)
-  └── main               (lint, typecheck, test, build, pnpm audit)
+  └── main               (sync check, format, lint, typecheck, test, build)
 
 tag v*.*.*
   ├── prime-build-cache  (shared build-prod stage → gha cache)

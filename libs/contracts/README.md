@@ -9,14 +9,42 @@ backend modules and generated clients.
 ## Public API
 
 ```ts
-import { PaginationDto, PageMetaDto, PageDto } from '@nestjs-fastify-nx/contracts';
+import {
+  ListResponseDto,
+  CursorPaginationDto,
+  toListResponse,
+  toCursorListResponse,
+  PaginationDto,
+  PageMetaDto,
+  PageDto,
+  ProblemDetailsDto,
+  ValidationProblemDetailsDto,
+  ValidationErrorItemDto,
+  ERROR_CODES,
+  errorTypeUrl,
+  type ErrorCode,
+  ApiCommonErrors,
+  type CommonErrorsOptions,
+  ApiPaginatedResponse,
+} from '@nestjs-fastify-nx/contracts';
 ```
 
-| Export          | Purpose                                                       |
-| --------------- | ------------------------------------------------------------- |
-| `PaginationDto` | `class-validator`-decorated request DTO (`page`, `pageSize`)  |
-| `PageMetaDto`   | Response metadata (`total`, `page`, `pageSize`, `totalPages`) |
-| `PageDto<T>`    | Generic paginated response envelope (`items`, `meta`)         |
+Cursor pagination is the default for resource lists; the offset DTOs exist for the rare screen that
+genuinely needs jump-to-page.
+
+| Export                                              | Purpose                                                                                   |
+| --------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `CursorPaginationDto`                               | Cursor request DTO (`limit`, `startingAfter`) — the default for lists                     |
+| `ListResponseDto<T>`                                | Stripe-style flat envelope (`object: 'list'`, `url`, `data`, `hasMore`, `lastCursor?`, …) |
+| `toCursorListResponse` / `toListResponse`           | Build that envelope from a cursor page / an offset page                                   |
+| `PaginationDto`                                     | Offset request DTO (`page`, `pageSize`, capped at 100)                                    |
+| `PageMetaDto` / `PageDto<T>`                        | Offset metadata + envelope (`items`, `meta`)                                              |
+| `ProblemDetailsDto` / `ValidationProblemDetailsDto` | RFC 9457 error bodies — the shape the global filter emits                                 |
+| `ValidationErrorItemDto`                            | One entry of the flat `errors[]` array                                                    |
+| `ERROR_CODES` / `ErrorCode`                         | Stable snake_case `code` values clients branch on                                         |
+| `errorTypeUrl(code)`                                | RFC 9457 `type` URI for a code (`/errors/<kebab-code>`)                                   |
+| `ApiCommonErrors` / `CommonErrorsOptions`           | Documents the error responses a route can emit                                            |
+| `ApiPaginatedResponse`                              | Documents a `ListResponseDto<T>` 200                                                      |
 
 The runtime helpers (`buildPageMeta`, `paginationSkip`, type aliases) live in
 [`@nestjs-fastify-nx/shared`](../shared/README.md). Use this lib when you need

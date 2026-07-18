@@ -1,11 +1,11 @@
 <div align="center">
-  <img src=".github/assets/banner.png" alt="nestjs-fastify-nx — Production-grade NestJS + Fastify + Nx 22 monorepo boilerplate" width="100%" />
+  <img src=".github/assets/banner.png" alt="nestjs-fastify-nx — Production-grade NestJS + Fastify + Nx 23 monorepo boilerplate" width="100%" />
 </div>
 
 <h1 align="center">nestjs-fastify-nx</h1>
 
 <p align="center">
-  <strong>Production-grade NestJS 11 + Fastify 5 + Nx 22 monorepo boilerplate.</strong><br/>
+  <strong>Production-grade NestJS 11 + Fastify 5 + Nx 23 monorepo boilerplate.</strong><br/>
   DDD · CQRS · Better Auth · GraphQL · Socket.io · BullMQ · OpenTelemetry · Sentry — wired and tested.
 </p>
 
@@ -22,9 +22,9 @@
 <p align="center">
   <img alt="NestJS" src="https://img.shields.io/badge/NestJS-11-E0234E?logo=nestjs&logoColor=white&style=flat-square" />
   <img alt="Fastify" src="https://img.shields.io/badge/Fastify-5-000000?logo=fastify&logoColor=white&style=flat-square" />
-  <img alt="Nx" src="https://img.shields.io/badge/Nx-22-143055?logo=nx&logoColor=white&style=flat-square" />
+  <img alt="Nx" src="https://img.shields.io/badge/Nx-23-143055?logo=nx&logoColor=white&style=flat-square" />
   <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-6-3178C6?logo=typescript&logoColor=white&style=flat-square" />
-  <img alt="Node" src="https://img.shields.io/badge/Node.js-22-339933?logo=node.js&logoColor=white&style=flat-square" />
+  <img alt="Node" src="https://img.shields.io/badge/Node.js-24-339933?logo=node.js&logoColor=white&style=flat-square" />
   <img alt="pnpm" src="https://img.shields.io/badge/pnpm-10.33-F69220?logo=pnpm&logoColor=white&style=flat-square" />
   <img alt="Prisma" src="https://img.shields.io/badge/Prisma-7-2D3748?logo=prisma&logoColor=white&style=flat-square" />
   <img alt="PostgreSQL" src="https://img.shields.io/badge/PostgreSQL-18-336791?logo=postgresql&logoColor=white&style=flat-square" />
@@ -95,7 +95,7 @@ If you've ever shipped a Node service to production, you've written this code al
 
 | Layer          | Technology                                                         |
 | -------------- | ------------------------------------------------------------------ |
-| Runtime        | Node.js 22, pnpm 10.33, TypeScript 6                               |
+| Runtime        | Node.js 24, pnpm 10.33, TypeScript 6                               |
 | Framework      | NestJS 11 + Fastify 5                                              |
 | ORM            | Prisma 7 (driver adapter `@prisma/adapter-pg`)                     |
 | Database       | PostgreSQL 18 (native `uuidv7()`, async I/O via io_uring)          |
@@ -110,7 +110,7 @@ If you've ever shipped a Node service to production, you've written this code al
 | Observability  | OpenTelemetry SDK + Sentry NestJS + Prometheus (`prom-client`)     |
 | Logging        | nestjs-pino (structured JSON, pino-http)                           |
 | Scheduling     | `@nestjs/schedule` + cron in the dedicated `scheduler` app         |
-| Monorepo       | Nx 22 (`@nx/nest`, `@nx/webpack`, `@nx/vite`, `@nx/vitest`)        |
+| Monorepo       | Nx 23 (`@nx/nest`, `@nx/webpack`, `@nx/vite`, `@nx/vitest`)        |
 | Bundler        | Webpack 5 (NestJS-correct decorator metadata via `tsc` compiler)   |
 | Test runner    | Vitest 4 + Testcontainers + Supertest                              |
 | API codegen    | Orval 8 → `libs/api-client`                                        |
@@ -270,7 +270,7 @@ Defense-in-depth across five layers — every layer runs locally and gates CI:
 
 | Layer          | Tool          | Local                             | CI                            |
 | -------------- | ------------- | --------------------------------- | ----------------------------- |
-| Secrets        | Gitleaks      | lefthook pre-commit + pre-push    | `ci.yml` (`secret-scan`)      |
+| Secrets        | Gitleaks      | lefthook pre-push (full history)  | `ci.yml` (`secret-scan`)      |
 | Dependencies   | OSV-Scanner   | `scripts/security/scan-deps.sh`   | `ci.yml` (`dep-scan`)         |
 | SAST           | Semgrep       | `scripts/security/scan-sast.sh`   | `release.yml`                 |
 | Container CVEs | Trivy         | `scripts/security/scan-images.sh` | `release.yml`                 |
@@ -311,13 +311,19 @@ pnpm nx run-many -t test --parallel=3
 git tag v1.2.3 && git push origin v1.2.3
 ```
 
-Triggers `release.yml`, which:
+Triggers `release.yml`, which per app:
 
-1. Builds + pushes 4 images to GHCR with SBOM + SLSA provenance.
-2. Signs each image with Cosign (keyless Fulcio OIDC).
-3. Gates on Trivy (HIGH/CRITICAL, fixable only) + Semgrep (ERROR).
-4. Runs the migration container against the production DB.
-5. Hits the Coolify webhook to roll out the new tag.
+1. Builds the image into the runner's local daemon — nothing published yet.
+2. Gates on Trivy (HIGH/CRITICAL, fixable only). A failing scan publishes nothing, so a
+   vulnerable image never reaches GHCR and is never signed.
+3. Pushes to GHCR with SBOM + SLSA provenance, then signs the digest with Cosign
+   (keyless Fulcio OIDC).
+4. Runs Semgrep (ERROR) as a separate job.
+
+**It stops there — the release does not deploy.** Running migrations and rolling out are
+deployment-specific (your environment owns its DB credentials and rollout mechanism), so they are
+deliberately not wired into CI: pull the published tag, run the migration image against your
+database, then restart the services. See [docs/deployment.md](./docs/deployment.md).
 
 Verify a published tag locally:
 
@@ -349,7 +355,7 @@ Contributions are very welcome — bug reports, feature requests, and pull reque
 
 1. Fork → feature branch from `main`.
 2. Use [Conventional Commits](https://www.conventionalcommits.org/) — enforced by commitlint (`feat:`, `fix:`, `refactor:`, `docs:`, …).
-3. Lefthook runs lint-staged + Gitleaks on commit; full Gitleaks history scan on push.
+3. Lefthook runs lint-staged + typecheck on commit, commitlint on the message, and a full Gitleaks history scan on push.
 4. CI must be green: lint, typecheck, unit tests, build, secret + dep scans.
 5. Open a PR — describe the _why_, link the issue, include a test plan.
 
