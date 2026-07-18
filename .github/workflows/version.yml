@@ -70,12 +70,16 @@ jobs:
         env:
           # Nx Release creates the GitHub Release through this token.
           GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+          # Pass workflow inputs through env, never interpolated straight into the shell —
+          # `${{ }}` in a run block is a shell-injection sink even for workflow_dispatch inputs.
+          INPUT_SPECIFIER: ${{ inputs.specifier }}
+          INPUT_DRY_RUN: ${{ inputs.dry-run }}
         run: |
           SPECIFIER=""
-          if [ "${{ inputs.specifier }}" != "auto" ]; then
-            SPECIFIER="${{ inputs.specifier }}"
+          if [ "$INPUT_SPECIFIER" != "auto" ]; then
+            SPECIFIER="$INPUT_SPECIFIER"
           fi
-          if [ "${{ inputs.dry-run }}" = "true" ]; then
+          if [ "$INPUT_DRY_RUN" = "true" ]; then
             pnpm nx release $SPECIFIER --dry-run --verbose
           else
             pnpm nx release $SPECIFIER --yes

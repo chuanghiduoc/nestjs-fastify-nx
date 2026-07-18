@@ -63,10 +63,20 @@ export class UploadVerificationProcessor extends WorkerHost {
   }
 
   private async reject(key: string, bucket: string, failureReason: string): Promise<void> {
-    await this.prisma.db.storedFile.updateMany({
-      where: { key },
+    // Mirror the success-path status guard: only flip VERIFYING → REJECTED. Without it, a
+    // duplicate/retried job could re-reject and delete an object another execution already
+    // marked READY (or already rejected+deleted), destroying a live file or double-deleting.
+    const result = await this.prisma.db.storedFile.updateMany({
+      where: { key, status: STORED_FILE_STATUS.VERIFYING },
       data: { status: STORED_FILE_STATUS.REJECTED, failureReason },
     });
+    if (result.count === 0) {
+      this.logger.warn(
+        { key },
+        'verify-magic-bytes: reject skipped — record not in VERIFYING state (already processed)',
+      );
+      return;
+    }
     await this.storage.delete(key, bucket);
   }
 }

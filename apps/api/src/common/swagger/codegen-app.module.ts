@@ -4,7 +4,7 @@ import { ConfigModule } from '@nestjs/config';
 import { CqrsModule } from '@nestjs/cqrs';
 import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { DatabaseModule } from '@nestjs-fastify-nx/infra-database';
-import { RedisCacheModule, RedisQueueModule } from '@nestjs-fastify-nx/infra-redis';
+import { RedisQueueModule } from '@nestjs-fastify-nx/infra-redis';
 import { MessagingModule } from '@nestjs-fastify-nx/infra-messaging';
 import { StorageModule } from '@nestjs-fastify-nx/infra-storage';
 import { BetterAuthModule, BetterAuthGuard, RolesGuard } from '@nestjs-fastify-nx/infra-auth';
@@ -29,7 +29,6 @@ import { AppController } from '../../app/app.controller';
     LoggingModule,
     HealthModule,
     DatabaseModule,
-    RedisCacheModule,
     RedisQueueModule,
     MessagingModule,
     StorageModule,

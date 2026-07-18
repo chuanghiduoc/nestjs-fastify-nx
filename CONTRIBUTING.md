@@ -151,6 +151,8 @@ Enforced by ESLint + Lefthook + CI.
 
 ## Pull Request Checklist
 
+> **Note:** the Lefthook pre-commit hook runs only `lint-staged` + `typecheck` (fast). It does **not** run tests or build — Testcontainers-backed tests are too slow for every commit. Run the full gate yourself before pushing: `pnpm nx affected -t lint test build typecheck --base=origin/main`. CI is the real enforcement point, but running it locally avoids a red PR.
+
 - [ ] Tests added/updated (`pnpm nx test`)
 - [ ] Lint pass (`pnpm nx affected -t lint --base=origin/main`)
 - [ ] Build pass (`pnpm nx affected -t build --base=origin/main`)

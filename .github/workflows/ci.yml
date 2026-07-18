@@ -38,6 +38,17 @@ jobs:
             --recursive
             --lockfile=./pnpm-lock.yaml
 
+  # SAST on every PR, not just release tags — so dependency PRs (auto-merged by
+  # dependabot once required checks pass) and code PRs are both scanned before
+  # landing. Reuses the same Docker-pinned Semgrep script release.yml runs.
+  sast:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - name: Semgrep static analysis
+        run: ./scripts/security/scan-sast.sh
+
   main:
     runs-on: ubuntu-latest
     timeout-minutes: 25

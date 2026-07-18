@@ -148,5 +148,22 @@ describe('PrismaUserRepository (integration)', () => {
       expect(result.items).toHaveLength(1);
       expect(result.items[0].email.toString()).toBe('alpha@test.com');
     });
+
+    it('treats % and _ in the search term as literal characters, not SQL wildcards', async () => {
+      await repository.save(UserFactory.create({ email: '50%off@test.com' }));
+      await repository.save(UserFactory.create({ email: 'has_underscore@test.com' }));
+      await repository.save(UserFactory.create({ email: 'unrelated@test.com' }));
+
+      const percentResult = await repository.findAllCursor({ limit: 10, search: '50%off' });
+      expect(percentResult.items).toHaveLength(1);
+      expect(percentResult.items[0].email.toString()).toBe('50%off@test.com');
+
+      const underscoreResult = await repository.findAllCursor({
+        limit: 10,
+        search: 'has_underscore',
+      });
+      expect(underscoreResult.items).toHaveLength(1);
+      expect(underscoreResult.items[0].email.toString()).toBe('has_underscore@test.com');
+    });
   });
 }, 90_000);

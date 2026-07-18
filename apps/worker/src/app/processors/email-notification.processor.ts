@@ -16,6 +16,10 @@ export interface EmailNotificationPayload {
 }
 
 const EMAIL_CONCURRENCY = positiveIntEnv('WORKER_EMAIL_CONCURRENCY', 5);
+// BullMQ rate limiter (deliveries per window) — separate from concurrency so throughput can be
+// tuned to the SMTP provider's rate limit independent of how many jobs run in parallel.
+const EMAIL_LIMITER_MAX = positiveIntEnv('WORKER_EMAIL_LIMITER_MAX', 100);
+const EMAIL_LIMITER_DURATION_MS = positiveIntEnv('WORKER_EMAIL_LIMITER_DURATION_MS', 60_000);
 // Thirty days covers outbox retention and ordinary manual-replay windows while staying bounded.
 const IDEMPOTENCY_TTL_SECONDS = 30 * 24 * 60 * 60;
 
@@ -30,7 +34,7 @@ function redactEmail(addr: string): string {
 
 @Processor(QUEUE_NAMES.EMAIL_NOTIFICATION, {
   concurrency: EMAIL_CONCURRENCY,
-  limiter: { max: 100, duration: 60_000 },
+  limiter: { max: EMAIL_LIMITER_MAX, duration: EMAIL_LIMITER_DURATION_MS },
 })
 export class EmailNotificationProcessor extends WorkerHost {
   private readonly logger = new Logger(EmailNotificationProcessor.name);

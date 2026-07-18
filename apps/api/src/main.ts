@@ -9,7 +9,6 @@ import { ConfigService } from '@nestjs/config';
 import { Logger } from 'nestjs-pino';
 import { fastifyHelmet } from '@fastify/helmet';
 import fastifyRateLimit from '@fastify/rate-limit';
-import fastifyMultipart from '@fastify/multipart';
 import fastifyCompress from '@fastify/compress';
 import fastifyUnderPressure from '@fastify/under-pressure';
 import { Redis } from 'ioredis';
@@ -187,16 +186,6 @@ async function bootstrap() {
     encodings: ['gzip', 'deflate'],
   });
 
-  const uploadMaxBytes = positiveIntEnv('UPLOAD_MAX_FILE_BYTES', 10_485_760);
-  await fastify.register(fastifyMultipart, {
-    limits: {
-      fileSize: uploadMaxBytes,
-      files: 1,
-      fields: 20,
-      parts: 50,
-    },
-  });
-
   // Must register before betterAuthHandler — reply.hijack() bypasses NestJS ThrottlerGuard.
   const authRateLimitMax = config.get('AUTH_RATE_LIMIT_MAX', { infer: true });
   const authIpRateLimitMax = config.get('AUTH_IP_RATE_LIMIT_MAX', { infer: true });
@@ -222,6 +211,10 @@ async function bootstrap() {
   await fastify.register(fastifyRateLimit, {
     global: false,
     redis: rateLimitRedis,
+    // Fail open on a store error instead of letting @fastify/rate-limit rethrow it as a 500 — a
+    // transient Redis reconnect would otherwise 500 every /api/auth/* call. The account bucket below
+    // still guards credential paths.
+    skipOnError: true,
     // preHandler (not onRequest) so req.body is parsed before keyGenerator reads the email field.
     hook: 'preHandler',
     max: authRateLimitMax,
@@ -259,6 +252,9 @@ async function bootstrap() {
 
   // A second, account-wide bucket complements the per-IP route bucket. Without both, attackers
   // can spray many accounts from one IP or distribute guesses for one account across many IPs.
+  // This bucket keys on the request's email, so it only augments credential paths that carry one
+  // (sign-in, sign-up, request-password-reset). reset-password submits only { token, newPassword }
+  // and is covered by the per-IP bucket alone — its token is unguessable, so that is sufficient.
   fastify.addHook('preHandler', async (req, reply) => {
     const path = req.url.split('?', 1)[0];
     if (!STRICT_AUTH_PATHS.has(path)) return;

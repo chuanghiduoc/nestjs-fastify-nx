@@ -23,6 +23,7 @@ import {
   revalidateWsSession,
   wsData,
 } from './ws-auth.adapter';
+import { BoundedConcurrencyLimiter, jitterDelay } from './bounded-concurrency';
 
 interface WsRedisEnv {
   REDIS_CACHE_HOST: string;
@@ -30,6 +31,7 @@ interface WsRedisEnv {
   REDIS_PUBSUB_DB: number;
   WS_CONNECTION_LIMIT_PER_IP: number;
   WS_SESSION_REVALIDATE_MS: number;
+  WS_SESSION_REVALIDATE_CONCURRENCY: number;
   TRUST_PROXY_HOPS: number;
 }
 
@@ -66,6 +68,9 @@ export class NotificationGateway
   private rateLimitClient!: Redis;
   private revalidationTimer?: NodeJS.Timeout;
   private revalidationInFlight?: Promise<void>;
+  private revalidationAbort?: AbortController;
+  private revalidateIntervalMs = 0;
+  private revalidateConcurrency = 1;
 
   constructor(
     private readonly config: ConfigService<WsRedisEnv, true>,
@@ -107,6 +112,10 @@ export class NotificationGateway
     server.use((socket, next) => void wsAuthMiddleware(socket, next));
 
     const revalidateMs = this.config.get('WS_SESSION_REVALIDATE_MS', { infer: true });
+    this.revalidateIntervalMs = revalidateMs;
+    this.revalidateConcurrency = this.config.get('WS_SESSION_REVALIDATE_CONCURRENCY', {
+      infer: true,
+    });
     this.revalidationTimer = setInterval(() => {
       if (this.revalidationInFlight) return;
       this.revalidationInFlight = this.revalidateConnectedSockets().finally(() => {
@@ -120,6 +129,9 @@ export class NotificationGateway
 
   async onApplicationShutdown(): Promise<void> {
     if (this.revalidationTimer) clearInterval(this.revalidationTimer);
+    // Cancel any pending per-socket jitter so an in-flight cycle settles now instead of blocking
+    // the graceful Redis-client close for up to WS_SESSION_REVALIDATE_MS.
+    this.revalidationAbort?.abort();
     await this.revalidationInFlight;
     // Guard the optional chaining — shutdown can fire before afterInit() ran.
     const closes: Promise<unknown>[] = [];
@@ -130,26 +142,46 @@ export class NotificationGateway
     await Promise.allSettled(closes);
   }
 
+  // Bounded concurrency caps how many Better Auth getSession() calls run at once; per-socket
+  // jitter spreads the burst across the full interval instead of firing it all on one tick —
+  // together they prevent a thundering herd against session storage on every revalidation cycle.
   private async revalidateConnectedSockets(): Promise<void> {
     const sockets = [...this.server.sockets.sockets.values()];
-    await Promise.allSettled(
-      sockets.map(async (socket) => {
-        try {
-          await revalidateWsSession(this.auth, socket);
-          await renewWsConnectionLease(this.rateLimitClient, socket).catch((err) => {
-            this.logger.warn(
-              `WebSocket connection lease renewal failed: socketId=${socket.id} error=${String(err)}`,
-            );
-          });
-        } catch (err) {
-          const user = wsData(socket).user;
-          this.logger.warn(
-            `Disconnecting revoked WebSocket: userId=${user?.userId ?? 'unknown'} socketId=${socket.id} reason=${String(err)}`,
-          );
-          socket.disconnect(true);
-        }
-      }),
-    );
+    if (sockets.length === 0) return;
+
+    const limiter = new BoundedConcurrencyLimiter(this.revalidateConcurrency);
+    const intervalMs = this.revalidateIntervalMs;
+    const abort = new AbortController();
+    this.revalidationAbort = abort;
+
+    try {
+      await Promise.allSettled(
+        sockets.map(async (socket) => {
+          await jitterDelay(intervalMs, abort.signal);
+          if (abort.signal.aborted) return;
+          await limiter.run(() => this.revalidateSocket(socket));
+        }),
+      );
+    } finally {
+      this.revalidationAbort = undefined;
+    }
+  }
+
+  private async revalidateSocket(socket: Socket): Promise<void> {
+    try {
+      await revalidateWsSession(this.auth, socket);
+      await renewWsConnectionLease(this.rateLimitClient, socket).catch((err) => {
+        this.logger.warn(
+          `WebSocket connection lease renewal failed: socketId=${socket.id} error=${String(err)}`,
+        );
+      });
+    } catch (err) {
+      const user = wsData(socket).user;
+      this.logger.warn(
+        `Disconnecting revoked WebSocket: userId=${user?.userId ?? 'unknown'} socketId=${socket.id} reason=${String(err)}`,
+      );
+      socket.disconnect(true);
+    }
   }
 
   async handleConnection(socket: Socket): Promise<void> {

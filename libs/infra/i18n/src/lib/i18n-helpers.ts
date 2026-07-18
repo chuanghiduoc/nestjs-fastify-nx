@@ -48,7 +48,18 @@ export function resolveRequestLocale(source: LocaleSource, fallback = 'en'): str
 function readQuery(source: LocaleSource): Record<string, unknown> | undefined {
   if (!source || typeof source !== 'object') return undefined;
   const q = (source as { query?: unknown }).query;
-  return q && typeof q === 'object' ? (q as Record<string, unknown>) : undefined;
+  if (q && typeof q === 'object') return q as Record<string, unknown>;
+  // A Fetch API Request (what Better Auth callbacks pass) has no `.query` — the query string lives
+  // in `.url`. Parse it so `?lang=` still resolves for transactional emails, not just controllers.
+  const url = (source as { url?: unknown }).url;
+  if (typeof url === 'string') {
+    try {
+      return Object.fromEntries(new URL(url).searchParams);
+    } catch {
+      return undefined;
+    }
+  }
+  return undefined;
 }
 
 function readHeader(source: LocaleSource, name: string): string | undefined {

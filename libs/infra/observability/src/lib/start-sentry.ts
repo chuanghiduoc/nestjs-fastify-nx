@@ -57,5 +57,7 @@ export async function reportFatalError(error: unknown, serviceName: string): Pro
   process.stderr.write(`[${serviceName}] fatal bootstrap error: ${rendered}\n`);
   Sentry.captureException(error, { tags: { service: serviceName, phase: 'bootstrap' } });
   await Sentry.flush(2_000).catch(() => false);
-  process.exitCode = 1;
+  // Hard exit, not just exitCode: open Prisma/ioredis sockets from a partial boot keep the event
+  // loop alive, so the process would hang instead of exiting for the orchestrator to restart.
+  process.exit(1);
 }

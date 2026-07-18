@@ -29,6 +29,7 @@ interface StalledEvent {
 // linger forever without a cap. 1h covers the longest legitimate job.
 const MAX_ACTIVE_AGE_MS = 60 * 60 * 1000;
 const MAX_ACTIVE_AGE_NS = BigInt(MAX_ACTIVE_AGE_MS) * 1_000_000n;
+const SWEEP_INTERVAL_NS = BigInt(5 * 60 * 1000) * 1_000_000n;
 
 // @QueueEventsListener requires a literal name — one subclass per queue.
 // QueueEvents is a broadcast stream: at API_REPLICAS > 1 every replica receives every event, so
@@ -36,6 +37,7 @@ const MAX_ACTIVE_AGE_NS = BigInt(MAX_ACTIVE_AGE_MS) * 1_000_000n;
 // leader (single writer) so `sum()` over replicas equals the real job count.
 abstract class QueueMetricsListenerBase extends QueueEventsHost {
   private readonly activeAt = new Map<string, bigint>();
+  private lastSweepAt = 0n;
 
   constructor(
     private readonly metrics: MetricsService,
@@ -49,7 +51,14 @@ abstract class QueueMetricsListenerBase extends QueueEventsHost {
   // stranding the entry on the ex-leader. It is per-replica state; only the metric write is gated.
   @OnQueueEvent('active')
   onActive(args: ActiveEvent): void {
-    this.activeAt.set(args.jobId, process.hrtime.bigint());
+    const now = process.hrtime.bigint();
+    this.activeAt.set(args.jobId, now);
+    // A terminal event landing on another replica strands this entry; `stalled` is too rare to be
+    // the only sweep trigger, so sweep here too — throttled to at most once per window.
+    if (now - this.lastSweepAt >= SWEEP_INTERVAL_NS) {
+      this.lastSweepAt = now;
+      this.sweepStale();
+    }
   }
 
   @OnQueueEvent('completed')

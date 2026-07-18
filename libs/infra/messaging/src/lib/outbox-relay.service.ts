@@ -110,10 +110,11 @@ export class OutboxRelayService implements OnModuleInit, OnModuleDestroy {
         return 0;
       }
 
+      // claimBatch() already incremented attempts for every claimed row, so each must be attempted
+      // this tick or it silently burns a retry — a failed row is retried later, it doesn't block.
       let dispatched = 0;
       for (const row of claimed) {
-        const ok = await this.dispatchOne(row);
-        if (ok) dispatched++;
+        if (await this.dispatchOne(row)) dispatched++;
       }
 
       await this.checkStuckRows();
@@ -157,7 +158,7 @@ export class OutboxRelayService implements OnModuleInit, OnModuleDestroy {
              SELECT id
                FROM "outbox_events"
               WHERE "processedAt" IS NULL AND attempts < $1
-              ORDER BY "createdAt"
+              ORDER BY "createdAt", id
               LIMIT $2
               FOR UPDATE SKIP LOCKED
            )

@@ -184,6 +184,12 @@ export function createBetterAuth(
     trustedOrigins,
     advanced: {
       database: { generateId: false }, // Postgres owns PKs via uuidv7() — B-tree friendly.
+      // Secure whenever the app is served over HTTPS — keyed on the baseURL protocol, NOT NODE_ENV
+      // alone, so an HTTPS staging/preview deploy (NODE_ENV != production) still gets Secure +
+      // __Secure-. httpOnly + SameSite=Lax are Better Auth defaults; SameSite=None (cross-site) is a
+      // deployment-topology call left to the operator.
+      useSecureCookies:
+        process.env['NODE_ENV'] === 'production' || (baseURL?.startsWith('https://') ?? false),
     },
     plugins: [openAPI()],
   });

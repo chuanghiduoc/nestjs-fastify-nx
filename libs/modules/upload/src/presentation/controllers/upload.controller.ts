@@ -65,7 +65,8 @@ export function verificationJobId(storageKey: string): string {
 @ApiCookieAuth('session')
 export class UploadController {
   private readonly logger = new Logger(UploadController.name);
-  // Must mirror @fastify/multipart cap in main.ts so both layers reject at the same threshold.
+  // Sourced from UPLOAD_MAX_FILE_BYTES — caps the presign policy and the confirm-time size check.
+  // (Uploads go direct-to-S3 via presign, so there is no server-side multipart body to bound.)
   private readonly maxFileSize: number;
   private readonly presignExpiresSeconds: number;
 
@@ -185,7 +186,8 @@ export class UploadController {
     // Publish to a fresh immutable key. The ETag precondition binds the copy to the exact object
     // version checked above, closing the HEAD/read/copy race. A replay can create another file but
     // can never overwrite a key already returned to a client.
-    const extension = dto.key.slice(dto.key.lastIndexOf('.'));
+    const dotIndex = dto.key.lastIndexOf('.');
+    const extension = dotIndex >= 0 ? dto.key.slice(dotIndex) : '';
     const fileId = generateId();
     const finalKey = `files/${req.user.userId}/${fileId}${extension}`;
     // Signing is offline and does not require the destination to exist. Do it before the
@@ -231,10 +233,20 @@ export class UploadController {
       });
     }
 
-    await this.prisma.db.storedFile.update({
-      where: { id: fileId },
+    // CAS on FINALIZING (mirrors every other status write in this flow) rather than update-by-id:
+    // if an orphan purge deleted the row after the owner was hard-deleted mid-confirm, a plain
+    // update() would throw a raw P2025 500 even though finalize already succeeded.
+    const transitioned = await this.prisma.db.storedFile.updateMany({
+      where: { id: fileId, status: STORED_FILE_STATUS.FINALIZING },
       data: { status: STORED_FILE_STATUS.VERIFYING },
     });
+    if (transitioned.count === 0) {
+      this.logger.error({ fileId, finalKey }, 'stored-file row missing at VERIFYING transition');
+      throw new InternalServerErrorException({
+        messageKey: I18N_KEYS.errors.upload.commit_failed,
+        message: 'Failed to finalize upload; please retry',
+      });
+    }
 
     // Asynchronous defense-in-depth recheck on the immutable final object. Future scanners can
     // extend this queue, but the current worker intentionally verifies magic bytes only.

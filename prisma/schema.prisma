@@ -50,6 +50,10 @@ model Session {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+  // Backs the scheduler's expired-session purge (SessionCleanupTask). Better Auth never deletes
+  // a session row itself, so without this index "WHERE expiresAt < cutoff" degrades into a
+  // sequential scan as the table grows unbounded.
+  @@index([expiresAt])
   @@map("sessions")
 }
 
@@ -134,7 +138,7 @@ model OutboxEvent {
 
 // `userId` intentionally has no FK — audit must survive User deletion.
 // Range-partitioned monthly by `createdAt` (see migration
-// `partition_audit_logs`). Postgres requires the partition key to participate
+// `20260501000000_init`). Postgres requires the partition key to participate
 // in the primary key, hence the composite `@@id([id, createdAt])` —
 // application stamps UUIDv7 ids so id-only uniqueness is preserved by
 // construction even though no global UNIQUE constraint enforces it.

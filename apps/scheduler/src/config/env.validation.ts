@@ -71,6 +71,7 @@ const schedulerEnvSchema = z
     STORED_FILE_CLEANUP_BATCH_SIZE: z.coerce.number().int().min(10).max(10_000).default(500),
     STORED_FILE_FINALIZING_STALE_MINUTES: z.coerce.number().int().min(5).max(1_440).default(60),
     STORED_FILE_VERIFYING_STALE_HOURS: z.coerce.number().int().min(1).max(168).default(24),
+    STORED_FILE_ORPHAN_GRACE_MINUTES: z.coerce.number().int().min(5).max(1_440).default(60),
 
     OUTBOX_POLL_INTERVAL_MS: z.coerce.number().int().min(100).max(60_000).default(1_000),
     OUTBOX_BATCH_SIZE: z.coerce.number().int().min(1).max(1_000).default(50),
@@ -84,6 +85,10 @@ const schedulerEnvSchema = z
     VERIFICATION_PURGE_GRACE_DAYS: z.coerce.number().int().min(1).max(365).default(1),
     VERIFICATION_PURGE_BATCH_SIZE: z.coerce.number().int().min(100).max(10_000).default(1_000),
     VERIFICATION_PURGE_MAX_BATCHES: z.coerce.number().int().min(1).max(10_000).default(200),
+
+    SESSION_PURGE_GRACE_DAYS: z.coerce.number().int().min(1).max(365).default(1),
+    SESSION_PURGE_BATCH_SIZE: z.coerce.number().int().min(100).max(10_000).default(1_000),
+    SESSION_PURGE_MAX_BATCHES: z.coerce.number().int().min(1).max(10_000).default(200),
 
     EVENT_PUBLISHER_DRIVER: z.enum(['inprocess', 'outbox']).default('inprocess'),
 

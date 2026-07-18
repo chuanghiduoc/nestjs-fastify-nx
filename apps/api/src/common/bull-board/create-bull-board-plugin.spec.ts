@@ -112,7 +112,7 @@ describe('createBullBoardPlugin', () => {
     const call = calls.find((c) => c[0] === 'onRequest');
     if (!call) throw new Error('onRequest hook not registered');
     return call[1] as (
-      req: { headers: Record<string, string | undefined> },
+      req: { headers: Record<string, string | undefined>; url?: string },
       reply: {
         header: ReturnType<typeof vi.fn>;
         status: ReturnType<typeof vi.fn>;
@@ -121,25 +121,42 @@ describe('createBullBoardPlugin', () => {
     ) => Promise<void>;
   }
 
-  it('rejects request without Authorization header with 401', async () => {
+  function makeReply() {
+    return {
+      header: vi.fn().mockReturnThis(),
+      status: vi.fn().mockReturnThis(),
+      send: vi.fn().mockReturnThis(),
+    };
+  }
+
+  it('rejects request without Authorization header with 401 problem+json', async () => {
     const plugin = createBullBoardPlugin(defaultOpts);
     const fastify = makeFastify();
     await plugin(fastify);
     const hook = getOnRequestHook(fastify);
-    const reply = { header: vi.fn(), status: vi.fn().mockReturnThis(), send: vi.fn() };
-    await hook({ headers: {} }, reply);
+    const reply = makeReply();
+    await hook({ headers: {}, url: '/api/admin/queues' }, reply);
     expect(reply.status).toHaveBeenCalledWith(401);
+    expect(reply.header).toHaveBeenCalledWith('WWW-Authenticate', 'Basic realm="Bull Board"');
+    expect(reply.header).toHaveBeenCalledWith('content-type', 'application/problem+json');
+    const [body] = reply.send.mock.calls[0] as [Record<string, unknown>];
+    expect(body).toMatchObject({ status: 401, code: 'unauthorized' });
   });
 
-  it('rejects request with wrong credentials with 401', async () => {
+  it('rejects request with wrong credentials with 401 problem+json', async () => {
     const plugin = createBullBoardPlugin(defaultOpts);
     const fastify = makeFastify();
     await plugin(fastify);
     const hook = getOnRequestHook(fastify);
-    const reply = { header: vi.fn(), status: vi.fn().mockReturnThis(), send: vi.fn() };
+    const reply = makeReply();
     const wrongCreds = Buffer.from('admin:wrong').toString('base64');
-    await hook({ headers: { authorization: `Basic ${wrongCreds}` } }, reply);
+    await hook(
+      { headers: { authorization: `Basic ${wrongCreds}` }, url: '/api/admin/queues' },
+      reply,
+    );
     expect(reply.status).toHaveBeenCalledWith(401);
+    const [body] = reply.send.mock.calls[0] as [Record<string, unknown>];
+    expect(body).toMatchObject({ status: 401, code: 'unauthorized' });
   });
 
   it('allows request with correct credentials (no 401)', async () => {
@@ -147,9 +164,12 @@ describe('createBullBoardPlugin', () => {
     const fastify = makeFastify();
     await plugin(fastify);
     const hook = getOnRequestHook(fastify);
-    const reply = { header: vi.fn(), status: vi.fn().mockReturnThis(), send: vi.fn() };
+    const reply = makeReply();
     const correctCreds = Buffer.from('admin:secret').toString('base64');
-    await hook({ headers: { authorization: `Basic ${correctCreds}` } }, reply);
+    await hook(
+      { headers: { authorization: `Basic ${correctCreds}` }, url: '/api/admin/queues' },
+      reply,
+    );
     expect(reply.status).not.toHaveBeenCalled();
   });
 
@@ -159,9 +179,35 @@ describe('createBullBoardPlugin', () => {
     const fastify = makeFastify();
     await plugin(fastify);
     const hook = getOnRequestHook(fastify);
-    const reply = { header: vi.fn(), status: vi.fn().mockReturnThis(), send: vi.fn() };
+    const reply = makeReply();
     const creds = Buffer.from('admin:secret:with:colons').toString('base64');
-    await hook({ headers: { authorization: `Basic ${creds}` } }, reply);
+    await hook({ headers: { authorization: `Basic ${creds}` }, url: '/api/admin/queues' }, reply);
     expect(reply.status).not.toHaveBeenCalled();
+  });
+
+  it('registers a scoped rate-limit plugin before the Basic-Auth hook', async () => {
+    const plugin = createBullBoardPlugin(defaultOpts);
+    const fastify = makeFastify();
+    await plugin(fastify);
+
+    const registerCalls = vi.mocked(fastify.register).mock.calls;
+    const rateLimitCallIndex = registerCalls.findIndex(
+      (call) => typeof call[1] === 'object' && call[1] !== null && 'max' in call[1],
+    );
+    expect(rateLimitCallIndex).toBeGreaterThanOrEqual(0);
+
+    const addHookCalls = vi.mocked(fastify.addHook).mock.calls;
+    const onRequestHookIndex = addHookCalls.findIndex((call) => call[0] === 'onRequest');
+    expect(onRequestHookIndex).toBeGreaterThanOrEqual(0);
+
+    // fastify.register and fastify.addHook are separate mocks — assert the rate-limit config
+    // shape itself carries a sane per-IP threshold rather than trying to interleave call order
+    // across two different mock timelines.
+    const rateLimitOpts = registerCalls[rateLimitCallIndex]?.[1] as {
+      max: number;
+      timeWindow: number;
+    };
+    expect(rateLimitOpts.max).toBe(10);
+    expect(rateLimitOpts.timeWindow).toBe(60_000);
   });
 });

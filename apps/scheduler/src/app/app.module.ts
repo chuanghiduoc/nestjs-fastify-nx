@@ -17,6 +17,7 @@ import { HeartbeatTask } from './tasks/heartbeat.task';
 import { OutboxCleanupTask } from './tasks/outbox-cleanup.task';
 import { SchedulerHealthService } from './health/scheduler-health.service';
 import { SchedulerLeadershipModule } from './leadership/scheduler-leadership.module';
+import { SessionCleanupTask } from './tasks/session-cleanup.task';
 import { StoredFileCleanupTask } from './tasks/stored-file-cleanup.task';
 import { VerificationCleanupTask } from './tasks/verification-cleanup.task';
 
@@ -46,6 +47,7 @@ import { VerificationCleanupTask } from './tasks/verification-cleanup.task';
     HeartbeatTask,
     OutboxCleanupTask,
     SchedulerHealthService,
+    SessionCleanupTask,
     StoredFileCleanupTask,
     VerificationCleanupTask,
     // Tracing only here — the scheduler has no Prometheus registry, so cqrs_* metrics are
