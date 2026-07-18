@@ -143,7 +143,7 @@ OTEL_ENABLED=true
 OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
 ENABLE_METRICS=true
 # Allow the Prometheus container (Docker bridge) to scrape /metrics
-METRICS_ALLOW_CIDRS=172.0.0.0/8
+METRICS_ALLOW_CIDRS=172.16.0.0/12
 ```
 
 | Service    | URL                    | Notes                 |

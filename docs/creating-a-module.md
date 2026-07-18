@@ -108,12 +108,12 @@ storage…), not DDD bounded contexts, so the DDD module generator doesn't apply
 `--directory=modules|composition`). To add one:
 
 - **Preferred:** copy the closest existing infra lib (e.g. `libs/infra/redis`) and rename — it already
-  matches the workspace conventions (inferred targets, `vite-tsconfig-paths` in the vitest config,
-  `scope:infra` tag).
+  matches the workspace conventions (inferred targets, `resolve: { tsconfigPaths: true }` in the
+  vitest config, `scope:infra` tag).
 - `pnpm gen:lib` / `pnpm gen:app` are raw `@nx/js:library` / `@nx/nest:application` passthroughs.
   Their Nx-default output drifts from this repo (it emits an explicit `build` target and the
   deprecated `nxViteTsPaths`/`nxCopyAssetsPlugin` vite plugins), so align it afterwards: delete the
-  explicit targets and swap the vitest plugins to `vite-tsconfig-paths`. Also add the correct
+  explicit targets and switch the vitest config to `resolve: { tsconfigPaths: true }`. Also add the correct
   `scope:*` / `type:*` tags so `@nx/enforce-module-boundaries` applies.
 
 ## After Generating

@@ -180,7 +180,7 @@ Optional — local observability (Prometheus · Grafana · Jaeger · Loki · All
 ```
 
 > Enable in `.env`: `OTEL_ENABLED=true`, `OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318`,
-> `ENABLE_METRICS=true`, `METRICS_ALLOW_CIDRS=172.0.0.0/8`
+> `ENABLE_METRICS=true`, `METRICS_ALLOW_CIDRS=172.16.0.0/12`
 
 Once the stack is up:
 

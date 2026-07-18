@@ -41,7 +41,7 @@ export class ListResponseDto<T = unknown> {
 
   @ApiPropertyOptional({
     description:
-      'Total matching rows. Only present when `?withTotalCount=true` is requested (COUNT is expensive on large tables).',
+      'Total matching rows. Omitted (undefined) on large/growth tables where COUNT would be a hot path — clients navigate via `hasMore`, not this.',
     example: 1284,
   })
   totalCount?: number;

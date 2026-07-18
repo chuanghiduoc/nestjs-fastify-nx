@@ -70,8 +70,7 @@ export class ProblemDetailsDto {
 
 export class ValidationErrorItemDto {
   @ApiProperty({
-    description:
-      'Path to the offending field. Dotted notation for objects, bracket for arrays. Prefixed with `query.`/`header.`/`path.` when the violation is not in the request body.',
+    description: 'Path to the offending field. Dotted notation for objects, bracket for arrays.',
     example: 'items[0].quantity',
   })
   path!: string;
