@@ -22,6 +22,11 @@ const envSchema = z
     // Prisma query events above this duration are logged as `warn` (query template + duration
     // only — never params, which can carry PII/secrets). See PrismaService.
     DATABASE_SLOW_QUERY_MS: z.coerce.number().int().min(1).default(200),
+    // Dev-only full query logging (incl. params) at debug level. PrismaService ignores it in production.
+    DATABASE_LOG_QUERIES: z
+      .string()
+      .default('false')
+      .transform((v) => v === 'true'),
 
     // Redis cache
     REDIS_CACHE_HOST: z.string().default('localhost'),
