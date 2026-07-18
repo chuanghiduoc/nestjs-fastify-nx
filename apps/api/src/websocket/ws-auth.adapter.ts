@@ -24,6 +24,16 @@ interface WsConnectionLease {
   member: string;
 }
 
+// socket.io types `socket.data` as `any`; this is the shape this app stores on it.
+export interface WsSocketData {
+  user?: { userId: string; email: string; role: string };
+  connectionLease?: WsConnectionLease;
+}
+
+export function wsData(socket: Socket): WsSocketData {
+  return socket.data as WsSocketData;
+}
+
 // Browser SPAs forward the Cookie header directly; non-browser clients pass auth.token, which is
 // wrapped into a synthetic cookie so both code paths are identical.
 // Redis sorted-set leases cap sockets per IP without leaking counts after process crashes.
@@ -73,7 +83,7 @@ export async function revalidateWsSession(auth: BetterAuthInstance, socket: Sock
     throw new Error('UNAUTHORIZED: Account not active');
   }
 
-  socket.data['user'] = {
+  wsData(socket).user = {
     userId: user.id,
     email: user.email,
     role: user.role,
@@ -81,7 +91,7 @@ export async function revalidateWsSession(auth: BetterAuthInstance, socket: Sock
 }
 
 export async function renewWsConnectionLease(redis: Redis, socket: Socket): Promise<void> {
-  const lease = socket.data['connectionLease'] as WsConnectionLease | undefined;
+  const lease = wsData(socket).connectionLease;
   if (!lease) return;
   await redis.eval(
     ACQUIRE_CONNECTION_SCRIPT,
@@ -118,7 +128,7 @@ export function createWsAuthMiddleware(auth: BetterAuthInstance, options: WsAuth
             await redis.eval(RELEASE_CONNECTION_SCRIPT, 1, key, socket.id);
             return next(new Error('TOO_MANY_CONNECTIONS: Per-IP limit exceeded'));
           }
-          socket.data['connectionLease'] = { key, member: socket.id } satisfies WsConnectionLease;
+          wsData(socket).connectionLease = { key, member: socket.id };
           socket.on('disconnect', () => {
             void redis.eval(RELEASE_CONNECTION_SCRIPT, 1, key, socket.id).catch(() => undefined);
           });

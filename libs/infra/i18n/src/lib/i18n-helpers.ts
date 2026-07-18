@@ -1,4 +1,4 @@
-import { I18nService } from 'nestjs-i18n';
+import type { I18nService } from 'nestjs-i18n';
 
 // Falls back to the literal key when translation lookup fails — keeps error responses informative when a JSON file is missing a row.
 export async function translateOrFallback(
@@ -30,7 +30,7 @@ export function resolveRequestLocale(source: LocaleSource, fallback = 'en'): str
   if (!source) return fallback;
 
   const query = readQuery(source);
-  const queryLang = typeof query?.['lang'] === 'string' ? (query['lang'] as string) : undefined;
+  const queryLang = typeof query?.['lang'] === 'string' ? query['lang'] : undefined;
   if (queryLang) return normalize(queryLang);
 
   const xLang = readHeader(source, 'x-lang');

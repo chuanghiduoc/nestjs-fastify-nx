@@ -4,6 +4,7 @@
   "license": "MIT",
   "scripts": {
     "postinstall": "node -e \"require('fs').existsSync('prisma/schema.prisma')&&require('child_process').execSync('pnpm exec prisma generate',{stdio:'inherit'})\"",
+    "prepare": "node -e \"process.env.CI||require('child_process').execSync('lefthook install',{stdio:'inherit'})\"",
     "build": "nx run-many --target=build",
     "test": "nx run-many --target=test",
     "lint": "nx run-many --target=lint --all",

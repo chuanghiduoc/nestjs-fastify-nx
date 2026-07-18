@@ -27,7 +27,8 @@
     },
     "lint": {
       "cache": true,
-      "inputs": ["default", "{workspaceRoot}/eslint.config.mjs", "{workspaceRoot}/.prettierrc"]
+      "inputs": ["default", "{workspaceRoot}/eslint.config.mjs", "{workspaceRoot}/.prettierrc"],
+      "options": { "args": "--max-warnings=0" }
     },
     "test": {
       "cache": true,

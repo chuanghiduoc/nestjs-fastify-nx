@@ -21,7 +21,7 @@ export class CorrelationIdMiddleware implements NestMiddleware {
     const requestId = this.cls.get(REQUEST_CONTEXT_KEYS.requestId) ?? resolveRequestId(req.headers);
     const correlationId =
       this.cls.get(REQUEST_CONTEXT_KEYS.correlationId) ??
-      resolveCorrelationId(req.headers as Record<string, unknown>, requestId);
+      resolveCorrelationId(req.headers, requestId);
 
     req.correlationId = correlationId;
     req.requestId = requestId;

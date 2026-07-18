@@ -8,15 +8,17 @@ import type { User } from '../domain/entities/user.entity';
 export class MockUserRepository implements UserRepositoryPort {
   private store = new Map<string, User>();
 
-  async findById(id: string): Promise<User | null> {
-    return this.store.get(id) ?? null;
+  findById(id: string): Promise<User | null> {
+    return Promise.resolve(this.store.get(id) ?? null);
   }
 
-  async findByEmail(email: string): Promise<User | null> {
-    return [...this.store.values()].find((u) => u.email.toString() === email) ?? null;
+  findByEmail(email: string): Promise<User | null> {
+    return Promise.resolve(
+      [...this.store.values()].find((u) => u.email.toString() === email) ?? null,
+    );
   }
 
-  async findAllCursor(options: FindAllCursorOptions): Promise<FindAllCursorResult> {
+  findAllCursor(options: FindAllCursorOptions): Promise<FindAllCursorResult> {
     const { startingAfter, limit, role, status, search } = options;
     let rows = [...this.store.values()];
 
@@ -49,15 +51,16 @@ export class MockUserRepository implements UserRepositoryPort {
 
     const hasMore = rows.length > limit;
     const items = hasMore ? rows.slice(0, limit) : rows;
-    return { items, hasMore };
+    return Promise.resolve({ items, hasMore });
   }
 
-  async save(user: User): Promise<void> {
+  save(user: User): Promise<void> {
     this.store.set(user.id, user);
+    return Promise.resolve();
   }
 
-  async exists(email: string): Promise<boolean> {
-    return [...this.store.values()].some((u) => u.email.toString() === email);
+  exists(email: string): Promise<boolean> {
+    return Promise.resolve([...this.store.values()].some((u) => u.email.toString() === email));
   }
 
   clear(): void {

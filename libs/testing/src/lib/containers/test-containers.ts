@@ -1,5 +1,7 @@
-import { PostgreSqlContainer, StartedPostgreSqlContainer } from '@testcontainers/postgresql';
-import { RedisContainer, StartedRedisContainer } from '@testcontainers/redis';
+import type { StartedPostgreSqlContainer } from '@testcontainers/postgresql';
+import { PostgreSqlContainer } from '@testcontainers/postgresql';
+import type { StartedRedisContainer } from '@testcontainers/redis';
+import { RedisContainer } from '@testcontainers/redis';
 
 export interface TestContainers {
   postgres: StartedPostgreSqlContainer;

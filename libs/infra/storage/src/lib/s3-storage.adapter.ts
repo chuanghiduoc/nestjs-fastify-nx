@@ -294,7 +294,7 @@ export class S3StorageAdapter implements StoragePort, OnModuleInit {
     }
 
     // The source stays committed=false, so a delete failure is bounded by lifecycle TTL.
-    await this.delete(sourceKey, targetBucket).catch((err) => {
+    await this.delete(sourceKey, targetBucket).catch((err: unknown) => {
       this.logger.warn(
         { err, sourceKey, finalKey },
         'finalized upload but failed to remove staging object',

@@ -64,12 +64,14 @@ export class EmailNotificationProcessor extends WorkerHost {
     try {
       const messageId = `<${createHash('sha256').update(jobId).digest('hex')}@nestjs-fastify-nx.local>`;
       await this.mail.send({ to, subject, html: body, messageId });
-      await this.redis.set(key, '1', 'EX', IDEMPOTENCY_TTL_SECONDS).catch((markerError) => {
-        this.logger.error(
-          { jobId: job.id, recipient: toMasked, cause: markerError },
-          'Email delivered but sent-marker persistence failed',
-        );
-      });
+      await this.redis
+        .set(key, '1', 'EX', IDEMPOTENCY_TTL_SECONDS)
+        .catch((markerError: unknown) => {
+          this.logger.error(
+            { jobId: job.id, recipient: toMasked, cause: markerError },
+            'Email delivered but sent-marker persistence failed',
+          );
+        });
       this.logger.log(`Email job #${job.id} delivered to "${toMasked}"`);
     } catch (err) {
       this.logger.error(

@@ -1,5 +1,7 @@
-import { INestApplication, Logger } from '@nestjs/common';
-import { SwaggerModule, DocumentBuilder, OpenAPIObject } from '@nestjs/swagger';
+import type { INestApplication } from '@nestjs/common';
+import { Logger } from '@nestjs/common';
+import type { OpenAPIObject } from '@nestjs/swagger';
+import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import {
   ListResponseDto,
   PageMetaDto,
@@ -162,7 +164,7 @@ async function mergeBetterAuthSpec(app: INestApplication, document: OpenAPIObjec
 
   let authSchema: AuthOpenApiDocument | undefined;
   try {
-    authSchema = (await auth.api.generateOpenAPISchema()) as AuthOpenApiDocument;
+    authSchema = await auth.api.generateOpenAPISchema();
   } catch (err) {
     logger.warn(`Failed to generate Better Auth OpenAPI schema: ${(err as Error).message}`);
     return;
@@ -187,7 +189,7 @@ async function mergeBetterAuthSpec(app: INestApplication, document: OpenAPIObjec
       const tagged = tagOperations(pathItem, AUTH_TAG) as Record<string, unknown>;
       ensurePathParameters(fullPath, tagged);
       normalizeAuthInfraErrors(tagged);
-      document.paths[fullPath] = tagged as (typeof document.paths)[string];
+      document.paths[fullPath] = tagged;
     }
   }
 

@@ -24,16 +24,14 @@ process.stderr.write = ((...args: StderrWriteArgs): boolean => {
 // only needs the DI graph. Any other fault still fails the build.
 const isRedisConnectionError = (err: unknown): boolean => {
   const parts = [String((err as Error)?.message ?? err), (err as { code?: string })?.code ?? ''];
-  const nested = (err as AggregateError)?.errors;
+  const nested = (err as { errors?: { message?: string; code?: string }[] }).errors;
   if (Array.isArray(nested))
     parts.push(...nested.map((e) => `${e?.message ?? ''} ${e?.code ?? ''}`));
   return /ECONNREFUSED|ioredis/i.test(parts.join(' '));
 };
 process.on('uncaughtException', (err) => {
   if (isRedisConnectionError(err)) return;
-  origStderrWrite(
-    `Uncaught exception during spec export: ${(err as Error)?.stack ?? String(err)}\n`,
-  );
+  origStderrWrite(`Uncaught exception during spec export: ${err?.stack ?? String(err)}\n`);
   process.exit(1);
 });
 process.on('unhandledRejection', (reason) => {
@@ -44,7 +42,8 @@ process.on('unhandledRejection', (reason) => {
 
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe, VersioningType } from '@nestjs/common';
-import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify';
+import type { NestFastifyApplication } from '@nestjs/platform-fastify';
+import { FastifyAdapter } from '@nestjs/platform-fastify';
 import { PrismaService } from '@nestjs-fastify-nx/infra-database';
 
 const noConnect = (): Promise<void> => Promise.resolve();

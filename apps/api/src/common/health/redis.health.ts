@@ -57,7 +57,7 @@ abstract class BaseRedisHealthIndicator implements OnModuleDestroy {
     try {
       const result = await withTimeout(this.redis.ping(), PROBE_TIMEOUT_MS);
       if (result !== 'PONG') {
-        return indicator.down({ message: `${key} ping returned ${result}` });
+        return indicator.down({ message: `${key} ping returned ${String(result)}` });
       }
       return indicator.up();
     } catch {
