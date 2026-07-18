@@ -107,10 +107,8 @@ jobs:
             org.opencontainers.image.url=https://github.com/${{ github.repository }}
             org.opencontainers.image.documentation=https://github.com/${{ github.repository }}/blob/main/docs/deployment.md
 
-      # Build into the runner's local daemon only — nothing is published yet. Trivy gates the push
-      # below, so an image with a fixable CRITICAL/HIGH CVE never reaches GHCR and never gets
-      # cosign-signed. Scanning after the push would leave a vulnerable, signed `latest` on the
-      # registry for any deploy automation to pull, with nothing to retract it.
+      # Local daemon only — nothing is published until Trivy passes below, so a vulnerable image
+      # never reaches GHCR and never gets signed. Scanning after the push has nothing to retract.
       - name: Build image for scanning (${{ matrix.app }})
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
         with:
@@ -139,8 +137,8 @@ jobs:
           severity: CRITICAL,HIGH
           ignore-unfixed: true
 
-      # always() so a failing gate still reports its findings to the Security tab. The push step
-      # below has no such condition, so it stays skipped when the scan fails.
+      # always() so a failing gate still reports. The push step below has no such condition, so it
+      # stays skipped when the scan fails.
       - name: Upload Trivy results to GitHub Security
         if: always()
         uses: github/codeql-action/upload-sarif@99df26d4f13ea111d4ec1a7dddef6063f76b97e9 # v4
@@ -148,9 +146,8 @@ jobs:
           sarif_file: trivy-${{ matrix.app }}.sarif
           category: trivy-${{ matrix.app }}
 
-      # Reached only when Trivy passed. Every layer is already in the gha cache from the scan build,
-      # so this is a cache hit, not a rebuild — it re-exports through buildkit to attach SBOM +
-      # provenance, which the local `load` exporter cannot produce.
+      # Cache hit on the scan build's layers, not a rebuild — it re-exports through buildkit to
+      # attach SBOM + provenance, which the local `load` exporter cannot produce.
       - name: Push Docker image (${{ matrix.app }})
         id: build
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7

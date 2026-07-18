@@ -142,10 +142,8 @@ export class UploadController {
       throw this.objectNotFound(dto.key);
     }
 
-    // 422, not 400: the request body is well-formed JSON that already passed ConfirmUploadDto. The
-    // server understood it perfectly and refuses because the *referenced S3 object* violates upload
-    // policy. (413 would be wrong for the oversize case too — the request payload is a few bytes;
-    // it is the stored object that is too large.)
+    // 422, not 400: the body already passed ConfirmUploadDto — it is the referenced S3 object that
+    // breaks policy. 413 would be wrong for oversize too; the request payload is a few bytes.
     if (!ALLOWED_MIME_TYPES.has(meta.contentType)) {
       await this.safeDelete(dto.key);
       throw new UnprocessableEntityException({

@@ -45,9 +45,8 @@ abstract class QueueMetricsListenerBase extends QueueEventsHost {
     super();
   }
 
-  // Map upkeep is deliberately NOT leader-gated: leadership can flip between a job's `active` and
-  // its terminal event, and gating the delete would strand that entry on the ex-leader forever.
-  // Only the metric write is gated — the map is per-replica state, not a global-state metric.
+  // Map upkeep is not leader-gated: leadership can flip between `active` and the terminal event,
+  // stranding the entry on the ex-leader. It is per-replica state; only the metric write is gated.
   @OnQueueEvent('active')
   onActive(args: ActiveEvent): void {
     this.activeAt.set(args.jobId, process.hrtime.bigint());

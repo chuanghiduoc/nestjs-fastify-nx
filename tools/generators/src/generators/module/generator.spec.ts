@@ -141,9 +141,8 @@ describe('module generator', () => {
     ).toBe(true);
   });
 
-  // The generated command/handler must be dispatchable through the CommandBus. Asserting on content
-  // rather than file existence: a handler missing @CommandHandler still produces both files, but
-  // CqrsModule's explorer never registers it, so `commandBus.execute` fails at runtime.
+  // Asserting on content, not file existence: a handler missing @CommandHandler still emits both
+  // files, but the explorer never registers it and commandBus.execute fails at runtime.
   it('generates a command that extends Command<TResult> so execute() infers the return type', async () => {
     await moduleGenerator(tree, { name: 'tasks', directory: 'modules', withCqrs: true });
 

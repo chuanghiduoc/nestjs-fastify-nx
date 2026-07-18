@@ -26,9 +26,8 @@ model User {
   @@index([status])
   @@index([createdAt])
   @@index([status, updatedAt])
-  // Composite backing cursor pagination, which reads ORDER BY createdAt DESC, id DESC.
-  // Declared with the real sort order and the real index name: without them `migrate diff` sees
-  // drift against the DDL and the next `migrate dev` writes a migration that drops this index.
+  // Backs cursor pagination (ORDER BY createdAt DESC, id DESC). Sort order and name must match the
+  // DDL exactly — otherwise `migrate diff` sees drift and the next `migrate dev` drops the index.
   @@index([createdAt(sort: Desc), id(sort: Desc)], map: "users_createdAt_id_desc_idx")
   @@index([email(ops: raw("gin_trgm_ops"))], type: Gin, map: "users_email_trgm_idx")
   @@index([name(ops: raw("gin_trgm_ops"))], type: Gin, map: "users_name_trgm_idx")
@@ -79,9 +78,8 @@ model Verification {
   createdAt  DateTime? @default(now())
   updatedAt  DateTime? @updatedAt
 
-  // Better Auth reads this table only by `identifier` (ordered by createdAt desc, limit 1) on every
-  // password-reset, email-verification, and delete-account confirmation. Without this index each of
-  // those is a sequential scan. `expiresAt` backs the scheduler's expired-token purge.
+  // Better Auth reads this table only by `identifier`, ordered by createdAt — every password-reset,
+  // email-verification and delete-account confirmation. `expiresAt` backs the scheduler's purge.
   @@index([identifier, createdAt(sort: Desc)])
   @@index([expiresAt])
   @@map("verifications")

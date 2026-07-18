@@ -23,9 +23,8 @@ const SIGNATURES: readonly Signature[] = [
 
 export const ALLOWED_MIME_TYPES = new Set(SIGNATURES.map((s) => s.mimeType));
 
-// Canonical extension per mime, derived from the same table that drives magic-byte detection.
-// Hand-maintaining this mapping next to SIGNATURES lets the two drift: a format could become
-// presignable with no signature to verify it against on confirm, or vice versa.
+// Derived from SIGNATURES, not hand-kept beside it: a second list drifts, and a format could then
+// become presignable with no signature to verify it against on confirm.
 export const MIME_EXTENSIONS: ReadonlyMap<string, string> = new Map(
   SIGNATURES.map((s) => [s.mimeType, s.extensions[0]]),
 );

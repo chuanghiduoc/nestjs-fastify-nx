@@ -82,9 +82,8 @@ function sendProblem(
 ): FastifyReply {
   const requestId = resolveRequestId(req.headers);
   (req.raw as { requestId?: string }).requestId = requestId;
-  // Same builder the global filter uses. Hand-rolling the body here is how this plugin ended up
-  // answering `type: 'about:blank'` while every Nest-side error answered `/errors/<code>`, for a
-  // field the DTO documents as having one convention.
+  // Same builder the global filter uses — this plugin runs before the Nest pipeline, so nothing
+  // else would give it the shared shape.
   return reply
     .status(status)
     .header('content-type', PROBLEM_CONTENT_TYPE)

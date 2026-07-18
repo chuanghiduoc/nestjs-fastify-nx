@@ -1,8 +1,7 @@
 import { createTestContainers, deployTestMigrations } from '@nestjs-fastify-nx/testing';
 import type { TestContainers } from '@nestjs-fastify-nx/testing';
 
-// Vitest loads this module once and calls both hooks on it, so module scope is enough to hand the
-// handle from setup to teardown. Specs read the endpoints from process.env, not from here.
+// Vitest calls both hooks on one module instance, so module scope carries the handle across.
 let containers: TestContainers | undefined;
 
 async function stopContainers(): Promise<void> {
@@ -27,8 +26,6 @@ export async function setup(): Promise<void> {
     return;
   }
 
-  // Shared helper rather than a local Promise.all: it starts the containers sequentially and stops
-  // the first one if the second fails, so a half-started pair can't leak past this process.
   containers = await createTestContainers();
 
   // Stop containers on SIGINT/SIGTERM (CI cancel, Ctrl-C) so Docker resources

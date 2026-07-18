@@ -40,11 +40,8 @@ export class OutboxPublisher implements EventPublisherPort {
 
     const transaction = this.prisma.currentTransaction;
     if (!transaction) {
-      // Not an error: an event-only write with no aggregate change is a legitimate use of this
-      // path. But a producer that just mutated state outside a transaction has lost the outbox's
-      // entire point — the event row and the state change can no longer commit or roll back
-      // together. From in here the two cases are indistinguishable, so warn rather than throw and
-      // let the log say which producer to look at.
+      // An event-only write is legitimate here; a producer that also mutated state has lost
+      // atomicity. Indistinguishable from in here, so warn instead of failing a valid caller.
       this.logger.warn(
         `Outbox write outside a transaction (${events.map((e) => e.eventType).join(', ')}) — ` +
           'not atomic with aggregate state. Wrap it in prisma.transaction() if this producer ' +

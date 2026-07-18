@@ -134,9 +134,6 @@ describe('registerIdempotency', () => {
     expect(callCount()).toBe(1);
   });
 
-  // A 2xx with an empty body is a completed mutation. Gating completion on the payload being a
-  // string sent it down the failure path instead, releasing the lock so a retry re-ran the very
-  // side effect the key exists to protect.
   it('completes and replays a 2xx that has no body, running the handler once', async () => {
     const { app, callCount } = await buildApp(redis);
 

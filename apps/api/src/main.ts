@@ -240,9 +240,7 @@ async function bootstrap() {
       const requestId = resolveRequestId(req.headers);
       (req.raw as { requestId?: string }).requestId = requestId;
       return {
-        // Built by the shared helper so a rate-limit 429 carries the same shape — and the same
-        // `type` convention — as a 429 raised by the Nest ThrottlerGuard. Hand-rolling this body is
-        // how it came to answer an rfc6585 URL where every other error answers `/errors/<code>`.
+        // Shared helper so a rate-limit 429 matches a ThrottlerGuard 429 byte for byte.
         ...buildProblemDetails({
           status: HttpStatus.TOO_MANY_REQUESTS,
           title: 'Too Many Requests',

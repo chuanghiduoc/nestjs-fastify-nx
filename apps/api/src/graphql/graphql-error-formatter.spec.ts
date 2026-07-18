@@ -18,8 +18,6 @@ function messagesOf(result: ReturnType<ReturnType<typeof createGraphqlErrorForma
 }
 
 describe('createGraphqlErrorFormatter', () => {
-  // The gap this closes: REST masks an unexpected 5xx in production, Mercurius' default formatter
-  // does not, so the same failure disclosed its raw message on one surface and not the other.
   it('masks an unexpected failure in production', () => {
     const leaky = new GraphQLError('connect ECONNREFUSED 10.0.0.5:5432 (postgres)', {
       originalError: new Error('connect ECONNREFUSED 10.0.0.5:5432 (postgres)'),

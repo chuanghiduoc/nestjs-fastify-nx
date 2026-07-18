@@ -48,9 +48,6 @@ describe('BetterAuthGuard', () => {
     await expect(guard.canActivate(makeContext())).rejects.toThrow(UnauthorizedException);
   });
 
-  // Forbidden, not Unauthorized: the session is valid, so re-authenticating cannot help. 401 would
-  // send an SPA back to login, where Better Auth (which does not check this custom `status` field)
-  // hands out a fresh session — and the next request 401s again, forever.
   it('throws ForbiddenException when the session is valid but the account is not active', async () => {
     for (const status of ['INACTIVE', 'BANNED']) {
       const session = {

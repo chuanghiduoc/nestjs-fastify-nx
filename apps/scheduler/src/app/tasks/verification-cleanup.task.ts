@@ -6,12 +6,8 @@ import { SchedulerLeaderService } from '../leadership/scheduler-leader.service';
 
 const BATCH_SIZE = positiveIntEnv('VERIFICATION_PURGE_BATCH_SIZE', 1000);
 const MAX_BATCHES = positiveIntEnv('VERIFICATION_PURGE_MAX_BATCHES', 200);
-// Better Auth only deletes a verification row when it is successfully consumed, so every abandoned
-// password-reset / email-verification link would otherwise live in the table forever.
-//
-// Rows are kept for a grace window past expiry rather than deleted the moment they expire: Better
-// Auth distinguishes "expired token" from "unknown token", and deleting on the expiry boundary
-// would downgrade a user who clicks a just-stale link to a generic "invalid token" error.
+// Purged past expiry rather than at it: Better Auth distinguishes an expired token from an unknown
+// one, so deleting on the boundary would answer a just-stale link with "invalid token" instead.
 const GRACE_DAYS = positiveIntEnv('VERIFICATION_PURGE_GRACE_DAYS', 1);
 
 @Injectable()

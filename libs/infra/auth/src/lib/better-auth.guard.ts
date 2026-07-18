@@ -68,11 +68,8 @@ export class BetterAuthGuard implements CanActivate {
       status: string;
     };
 
-    // 403, not 401: the session is valid and unexpired, so the credentials are not the problem —
-    // the server understood the request and refuses to authorize a deactivated/banned account.
-    // 401 also traps the client in a loop: Better Auth does not check this custom `status` field on
-    // sign-in, so an SPA reacting to 401 by redirecting to login gets a fresh session and another
-    // 401, forever. 403 lets it surface "account disabled" instead.
+    // 403, not 401: the session is valid, so re-authenticating cannot help. Better Auth does not
+    // check this custom `status` on sign-in, so 401 would loop an SPA through login forever.
     if (user.status !== 'ACTIVE') {
       throw new ForbiddenException({
         messageKey: I18N_KEYS.errors.auth.account_inactive,

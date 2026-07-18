@@ -25,9 +25,7 @@ function buildConfig(): ConfigService {
 }
 
 describe('queueRetryStrategy', () => {
-  // ioredis stops reconnecting for good when retryStrategy returns a non-number. A previous
-  // version returned null past 10 attempts, so any Redis outage lasting longer than ~9s stranded
-  // the queue connection permanently — no self-healing, and no healthcheck watching for it.
+  // ioredis stops reconnecting for good on a non-number, stranding the queue after any outage.
   it('always returns a number, however many attempts have failed', () => {
     for (const attempt of [1, 2, 9, 10, 11, 100, 10_000]) {
       const delay = queueRetryStrategy(attempt);
