@@ -64,7 +64,7 @@ export class PrismaUserRepository implements UserRepositoryPort {
   async findById(id: string): Promise<User | null> {
     try {
       const raw = await this.prisma.db.user.findUnique({ where: { id } });
-      return raw ? this.mapToEntity(raw as UserRow) : null;
+      return raw ? this.mapToEntity(raw) : null;
     } catch (err) {
       if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2025') {
         return null;
@@ -76,7 +76,7 @@ export class PrismaUserRepository implements UserRepositoryPort {
   async findByEmail(email: string): Promise<User | null> {
     try {
       const raw = await this.prisma.db.user.findUnique({ where: { email } });
-      return raw ? this.mapToEntity(raw as UserRow) : null;
+      return raw ? this.mapToEntity(raw) : null;
     } catch (err) {
       return this.handleError(err, 'findByEmail');
     }
@@ -136,9 +136,7 @@ export class PrismaUserRepository implements UserRepositoryPort {
         take: limit + 1,
       });
       const hasMore = rows.length > limit;
-      const items = (hasMore ? rows.slice(0, limit) : rows).map((row) =>
-        this.mapToEntity(row as UserRow),
-      );
+      const items = (hasMore ? rows.slice(0, limit) : rows).map((row) => this.mapToEntity(row));
       return { items, hasMore };
     } catch (err) {
       return this.handleError(err, 'findAllCursor');

@@ -21,6 +21,7 @@ import {
   createWsAuthMiddleware,
   renewWsConnectionLease,
   revalidateWsSession,
+  wsData,
 } from './ws-auth.adapter';
 
 interface WsRedisEnv {
@@ -98,13 +99,12 @@ export class NotificationGateway
     );
 
     server.adapter(createAdapter(this.pubClient, this.subClient));
-    server.use(
-      createWsAuthMiddleware(this.auth, {
-        redis: this.rateLimitClient,
-        maxConcurrentPerIp: this.config.get('WS_CONNECTION_LIMIT_PER_IP', { infer: true }),
-        trustProxyHops: this.config.get('TRUST_PROXY_HOPS', { infer: true }),
-      }),
-    );
+    const wsAuthMiddleware = createWsAuthMiddleware(this.auth, {
+      redis: this.rateLimitClient,
+      maxConcurrentPerIp: this.config.get('WS_CONNECTION_LIMIT_PER_IP', { infer: true }),
+      trustProxyHops: this.config.get('TRUST_PROXY_HOPS', { infer: true }),
+    });
+    server.use((socket, next) => void wsAuthMiddleware(socket, next));
 
     const revalidateMs = this.config.get('WS_SESSION_REVALIDATE_MS', { infer: true });
     this.revalidationTimer = setInterval(() => {
@@ -142,7 +142,7 @@ export class NotificationGateway
             );
           });
         } catch (err) {
-          const user = socket.data['user'] as { userId?: string } | undefined;
+          const user = wsData(socket).user;
           this.logger.warn(
             `Disconnecting revoked WebSocket: userId=${user?.userId ?? 'unknown'} socketId=${socket.id} reason=${String(err)}`,
           );
@@ -153,7 +153,7 @@ export class NotificationGateway
   }
 
   async handleConnection(socket: Socket): Promise<void> {
-    const user = socket.data['user'] as { userId: string; email: string } | undefined;
+    const user = wsData(socket).user;
     if (!user) {
       socket.disconnect(true);
       return;
@@ -172,7 +172,7 @@ export class NotificationGateway
   }
 
   handleDisconnect(socket: Socket): void {
-    const user = socket.data['user'] as { userId: string } | undefined;
+    const user = wsData(socket).user;
     this.logger.log(
       `Client disconnected: userId=${user?.userId ?? 'unknown'} socketId=${socket.id}`,
     );
@@ -183,7 +183,7 @@ export class NotificationGateway
     @MessageBody() _data: unknown,
     @ConnectedSocket() socket: Socket,
   ): { event: string; data: string } {
-    const user = socket.data['user'] as { userId: string };
+    const user = wsData(socket).user;
     this.logger.debug(`Ping from userId=${user?.userId}`);
     return { event: 'pong', data: 'pong' };
   }

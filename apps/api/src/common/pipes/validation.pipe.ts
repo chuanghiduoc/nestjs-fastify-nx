@@ -75,7 +75,7 @@ function extractConstraintArgs(
   err: ValidationError,
   rule: string,
 ): Record<string, unknown> | undefined {
-  const ctx = (err as ValidationError & { contexts?: Record<string, unknown> }).contexts?.[rule];
+  const ctx = (err as { contexts?: Record<string, unknown> }).contexts?.[rule];
   if (ctx && typeof ctx === 'object') {
     return ctx as Record<string, unknown>;
   }

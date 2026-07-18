@@ -27,7 +27,6 @@ describe('validateConfig', () => {
   });
 
   it('rejects a missing DATABASE_URL', () => {
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { DATABASE_URL: _url, ...rest } = baseDevEnv;
     expect(() => validateConfig(rest)).toThrow();
   });
@@ -139,7 +138,6 @@ describe('validateConfig', () => {
   });
 
   it('rejects missing BETTER_AUTH_SECRET in production', () => {
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { BETTER_AUTH_SECRET: _s, ...rest } = baseProdEnv;
     expect(() => validateConfig(rest)).toThrow(/BETTER_AUTH_SECRET/);
   });

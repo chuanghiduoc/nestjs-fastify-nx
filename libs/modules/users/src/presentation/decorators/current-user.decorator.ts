@@ -1,4 +1,5 @@
-import { createParamDecorator, ExecutionContext } from '@nestjs/common';
+import type { ExecutionContext } from '@nestjs/common';
+import { createParamDecorator } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
 import type { AuthenticatedUser } from '../types/authenticated-user.type';
 

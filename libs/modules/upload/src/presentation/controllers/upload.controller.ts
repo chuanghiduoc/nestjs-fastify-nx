@@ -250,7 +250,7 @@ export class UploadController {
           removeOnFail: { count: 50 },
         },
       )
-      .catch((err) => {
+      .catch((err: unknown) => {
         this.logger.error({ err, key: finalKey }, 'enqueue verify-magic-bytes failed');
         throw err;
       });
@@ -290,7 +290,7 @@ export class UploadController {
             removeOnFail: { count: 50 },
           },
         )
-        .catch((err) => {
+        .catch((err: unknown) => {
           this.logger.error({ err, key: record.key }, 'enqueue verify-magic-bytes failed');
           throw err;
         });
@@ -304,7 +304,7 @@ export class UploadController {
   // validation error that triggered it, but silently swallowing it orphans the object
   // until the 24h lifecycle expiry — so surface it for observability.
   private async safeDelete(key: string): Promise<void> {
-    await this.storage.delete(key).catch((err) => {
+    await this.storage.delete(key).catch((err: unknown) => {
       this.logger.warn(
         { err, key },
         'cleanup delete failed — object orphaned until lifecycle expiry',

@@ -1,7 +1,8 @@
 import { Test } from '@nestjs/testing';
 import { HttpStatus, VersioningType } from '@nestjs/common';
 import { ERROR_CODES } from '@nestjs-fastify-nx/contracts';
-import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify';
+import type { NestFastifyApplication } from '@nestjs/platform-fastify';
+import { FastifyAdapter } from '@nestjs/platform-fastify';
 import type { FastifyReply, FastifyRequest, RouteShorthandOptions } from 'fastify';
 import { toNodeHandler } from 'better-auth/node';
 import fastifyRateLimit from '@fastify/rate-limit';

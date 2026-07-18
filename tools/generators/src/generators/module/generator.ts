@@ -1,5 +1,4 @@
 import {
-  Tree,
   formatFiles,
   generateFiles,
   names,
@@ -7,6 +6,7 @@ import {
   addProjectConfiguration,
   updateJson,
 } from '@nx/devkit';
+import type { Tree } from '@nx/devkit';
 import * as path from 'path';
 import type { ModuleGeneratorSchema } from './schema';
 
@@ -64,11 +64,15 @@ export async function moduleGenerator(tree: Tree, options: ModuleGeneratorSchema
   // bounded-context module, `@nestjs-fastify-nx/composition-admin` is a
   // cross-cutting aggregate. Keep name and path in lockstep.
   const importPath = `@nestjs-fastify-nx/${projectName}`;
-  updateJson(tree, 'tsconfig.base.json', (json) => {
-    json.compilerOptions.paths ??= {};
-    json.compilerOptions.paths[importPath] = [`./${projectRoot}/src/index.ts`];
-    return json;
-  });
+  updateJson<{ compilerOptions: { paths?: Record<string, string[]> } }>(
+    tree,
+    'tsconfig.base.json',
+    (json) => {
+      json.compilerOptions.paths ??= {};
+      json.compilerOptions.paths[importPath] = [`./${projectRoot}/src/index.ts`];
+      return json;
+    },
+  );
 
   generateFiles(tree, path.join(__dirname, 'files'), projectRoot, {
     ...moduleNames,

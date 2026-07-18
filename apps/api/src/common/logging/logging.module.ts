@@ -19,11 +19,8 @@ import { resolveCorrelationId, resolveRequestId } from './request-id';
       middleware: {
         mount: true,
         setup: (cls, req: IncomingMessage) => {
-          const requestId = resolveRequestId(req.headers as Record<string, unknown>);
-          const correlationId = resolveCorrelationId(
-            req.headers as Record<string, unknown>,
-            requestId,
-          );
+          const requestId = resolveRequestId(req.headers);
+          const correlationId = resolveCorrelationId(req.headers, requestId);
           cls.set(REQUEST_CONTEXT_KEYS.requestId, requestId);
           cls.set(REQUEST_CONTEXT_KEYS.correlationId, correlationId);
         },

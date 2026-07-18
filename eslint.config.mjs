@@ -1,11 +1,17 @@
 // @ts-check
 import nxPlugin from '@nx/eslint-plugin';
 import tseslint from 'typescript-eslint';
+import { defineConfig } from 'eslint/config';
 
-export default tseslint.config(
-  // Nx recommended rules (includes module boundaries)
+// @nx/eslint-plugin ships tseslint-flavoured flat configs; defineConfig's stricter
+// ConfigWithExtends doesn't accept them nominally, so widen once at the boundary.
+const nxConfigs = /** @type {import('eslint').Linter.Config[]} */ ([
   ...nxPlugin.configs['flat/base'],
   ...nxPlugin.configs['flat/typescript'],
+]);
+
+export default defineConfig(
+  ...nxConfigs,
 
   // Global ignores
   {
@@ -31,6 +37,12 @@ export default tseslint.config(
   {
     files: ['**/*.ts'],
     ignores: ['**/*.spec.ts', '**/*.integration.ts', '**/e2e/**/*.ts'],
+    extends: [
+      // Correctness-focused, not strictTypeChecked: the latter's stylistic rules
+      // (no-extraneous-class on every @Module(), dot-notation vs our process.env['X'])
+      // fight this stack. High-value strict rules are re-enabled individually below.
+      ...tseslint.configs.recommendedTypeChecked,
+    ],
     languageOptions: {
       parserOptions: {
         project: ['./tsconfig.base.json'],
@@ -38,7 +50,36 @@ export default tseslint.config(
       },
     },
     rules: {
-      // No `any` in production code — the codebase is currently clean, keep it that way.
+      // A type-only interface imported as a value leaks into swc's design:paramtypes.
+      '@typescript-eslint/consistent-type-imports': [
+        'error',
+        { prefer: 'type-imports', fixStyle: 'separate-type-imports' },
+      ],
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        {
+          argsIgnorePattern: '^_',
+          varsIgnorePattern: '^_',
+          caughtErrorsIgnorePattern: '^_',
+          ignoreRestSiblings: true,
+        },
+      ],
+      '@typescript-eslint/no-non-null-assertion': 'error',
+      '@typescript-eslint/switch-exhaustiveness-check': 'error',
+      '@typescript-eslint/no-unnecessary-type-assertion': 'error',
+      '@typescript-eslint/no-unnecessary-boolean-literal-compare': 'error',
+      '@typescript-eslint/prefer-nullish-coalescing': [
+        'error',
+        { ignorePrimitives: { string: true, boolean: true } },
+      ],
+      '@typescript-eslint/restrict-template-expressions': [
+        'error',
+        { allowNumber: true, allowBoolean: true },
+      ],
+      eqeqeq: ['error', 'smart'],
+      // Only ever fires on numeric HttpStatus comparisons here (no string enums), where comparing a
+      // status number to an HttpStatus member is safe and idiomatic — pure noise, off.
+      '@typescript-eslint/no-unsafe-enum-comparison': 'off',
       '@typescript-eslint/no-explicit-any': 'error',
       // Deprecated API usage is tech debt with a known migration path — fail the build so it
       // never silently accumulates. Type-aware: reads @deprecated JSDoc from our own symbols and
@@ -198,6 +239,21 @@ export default tseslint.config(
       },
     },
     rules: {
+      // Core hygiene applies to tests too, but not the type-aware preset — mocks legitimately
+      // lean on `any`/non-null assertions that would otherwise drown tests in noise.
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        {
+          argsIgnorePattern: '^_',
+          varsIgnorePattern: '^_',
+          caughtErrorsIgnorePattern: '^_',
+          ignoreRestSiblings: true,
+        },
+      ],
+      '@typescript-eslint/consistent-type-imports': [
+        'error',
+        { prefer: 'type-imports', fixStyle: 'separate-type-imports' },
+      ],
       '@nx/enforce-module-boundaries': [
         'error',
         {

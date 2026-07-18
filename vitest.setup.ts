@@ -5,7 +5,7 @@ import { Logger } from '@nestjs/common';
 // assertions still verify behavior; logs add no signal.
 //
 // Set `VITEST_VERBOSE=1` to keep logs (useful when debugging a flaky test).
-if (!process.env.VITEST_VERBOSE) {
+if (!process.env['VITEST_VERBOSE']) {
   Logger.overrideLogger(false);
 }
 
@@ -13,4 +13,4 @@ if (!process.env.VITEST_VERBOSE) {
 // CodegenAppModule don't crash during `ConfigModule.forRoot()` evaluation.
 // Real values are injected by e2e / integration setups; unit tests just need
 // the schema to pass.
-process.env.DATABASE_URL ??= 'postgresql://test:test@localhost:5432/test';
+process.env['DATABASE_URL'] ??= 'postgresql://test:test@localhost:5432/test';
