@@ -4,25 +4,26 @@ Copy `.env.example` to `.env` and fill in the values.
 
 ## Database
 
-| Variable                          | Default                                                   | Required    | Description                                                                                           |
-| --------------------------------- | --------------------------------------------------------- | ----------- | ----------------------------------------------------------------------------------------------------- |
-| `DATABASE_URL`                    | `postgresql://postgres:postgres@localhost:5432/nestjs_db` | Yes         | PostgreSQL connection string                                                                          |
-| `DATABASE_DIRECT_URL`             | —                                                         | No          | Bypasses PgBouncer for migrations; also the feature flag that enables the PgBouncer deep-health check |
-| `DATABASE_REPLICA_URL`            | —                                                         | No          | Read replica. When set, `PrismaService.dbRead` routes lag-tolerant reads here                         |
-| `DATABASE_REPLICA_POOL_MAX`       | `10`                                                      | No          | Max pool connections against the replica                                                              |
-| `DATABASE_POOL_MAX`               | `20`                                                      | No          | Max pool connections                                                                                  |
-| `DATABASE_POOL_MIN`               | `0`                                                       | No          | Min pool connections                                                                                  |
-| `DATABASE_IDLE_TIMEOUT_MS`        | `10000`                                                   | No          | Idle connection timeout                                                                               |
-| `DATABASE_CONNECTION_TIMEOUT_MS`  | `5000`                                                    | No          | Connection acquire timeout                                                                            |
-| `DATABASE_STATEMENT_TIMEOUT_MS`   | `30000`                                                   | No          | Per-statement timeout                                                                                 |
-| `DATABASE_APPLICATION_NAME`       | `nestjs-fastify-api`                                      | No          | Surfaced in `pg_stat_activity`                                                                        |
-| `DB_PASSWORD_FILE`                | —                                                         | No          | Docker/Kubernetes secret file injected into password-less DB URLs                                     |
-| `DATABASE_SLOW_QUERY_MS`          | `200`                                                     | No          | Logs a `warn` (query template + duration, never params) above this threshold                          |
-| `DB_REPLICATION_LAG_THRESHOLD_MS` | `30000`                                                   | No          | Deep-health threshold for physical replica replay lag                                                 |
-| `POSTGRES_USER`                   | `postgres`                                                | Docker only | DB username for Compose                                                                               |
-| `POSTGRES_PASSWORD`               | `postgres`                                                | Docker only | DB password for Compose                                                                               |
-| `POSTGRES_DB`                     | `nestjs_db`                                               | Docker only | Database name for Compose                                                                             |
-| `POSTGRES_PORT`                   | `5432`                                                    | Docker only | Host port for Compose                                                                                 |
+| Variable                          | Default                                                   | Required    | Description                                                                                              |
+| --------------------------------- | --------------------------------------------------------- | ----------- | -------------------------------------------------------------------------------------------------------- |
+| `DATABASE_URL`                    | `postgresql://postgres:postgres@localhost:5432/nestjs_db` | Yes         | PostgreSQL connection string                                                                             |
+| `DATABASE_DIRECT_URL`             | —                                                         | No          | Bypasses PgBouncer for migrations; also the feature flag that enables the PgBouncer deep-health check    |
+| `DATABASE_REPLICA_URL`            | —                                                         | No          | Read replica. When set, `PrismaService.dbRead` routes lag-tolerant reads here                            |
+| `DATABASE_REPLICA_POOL_MAX`       | `10`                                                      | No          | Max pool connections against the replica                                                                 |
+| `DATABASE_POOL_MAX`               | `20`                                                      | No          | Max pool connections                                                                                     |
+| `DATABASE_POOL_MIN`               | `0`                                                       | No          | Min pool connections                                                                                     |
+| `DATABASE_IDLE_TIMEOUT_MS`        | `10000`                                                   | No          | Idle connection timeout                                                                                  |
+| `DATABASE_CONNECTION_TIMEOUT_MS`  | `5000`                                                    | No          | Connection acquire timeout                                                                               |
+| `DATABASE_STATEMENT_TIMEOUT_MS`   | `30000`                                                   | No          | Per-statement timeout                                                                                    |
+| `DATABASE_APPLICATION_NAME`       | `nestjs-fastify-api`                                      | No          | Surfaced in `pg_stat_activity`                                                                           |
+| `DB_PASSWORD_FILE`                | —                                                         | No          | Docker/Kubernetes secret file injected into password-less DB URLs                                        |
+| `DATABASE_SLOW_QUERY_MS`          | `200`                                                     | No          | Logs a `warn` (query template + duration, never params) above this threshold                             |
+| `DATABASE_LOG_QUERIES`            | `false`                                                   | No          | Dev only: logs every query at `debug` **with params** (set `LOG_LEVEL=debug` too). Ignored in production |
+| `DB_REPLICATION_LAG_THRESHOLD_MS` | `30000`                                                   | No          | Deep-health threshold for physical replica replay lag                                                    |
+| `POSTGRES_USER`                   | `postgres`                                                | Docker only | DB username for Compose                                                                                  |
+| `POSTGRES_PASSWORD`               | `postgres`                                                | Docker only | DB password for Compose                                                                                  |
+| `POSTGRES_DB`                     | `nestjs_db`                                               | Docker only | Database name for Compose                                                                                |
+| `POSTGRES_PORT`                   | `5432`                                                    | Docker only | Host port for Compose                                                                                    |
 
 ## Redis
 
