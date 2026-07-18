@@ -15,6 +15,11 @@ const schedulerEnvSchema = z
     DB_PASSWORD_FILE: z.string().trim().min(1).optional(),
     // Prisma query events above this duration are logged as `warn`. See PrismaService.
     DATABASE_SLOW_QUERY_MS: z.coerce.number().int().min(1).default(200),
+    // Dev-only full query logging (incl. params) at debug level. PrismaService ignores it in production.
+    DATABASE_LOG_QUERIES: z
+      .string()
+      .default('false')
+      .transform((v) => v === 'true'),
 
     REDIS_QUEUE_HOST: z.string().default('localhost'),
     REDIS_QUEUE_PORT: z.coerce.number().int().min(1).max(65535).default(6380),

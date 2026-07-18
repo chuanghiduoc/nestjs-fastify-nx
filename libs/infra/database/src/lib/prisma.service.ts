@@ -3,7 +3,7 @@ import { PrismaClient } from '@prisma/client';
 import type { Prisma } from '@prisma/client';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { PrismaPg } from '@prisma/adapter-pg';
-import { injectDatabasePassword, intEnv } from '@nestjs-fastify-nx/shared';
+import { boolEnv, injectDatabasePassword, intEnv } from '@nestjs-fastify-nx/shared';
 
 // Derived from the $transaction overload to avoid importing @prisma/client/runtime internals.
 export type TransactionClient = Parameters<PrismaClient['$transaction']>[0] extends (
@@ -61,6 +61,7 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
 
     const appName = process.env['DATABASE_APPLICATION_NAME'] ?? 'nestjs-fastify-api';
     const slowQueryThresholdMs = intEnv('DATABASE_SLOW_QUERY_MS', 200);
+    const logAllQueries = this.resolveQueryLogging();
 
     this._writeClient = new PrismaClient({
       adapter: buildPgAdapter(writeUrl, {
@@ -70,7 +71,7 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
       }),
       log: [{ emit: 'event', level: 'query' }],
     });
-    this.registerSlowQueryLogger(this._writeClient, slowQueryThresholdMs);
+    this.registerQueryLogger(this._writeClient, slowQueryThresholdMs, logAllQueries);
 
     const replicaUrl = injectDatabasePassword(
       process.env['DATABASE_REPLICA_URL']?.trim(),
@@ -87,22 +88,54 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
         }),
         log: [{ emit: 'event', level: 'query' }],
       });
-      this.registerSlowQueryLogger(this._readClient, slowQueryThresholdMs);
+      this.registerQueryLogger(this._readClient, slowQueryThresholdMs, logAllQueries);
       this.logger.log('Read replica enabled via DATABASE_REPLICA_URL');
     } else {
       this._readClient = this._writeClient;
     }
   }
 
-  // Only `query` (the parameterized SQL template) and `duration` are logged — `params` is
-  // the serialized argument values and can carry PII/secrets, so it is never logged here.
-  private registerSlowQueryLogger(client: PrismaClient, thresholdMs: number): void {
-    (client as unknown as PrismaQueryEventEmitter).$on('query', (event) => {
-      if (!isSlowQuery(event.duration, thresholdMs)) return;
+  // DATABASE_LOG_QUERIES turns on a full per-query debug log — including `params` — for local
+  // debugging. Forced off in production regardless of the flag: `params` is the serialized argument
+  // values and can carry PII/secrets, so it must never reach a production log.
+  private resolveQueryLogging(): boolean {
+    const requested = boolEnv('DATABASE_LOG_QUERIES', false);
+    if (!requested) return false;
+    if (process.env['NODE_ENV'] === 'production') {
       this.logger.warn(
-        { durationMs: event.duration, query: event.query },
-        'Slow database query detected',
+        'DATABASE_LOG_QUERIES is ignored in production — query params must never be logged there',
       );
+      return false;
+    }
+    this.logger.warn(
+      'DATABASE_LOG_QUERIES enabled — every query, including params, is logged at debug level. ' +
+        'Development only; never enable in production.',
+    );
+    return true;
+  }
+
+  // Two independent concerns on one `query` subscription:
+  //  - slow-query WARN always runs (template + duration only; never params — safe for production).
+  //  - full-query DEBUG runs only when DATABASE_LOG_QUERIES made `logAllQueries` true, and carries
+  //    params. resolveQueryLogging() already guaranteed that is dev-only.
+  private registerQueryLogger(
+    client: PrismaClient,
+    thresholdMs: number,
+    logAllQueries: boolean,
+  ): void {
+    (client as unknown as PrismaQueryEventEmitter).$on('query', (event) => {
+      if (logAllQueries) {
+        this.logger.debug(
+          { durationMs: event.duration, query: event.query, params: event.params },
+          'Database query',
+        );
+      }
+      if (isSlowQuery(event.duration, thresholdMs)) {
+        this.logger.warn(
+          { durationMs: event.duration, query: event.query },
+          'Slow database query detected',
+        );
+      }
     });
   }
 
