@@ -1,6 +1,7 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'node:crypto';
+import { redisReconnectStrategy } from '@nestjs-fastify-nx/shared';
 import Redis from 'ioredis';
 import type { EnvConfig } from '../../config/env.validation';
 
@@ -46,7 +47,7 @@ export class MetricsLeaderService implements OnModuleInit, OnModuleDestroy {
       port: config.get('REDIS_QUEUE_PORT', { infer: true }),
       lazyConnect: true,
       maxRetriesPerRequest: 1,
-      retryStrategy: () => null,
+      retryStrategy: redisReconnectStrategy,
     });
     // Surfaced as leader=false on the next failed tick — never crash the process on a Redis blip.
     this.redis.on('error', () => undefined);

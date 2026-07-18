@@ -15,7 +15,7 @@ import { Redis } from 'ioredis';
 import { createHash } from 'node:crypto';
 import { toNodeHandler } from 'better-auth/node';
 import { BETTER_AUTH_INSTANCE, type BetterAuthInstance } from '@nestjs-fastify-nx/infra-auth';
-import { intEnv, positiveIntEnv } from '@nestjs-fastify-nx/shared';
+import { intEnv, positiveIntEnv, redisReconnectStrategy } from '@nestjs-fastify-nx/shared';
 import { ERROR_CODES } from '@nestjs-fastify-nx/contracts';
 import { reportFatalError, startSentry } from '@nestjs-fastify-nx/infra-observability';
 import { AppModule } from './app/app.module';
@@ -144,7 +144,7 @@ async function bootstrap() {
       port: config.get('REDIS_CACHE_PORT', { infer: true }),
       db: 5,
       maxRetriesPerRequest: 1,
-      retryStrategy: (times: number) => (times >= 10 ? null : Math.min(times * 200, 3000)),
+      retryStrategy: redisReconnectStrategy,
       enableOfflineQueue: false,
     });
     idempotencyRedis.on('error', (err: Error) => {
@@ -216,7 +216,7 @@ async function bootstrap() {
     port: config.get('REDIS_CACHE_PORT', { infer: true }),
     db: 4,
     maxRetriesPerRequest: 1,
-    retryStrategy: (times: number) => (times >= 10 ? null : Math.min(times * 200, 3000)),
+    retryStrategy: redisReconnectStrategy,
     enableOfflineQueue: false,
   });
   rateLimitRedis.on('error', (err: Error) => {

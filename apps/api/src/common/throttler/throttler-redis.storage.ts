@@ -5,6 +5,7 @@ import {
   type ThrottlerStorageRedis,
 } from '@nest-lab/throttler-storage-redis';
 import type { ThrottlerStorage } from '@nestjs/throttler';
+import { redisReconnectStrategy } from '@nestjs-fastify-nx/shared';
 import Redis from 'ioredis';
 import type { EnvConfig } from '../../config/env.validation';
 
@@ -25,7 +26,7 @@ export class ThrottlerRedisStorage implements OnModuleDestroy {
       port: config.get('REDIS_CACHE_PORT', { infer: true }),
       db: 1,
       maxRetriesPerRequest: 1,
-      retryStrategy: (times: number) => (times >= 10 ? null : Math.min(times * 200, 3000)),
+      retryStrategy: redisReconnectStrategy,
       enableOfflineQueue: false,
     });
     this.redis.on('error', (err: Error) => {
