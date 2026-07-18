@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '@nestjs-fastify-nx/infra-database';
-import type { Prisma } from '@prisma/client';
+import type { Prisma } from '@nestjs-fastify-nx/infra-database';
 import type { DomainEvent, EventPublisherPort } from '@nestjs-fastify-nx/core';
 import { generateId } from '@nestjs-fastify-nx/shared';
 import { OUTBOX_SCHEMA_VERSION } from './outbox-schema-version';

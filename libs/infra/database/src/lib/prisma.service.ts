@@ -1,6 +1,6 @@
 import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
-import { PrismaClient } from '@prisma/client';
-import type { Prisma } from '@prisma/client';
+import { PrismaClient } from '../generated/prisma/client';
+import type { Prisma } from '../generated/prisma/client';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { boolEnv, injectDatabasePassword, intEnv } from '@nestjs-fastify-nx/shared';

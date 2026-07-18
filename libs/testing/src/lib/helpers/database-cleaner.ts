@@ -1,4 +1,4 @@
-import type { PrismaClient } from '@prisma/client';
+import type { PrismaClient } from '@nestjs-fastify-nx/infra-database';
 
 export class DatabaseCleaner {
   constructor(private readonly prisma: PrismaClient) {}

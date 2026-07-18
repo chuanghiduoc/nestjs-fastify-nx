@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { Logger } from '@nestjs/common';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from '../generated/prisma/client';
 import { PrismaService, isSlowQuery } from './prisma.service';
 
 type QueryListener = (event: { query: string; params: string; duration: number }) => void;

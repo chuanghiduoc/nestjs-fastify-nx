@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { Prisma } from '@prisma/client';
+import { Prisma } from '@nestjs-fastify-nx/infra-database';
 import { PrismaAuditLogRepository } from './prisma-audit-log.repository';
 import { AuditLog } from '../../domain/entities/audit-log.entity';
 import type { PrismaService } from '@nestjs-fastify-nx/infra-database';

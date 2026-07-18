@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { I18N_KEYS } from '@nestjs-fastify-nx/infra-i18n';
 import { PrismaService } from '@nestjs-fastify-nx/infra-database';
-import { Prisma } from '@prisma/client';
+import { Prisma } from '@nestjs-fastify-nx/infra-database';
 import { User, UserRole, UserStatus } from '../../domain/entities/user.entity';
 import type {
   FindAllCursorOptions,

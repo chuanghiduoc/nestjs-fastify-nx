@@ -59,7 +59,7 @@ vitest.config.*.timestamp*
 .claude/worktrees
 .claude/agent-memory/
 .claude/settings.local.json
-/generated/prisma
+libs/infra/database/src/generated/
 .test-tmp/
 .code-review-graph/
 .claude/settings.json.bak
