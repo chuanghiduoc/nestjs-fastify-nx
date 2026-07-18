@@ -25,6 +25,7 @@ import { setupSwagger } from './common/swagger/swagger.config';
 import { createBullBoardPlugin } from './common/bull-board/create-bull-board-plugin';
 import { registerIdempotency } from './common/idempotency/register-idempotency';
 import { applyFastifyProblemDetailsHook } from './common/filters/fastify-error-handler';
+import { buildProblemDetails } from './common/filters/problem-details.helper';
 import type { EnvConfig } from './config/env.validation';
 
 const STRICT_AUTH_PATHS = new Set([
@@ -172,16 +173,16 @@ async function bootstrap() {
         .header('content-type', 'application/problem+json')
         .header('x-request-id', requestId)
         .header('retry-after', '10')
-        .send({
-          type: 'about:blank',
-          title: 'Service Unavailable',
-          status: HttpStatus.SERVICE_UNAVAILABLE,
-          code: ERROR_CODES.SERVICE_UNAVAILABLE,
-          detail: 'Server is under heavy load; please retry shortly.',
-          instance: req.url,
-          requestId,
-          timestamp: new Date().toISOString(),
-        });
+        .send(
+          buildProblemDetails({
+            status: HttpStatus.SERVICE_UNAVAILABLE,
+            title: 'Service Unavailable',
+            detail: 'Server is under heavy load; please retry shortly.',
+            code: ERROR_CODES.SERVICE_UNAVAILABLE,
+            instance: req.url,
+            requestId,
+          }),
+        );
     },
   });
 
@@ -239,16 +240,18 @@ async function bootstrap() {
       const requestId = resolveRequestId(req.headers);
       (req.raw as { requestId?: string }).requestId = requestId;
       return {
-        type: 'https://tools.ietf.org/html/rfc6585#section-4',
-        title: 'Too Many Requests',
-        status: HttpStatus.TOO_MANY_REQUESTS,
-        // Match ProblemDetailsDto so rate-limit 429s carry the same shape (and the same `code`,
-        // ERROR_CODES.RATE_LIMITED) as a 429 raised by the Nest ThrottlerGuard.
-        code: ERROR_CODES.RATE_LIMITED,
-        detail: `Rate limit exceeded. Try again in ${Math.ceil(context.ttl / 1000)} seconds.`,
+        // Built by the shared helper so a rate-limit 429 carries the same shape — and the same
+        // `type` convention — as a 429 raised by the Nest ThrottlerGuard. Hand-rolling this body is
+        // how it came to answer an rfc6585 URL where every other error answers `/errors/<code>`.
+        ...buildProblemDetails({
+          status: HttpStatus.TOO_MANY_REQUESTS,
+          title: 'Too Many Requests',
+          detail: `Rate limit exceeded. Try again in ${Math.ceil(context.ttl / 1000)} seconds.`,
+          code: ERROR_CODES.RATE_LIMITED,
+          instance: req.url,
+          requestId,
+        }),
         retryAfter: Math.ceil(context.ttl / 1000),
-        requestId,
-        timestamp: new Date().toISOString(),
       };
     },
     addHeaders: {

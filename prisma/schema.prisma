@@ -26,11 +26,12 @@ model User {
   @@index([status])
   @@index([createdAt])
   @@index([status, updatedAt])
-  // Composite for cursor pagination — see migration
-  // 20260601200000_users_cursor_composite_index. Prisma's schema DSL has no
-  // sort-order qualifier so the DESC ordering is enforced by the raw SQL
-  // migration only; the @@index here keeps `prisma db pull` round-trippable.
-  @@index([createdAt, id])
+  // Composite backing cursor pagination, which reads ORDER BY createdAt DESC, id DESC.
+  // Declared with the real sort order and the real index name: without them `migrate diff` sees
+  // drift against the DDL and the next `migrate dev` writes a migration that drops this index.
+  @@index([createdAt(sort: Desc), id(sort: Desc)], map: "users_createdAt_id_desc_idx")
+  @@index([email(ops: raw("gin_trgm_ops"))], type: Gin, map: "users_email_trgm_idx")
+  @@index([name(ops: raw("gin_trgm_ops"))], type: Gin, map: "users_name_trgm_idx")
   @@map("users")
 }
 

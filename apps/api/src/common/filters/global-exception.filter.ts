@@ -174,7 +174,9 @@ function normalizeException(exception: unknown): NormalizedError {
     const body = exception.getResponse() as HttpExceptionResponseObject;
     return {
       status: exception.getStatus(),
-      title: body.title ?? I18N_KEYS.common.unprocessable_entity,
+      // No fallback: the constructor always sets a title, so one here would be unreachable and
+      // would imply a default that does not exist.
+      title: body.title as string,
       detail: body.messageKey ?? (typeof body.message === 'string' ? body.message : undefined),
       code: exception.code,
       args: body.args,

@@ -34,6 +34,8 @@ export function buildPageMeta(page: number, pageSize: number, total: number): Pa
 // which Prisma rejects at the driver with an error that says nothing about which page caused it.
 export function paginationSkip(options: PaginationOptions): number {
   const page = Number.isFinite(options.page) ? Math.max(1, Math.trunc(options.page)) : 1;
-  const pageSize = Number.isFinite(options.pageSize) ? Math.max(0, Math.trunc(options.pageSize)) : 0;
+  const pageSize = Number.isFinite(options.pageSize)
+    ? Math.max(0, Math.trunc(options.pageSize))
+    : 0;
   return (page - 1) * pageSize;
 }

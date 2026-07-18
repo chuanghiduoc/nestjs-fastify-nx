@@ -3,6 +3,7 @@ import { HttpStatus } from '@nestjs/common';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type Redis from 'ioredis';
 import { ERROR_CODES } from '@nestjs-fastify-nx/contracts';
+import { buildProblemDetails, PROBLEM_CONTENT_TYPE } from '../filters/problem-details.helper';
 import { resolveCorrelationId, resolveRequestId } from '../logging/request-id';
 import { IdempotencyStore, type AcquireResult } from './idempotency-store';
 
@@ -19,7 +20,6 @@ const REPLAYED_HEADER = 'idempotent-replayed';
 const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 const SCOPED_PATH_PREFIX = '/api/v1/';
 const MAX_KEY_LENGTH = 255;
-const PROBLEM_CONTENT_TYPE = 'application/problem+json';
 
 interface IdempotencyContext {
   storeKey: string;
@@ -82,20 +82,14 @@ function sendProblem(
 ): FastifyReply {
   const requestId = resolveRequestId(req.headers);
   (req.raw as { requestId?: string }).requestId = requestId;
+  // Same builder the global filter uses. Hand-rolling the body here is how this plugin ended up
+  // answering `type: 'about:blank'` while every Nest-side error answered `/errors/<code>`, for a
+  // field the DTO documents as having one convention.
   return reply
     .status(status)
     .header('content-type', PROBLEM_CONTENT_TYPE)
     .header('x-request-id', requestId)
-    .send({
-      type: 'about:blank',
-      title,
-      status,
-      code,
-      detail,
-      instance: req.url,
-      requestId,
-      timestamp: new Date().toISOString(),
-    });
+    .send(buildProblemDetails({ status, title, detail, code, instance: req.url, requestId }));
 }
 
 // Adds the idempotency hooks directly to the root Fastify instance (NOT via register(), whose
