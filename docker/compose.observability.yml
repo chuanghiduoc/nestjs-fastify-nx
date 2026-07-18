@@ -102,6 +102,13 @@ services:
       COMPOSE_PROJECT_NAME: ${COMPOSE_PROJECT_NAME:-nestjs-fastify-nx}
     volumes:
       - ./alloy/config.alloy:/etc/alloy/config.alloy:ro
+      # SECURITY: `:ro` here is NOT a sandbox. It marks the socket inode read-only, but it does not
+      # filter the API calls made through it — Alloy still holds full read/write Docker Engine
+      # access (inspect any container's env/secrets, create a container with host mounts, i.e.
+      # root-equivalent on this host). Alloy needs the socket for container log discovery, so the
+      # mount stays; the trust boundary is the host itself. Only enable --with-obs on a host you
+      # already trust with root. For a multi-tenant or untrusted host, front this with a
+      # read-only docker-socket-proxy instead of mounting the socket directly.
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - alloy_data:/var/lib/alloy/data
     depends_on:

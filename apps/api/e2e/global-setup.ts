@@ -1,16 +1,13 @@
-import { deployTestMigrations } from '@nestjs-fastify-nx/testing';
-import { PostgreSqlContainer } from '@testcontainers/postgresql';
-import { RedisContainer } from '@testcontainers/redis';
-import type { StartedPostgreSqlContainer } from '@testcontainers/postgresql';
-import type { StartedRedisContainer } from '@testcontainers/redis';
+import { createTestContainers, deployTestMigrations } from '@nestjs-fastify-nx/testing';
+import type { TestContainers } from '@nestjs-fastify-nx/testing';
 
-declare global {
-  var __E2E_POSTGRES__: StartedPostgreSqlContainer;
-  var __E2E_REDIS__: StartedRedisContainer;
-}
+// Vitest loads this module once and calls both hooks on it, so module scope is enough to hand the
+// handle from setup to teardown. Specs read the endpoints from process.env, not from here.
+let containers: TestContainers | undefined;
 
 async function stopContainers(): Promise<void> {
-  await Promise.all([globalThis.__E2E_POSTGRES__?.stop(), globalThis.__E2E_REDIS__?.stop()]);
+  await containers?.teardown().catch(() => undefined);
+  containers = undefined;
 }
 
 export async function setup(): Promise<void> {
@@ -30,15 +27,9 @@ export async function setup(): Promise<void> {
     return;
   }
 
-  const [postgresContainer, redisContainer] = await Promise.all([
-    new PostgreSqlContainer('postgres:18-alpine').start(),
-    new RedisContainer('redis:8-alpine').start(),
-  ]);
-
-  // Expose via globalThis so createTestApp() can read them without re-importing
-  // containers package in each spec file.
-  globalThis.__E2E_POSTGRES__ = postgresContainer;
-  globalThis.__E2E_REDIS__ = redisContainer;
+  // Shared helper rather than a local Promise.all: it starts the containers sequentially and stops
+  // the first one if the second fails, so a half-started pair can't leak past this process.
+  containers = await createTestContainers();
 
   // Stop containers on SIGINT/SIGTERM (CI cancel, Ctrl-C) so Docker resources
   // are not leaked when Vitest's teardown export is bypassed by process kill.
@@ -48,11 +39,11 @@ export async function setup(): Promise<void> {
   process.once('SIGINT', handleSignal);
   process.once('SIGTERM', handleSignal);
 
-  const dbUrl = postgresContainer.getConnectionUri();
+  const dbUrl = containers.postgres.getConnectionUri();
   configureTestEnvironment(
     dbUrl,
-    redisContainer.getHost(),
-    String(redisContainer.getFirstMappedPort()),
+    containers.redis.getHost(),
+    String(containers.redis.getFirstMappedPort()),
   );
 
   // Run migrations once against the shared container. Any failure here means

@@ -59,6 +59,11 @@ services:
       TZ: ${TZ:-UTC}
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/nestjs_db
       REDIS_CACHE_HOST: redis-cache
+      # Pinned to the in-network port, like REDIS_QUEUE_PORT below. Without it the container
+      # inherits REDIS_CACHE_PORT from env_file, but that value is the HOST publish port — so
+      # repointing it to dodge a clash with another stack would silently break every container's
+      # cache connection while still looking correct in .env.
+      REDIS_CACHE_PORT: '6379'
       REDIS_QUEUE_HOST: redis-queue
       REDIS_QUEUE_PORT: '6380'
       STORAGE_ENDPOINT: http://minio:9000
@@ -94,6 +99,11 @@ services:
       LOG_PRETTY: 'false'
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/nestjs_db
       REDIS_CACHE_HOST: redis-cache
+      # Pinned to the in-network port, like REDIS_QUEUE_PORT below. Without it the container
+      # inherits REDIS_CACHE_PORT from env_file, but that value is the HOST publish port — so
+      # repointing it to dodge a clash with another stack would silently break every container's
+      # cache connection while still looking correct in .env.
+      REDIS_CACHE_PORT: '6379'
       REDIS_QUEUE_HOST: redis-queue
       REDIS_QUEUE_PORT: '6380'
       STORAGE_ENDPOINT: http://minio:9000
@@ -138,6 +148,11 @@ services:
       LOG_PRETTY: 'false'
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/nestjs_db
       REDIS_CACHE_HOST: redis-cache
+      # Pinned to the in-network port, like REDIS_QUEUE_PORT below. Without it the container
+      # inherits REDIS_CACHE_PORT from env_file, but that value is the HOST publish port — so
+      # repointing it to dodge a clash with another stack would silently break every container's
+      # cache connection while still looking correct in .env.
+      REDIS_CACHE_PORT: '6379'
       REDIS_QUEUE_HOST: redis-queue
       REDIS_QUEUE_PORT: '6380'
       STORAGE_ENDPOINT: http://minio:9000
