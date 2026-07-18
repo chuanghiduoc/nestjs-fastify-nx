@@ -7,17 +7,21 @@ Operational runbook for on-call engineers. Each section follows the pattern:
 
 ## 1. Outbox stuck
 
-**Symptom:** Domain events stop flowing. Downstream listeners (audit-log, notifications) are silent. `outbox_events` rows accumulate with `processed_at IS NULL`.
+**Symptom:** Domain events stop flowing. Downstream listeners (audit-log, notifications) are silent. `outbox_events` rows accumulate with `"processedAt" IS NULL`.
 
 **Diagnostic:**
 
+Prisma maps the table to snake_case but leaves column names camelCase, so every column here must
+stay double-quoted — unquoted, Postgres folds it to lowercase and answers
+`column "event_type" does not exist`.
+
 ```sql
 -- Find events that have exhausted retry attempts
-SELECT id, event_type, aggregate_id, attempts, created_at, last_error
+SELECT id, "eventType", "aggregateId", attempts, "createdAt", "lastError"
 FROM outbox_events
-WHERE processed_at IS NULL
+WHERE "processedAt" IS NULL
   AND attempts >= 10
-ORDER BY created_at ASC
+ORDER BY "createdAt" ASC
 LIMIT 50;
 
 -- Count stuck vs in-flight events
@@ -25,7 +29,7 @@ SELECT
   CASE WHEN attempts >= 10 THEN 'exhausted' ELSE 'retrying' END AS state,
   COUNT(*)
 FROM outbox_events
-WHERE processed_at IS NULL
+WHERE "processedAt" IS NULL
 GROUP BY 1;
 ```
 
@@ -42,14 +46,14 @@ docker compose logs scheduler --tail=200 | grep -i "outbox\|error\|failed"
 ```sql
 -- Reset specific event types for replay
 UPDATE outbox_events
-SET attempts = 0, last_error = NULL
-WHERE processed_at IS NULL
-  AND event_type = 'users.registered'
+SET attempts = 0, "lastError" = NULL
+WHERE "processedAt" IS NULL
+  AND "eventType" = 'users.registered'
   AND attempts >= 10;
 ```
 
 3. The scheduler's outbox relay picks up rows with `attempts < OUTBOX_MAX_ATTEMPTS` on the next poll cycle (`OUTBOX_POLL_INTERVAL_MS`, default 1 s).
-4. Monitor `processed_at` population over the next minute.
+4. Monitor `"processedAt"` population over the next minute.
 
 **Escalation:** If events are still stuck after reset, check `OUTBOX_TX_TIMEOUT_MS` (default 30 s) — a too-short timeout causes P2028 rollback loops. Increase and redeploy.
 
@@ -94,7 +98,7 @@ redis-cli -h $REDIS_QUEUE_HOST -p $REDIS_QUEUE_PORT
 5. Purge genuinely unrecoverable jobs (data from a bad deploy) after confirming replay is safe:
    Bull Board → "Clean" → select "failed" state → confirm.
 
-**Escalation:** If the queue fills faster than the worker can drain (sustained spike), scale the worker replicas via Coolify or increase `BULLMQ_CONCURRENCY`. Alert the team if a runaway job producer is suspected.
+**Escalation:** If the queue fills faster than the worker can drain (sustained spike), scale the worker replicas via your orchestrator or increase `BULLMQ_CONCURRENCY`. Alert the team if a runaway job producer is suspected.
 
 ---
 
@@ -105,37 +109,44 @@ redis-cli -h $REDIS_QUEUE_HOST -p $REDIS_QUEUE_PORT
 **Diagnostic:**
 
 ```bash
-# Check audit-log listener logs for subscription errors
-docker compose logs api --tail=500 | grep -i "audit"
+# Check audit-log listener logs for subscription errors.
+# With EVENT_PUBLISHER_DRIVER=outbox the listener runs in the SCHEDULER — that is where the relay
+# republishes events. Check api only when running the inprocess driver.
+docker compose logs scheduler --tail=500 | grep -i "audit"
 
 # Check if outbox relay is delivering the events
 docker compose logs scheduler --tail=200 | grep "outbox"
 ```
 
 ```sql
--- Check if outbox has the event but audit_logs does not
-SELECT o.event_type, o.aggregate_id, o.processed_at, o.last_error
+-- Check if outbox has the event but audit_logs does not.
+-- AuditLogListener writes the event's aggregateId to "userId" and its eventType to action, so those
+-- are what the two tables join on — audit_logs has no entity/aggregate column of its own.
+SELECT o."eventType", o."aggregateId", o."processedAt", o."lastError"
 FROM outbox_events o
-WHERE o.event_type LIKE 'users.%'
-  AND o.created_at > NOW() - INTERVAL '1 hour'
+WHERE o."eventType" LIKE 'users.%'
+  AND o."createdAt" > NOW() - INTERVAL '1 hour'
   AND NOT EXISTS (
     SELECT 1 FROM audit_logs a
-    WHERE a.entity_id = o.aggregate_id
-      AND a.created_at > o.created_at - INTERVAL '5 seconds'
+    -- audit_logs."userId" is uuid, outbox_events."aggregateId" is text; cast the uuid side, since
+    -- casting the text side throws outright on any aggregate id that is not a uuid.
+    WHERE a."userId"::text = o."aggregateId"
+      AND a.action = o."eventType"
+      AND a."createdAt" > o."createdAt" - INTERVAL '5 seconds'
   )
-ORDER BY o.created_at DESC
+ORDER BY o."createdAt" DESC
 LIMIT 20;
 ```
 
 **Action:**
 
-1. If outbox rows show `processed_at IS NOT NULL` but audit rows are absent: the audit listener threw an error silently. Check for schema mismatch or a bug in the listener — redeploy after fix.
-2. If outbox rows show `processed_at IS NULL`: the relay is stuck — follow the **Outbox stuck** runbook section above.
-3. To replay a specific event, reset its `attempts` and `processed_at`:
+1. If outbox rows show `"processedAt" IS NOT NULL` but audit rows are absent: the audit listener threw an error silently. Check for schema mismatch or a bug in the listener — redeploy after fix.
+2. If outbox rows show `"processedAt" IS NULL`: the relay is stuck — follow the **Outbox stuck** runbook section above.
+3. To replay a specific event, reset its `attempts` and `"processedAt"`:
 
 ```sql
 UPDATE outbox_events
-SET attempts = 0, processed_at = NULL, last_error = NULL
+SET attempts = 0, "processedAt" = NULL, "lastError" = NULL
 WHERE id = '<event-uuid>';
 ```
 
@@ -170,8 +181,11 @@ docker compose logs redis-queue --tail=100
 
 **Fallback behavior while Redis is down:**
 
-- **Session auth**: Better Auth falls back to DB verification (slower, higher DB load).
+- **Session auth**: unaffected. Better Auth is not configured with `secondaryStorage`, so sessions
+  always resolve against Postgres — there is no Redis path to lose.
 - **BullMQ**: Jobs queue in memory briefly; if the connection times out, new job enqueues fail with a 500.
+  The queue client retries reconnecting indefinitely with a 3 s cap, so it recovers on its own once
+  Redis is back — no restart needed.
 - **Cache (redis-cache)**: Cache misses — all reads go to DB. Expect elevated DB CPU.
 - **Socket.io pub/sub**: Disconnects; WebSocket clients will need to reconnect.
 

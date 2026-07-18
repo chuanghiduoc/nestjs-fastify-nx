@@ -134,38 +134,13 @@ wraps each migration in its own transaction, so the inner transaction
 conflicts. Remove the explicit transaction markers — the migration's
 statements run atomically already.
 
-### UUID migration fails on a dev database with legacy ids
-
-Symptom: `invalid input syntax for type uuid: "<some-non-uuid-string>"` while
-applying `20260428000002_uuid_pks`.
-
-Cause: rows in `users` or `audit_logs` have ids that pre-date the UUIDv7
-switch (CUID, ULID, etc.). For dev databases only, clean them out:
-
-```sql
-DELETE FROM users
-WHERE id !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$';
-```
-
-For production rollouts, do NOT delete data — instead, run a one-off backfill
-that rewrites each row's id to a UUIDv7 before applying the migration.
-
-### Outbox migration fails with `unique violation` on `outbox_events.id`
-
-Symptom: pre-existing CUID-format ids fail the `id::uuid` cast.
-
-Resolution: drain the outbox before deploying. Wait until
-`SELECT count(*) FROM outbox_events WHERE "processedAt" IS NULL` returns 0,
-then apply the migration. The migration deletes already-processed rows whose
-ids would otherwise block the type change.
-
 ### `foreign key constraint cannot be implemented`
 
 Symptom appears mostly on dev DBs after switching between feature branches.
 
 Cause: tables created by another branch (e.g., `sessions`, `accounts`,
-`verifications` from a better-auth experiment) reference `users.id` with a
-mismatched type after the UUID migration.
+`verifications`) already exist and reference `users.id` with a mismatched type,
+so the incoming migration cannot add its constraint.
 
 Resolution: drop the orphan tables on the dev DB and re-run migrate:
 
@@ -202,7 +177,8 @@ Symptom: jobs appear in the queue UI as failed and never retry.
 Diagnostic: check `attemptsMade` against the job's `attempts` setting. If
 `attemptsMade === attempts`, the job has exhausted its retry budget and is now
 the responsibility of the dead-letter queue. Inspect the matching DLQ
-(`<queue>:dlq`) for the envelope.
+(`<queue>.dlq`, per `dlqNameFor()`) for the envelope. The separator is a dot,
+not a colon: BullMQ reserves `:` for its own Redis key scheme.
 
 ### Welcome email sent twice for the same user
 
@@ -210,8 +186,10 @@ Symptom: a user receives the welcome email twice within seconds.
 
 Cause: the listener was invoked twice (likely a duplicate domain event or a
 worker restart between enqueue and acknowledge). The producer enqueues with
-`jobId: welcome-email:<eventId>` so BullMQ deduplicates by job id — the
-second enqueue is a no-op.
+`jobId: welcome-email__<eventId>` so BullMQ deduplicates by job id — the
+second enqueue is a no-op. Note the `__` separator: a custom job id containing
+`:` makes BullMQ throw `Custom Id cannot contain :`, because `:` delimits its
+internal Redis keys.
 
 If duplicates still slip through, check that `event.eventId` is stable across
 emits (it MUST be a deterministic value — typically the same UUID for the
@@ -275,10 +253,12 @@ Cause: the migration container is connecting through pgbouncer. Prisma migrate
 uses session-scoped DDL operations (advisory locks, `SET LOCAL`) that are
 incompatible with transaction mode.
 
-Resolution: set `DATABASE_DIRECT_URL` so the migration bootstrap
-(`apps/migration/src/main.ts`) re-exports `DATABASE_URL` to the direct Postgres
-address before invoking `prisma migrate deploy`. When using the compose overlay
-this is already set — verify with:
+Resolution: set `DATABASE_DIRECT_URL`. `prisma.config.ts` resolves the datasource
+as `DATABASE_DIRECT_URL || DATABASE_URL`, so setting it points every Prisma CLI
+invocation — including `migrate deploy` — straight at Postgres while the app keeps
+using the pooled `DATABASE_URL`. (`apps/migration/src/main.ts` does not rewrite
+`DATABASE_URL`; it only splices in a `DB_PASSWORD_FILE` secret when one is set.)
+When using the compose overlay this is already set — verify with:
 
 ```bash
 docker compose config | grep -A5 'migration:'
@@ -459,7 +439,8 @@ the failing dependency from the JSON body of `/health`.
 
 ### Metrics endpoint returns 403 Forbidden or no data
 
-Endpoint: `GET /api/v1/metrics`.
+Endpoint: `GET /metrics` — the controller is `VERSION_NEUTRAL` and `main.ts`
+excludes it from the global `api` prefix, so it carries neither `/api` nor `/v1`.
 
 Cause 1: `ENABLE_METRICS=false` in the env. Set it to `true` to enable Prometheus
 collection.

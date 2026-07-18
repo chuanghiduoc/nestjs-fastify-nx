@@ -28,6 +28,7 @@ import {
   HTTP_STATUS_CODES,
   HTTP_STATUS_TITLES,
   PROBLEM_CONTENT_TYPE,
+  type HealthChecks,
 } from './problem-details.helper';
 import { resolveFastifyCode, resolveFastifyStatus } from './fastify-error-handler';
 
@@ -40,6 +41,7 @@ interface NormalizedError {
   code: string;
   args?: Record<string, unknown>;
   errors?: ValidationErrorItemDto[];
+  checks?: HealthChecks;
 }
 
 // Maps the HTTP status → i18n key used when a NestJS built-in exception ships only a raw English `message`.
@@ -118,6 +120,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
           instance: request.url,
           requestId: raw.requestId,
           errors: normalized.errors,
+          checks: normalized.checks,
         }),
       );
   }
@@ -161,7 +164,6 @@ export class GlobalExceptionFilter implements ExceptionFilter {
 interface HttpExceptionResponseObject {
   message?: string | string[];
   error?: string;
-  statusCode?: number;
   code?: string;
   title?: string;
   messageKey?: string;
@@ -175,7 +177,9 @@ function normalizeException(exception: unknown): NormalizedError {
     const body = exception.getResponse() as HttpExceptionResponseObject;
     return {
       status: exception.getStatus(),
-      title: body.title ?? I18N_KEYS.common.unprocessable_entity,
+      // No fallback: the constructor always sets a title, so one here would be unreachable and
+      // would imply a default that does not exist.
+      title: body.title as string,
       detail: body.messageKey ?? (typeof body.message === 'string' ? body.message : undefined),
       code: exception.code,
       args: body.args,
@@ -228,6 +232,17 @@ function normalizeException(exception: unknown): NormalizedError {
     return { status, title: defaultTitle, detail: res, code: defaultCode };
   }
 
+  const healthChecks = extractFailingHealthChecks(res);
+  if (healthChecks) {
+    return {
+      status,
+      title: defaultTitle,
+      detail: `Unhealthy dependencies: ${Object.keys(healthChecks).join(', ')}`,
+      code: defaultCode,
+      checks: healthChecks,
+    };
+  }
+
   const body = res as HttpExceptionResponseObject;
   const title = typeof body.title === 'string' ? body.title : defaultTitle;
   const code = typeof body.code === 'string' ? body.code : defaultCode;
@@ -252,6 +267,18 @@ function normalizeException(exception: unknown): NormalizedError {
       : exception.message;
 
   return { status, title, detail, code, args: body.args };
+}
+
+// @nestjs/terminus throws ServiceUnavailableException whose response is the HealthCheckResult
+// ({ status, info, error, details }). Returns its failing indicators so the filter can surface them
+// as a `checks` extension instead of flattening the 503 to a bare "Service Unavailable".
+export function extractFailingHealthChecks(res: unknown): HealthChecks | undefined {
+  if (!res || typeof res !== 'object') return undefined;
+  const candidate = res as { status?: unknown; error?: unknown };
+  if (candidate.status !== 'error') return undefined;
+  if (!candidate.error || typeof candidate.error !== 'object') return undefined;
+  const error = candidate.error as HealthChecks;
+  return Object.keys(error).length > 0 ? error : undefined;
 }
 
 function isFastifyLevelError(exception: unknown): exception is FastifyError {

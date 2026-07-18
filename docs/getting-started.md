@@ -3,7 +3,7 @@
 ## Prerequisites
 
 - Docker Desktop (required for PostgreSQL, Redis, MinIO)
-- Node.js 22+ and pnpm 10.33+ (`corepack enable && corepack prepare pnpm@10.33.0 --activate`)
+- Node.js 24+ and pnpm 10.33+ (`corepack enable && corepack prepare pnpm@10.33.0 --activate`)
 
 ## Setup
 

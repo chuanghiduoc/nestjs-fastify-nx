@@ -76,6 +76,19 @@ async function buildApp(redis: Redis): Promise<AppSetup> {
     calls += 1;
     return reply.status(504).send({ calls, timeout: true });
   });
+  // A 2xx that carries no body — the shape a DELETE endpoint returns.
+  app.post('/api/v1/nocontent', async (_req, reply) => {
+    calls += 1;
+    return reply.status(204).send();
+  });
+  // A 2xx whose payload reaches onSend as a Buffer rather than a string.
+  app.post('/api/v1/binary', async (_req, reply) => {
+    calls += 1;
+    return reply
+      .status(200)
+      .header('content-type', 'application/octet-stream')
+      .send(Buffer.from('binary-payload'));
+  });
 
   registerIdempotency(app, {
     redis,
@@ -119,6 +132,51 @@ describe('registerIdempotency', () => {
     expect(second.headers['x-request-id']).toMatch(/^[a-f0-9]{32}$/);
     expect(second.headers['x-correlation-id']).toBe(second.headers['x-request-id']);
     expect(callCount()).toBe(1);
+  });
+
+  it('completes and replays a 2xx that has no body, running the handler once', async () => {
+    const { app, callCount } = await buildApp(redis);
+
+    const first = await app.inject({
+      method: 'POST',
+      url: '/api/v1/nocontent',
+      headers: KEY_HEADER,
+      payload: { a: 1 },
+    });
+    const second = await app.inject({
+      method: 'POST',
+      url: '/api/v1/nocontent',
+      headers: KEY_HEADER,
+      payload: { a: 1 },
+    });
+
+    expect(first.statusCode).toBe(204);
+    expect(second.statusCode).toBe(204);
+    expect(second.headers['idempotent-replayed']).toBe('true');
+    expect(callCount()).toBe(1);
+  });
+
+  it('keeps the key pending for a 2xx body it cannot replay, so a duplicate conflicts instead of re-running', async () => {
+    const { app, callCount, errors } = await buildApp(redis);
+
+    const first = await app.inject({
+      method: 'POST',
+      url: '/api/v1/binary',
+      headers: KEY_HEADER,
+      payload: { a: 1 },
+    });
+    const second = await app.inject({
+      method: 'POST',
+      url: '/api/v1/binary',
+      headers: KEY_HEADER,
+      payload: { a: 1 },
+    });
+
+    expect(first.statusCode).toBe(200);
+    // 409, not a second execution: releasing the lock here would let the mutation run twice.
+    expect(second.statusCode).toBe(409);
+    expect(callCount()).toBe(1);
+    expect(errors.some((e) => e.includes('cannot replay'))).toBe(true);
   });
 
   it('treats JSON objects with different key order as the same payload', async () => {

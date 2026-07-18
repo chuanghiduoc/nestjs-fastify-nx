@@ -32,5 +32,8 @@
     "delete_failed": "Xóa đối tượng thất bại",
     "commit_failed": "Commit đối tượng thất bại",
     "read_range_failed": "Đọc dải byte thất bại"
+  },
+  "pagination": {
+    "invalid_cursor": "startingAfter không phải là con trỏ hợp lệ"
   }
 }

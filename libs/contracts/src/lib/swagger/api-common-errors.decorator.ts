@@ -19,7 +19,11 @@ const validationProblemContent = (description: string) => ({
 export interface CommonErrorsOptions {
   /** Endpoint requires authentication — include 401. Default: true. */
   auth?: boolean;
-  /** Endpoint requires a specific role/permission — include 403. Default: true when `auth` is true. */
+  /**
+   * Include 403. Ignored when `auth` is true: 403 is not only about roles — BetterAuthGuard
+   * rejects a valid session belonging to a non-ACTIVE account with 403, so every authenticated
+   * endpoint can emit it whether or not it declares a required role. Default: false.
+   */
   forbidden?: boolean;
   /** Endpoint reads/operates on a resource by id — include 404. Default: false. */
   notFound?: boolean;
@@ -36,7 +40,9 @@ export interface CommonErrorsOptions {
 // Documents Problem Details error responses (always 400, 429, 500 plus selected optional codes).
 export const ApiCommonErrors = (options: CommonErrorsOptions = {}) => {
   const auth = options.auth ?? true;
-  const forbidden = options.forbidden ?? auth;
+  // Forced on for authenticated routes — see CommonErrorsOptions.forbidden. Opting out would
+  // document a contract the guard does not honour.
+  const forbidden = auth || (options.forbidden ?? false);
   const validation = options.validation ?? true;
   const notFound = options.notFound ?? false;
   const conflict = options.conflict ?? false;

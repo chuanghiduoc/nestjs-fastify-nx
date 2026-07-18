@@ -141,6 +141,59 @@ describe('module generator', () => {
     ).toBe(true);
   });
 
+  // Asserting on content, not file existence: a handler missing @CommandHandler still emits both
+  // files, but the explorer never registers it and commandBus.execute fails at runtime.
+  it('generates a command that extends Command<TResult> so execute() infers the return type', async () => {
+    await moduleGenerator(tree, { name: 'tasks', directory: 'modules', withCqrs: true });
+
+    const command = tree.read(
+      'libs/modules/tasks/src/application/commands/create-tasks/create-tasks.command.ts',
+      'utf-8',
+    );
+    expect(command).toContain("import { Command } from '@nestjs/cqrs'");
+    expect(command).toContain('export class CreateTasksCommand extends Command<Tasks>');
+  });
+
+  it('generates a handler decorated with @CommandHandler and implementing ICommandHandler', async () => {
+    await moduleGenerator(tree, { name: 'tasks', directory: 'modules', withCqrs: true });
+
+    const handler = tree.read(
+      'libs/modules/tasks/src/application/commands/create-tasks/create-tasks.handler.ts',
+      'utf-8',
+    );
+    expect(handler).toContain('@CommandHandler(CreateTasksCommand)');
+    // Whitespace-tolerant: prettier reflows the generic argument list across lines.
+    expect(handler).toMatch(/implements ICommandHandler<\s*CreateTasksCommand,\s*Tasks\s*>/);
+    // @Injectable would register the class as a plain provider and hide the missing bus wiring.
+    expect(handler).not.toContain('@Injectable()');
+  });
+
+  it('exports the command from the public barrel so other scopes can dispatch it', async () => {
+    await moduleGenerator(tree, { name: 'tasks', directory: 'modules', withCqrs: true });
+
+    const barrel = tree.read('libs/modules/tasks/src/index.ts', 'utf-8');
+    expect(barrel).toContain('CreateTasksCommand');
+  });
+
+  it('keeps handlers out of every barrel', async () => {
+    await moduleGenerator(tree, { name: 'tasks', directory: 'modules', withCqrs: true });
+
+    expect(tree.read('libs/modules/tasks/src/index.ts', 'utf-8')).not.toContain(
+      'CreateTasksHandler',
+    );
+    expect(tree.read('libs/modules/tasks/src/application/index.ts', 'utf-8')).not.toContain(
+      'CreateTasksHandler',
+    );
+  });
+
+  it('names the vitest project after the resolved project name, not a hardcoded modules- prefix', async () => {
+    await moduleGenerator(tree, { name: 'billing', directory: 'composition', withCqrs: false });
+
+    const vitestConfig = tree.read('libs/composition/billing/vitest.config.mts', 'utf-8');
+    expect(vitestConfig).toContain("name: 'composition-billing'");
+    expect(vitestConfig).not.toContain('modules-billing');
+  });
+
   it('emits controller with correct route segment (no pluralisation)', async () => {
     await moduleGenerator(tree, { name: 'users', directory: 'modules', withCqrs: false });
 

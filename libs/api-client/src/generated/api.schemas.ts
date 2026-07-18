@@ -18,6 +18,11 @@
  * Every response carries an `X-Request-Id` header (also mirrored as `requestId` in error bodies). Quote it when filing support tickets.
  * OpenAPI spec version: 1.0.0
  */
+/**
+ * Present only on a health-probe 503: the dependencies that reported `down`, so an operator can see which one failed without reading logs.
+ */
+export type ProblemDetailsDtoChecks = { [key: string]: { [key: string]: unknown } };
+
 export interface ProblemDetailsDto {
   /** A URI reference identifying the problem type. SHOULD resolve to human-readable docs. */
   type: string;
@@ -39,6 +44,8 @@ export interface ProblemDetailsDto {
   requestId?: string;
   /** ISO 8601 UTC timestamp when the error was produced. */
   timestamp: string;
+  /** Present only on a health-probe 503: the dependencies that reported `down`, so an operator can see which one failed without reading logs. */
+  checks?: ProblemDetailsDtoChecks;
 }
 
 /**
@@ -68,6 +75,11 @@ export interface ValidationErrorItemDto {
   received?: ValidationErrorItemDtoReceived;
 }
 
+/**
+ * Present only on a health-probe 503: the dependencies that reported `down`, so an operator can see which one failed without reading logs.
+ */
+export type ValidationProblemDetailsDtoChecks = { [key: string]: { [key: string]: unknown } };
+
 export interface ValidationProblemDetailsDto {
   /** A URI reference identifying the problem type. SHOULD resolve to human-readable docs. */
   type: string;
@@ -89,6 +101,8 @@ export interface ValidationProblemDetailsDto {
   requestId?: string;
   /** ISO 8601 UTC timestamp when the error was produced. */
   timestamp: string;
+  /** Present only on a health-probe 503: the dependencies that reported `down`, so an operator can see which one failed without reading logs. */
+  checks?: ValidationProblemDetailsDtoChecks;
   /** Per-field violations. Frontend should highlight each `path` independently. */
   errors: ValidationErrorItemDto[];
 }
@@ -98,6 +112,80 @@ export interface ServiceInfoDto {
   name: string;
   /** Semantic version of the running build. */
   version: string;
+}
+
+/**
+ * Aggregate health status.
+ */
+export type HealthCheckResultDtoStatus =
+  (typeof HealthCheckResultDtoStatus)[keyof typeof HealthCheckResultDtoStatus];
+
+export const HealthCheckResultDtoStatus = {
+  ok: 'ok',
+  error: 'error',
+  shutting_down: 'shutting_down',
+} as const;
+
+export type HealthCheckResultDtoInfoStatus =
+  (typeof HealthCheckResultDtoInfoStatus)[keyof typeof HealthCheckResultDtoInfoStatus];
+
+export const HealthCheckResultDtoInfoStatus = {
+  up: 'up',
+  down: 'down',
+} as const;
+
+/**
+ * Per-indicator status. Keys depend on the endpoint — `/health` reports `database`, `memory_heap`, `redis_cache`, `redis_queue`; `/health/ready` reports the subset a pod needs to serve traffic (`database`, `redis_cache`, `redis_queue`); `/health/dependencies` reports the deep checks (`bullmq`, `pgbouncer`, `replication_lag`).
+ */
+export type HealthCheckResultDtoInfo = {
+  [key: string]: {
+    status: HealthCheckResultDtoInfoStatus;
+  };
+};
+
+export type HealthCheckResultDtoErrorStatus =
+  (typeof HealthCheckResultDtoErrorStatus)[keyof typeof HealthCheckResultDtoErrorStatus];
+
+export const HealthCheckResultDtoErrorStatus = {
+  up: 'up',
+  down: 'down',
+} as const;
+
+/**
+ * Indicators that reported `down`. Empty when `status === "ok"`.
+ */
+export type HealthCheckResultDtoError = {
+  [key: string]: {
+    status: HealthCheckResultDtoErrorStatus;
+  };
+};
+
+export type HealthCheckResultDtoDetailsStatus =
+  (typeof HealthCheckResultDtoDetailsStatus)[keyof typeof HealthCheckResultDtoDetailsStatus];
+
+export const HealthCheckResultDtoDetailsStatus = {
+  up: 'up',
+  down: 'down',
+} as const;
+
+/**
+ * Mirror of `info` plus failed indicators — convenient for UI rendering.
+ */
+export type HealthCheckResultDtoDetails = {
+  [key: string]: {
+    status: HealthCheckResultDtoDetailsStatus;
+  };
+};
+
+export interface HealthCheckResultDto {
+  /** Aggregate health status. */
+  status: HealthCheckResultDtoStatus;
+  /** Per-indicator status. Keys depend on the endpoint — `/health` reports `database`, `memory_heap`, `redis_cache`, `redis_queue`; `/health/ready` reports the subset a pod needs to serve traffic (`database`, `redis_cache`, `redis_queue`); `/health/dependencies` reports the deep checks (`bullmq`, `pgbouncer`, `replication_lag`). */
+  info: HealthCheckResultDtoInfo;
+  /** Indicators that reported `down`. Empty when `status === "ok"`. */
+  error: HealthCheckResultDtoError;
+  /** Mirror of `info` plus failed indicators — convenient for UI rendering. */
+  details: HealthCheckResultDtoDetails;
 }
 
 export type LivenessResponseDtoStatus =
@@ -340,222 +428,6 @@ export interface Verification {
   createdAt: string;
   updatedAt: string;
 }
-
-/**
- * @nullable
- */
-export type HealthCheck200Info = {
-  [key: string]: {
-    status: string;
-    [key: string]: unknown;
-  };
-} | null;
-
-/**
- * @nullable
- */
-export type HealthCheck200Error = {
-  [key: string]: {
-    status: string;
-    [key: string]: unknown;
-  };
-} | null;
-
-export type HealthCheck200Details = {
-  [key: string]: {
-    status: string;
-    [key: string]: unknown;
-  };
-};
-
-export type HealthCheck200 = {
-  status?: string;
-  /** @nullable */
-  info?: HealthCheck200Info;
-  /** @nullable */
-  error?: HealthCheck200Error;
-  details?: HealthCheck200Details;
-};
-
-/**
- * @nullable
- */
-export type HealthCheck503Info = {
-  [key: string]: {
-    status: string;
-    [key: string]: unknown;
-  };
-} | null;
-
-/**
- * @nullable
- */
-export type HealthCheck503Error = {
-  [key: string]: {
-    status: string;
-    [key: string]: unknown;
-  };
-} | null;
-
-export type HealthCheck503Details = {
-  [key: string]: {
-    status: string;
-    [key: string]: unknown;
-  };
-};
-
-export type HealthCheck503 = {
-  status?: string;
-  /** @nullable */
-  info?: HealthCheck503Info;
-  /** @nullable */
-  error?: HealthCheck503Error;
-  details?: HealthCheck503Details;
-};
-
-/**
- * @nullable
- */
-export type HealthReadiness200Info = {
-  [key: string]: {
-    status: string;
-    [key: string]: unknown;
-  };
-} | null;
-
-/**
- * @nullable
- */
-export type HealthReadiness200Error = {
-  [key: string]: {
-    status: string;
-    [key: string]: unknown;
-  };
-} | null;
-
-export type HealthReadiness200Details = {
-  [key: string]: {
-    status: string;
-    [key: string]: unknown;
-  };
-};
-
-export type HealthReadiness200 = {
-  status?: string;
-  /** @nullable */
-  info?: HealthReadiness200Info;
-  /** @nullable */
-  error?: HealthReadiness200Error;
-  details?: HealthReadiness200Details;
-};
-
-/**
- * @nullable
- */
-export type HealthReadiness503Info = {
-  [key: string]: {
-    status: string;
-    [key: string]: unknown;
-  };
-} | null;
-
-/**
- * @nullable
- */
-export type HealthReadiness503Error = {
-  [key: string]: {
-    status: string;
-    [key: string]: unknown;
-  };
-} | null;
-
-export type HealthReadiness503Details = {
-  [key: string]: {
-    status: string;
-    [key: string]: unknown;
-  };
-};
-
-export type HealthReadiness503 = {
-  status?: string;
-  /** @nullable */
-  info?: HealthReadiness503Info;
-  /** @nullable */
-  error?: HealthReadiness503Error;
-  details?: HealthReadiness503Details;
-};
-
-/**
- * @nullable
- */
-export type HealthDependencies200Info = {
-  [key: string]: {
-    status: string;
-    [key: string]: unknown;
-  };
-} | null;
-
-/**
- * @nullable
- */
-export type HealthDependencies200Error = {
-  [key: string]: {
-    status: string;
-    [key: string]: unknown;
-  };
-} | null;
-
-export type HealthDependencies200Details = {
-  [key: string]: {
-    status: string;
-    [key: string]: unknown;
-  };
-};
-
-export type HealthDependencies200 = {
-  status?: string;
-  /** @nullable */
-  info?: HealthDependencies200Info;
-  /** @nullable */
-  error?: HealthDependencies200Error;
-  details?: HealthDependencies200Details;
-};
-
-/**
- * @nullable
- */
-export type HealthDependencies503Info = {
-  [key: string]: {
-    status: string;
-    [key: string]: unknown;
-  };
-} | null;
-
-/**
- * @nullable
- */
-export type HealthDependencies503Error = {
-  [key: string]: {
-    status: string;
-    [key: string]: unknown;
-  };
-} | null;
-
-export type HealthDependencies503Details = {
-  [key: string]: {
-    status: string;
-    [key: string]: unknown;
-  };
-};
-
-export type HealthDependencies503 = {
-  status?: string;
-  /** @nullable */
-  info?: HealthDependencies503Info;
-  /** @nullable */
-  error?: HealthDependencies503Error;
-  details?: HealthDependencies503Details;
-};
 
 export type AdminUsersListParams = {
   /**

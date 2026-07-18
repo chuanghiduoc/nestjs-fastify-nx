@@ -59,6 +59,9 @@ services:
       TZ: ${TZ:-UTC}
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/nestjs_db
       REDIS_CACHE_HOST: redis-cache
+      # In-network port. Unpinned it falls through to env_file, where the value is the HOST
+      # publish port — repointing that to dodge a clash would then break the cache connection.
+      REDIS_CACHE_PORT: '6379'
       REDIS_QUEUE_HOST: redis-queue
       REDIS_QUEUE_PORT: '6380'
       STORAGE_ENDPOINT: http://minio:9000
@@ -94,6 +97,9 @@ services:
       LOG_PRETTY: 'false'
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/nestjs_db
       REDIS_CACHE_HOST: redis-cache
+      # In-network port. Unpinned it falls through to env_file, where the value is the HOST
+      # publish port — repointing that to dodge a clash would then break the cache connection.
+      REDIS_CACHE_PORT: '6379'
       REDIS_QUEUE_HOST: redis-queue
       REDIS_QUEUE_PORT: '6380'
       STORAGE_ENDPOINT: http://minio:9000
@@ -138,6 +144,9 @@ services:
       LOG_PRETTY: 'false'
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/nestjs_db
       REDIS_CACHE_HOST: redis-cache
+      # In-network port. Unpinned it falls through to env_file, where the value is the HOST
+      # publish port — repointing that to dodge a clash would then break the cache connection.
+      REDIS_CACHE_PORT: '6379'
       REDIS_QUEUE_HOST: redis-queue
       REDIS_QUEUE_PORT: '6380'
       STORAGE_ENDPOINT: http://minio:9000

@@ -14,19 +14,31 @@ import {
   createTestContainers,
   type TestContainers,
   DatabaseCleaner,
+  deployTestMigrations,
 } from '@nestjs-fastify-nx/testing';
 ```
 
 ### `createTestContainers()`
 
-Boots ephemeral Postgres 18 and Redis 8 containers, runs `prisma migrate
-deploy` against the fresh DB, and returns connection details + a `teardown()`
-hook. Use it in `beforeAll`; tear down in `afterAll`.
+Boots ephemeral Postgres 18 and Redis 8 containers and returns the two started
+containers plus a `teardown()` hook. It does **not** migrate — call
+`deployTestMigrations(databaseUrl)` yourself once the URL is known, or every
+query fails with `relation does not exist`. Use it in `beforeAll`; tear down in
+`afterAll`.
+
+The containers start sequentially, and the first is stopped if the second fails
+to start — a `Promise.all` would leave the survivor running with no handle left
+to stop it.
 
 ```ts
 const containers = await createTestContainers();
-process.env.DATABASE_URL = containers.databaseUrl;
-process.env.REDIS_CACHE_HOST = containers.redisHost;
+const databaseUrl = containers.postgres.getConnectionUri();
+
+process.env.DATABASE_URL = databaseUrl;
+process.env.REDIS_CACHE_HOST = containers.redis.getHost();
+process.env.REDIS_CACHE_PORT = String(containers.redis.getFirstMappedPort());
+
+deployTestMigrations(databaseUrl);
 // ... boot the Nest test module ...
 await containers.teardown();
 ```

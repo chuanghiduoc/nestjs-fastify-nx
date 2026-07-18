@@ -57,6 +57,15 @@ export class ProblemDetailsDto {
     format: 'date-time',
   })
   timestamp!: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Present only on a health-probe 503: the dependencies that reported `down`, so an operator can see which one failed without reading logs.',
+    type: 'object',
+    additionalProperties: { type: 'object' },
+    example: { redis_cache: { status: 'down', message: 'redis_cache check failed' } },
+  })
+  checks?: Record<string, { status: string; message?: string }>;
 }
 
 export class ValidationErrorItemDto {

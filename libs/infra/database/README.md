@@ -10,13 +10,20 @@ it as a global provider.
 ## Public API
 
 ```ts
-import { DatabaseModule, PrismaService } from '@nestjs-fastify-nx/infra-database';
+import {
+  DatabaseModule,
+  PrismaService,
+  type TransactionClient,
+  PrismaReplicationLagHealthIndicator,
+} from '@nestjs-fastify-nx/infra-database';
 ```
 
-| Export           | Purpose                                                       |
-| ---------------- | ------------------------------------------------------------- |
-| `DatabaseModule` | Global NestJS module — exports `PrismaService` workspace-wide |
-| `PrismaService`  | `PrismaClient` subclass with `onModuleInit` connect logic     |
+| Export                                | Purpose                                                                                               |
+| ------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `DatabaseModule`                      | Global NestJS module — exports `PrismaService` workspace-wide                                         |
+| `PrismaService`                       | `PrismaClient` subclass with `onModuleInit` connect logic, `db`/`dbRead` clients, and `transaction()` |
+| `TransactionClient`                   | The client handed to a `transaction()` callback                                                       |
+| `PrismaReplicationLagHealthIndicator` | Physical replica replay lag — wired to `/health/dependencies`, never to the readiness probe           |
 
 ## Driver adapter
 

@@ -14,8 +14,16 @@ import {
   OutboxPublisher,
   OutboxRelayService,
   OutboxRelayModule,
+  OUTBOX_SCHEMA_VERSION,
+  OUTBOX_RELAY_LEADERSHIP,
+  type OutboxRelayLeadership,
 } from '@nestjs-fastify-nx/infra-messaging';
 ```
+
+`OUTBOX_SCHEMA_VERSION` stamps every serialized payload, so a relay can tell which shape it is
+reading. `OUTBOX_RELAY_LEADERSHIP` is the token `OutboxRelayModule` resolves to decide whether this
+replica may drain the outbox — the scheduler binds its `SchedulerLeaderService` to it, which is why
+only one replica relays at a time.
 
 ## Two drivers, one port
 

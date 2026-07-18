@@ -193,14 +193,15 @@ For a team that needs persistent access, put the host on a private network (VPN 
 
 1. Merge to `main`
 2. Tag the release: `git tag v1.2.3 && git push origin v1.2.3`
-3. The [release workflow](../.github/workflows/release.yml) automatically:
-   - Builds all 4 images (api, worker, scheduler, migration) with SBOM +
-     max-mode SLSA provenance attestations.
-   - Pushes to GHCR (`ghcr.io/<owner>/<repo>`).
-   - Signs each image with **Cosign keyless** (Sigstore Fulcio) — identity is
-     the workflow ref, recorded in the public Rekor log.
-   - Gates on **Trivy** image scan (HIGH/CRITICAL, fixable only) and
-     **Semgrep** SAST (TS/Node/OWASP rule packs).
+3. The [release workflow](../.github/workflows/release.yml) automatically, per app:
+   - Builds the image into the runner's local daemon — nothing is published yet.
+   - Gates on **Trivy** (HIGH/CRITICAL, fixable only). A failing scan stops here,
+     so a vulnerable image is never pushed and never signed.
+   - Pushes to GHCR (`ghcr.io/<owner>/<repo>`) with SBOM + max-mode SLSA
+     provenance attestations.
+   - Signs the pushed digest with **Cosign keyless** (Sigstore Fulcio) — identity
+     is the workflow ref, recorded in the public Rekor log.
+   - Runs **Semgrep** SAST (TS/Node/OWASP rule packs) as a separate job.
 4. Roll out from your target environment: pull the published tag from GHCR, run
    the migration image against the prod database, then start/restart the
    services. This step is deployment-specific and intentionally left out of CI.

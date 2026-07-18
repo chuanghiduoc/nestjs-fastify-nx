@@ -4,22 +4,25 @@ Copy `.env.example` to `.env` and fill in the values.
 
 ## Database
 
-| Variable                          | Default                                                   | Required    | Description                                                                  |
-| --------------------------------- | --------------------------------------------------------- | ----------- | ---------------------------------------------------------------------------- |
-| `DATABASE_URL`                    | `postgresql://postgres:postgres@localhost:5432/nestjs_db` | Yes         | PostgreSQL connection string                                                 |
-| `DATABASE_POOL_MAX`               | `20`                                                      | No          | Max pool connections                                                         |
-| `DATABASE_POOL_MIN`               | `0`                                                       | No          | Min pool connections                                                         |
-| `DATABASE_IDLE_TIMEOUT_MS`        | `10000`                                                   | No          | Idle connection timeout                                                      |
-| `DATABASE_CONNECTION_TIMEOUT_MS`  | `5000`                                                    | No          | Connection acquire timeout                                                   |
-| `DATABASE_STATEMENT_TIMEOUT_MS`   | `30000`                                                   | No          | Per-statement timeout                                                        |
-| `DATABASE_APPLICATION_NAME`       | `nestjs-fastify-api`                                      | No          | Surfaced in `pg_stat_activity`                                               |
-| `DB_PASSWORD_FILE`                | —                                                         | No          | Docker/Kubernetes secret file injected into password-less DB URLs            |
-| `DATABASE_SLOW_QUERY_MS`          | `200`                                                     | No          | Logs a `warn` (query template + duration, never params) above this threshold |
-| `DB_REPLICATION_LAG_THRESHOLD_MS` | `30000`                                                   | No          | Deep-health threshold for physical replica replay lag                        |
-| `POSTGRES_USER`                   | `postgres`                                                | Docker only | DB username for Compose                                                      |
-| `POSTGRES_PASSWORD`               | `postgres`                                                | Docker only | DB password for Compose                                                      |
-| `POSTGRES_DB`                     | `nestjs_db`                                               | Docker only | Database name for Compose                                                    |
-| `POSTGRES_PORT`                   | `5432`                                                    | Docker only | Host port for Compose                                                        |
+| Variable                          | Default                                                   | Required    | Description                                                                                           |
+| --------------------------------- | --------------------------------------------------------- | ----------- | ----------------------------------------------------------------------------------------------------- |
+| `DATABASE_URL`                    | `postgresql://postgres:postgres@localhost:5432/nestjs_db` | Yes         | PostgreSQL connection string                                                                          |
+| `DATABASE_DIRECT_URL`             | —                                                         | No          | Bypasses PgBouncer for migrations; also the feature flag that enables the PgBouncer deep-health check |
+| `DATABASE_REPLICA_URL`            | —                                                         | No          | Read replica. When set, `PrismaService.dbRead` routes lag-tolerant reads here                         |
+| `DATABASE_REPLICA_POOL_MAX`       | `10`                                                      | No          | Max pool connections against the replica                                                              |
+| `DATABASE_POOL_MAX`               | `20`                                                      | No          | Max pool connections                                                                                  |
+| `DATABASE_POOL_MIN`               | `0`                                                       | No          | Min pool connections                                                                                  |
+| `DATABASE_IDLE_TIMEOUT_MS`        | `10000`                                                   | No          | Idle connection timeout                                                                               |
+| `DATABASE_CONNECTION_TIMEOUT_MS`  | `5000`                                                    | No          | Connection acquire timeout                                                                            |
+| `DATABASE_STATEMENT_TIMEOUT_MS`   | `30000`                                                   | No          | Per-statement timeout                                                                                 |
+| `DATABASE_APPLICATION_NAME`       | `nestjs-fastify-api`                                      | No          | Surfaced in `pg_stat_activity`                                                                        |
+| `DB_PASSWORD_FILE`                | —                                                         | No          | Docker/Kubernetes secret file injected into password-less DB URLs                                     |
+| `DATABASE_SLOW_QUERY_MS`          | `200`                                                     | No          | Logs a `warn` (query template + duration, never params) above this threshold                          |
+| `DB_REPLICATION_LAG_THRESHOLD_MS` | `30000`                                                   | No          | Deep-health threshold for physical replica replay lag                                                 |
+| `POSTGRES_USER`                   | `postgres`                                                | Docker only | DB username for Compose                                                                               |
+| `POSTGRES_PASSWORD`               | `postgres`                                                | Docker only | DB password for Compose                                                                               |
+| `POSTGRES_DB`                     | `nestjs_db`                                               | Docker only | Database name for Compose                                                                             |
+| `POSTGRES_PORT`                   | `5432`                                                    | Docker only | Host port for Compose                                                                                 |
 
 ## Redis
 
@@ -90,17 +93,17 @@ Optional. Each provider activates only when **both** its `*_CLIENT_ID` and `*_CL
 
 ## Application
 
-| Variable              | Default                        | Required | Description                                                        |
-| --------------------- | ------------------------------ | -------- | ------------------------------------------------------------------ |
-| `NODE_ENV`            | `development`                  | No       | `development` or `production`                                      |
-| `PORT`                | `3000`                         | No       | HTTP port                                                          |
-| `API_BASE_URL`        | `http://localhost:3000/api/v1` | No       | Generated Axios client base URL for SSR/Node execution             |
-| `TRUST_PROXY_HOPS`    | `0`                            | No       | Trusted reverse-proxy depth; keep `0` when API is exposed directly |
-| `TZ`                  | `UTC`                          | No       | IANA timezone resolved by Node (requires `tzdata` in the image)    |
-| `THROTTLER_ENABLED`   | `true`                         | No       | Toggle the global rate limiter                                     |
-| `THROTTLER_LIMIT`     | `100`                          | No       | Requests per window                                                |
-| `THROTTLER_TTL`       | `60`                           | No       | Window length in seconds                                           |
-| `THROTTLER_FAIL_OPEN` | `true`                         | No       | Permit general API traffic during throttler Redis outages          |
+| Variable              | Default                 | Required | Description                                                                                                                                           |
+| --------------------- | ----------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `NODE_ENV`            | `development`           | No       | `development` or `production`                                                                                                                         |
+| `PORT`                | `3000`                  | No       | HTTP port                                                                                                                                             |
+| `API_BASE_URL`        | `http://localhost:3000` | No       | Origin the generated Axios client targets from SSR/Node. Origin only — the generated operations already carry `/api/v1`, so a path here is sent twice |
+| `TRUST_PROXY_HOPS`    | `0`                     | No       | Trusted reverse-proxy depth; keep `0` when API is exposed directly                                                                                    |
+| `TZ`                  | `UTC`                   | No       | IANA timezone resolved by Node (requires `tzdata` in the image)                                                                                       |
+| `THROTTLER_ENABLED`   | `true`                  | No       | Toggle the global rate limiter                                                                                                                        |
+| `THROTTLER_LIMIT`     | `100`                   | No       | Requests per window                                                                                                                                   |
+| `THROTTLER_TTL`       | `60`                    | No       | Window length in seconds                                                                                                                              |
+| `THROTTLER_FAIL_OPEN` | `true`                  | No       | Permit general API traffic during throttler Redis outages                                                                                             |
 
 ## Rate Limiting & Request Body Limits
 
@@ -179,25 +182,32 @@ safe because command handlers roll back their transaction on error.
 
 ## Eventing & Outbox
 
-| Variable                  | Default     | Required | Description                                                                 |
-| ------------------------- | ----------- | -------- | --------------------------------------------------------------------------- |
-| `EVENT_PUBLISHER_DRIVER`  | `inprocess` | No       | `inprocess` (EventEmitter2) or `outbox` (Postgres outbox + scheduler relay) |
-| `OUTBOX_TX_TIMEOUT_MS`    | `30000`     | No       | Outbox interactive tx timeout (30 sec); increase if events hang in publish  |
-| `OUTBOX_POLL_INTERVAL_MS` | `1000`      | No       | Relay polling cadence                                                       |
-| `OUTBOX_BATCH_SIZE`       | `50`        | No       | Max events relayed per poll                                                 |
-| `OUTBOX_MAX_ATTEMPTS`     | `10`        | No       | Retry budget before an event is parked                                      |
+| Variable                   | Default     | Required | Description                                                                                                     |
+| -------------------------- | ----------- | -------- | --------------------------------------------------------------------------------------------------------------- |
+| `EVENT_PUBLISHER_DRIVER`   | `inprocess` | No       | `inprocess` (EventEmitter2) or `outbox` (Postgres outbox + scheduler relay)                                     |
+| `OUTBOX_TX_TIMEOUT_MS`     | `30000`     | No       | Outbox interactive tx timeout (30 sec); increase if events hang in publish                                      |
+| `OUTBOX_POLL_INTERVAL_MS`  | `1000`      | No       | Relay polling cadence                                                                                           |
+| `OUTBOX_BATCH_SIZE`        | `50`        | No       | Max events relayed per poll                                                                                     |
+| `OUTBOX_MAX_ATTEMPTS`      | `10`        | No       | Retry budget before an event is parked                                                                          |
+| `OUTBOX_RETENTION_DAYS`    | `7`         | No       | Age after which a **processed** row is hard-deleted (03:15 UTC). Unprocessed rows are never purged by this cron |
+| `OUTBOX_PURGE_BATCH_SIZE`  | `1000`      | No       | Rows deleted per purge batch                                                                                    |
+| `OUTBOX_PURGE_MAX_BATCHES` | `200`       | No       | Batches per purge run — the cap is `BATCH_SIZE × MAX_BATCHES` rows/night                                        |
 
 ## Scheduler cleanup
 
-| Variable                               | Default | Description                                    |
-| -------------------------------------- | ------- | ---------------------------------------------- |
-| `DLQ_ALERT_THRESHOLD`                  | `10`    | Alert threshold per dead-letter queue          |
-| `INACTIVE_USER_RETENTION_DAYS`         | `90`    | Age before inactive users are purged           |
-| `USER_PURGE_BATCH_SIZE`                | `500`   | Users deleted per cleanup batch                |
-| `USER_PURGE_MAX_BATCHES`               | `200`   | Maximum user cleanup batches per run           |
-| `STORED_FILE_CLEANUP_BATCH_SIZE`       | `500`   | Stored-file lifecycle records scanned per hour |
-| `STORED_FILE_FINALIZING_STALE_MINUTES` | `60`    | FINALIZING age considered abandoned            |
-| `STORED_FILE_VERIFYING_STALE_HOURS`    | `24`    | VERIFYING age considered abandoned             |
+| Variable                               | Default | Description                                      |
+| -------------------------------------- | ------- | ------------------------------------------------ |
+| `AUDIT_LOG_RETENTION_MONTHS`           | `12`    | Monthly `audit_logs` partitions kept before DROP |
+| `DLQ_ALERT_THRESHOLD`                  | `10`    | Alert threshold per dead-letter queue            |
+| `INACTIVE_USER_RETENTION_DAYS`         | `90`    | Age before inactive users are purged             |
+| `USER_PURGE_BATCH_SIZE`                | `500`   | Users deleted per cleanup batch                  |
+| `USER_PURGE_MAX_BATCHES`               | `200`   | Maximum user cleanup batches per run             |
+| `STORED_FILE_CLEANUP_BATCH_SIZE`       | `500`   | Stored-file lifecycle records scanned per hour   |
+| `STORED_FILE_FINALIZING_STALE_MINUTES` | `60`    | FINALIZING age considered abandoned              |
+| `STORED_FILE_VERIFYING_STALE_HOURS`    | `24`    | VERIFYING age considered abandoned               |
+| `VERIFICATION_PURGE_GRACE_DAYS`        | `1`     | Age past `expiresAt` before a token is deleted   |
+| `VERIFICATION_PURGE_BATCH_SIZE`        | `1000`  | Verification rows deleted per batch              |
+| `VERIFICATION_PURGE_MAX_BATCHES`       | `200`   | Maximum verification purge batches per run       |
 
 ## Bull Board
 
@@ -209,30 +219,30 @@ safe because command handlers roll back their transaction on error.
 
 ## Observability
 
-| Variable                         | Default                 | Required | Description                                                                                                                                                          |
-| -------------------------------- | ----------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `LOG_LEVEL`                      | `info`                  | No       | pino log level: `trace`, `debug`, `info`, `warn`, `error`                                                                                                            |
-| `LOG_PRETTY`                     | `true`                  | No       | Pretty-print host development logs; Compose overrides this to `false` for structured container logs                                                                  |
-| `COMPOSE_PROJECT_NAME`           | `nestjs-fastify-nx`     | No       | Prefix for Compose containers, networks, volumes, and locally built image tags                                                                                       |
-| `SWARM_STACK_NAME`               | `app`                   | No       | Stack namespace used by `scripts/swarm-local-test.sh`; independent from the Compose project name                                                                     |
-| `PROD_STARTUP_TIMEOUT_SECONDS`   | `120`                   | No       | Maximum time `build-prod.sh` waits for the production stack to become healthy                                                                                        |
-| `ENABLE_METRICS`                 | `false`                 | No       | Expose `/metrics` for Prometheus (excluded from `api/v1` prefix)                                                                                                     |
-| `METRICS_ALLOW_CIDRS`            | —                       | No       | Comma-separated CIDR ranges allowed to hit `/metrics` (empty=closed)                                                                                                 |
-| `OTEL_ENABLED`                   | `false`                 | No       | Bootstrap the OpenTelemetry SDK                                                                                                                                      |
-| `OTEL_SERVICE_NAME`              | `nestjs-fastify-api`    | No       | Reported service name                                                                                                                                                |
-| `OTEL_SERVICE_NAMESPACE`         | `app`                   | No       | Reported service namespace                                                                                                                                           |
-| `OTEL_SERVICE_VERSION`           | `0.0.0`                 | No       | Release/version attached to OTel resources and Sentry events                                                                                                         |
-| `OTEL_EXPORTER_OTLP_ENDPOINT`    | `http://localhost:4318` | No       | OTLP/HTTP collector endpoint                                                                                                                                         |
-| `OTEL_EXPORTER_OTLP_HEADERS`     | —                       | No       | Optional collector auth headers                                                                                                                                      |
-| `OTEL_TRACES_SAMPLER_RATIO`      | `1`                     | No       | Head sampling ratio for **new** traces. Keep `1` with Collector tail sampling; discarded head traces cannot be recovered                                             |
-| `OTEL_TRUST_INBOUND_TRACEPARENT` | `false`                 | No       | Trust client `traceparent`/`baggage`. Keep `false` on a public edge; `true` only behind a trusted mesh/gateway                                                       |
-| `OTEL_METRICS_EXPORT_ENABLED`    | `false`                 | No       | Push OTLP metrics from this process. Keep `false` for the API (prom-client `/metrics` is source of truth); `true` for worker/scheduler which have no scrape endpoint |
-| `OTEL_DEBUG`                     | `false`                 | No       | Verbose SDK logging                                                                                                                                                  |
-| `TRUST_INBOUND_REQUEST_ID`       | `false`                 | No       | Accept sanitized `X-Request-Id` from a trusted gateway; keep false for public callers                                                                                |
-| `GRAFANA_ADMIN_PASSWORD`         | `admin`                 | No       | Local Grafana admin password; must be replaced on shared/remote hosts                                                                                                |
-| `SENTRY_DSN`                     | —                       | No       | Sentry DSN; leave empty to disable                                                                                                                                   |
-| `SENTRY_TRACES_SAMPLE_RATE`      | `0.1`                   | No       | Sentry tracing sample rate                                                                                                                                           |
-| `SENTRY_ENVIRONMENT`             | `development`           | No       | Reported Sentry environment tag                                                                                                                                      |
+| Variable                         | Default                                  | Required | Description                                                                                                                                                          |
+| -------------------------------- | ---------------------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `LOG_LEVEL`                      | `info`                                   | No       | pino log level: `trace`, `debug`, `info`, `warn`, `error`                                                                                                            |
+| `LOG_PRETTY`                     | `true`                                   | No       | Pretty-print host development logs; Compose overrides this to `false` for structured container logs                                                                  |
+| `COMPOSE_PROJECT_NAME`           | `nestjs-fastify-nx`                      | No       | Prefix for Compose containers, networks, volumes, and locally built image tags                                                                                       |
+| `SWARM_STACK_NAME`               | `app`                                    | No       | Stack namespace used by `scripts/swarm-local-test.sh`; independent from the Compose project name                                                                     |
+| `PROD_STARTUP_TIMEOUT_SECONDS`   | `120`                                    | No       | Maximum time `build-prod.sh` waits for the production stack to become healthy                                                                                        |
+| `ENABLE_METRICS`                 | `false`                                  | No       | Expose `/metrics` for Prometheus (excluded from `api/v1` prefix)                                                                                                     |
+| `METRICS_ALLOW_CIDRS`            | —                                        | No       | Comma-separated CIDR ranges allowed to hit `/metrics` (empty=closed)                                                                                                 |
+| `OTEL_ENABLED`                   | `false`                                  | No       | Bootstrap the OpenTelemetry SDK                                                                                                                                      |
+| `OTEL_SERVICE_NAME`              | `nestjs-fastify-api`                     | No       | Reported service name                                                                                                                                                |
+| `OTEL_SERVICE_NAMESPACE`         | `app`                                    | No       | Reported service namespace                                                                                                                                           |
+| `OTEL_SERVICE_VERSION`           | `0.0.0`                                  | No       | Release/version attached to OTel resources and Sentry events                                                                                                         |
+| `OTEL_EXPORTER_OTLP_ENDPOINT`    | `http://localhost:4318`                  | No       | OTLP/HTTP collector endpoint                                                                                                                                         |
+| `OTEL_EXPORTER_OTLP_HEADERS`     | —                                        | No       | Optional collector auth headers                                                                                                                                      |
+| `OTEL_TRACES_SAMPLER_RATIO`      | `1`                                      | No       | Head sampling ratio for **new** traces. Keep `1` with Collector tail sampling; discarded head traces cannot be recovered                                             |
+| `OTEL_TRUST_INBOUND_TRACEPARENT` | `false`                                  | No       | Trust client `traceparent`/`baggage`. Keep `false` on a public edge; `true` only behind a trusted mesh/gateway                                                       |
+| `OTEL_METRICS_EXPORT_ENABLED`    | `false`                                  | No       | Push OTLP metrics from this process. Keep `false` for the API (prom-client `/metrics` is source of truth); `true` for worker/scheduler which have no scrape endpoint |
+| `OTEL_DEBUG`                     | `false`                                  | No       | Verbose SDK logging                                                                                                                                                  |
+| `TRUST_INBOUND_REQUEST_ID`       | `false`                                  | No       | Accept sanitized `X-Request-Id` from a trusted gateway; keep false for public callers                                                                                |
+| `GRAFANA_ADMIN_PASSWORD`         | `admin`                                  | No       | Local Grafana admin password; must be replaced on shared/remote hosts                                                                                                |
+| `SENTRY_DSN`                     | —                                        | No       | Sentry DSN; leave empty to disable                                                                                                                                   |
+| `SENTRY_TRACES_SAMPLE_RATE`      | `0.01` (api, scheduler) · `0.1` (worker) | No       | Sentry tracing sample rate. The api default is deliberately 1%: at 1k RPS, 0.1 burns ~26M traces/day                                                                 |
+| `SENTRY_ENVIRONMENT`             | `development`                            | No       | Reported Sentry environment tag                                                                                                                                      |
 
 ## CI / Nx Cloud
 

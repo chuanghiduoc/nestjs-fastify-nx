@@ -10,9 +10,8 @@ and in **CI** (gate). A clean local run mirrors the CI gate.
 | --- | -------------- | ------------- | ---------------------------------- | -------------------------------------- |
 | 1   | Secrets        | Gitleaks      | `scripts/security/scan-secrets.sh` | `ci.yml` (`secret-scan` job, lefthook) |
 | 2   | Dependencies   | OSV-Scanner   | `scripts/security/scan-deps.sh`    | `ci.yml` (`dep-scan` job)              |
-| 2   | Dependencies   | `pnpm audit`  | (built-in)                         | `ci.yml` (main job)                    |
 | 3   | SAST           | Semgrep       | `scripts/security/scan-sast.sh`    | `release.yml` (`static-analysis`)      |
-| 4   | Container CVEs | Trivy         | `scripts/security/scan-images.sh`  | `release.yml` (`security-scan`)        |
+| 4   | Container CVEs | Trivy         | `scripts/security/scan-images.sh`  | `release.yml` (`build-and-push`)       |
 | 5   | Supply chain   | Cosign + SLSA | `scripts/security/sign-images.sh`  | `release.yml` (sign step)              |
 
 Run the whole stack locally: `./scripts/security/scan-all.sh`.
@@ -21,8 +20,10 @@ Run the whole stack locally: `./scripts/security/scan-all.sh`.
 
 ### Gitleaks — secrets
 
-API keys, tokens, private keys committed to the repo. Pre-commit hook scans
-staged hunks; pre-push hook scans full history; CI scans the entire diff.
+API keys, tokens, private keys committed to the repo. The pre-push hook scans the
+full history; CI scans the entire diff. There is deliberately no Gitleaks step on
+`pre-commit` — lefthook keeps that hook to `lint-staged` + `typecheck` so commits
+stay fast, and push is the last point before anything leaves the machine.
 
 ```bash
 ./scripts/security/scan-secrets.sh           # full repo + history
@@ -75,6 +76,12 @@ uploads SARIF to GitHub Security). The local `build-*.sh` scripts deliberately
 skip it to keep the inner loop fast — run `scripts/security/scan-images.sh`
 manually when you want a pre-push check.
 
+The scan is a **pre-push gate**: `build-and-push` builds each image into the
+runner's local daemon, scans it, and only pushes to GHCR (then cosign-signs it)
+once Trivy is clean. A failing scan therefore publishes nothing — there is no
+window in which a vulnerable, signed `latest` is pullable, and nothing needs
+retracting. The push step is a cache hit on the layers the scan build produced.
+
 ### Cosign — supply-chain signatures
 
 Production images are signed with **keyless OIDC** via Sigstore Fulcio in
@@ -111,8 +118,8 @@ back to a specific commit, workflow run, and signing identity.
 ./scripts/security/scan-images.sh
 ```
 
-Lefthook wires Gitleaks into `pre-commit` (staged hunks) and `pre-push`
-(full history). To run hooks manually:
+Lefthook wires Gitleaks into `pre-push` (full history). `pre-commit` runs
+`lint-staged` + `typecheck`; `commit-msg` runs commitlint. To run hooks manually:
 
 ```bash
 pnpm exec lefthook run pre-commit
@@ -125,15 +132,21 @@ pnpm exec lefthook run pre-push
 PR / push
   ├── secret-scan        (gitleaks-action)
   ├── dep-scan           (osv-scanner-action)
-  └── main               (lint, typecheck, test, build, pnpm audit)
+  └── main               (sync check, format, lint, typecheck, test, build)
 
 tag v*.*.*
-  ├── build-and-push     (buildx + SBOM + provenance attestations)
-  │     └── cosign sign  (keyless via Fulcio OIDC)
-  ├── security-scan      (Trivy SARIF → GitHub Security)
-  ├── static-analysis    (Semgrep, error-only gate)
-  └── migrate-and-deploy (gated on the four above)
+  ├── prime-build-cache  (shared build-prod stage → gha cache)
+  ├── build-and-push     (per app: build local → Trivy gate → push → cosign sign)
+  │     ├── build (load, no push)   buildx into the runner's daemon
+  │     ├── trivy                   SARIF → GitHub Security; fails the job on CRITICAL/HIGH
+  │     ├── push                    only if Trivy passed; SBOM + provenance attestations
+  │     └── cosign sign             keyless via Fulcio OIDC
+  └── static-analysis    (Semgrep, error-only gate)
 ```
+
+Release stops at signed, scanned images on GHCR. Database migration and rollout
+are deployment-specific and intentionally not wired into this workflow — see
+`docs/deployment.md`.
 
 ## Tuning
 

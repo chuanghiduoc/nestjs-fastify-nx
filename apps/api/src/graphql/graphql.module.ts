@@ -6,6 +6,7 @@ import { NoSchemaIntrospectionCustomRule } from 'graphql';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { UsersModule } from '@nestjs-fastify-nx/modules-users';
 import type { EnvConfig } from '../config/env.validation';
+import { createGraphqlErrorFormatter } from './graphql-error-formatter';
 import { UserResolver } from './resolvers/user.resolver';
 
 @Module({
@@ -21,6 +22,10 @@ import { UserResolver } from './resolvers/user.resolver';
           path: '/graphql',
           context: (req: FastifyRequest, reply: FastifyReply) => ({ req, reply }),
           validationRules: isProduction ? [NoSchemaIntrospectionCustomRule] : [],
+          // Mercurius' default formatter has no production masking, so an unexpected resolver
+          // failure would answer with its raw message here while REST answers "Internal Server
+          // Error" for the same failure.
+          errorFormatter: createGraphqlErrorFormatter(isProduction),
         };
       },
     }),

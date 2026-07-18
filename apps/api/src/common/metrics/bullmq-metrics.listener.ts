@@ -45,33 +45,30 @@ abstract class QueueMetricsListenerBase extends QueueEventsHost {
     super();
   }
 
+  // Map upkeep is not leader-gated: leadership can flip between `active` and the terminal event,
+  // stranding the entry on the ex-leader. It is per-replica state; only the metric write is gated.
   @OnQueueEvent('active')
   onActive(args: ActiveEvent): void {
-    if (!this.leader.isLeader()) return;
     this.activeAt.set(args.jobId, process.hrtime.bigint());
   }
 
   @OnQueueEvent('completed')
   onCompleted(args: CompletedEvent): void {
-    if (!this.leader.isLeader()) return;
-    this.metrics.bullmqJobsTotal.inc({ queue: this.queueLabel, status: 'completed' });
-    this.observeDuration(args.jobId, 'completed');
+    this.recordTerminal(args.jobId, 'completed');
   }
 
   @OnQueueEvent('failed')
   onFailed(args: FailedEvent): void {
-    if (!this.leader.isLeader()) return;
-    this.metrics.bullmqJobsTotal.inc({ queue: this.queueLabel, status: 'failed' });
-    this.observeDuration(args.jobId, 'failed');
+    this.recordTerminal(args.jobId, 'failed');
   }
 
   @OnQueueEvent('stalled')
   onStalled(args: StalledEvent): void {
-    if (!this.leader.isLeader()) return;
-    this.metrics.bullmqJobsTotal.inc({ queue: this.queueLabel, status: 'stalled' });
     // Stalled jobs get re-claimed elsewhere — drop the local active entry so it can't leak.
     this.activeAt.delete(args.jobId);
     this.sweepStale();
+    if (!this.leader.isLeader()) return;
+    this.metrics.bullmqJobsTotal.inc({ queue: this.queueLabel, status: 'stalled' });
   }
 
   @OnQueueEvent('delayed')
@@ -80,18 +77,25 @@ abstract class QueueMetricsListenerBase extends QueueEventsHost {
     this.metrics.bullmqJobsTotal.inc({ queue: this.queueLabel, status: 'delayed' });
   }
 
-  private observeDuration(jobId: string, status: 'completed' | 'failed'): void {
-    const startedAt = this.activeAt.get(jobId);
-    if (startedAt === undefined) return;
-    this.activeAt.delete(jobId);
-    const elapsedNs = process.hrtime.bigint() - startedAt;
-    const durationSeconds = Number(elapsedNs) / 1e9;
-    // Drop the sample if the active timestamp is impossibly old — keeps the histogram clean.
-    if (elapsedNs > MAX_ACTIVE_AGE_NS) return;
+  private recordTerminal(jobId: string, status: 'completed' | 'failed'): void {
+    const elapsedNs = this.takeElapsed(jobId);
+    if (!this.leader.isLeader()) return;
+
+    this.metrics.bullmqJobsTotal.inc({ queue: this.queueLabel, status });
+    // Drop the sample if the active timestamp is missing (job started before this replica saw it)
+    // or impossibly old — keeps the histogram clean.
+    if (elapsedNs === undefined || elapsedNs > MAX_ACTIVE_AGE_NS) return;
     this.metrics.bullmqJobDurationSeconds.observe(
       { queue: this.queueLabel, status },
-      durationSeconds,
+      Number(elapsedNs) / 1e9,
     );
+  }
+
+  private takeElapsed(jobId: string): bigint | undefined {
+    const startedAt = this.activeAt.get(jobId);
+    if (startedAt === undefined) return undefined;
+    this.activeAt.delete(jobId);
+    return process.hrtime.bigint() - startedAt;
   }
 
   private sweepStale(): void {

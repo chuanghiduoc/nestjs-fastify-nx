@@ -1,1 +1,7 @@
 export { <%= className %>Module } from './<%= fileName %>.module';
+<% if (withCqrs) { %>
+// Re-exported so cross-cutting consumers (composition libs, other apps) can dispatch through the
+// CommandBus. Without this the command is unreachable outside this module — the tsconfig path
+// alias resolves to this barrel and nothing else.
+export { Create<%= className %>Command } from './application';
+<% } %>

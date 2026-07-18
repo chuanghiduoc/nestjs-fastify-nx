@@ -15,6 +15,7 @@ import { AppModule } from '../src/app/app.module';
 import { registerIdempotency } from '../src/common/idempotency/register-idempotency';
 import { ProblemDetailsValidationPipe } from '../src/common/pipes';
 import { applyFastifyProblemDetailsHook } from '../src/common/filters/fastify-error-handler';
+import { buildProblemDetails } from '../src/common/filters/problem-details.helper';
 
 // In-process stub — e2e covers controller logic, not the S3 wire format.
 // Real S3 paths are unit-tested in s3-storage.adapter.spec.ts.
@@ -156,12 +157,16 @@ export async function createTestApp(): Promise<TestAppContext> {
       const email = body && typeof body['email'] === 'string' ? body['email'].toLowerCase() : '';
       return `${req.ip}:${email}`;
     },
-    errorResponseBuilder: (_req, context) => ({
-      type: 'https://tools.ietf.org/html/rfc6585#section-4',
-      title: 'Too Many Requests',
-      status: HttpStatus.TOO_MANY_REQUESTS,
-      code: ERROR_CODES.RATE_LIMITED,
-      detail: `Rate limit exceeded. Try again in ${Math.ceil(context.ttl / 1000)} seconds.`,
+    // Same builder main.ts uses — a hand-rolled body here would let e2e pass against a shape
+    // production does not emit.
+    errorResponseBuilder: (req, context) => ({
+      ...buildProblemDetails({
+        status: HttpStatus.TOO_MANY_REQUESTS,
+        title: 'Too Many Requests',
+        detail: `Rate limit exceeded. Try again in ${Math.ceil(context.ttl / 1000)} seconds.`,
+        code: ERROR_CODES.RATE_LIMITED,
+        instance: req.url,
+      }),
       retryAfter: Math.ceil(context.ttl / 1000),
     }),
   });

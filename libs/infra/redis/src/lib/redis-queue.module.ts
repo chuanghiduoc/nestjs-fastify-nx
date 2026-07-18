@@ -1,6 +1,7 @@
 import { Injectable, Module, OnModuleDestroy } from '@nestjs/common';
 import { BullModule } from '@nestjs/bullmq';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { redisReconnectStrategy } from '@nestjs-fastify-nx/shared';
 import Redis from 'ioredis';
 
 /**
@@ -35,8 +36,7 @@ export class RedisQueueClientProvider implements OnModuleDestroy {
       host: config.get('REDIS_QUEUE_HOST', { infer: true }),
       port: config.get('REDIS_QUEUE_PORT', { infer: true }),
       maxRetriesPerRequest: null,
-      retryStrategy: (times: number): number | null =>
-        times >= 10 ? null : Math.min(times * 200, 3000),
+      retryStrategy: redisReconnectStrategy,
       // lazyConnect prevents opening a socket until the first command —
       // importers that never call redis (e.g. health checks) pay no fd cost.
       lazyConnect: true,
@@ -60,8 +60,7 @@ export class RedisQueueClientProvider implements OnModuleDestroy {
           // BullMQ requires `maxRetriesPerRequest: null` — without it BullMQ
           // throws on every connection blip instead of letting ioredis retry.
           maxRetriesPerRequest: null,
-          retryStrategy: (times: number): number | null =>
-            times >= 10 ? null : Math.min(times * 200, 3000),
+          retryStrategy: redisReconnectStrategy,
         },
         prefix: config.get('REDIS_QUEUE_PREFIX', { infer: true }),
         defaultJobOptions: {

@@ -2,11 +2,18 @@
 const BASE64URL = /^[A-Za-z0-9_-]+$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
+// A cursor that has already passed validation. Repository ports take this rather than the raw
+// string so a malformed cursor is unrepresentable below the boundary that decodes it.
+export interface DecodedCursor {
+  createdAt: Date;
+  id: string;
+}
+
 export function encodeCursor(sortField: Date, id: string): string {
   return Buffer.from(`${sortField.toISOString()}:${id}`).toString('base64url');
 }
 
-export function decodeCursor(cursor: string): { createdAt: Date; id: string } | null {
+export function decodeCursor(cursor: string): DecodedCursor | null {
   try {
     if (!cursor || !BASE64URL.test(cursor)) return null;
     const bytes = Buffer.from(cursor, 'base64url');

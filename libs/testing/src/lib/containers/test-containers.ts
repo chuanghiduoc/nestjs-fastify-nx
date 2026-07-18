@@ -7,11 +7,13 @@ export interface TestContainers {
   teardown: () => Promise<void>;
 }
 
+// Images match docker/compose.yml so tests exercise what the apps run against. Sequential, not
+// Promise.all: a rejection there discards the other handle, leaking a running container.
 export async function createTestContainers(): Promise<TestContainers> {
   const postgres = await new PostgreSqlContainer('postgres:18-alpine').start();
   let redis: StartedRedisContainer;
   try {
-    redis = await new RedisContainer('redis:7-alpine').start();
+    redis = await new RedisContainer('redis:8-alpine').start();
   } catch (error) {
     await postgres.stop().catch(() => undefined);
     throw error;

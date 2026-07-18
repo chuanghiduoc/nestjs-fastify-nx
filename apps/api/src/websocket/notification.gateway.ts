@@ -16,6 +16,7 @@ import Redis from 'ioredis';
 import { ConfigService } from '@nestjs/config';
 import { BETTER_AUTH_INSTANCE } from '@nestjs-fastify-nx/infra-auth';
 import type { BetterAuthInstance } from '@nestjs-fastify-nx/infra-auth';
+import { redisReconnectStrategy } from '@nestjs-fastify-nx/shared';
 import {
   createWsAuthMiddleware,
   renewWsConnectionLease,
@@ -71,25 +72,18 @@ export class NotificationGateway
   ) {}
 
   afterInit(server: Server): void {
-    // null after the cap stops ioredis reconnecting forever on a dead Redis.
-    const retryStrategy = (times: number): number | null =>
-      times >= 10 ? null : Math.min(times * 100, 3000);
     const host = this.config.get('REDIS_CACHE_HOST', { infer: true });
     const port = this.config.get('REDIS_CACHE_PORT', { infer: true });
+    const db = this.config.get('REDIS_PUBSUB_DB', { infer: true });
 
-    this.pubClient = new Redis({
-      host,
-      port,
-      db: this.config.get('REDIS_PUBSUB_DB', { infer: true }),
-      retryStrategy,
-    });
+    this.pubClient = new Redis({ host, port, db, retryStrategy: redisReconnectStrategy });
     this.subClient = this.pubClient.duplicate();
 
     this.rateLimitClient = new Redis({
       host,
       port,
-      db: this.config.get('REDIS_PUBSUB_DB', { infer: true }),
-      retryStrategy,
+      db,
+      retryStrategy: redisReconnectStrategy,
       enableOfflineQueue: false,
     });
 

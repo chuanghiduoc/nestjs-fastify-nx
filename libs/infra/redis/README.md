@@ -12,6 +12,7 @@ import {
   RedisCacheModule,
   RedisCacheService,
   RedisQueueModule,
+  REDIS_QUEUE_CLIENT,
   DeadLetterModule,
   dlqNameFor,
   createDeadLetterRouterClass,
@@ -20,11 +21,16 @@ import {
 } from '@nestjs-fastify-nx/infra-redis';
 ```
 
+`REDIS_QUEUE_CLIENT` resolves to the ioredis client already connected to the queue instance. Inject
+it (`@Inject(REDIS_QUEUE_CLIENT) redis: Redis`) rather than opening a second connection for things
+like a processor's SETNX idempotency guard.
+
 ## Cache
 
 `RedisCacheModule` wires `cache-manager` over `Keyv` against the cache
 instance (`REDIS_CACHE_HOST` / `REDIS_CACHE_PORT`). `RedisCacheService` is a
-thin typed wrapper exposing `get` / `set` / `del` / `wrap`.
+thin typed wrapper exposing `get` / `set` / `del` / `reset`. `get`, `set` and
+`del` take an optional `namespace` that prefixes the key.
 
 Default TTL: `REDIS_CACHE_TTL_MS` (5 minutes).
 
@@ -41,12 +47,18 @@ and consumers can't drift.
 ## Dead-letter queues
 
 For at-least-once durability, every business queue gets a paired DLQ. The
-naming convention is enforced by `dlqNameFor(queueName)` which appends `:dlq`.
+naming convention is enforced by `dlqNameFor(queueName)`, which appends `.dlq`.
+The separator is a dot, not a colon — BullMQ reserves `:` for its internal Redis
+key scheme and rejects it in custom ids.
+
+`createDeadLetterRouterClass(queue)` returns a `QueueEventsHost` subclass already
+decorated with `@QueueEventsListener(queue)` — it listens for failures, it is not
+a `@Processor`. Register it as a provider:
 
 ```ts
-@Processor(QUEUE_NAMES.EMAIL_NOTIFICATION)
-class EmailProcessor extends createDeadLetterRouterClass(QUEUE_NAMES.EMAIL_NOTIFICATION) {
-  // failed jobs after retry exhaustion are auto-routed to email-notification:dlq
+@Injectable()
+class EmailDeadLetterRouter extends createDeadLetterRouterClass(QUEUE_NAMES.EMAIL_NOTIFICATION) {
+  // Jobs that exhaust their retries are auto-routed to email-notification.dlq
 }
 ```
 

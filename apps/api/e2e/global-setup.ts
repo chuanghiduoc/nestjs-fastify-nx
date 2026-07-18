@@ -1,16 +1,12 @@
-import { deployTestMigrations } from '@nestjs-fastify-nx/testing';
-import { PostgreSqlContainer } from '@testcontainers/postgresql';
-import { RedisContainer } from '@testcontainers/redis';
-import type { StartedPostgreSqlContainer } from '@testcontainers/postgresql';
-import type { StartedRedisContainer } from '@testcontainers/redis';
+import { createTestContainers, deployTestMigrations } from '@nestjs-fastify-nx/testing';
+import type { TestContainers } from '@nestjs-fastify-nx/testing';
 
-declare global {
-  var __E2E_POSTGRES__: StartedPostgreSqlContainer;
-  var __E2E_REDIS__: StartedRedisContainer;
-}
+// Vitest calls both hooks on one module instance, so module scope carries the handle across.
+let containers: TestContainers | undefined;
 
 async function stopContainers(): Promise<void> {
-  await Promise.all([globalThis.__E2E_POSTGRES__?.stop(), globalThis.__E2E_REDIS__?.stop()]);
+  await containers?.teardown().catch(() => undefined);
+  containers = undefined;
 }
 
 export async function setup(): Promise<void> {
@@ -30,15 +26,7 @@ export async function setup(): Promise<void> {
     return;
   }
 
-  const [postgresContainer, redisContainer] = await Promise.all([
-    new PostgreSqlContainer('postgres:18-alpine').start(),
-    new RedisContainer('redis:8-alpine').start(),
-  ]);
-
-  // Expose via globalThis so createTestApp() can read them without re-importing
-  // containers package in each spec file.
-  globalThis.__E2E_POSTGRES__ = postgresContainer;
-  globalThis.__E2E_REDIS__ = redisContainer;
+  containers = await createTestContainers();
 
   // Stop containers on SIGINT/SIGTERM (CI cancel, Ctrl-C) so Docker resources
   // are not leaked when Vitest's teardown export is bypassed by process kill.
@@ -48,11 +36,11 @@ export async function setup(): Promise<void> {
   process.once('SIGINT', handleSignal);
   process.once('SIGTERM', handleSignal);
 
-  const dbUrl = postgresContainer.getConnectionUri();
+  const dbUrl = containers.postgres.getConnectionUri();
   configureTestEnvironment(
     dbUrl,
-    redisContainer.getHost(),
-    String(redisContainer.getFirstMappedPort()),
+    containers.redis.getHost(),
+    String(containers.redis.getFirstMappedPort()),
   );
 
   // Run migrations once against the shared container. Any failure here means

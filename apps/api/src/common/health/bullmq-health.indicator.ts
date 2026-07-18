@@ -3,6 +3,7 @@ import type { HealthIndicatorResult } from '@nestjs/terminus';
 import { HealthIndicatorService } from '@nestjs/terminus';
 import { ConfigService } from '@nestjs/config';
 import { Queue } from 'bullmq';
+import { redisReconnectStrategy } from '@nestjs-fastify-nx/shared';
 import type { EnvConfig } from '../../config/env.validation';
 import { QUEUE_NAMES } from '../../app/constants/queue.constants';
 
@@ -34,7 +35,9 @@ export class BullMqHealthIndicator implements OnModuleDestroy {
         port: config.get('REDIS_QUEUE_PORT', { infer: true }),
         maxRetriesPerRequest: 1,
         connectTimeout: PROBE_TIMEOUT_MS,
-        retryStrategy: () => null,
+        // A number, not null: null makes ioredis give up reconnecting for good, so one Redis blip
+        // would leave this probe reporting down forever. The timeouts above bound each probe call.
+        retryStrategy: redisReconnectStrategy,
         lazyConnect: true,
       },
       prefix: config.get('REDIS_QUEUE_PREFIX', { infer: true }),

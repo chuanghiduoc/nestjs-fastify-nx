@@ -15,7 +15,7 @@ import { Redis } from 'ioredis';
 import { createHash } from 'node:crypto';
 import { toNodeHandler } from 'better-auth/node';
 import { BETTER_AUTH_INSTANCE, type BetterAuthInstance } from '@nestjs-fastify-nx/infra-auth';
-import { intEnv, positiveIntEnv } from '@nestjs-fastify-nx/shared';
+import { intEnv, positiveIntEnv, redisReconnectStrategy } from '@nestjs-fastify-nx/shared';
 import { ERROR_CODES } from '@nestjs-fastify-nx/contracts';
 import { reportFatalError, startSentry } from '@nestjs-fastify-nx/infra-observability';
 import { AppModule } from './app/app.module';
@@ -25,6 +25,7 @@ import { setupSwagger } from './common/swagger/swagger.config';
 import { createBullBoardPlugin } from './common/bull-board/create-bull-board-plugin';
 import { registerIdempotency } from './common/idempotency/register-idempotency';
 import { applyFastifyProblemDetailsHook } from './common/filters/fastify-error-handler';
+import { buildProblemDetails } from './common/filters/problem-details.helper';
 import type { EnvConfig } from './config/env.validation';
 
 const STRICT_AUTH_PATHS = new Set([
@@ -143,7 +144,7 @@ async function bootstrap() {
       port: config.get('REDIS_CACHE_PORT', { infer: true }),
       db: 5,
       maxRetriesPerRequest: 1,
-      retryStrategy: (times: number) => (times >= 10 ? null : Math.min(times * 200, 3000)),
+      retryStrategy: redisReconnectStrategy,
       enableOfflineQueue: false,
     });
     idempotencyRedis.on('error', (err: Error) => {
@@ -172,16 +173,16 @@ async function bootstrap() {
         .header('content-type', 'application/problem+json')
         .header('x-request-id', requestId)
         .header('retry-after', '10')
-        .send({
-          type: 'about:blank',
-          title: 'Service Unavailable',
-          status: HttpStatus.SERVICE_UNAVAILABLE,
-          code: ERROR_CODES.SERVICE_UNAVAILABLE,
-          detail: 'Server is under heavy load; please retry shortly.',
-          instance: req.url,
-          requestId,
-          timestamp: new Date().toISOString(),
-        });
+        .send(
+          buildProblemDetails({
+            status: HttpStatus.SERVICE_UNAVAILABLE,
+            title: 'Service Unavailable',
+            detail: 'Server is under heavy load; please retry shortly.',
+            code: ERROR_CODES.SERVICE_UNAVAILABLE,
+            instance: req.url,
+            requestId,
+          }),
+        );
     },
   });
 
@@ -215,7 +216,7 @@ async function bootstrap() {
     port: config.get('REDIS_CACHE_PORT', { infer: true }),
     db: 4,
     maxRetriesPerRequest: 1,
-    retryStrategy: (times: number) => (times >= 10 ? null : Math.min(times * 200, 3000)),
+    retryStrategy: redisReconnectStrategy,
     enableOfflineQueue: false,
   });
   rateLimitRedis.on('error', (err: Error) => {
@@ -239,16 +240,16 @@ async function bootstrap() {
       const requestId = resolveRequestId(req.headers);
       (req.raw as { requestId?: string }).requestId = requestId;
       return {
-        type: 'https://tools.ietf.org/html/rfc6585#section-4',
-        title: 'Too Many Requests',
-        status: HttpStatus.TOO_MANY_REQUESTS,
-        // Match ProblemDetailsDto so rate-limit 429s carry the same shape (and the same `code`,
-        // ERROR_CODES.RATE_LIMITED) as a 429 raised by the Nest ThrottlerGuard.
-        code: ERROR_CODES.RATE_LIMITED,
-        detail: `Rate limit exceeded. Try again in ${Math.ceil(context.ttl / 1000)} seconds.`,
+        // Shared helper so a rate-limit 429 matches a ThrottlerGuard 429 byte for byte.
+        ...buildProblemDetails({
+          status: HttpStatus.TOO_MANY_REQUESTS,
+          title: 'Too Many Requests',
+          detail: `Rate limit exceeded. Try again in ${Math.ceil(context.ttl / 1000)} seconds.`,
+          code: ERROR_CODES.RATE_LIMITED,
+          instance: req.url,
+          requestId,
+        }),
         retryAfter: Math.ceil(context.ttl / 1000),
-        requestId,
-        timestamp: new Date().toISOString(),
       };
     },
     addHeaders: {
@@ -292,14 +293,15 @@ async function bootstrap() {
         .header('content-type', 'application/problem+json')
         .header('retry-after', String(retryAfter))
         .send({
-          type: 'https://tools.ietf.org/html/rfc6585#section-4',
-          title: 'Too Many Requests',
-          status: HttpStatus.TOO_MANY_REQUESTS,
-          code: ERROR_CODES.RATE_LIMITED,
-          detail: `Rate limit exceeded. Try again in ${retryAfter} seconds.`,
+          ...buildProblemDetails({
+            status: HttpStatus.TOO_MANY_REQUESTS,
+            title: 'Too Many Requests',
+            detail: `Rate limit exceeded. Try again in ${retryAfter} seconds.`,
+            code: ERROR_CODES.RATE_LIMITED,
+            instance: req.url,
+            requestId,
+          }),
           retryAfter,
-          requestId,
-          timestamp: new Date().toISOString(),
         });
     } catch (err) {
       if (authRateLimitFailOpen) {
@@ -314,15 +316,16 @@ async function bootstrap() {
         .status(HttpStatus.SERVICE_UNAVAILABLE)
         .header('content-type', 'application/problem+json')
         .header('retry-after', '5')
-        .send({
-          type: 'about:blank',
-          title: 'Service Unavailable',
-          status: HttpStatus.SERVICE_UNAVAILABLE,
-          code: ERROR_CODES.SERVICE_UNAVAILABLE,
-          detail: 'Authentication is temporarily unavailable. Retry shortly.',
-          requestId,
-          timestamp: new Date().toISOString(),
-        });
+        .send(
+          buildProblemDetails({
+            status: HttpStatus.SERVICE_UNAVAILABLE,
+            title: 'Service Unavailable',
+            detail: 'Authentication is temporarily unavailable. Retry shortly.',
+            code: ERROR_CODES.SERVICE_UNAVAILABLE,
+            instance: req.url,
+            requestId,
+          }),
+        );
     }
   });
 
@@ -378,15 +381,15 @@ async function bootstrap() {
         'Better Auth handler threw unexpectedly',
       );
       if (!reply.raw.headersSent) {
-        const body = JSON.stringify({
-          type: 'https://tools.ietf.org/html/rfc7231#section-6.6.1',
-          title: 'Internal Server Error',
-          status: HttpStatus.INTERNAL_SERVER_ERROR,
-          code: ERROR_CODES.INTERNAL_SERVER_ERROR,
-          instance: req.url,
-          requestId,
-          timestamp: new Date().toISOString(),
-        });
+        const body = JSON.stringify(
+          buildProblemDetails({
+            status: HttpStatus.INTERNAL_SERVER_ERROR,
+            title: 'Internal Server Error',
+            code: ERROR_CODES.INTERNAL_SERVER_ERROR,
+            instance: req.url,
+            requestId,
+          }),
+        );
         reply.raw.writeHead(HttpStatus.INTERNAL_SERVER_ERROR, {
           'Content-Type': 'application/problem+json',
           'Content-Length': Buffer.byteLength(body),

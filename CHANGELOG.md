@@ -53,13 +53,13 @@ Initial public release of the boilerplate.
 #### Core platform
 
 - **Four runnable apps** — `api`, `worker`, `scheduler`, `migration` — sharing one Nx workspace and one pnpm lockfile
-- **Nx 22** monorepo with `@nx/enforce-module-boundaries` enforcing DDD layering via `scope:*` tags (api, worker, scheduler, migration, modules, composition, infra, core, shared, contracts, testing)
+- **Nx 23** monorepo with `@nx/enforce-module-boundaries` enforcing DDD layering via `scope:*` tags (api, worker, scheduler, migration, modules, composition, infra, core, shared, contracts, testing)
 - **Webpack 5** bundler wired with `tsc` compiler so NestJS decorator metadata resolves correctly in production builds
 - **TypeScript project references** kept in sync via `nx sync`
 
 #### API surfaces (single Fastify instance)
 
-- **REST** with `@nestjs/swagger` — auto-mounted at `/api/docs` outside production, deterministic `operationId` factory consumed by Orval codegen
+- **REST** with `@nestjs/swagger` — auto-mounted at `/docs` (Scalar) outside production, deterministic `operationId` factory consumed by Orval codegen
 - **GraphQL** via `@nestjs/mercurius` — schema-first, GraphiQL exposed at `/graphiql` in dev
 - **Socket.io 4** with `@socket.io/redis-adapter` for cross-pod broadcast; WebSocket upgrades reuse the Better Auth cookie via a custom adapter
 - **OpenAPI codegen** — Orval emits a typed REST client into `libs/api-client` from the live spec exported by `CodegenAppModule`
@@ -121,7 +121,7 @@ Initial public release of the boilerplate.
 - **GitHub Actions**:
   - `ci.yml` — lint, typecheck, unit tests, build, secret scan, dep scan
   - `integration.yml` — Vitest integration suite with Testcontainers services
-  - `release.yml` — buildx + SBOM + provenance, Trivy gate, Semgrep gate, Cosign sign, migrate-and-deploy via Coolify webhook
+  - `release.yml` — buildx + SBOM + provenance, Trivy gate BEFORE push, Cosign sign, Semgrep gate. Stops at a signed image — deploy is deployment-specific and not wired here
 - **Vitest 4** + **Testcontainers** (real Postgres + Redis) + **Supertest** for unit, integration, and HTTP e2e suites
 
 [1.0.0]: https://github.com/chuanghiduoc/nestjs-fastify-nx/releases/tag/v1.0.0

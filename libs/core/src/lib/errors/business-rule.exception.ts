@@ -36,7 +36,6 @@ export class BusinessRuleException extends HttpException {
     const title = options.title ?? 'Business rule violation';
     super(
       {
-        statusCode: status,
         code,
         title,
         messageKey: options.messageKey,

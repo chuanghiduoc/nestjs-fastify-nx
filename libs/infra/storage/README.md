@@ -15,16 +15,22 @@ import {
   type StoragePort,
   type StoredFile,
   type UploadOptions,
+  type ObjectMetadata,
+  type PresignedUpload,
+  type PresignUploadOptions,
 } from '@nestjs-fastify-nx/infra-storage';
 ```
 
-| Export          | Purpose                                                       |
-| --------------- | ------------------------------------------------------------- |
-| `StorageModule` | Global NestJS module — registers the S3 client + adapter      |
-| `STORAGE_PORT`  | DI token; inject as `@Inject(STORAGE_PORT) port: StoragePort` |
-| `StoragePort`   | Interface: `upload`, `delete`, `getSignedUrl`, `exists`       |
-| `StoredFile`    | Result envelope (`key`, `bucket`, `etag`, `size`)             |
-| `UploadOptions` | Per-upload knobs (content type, ACL, metadata)                |
+| Export                 | Purpose                                                                                             |
+| ---------------------- | --------------------------------------------------------------------------------------------------- |
+| `StorageModule`        | Registers the S3 client + adapter. Not `@Global` — import it where you need it                      |
+| `STORAGE_PORT`         | DI token; inject as `@Inject(STORAGE_PORT) port: StoragePort`                                       |
+| `StoragePort`          | Interface: `upload`, `presignUpload`, `head`, `getSignedUrl`, `delete`, `finalize`, `readRange`     |
+| `StoredFile`           | Result envelope (`key`, `url`, `bucket`, `size`)                                                    |
+| `UploadOptions`        | Per-upload knobs (`bucket`, `contentType`, `metadata`)                                              |
+| `ObjectMetadata`       | What `head()` returns (`contentType`, `size`, `bucket`, `etag`) — `null` when the object is missing |
+| `PresignedUpload`      | Presigned POST policy (`url`, `fields`, `key`, `bucket`, `expiresAt`, `maxBytes`)                   |
+| `PresignUploadOptions` | Policy inputs (`contentType`, `maxBytes`, optional `bucket`/`expiresInSeconds`)                     |
 
 ## Why a port?
 
@@ -33,9 +39,12 @@ depend on `StoragePort`. Swapping S3 for GCS or local disk is a single-file
 change in this lib, and tests can substitute an in-memory implementation
 without touching Nest's DI tree.
 
-The `upload` controller in `apps/api` is the only direct consumer; feature
-modules that need persistence (e.g. attaching a file to a domain entity)
-inject `STORAGE_PORT` and store the returned `key`.
+Three places inject `STORAGE_PORT` today: the upload controller
+(`libs/modules/upload`) issues policies and confirms objects, the worker's
+`upload-verification.processor` re-reads magic bytes off the final object, and
+the scheduler's `stored-file-cleanup.task` deletes abandoned ones. Feature
+modules that attach a file to a domain entity do the same and store the
+returned `key`.
 
 ## Configuration
 

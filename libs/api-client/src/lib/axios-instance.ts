@@ -7,9 +7,12 @@ import type { AxiosRequestConfig } from 'axios';
 const _globalThis = globalThis as Record<string, unknown>;
 const _isBrowser = typeof _globalThis['window'] !== 'undefined';
 
+// Origin only — never a path. Generated operations already carry the full server path, and axios
+// concatenates, so `/api/v1` here would send `/api/v1/api/v1/users/me`. Empty in the browser
+// because same-origin needs no prefix.
 const BASE_URL = _isBrowser
-  ? ((_globalThis['__API_URL__'] as string | undefined) ?? '/api/v1')
-  : (process.env['API_BASE_URL'] ?? 'http://localhost:3000/api/v1');
+  ? ((_globalThis['__API_URL__'] as string | undefined) ?? '')
+  : (process.env['API_BASE_URL'] ?? 'http://localhost:3000');
 
 export const axiosInstance = axios.create({
   baseURL: BASE_URL,

@@ -3,6 +3,7 @@ import { HttpStatus } from '@nestjs/common';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type Redis from 'ioredis';
 import { ERROR_CODES } from '@nestjs-fastify-nx/contracts';
+import { buildProblemDetails, PROBLEM_CONTENT_TYPE } from '../filters/problem-details.helper';
 import { resolveCorrelationId, resolveRequestId } from '../logging/request-id';
 import { IdempotencyStore, type AcquireResult } from './idempotency-store';
 
@@ -19,7 +20,6 @@ const REPLAYED_HEADER = 'idempotent-replayed';
 const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 const SCOPED_PATH_PREFIX = '/api/v1/';
 const MAX_KEY_LENGTH = 255;
-const PROBLEM_CONTENT_TYPE = 'application/problem+json';
 
 interface IdempotencyContext {
   storeKey: string;
@@ -82,20 +82,13 @@ function sendProblem(
 ): FastifyReply {
   const requestId = resolveRequestId(req.headers);
   (req.raw as { requestId?: string }).requestId = requestId;
+  // Same builder the global filter uses — this plugin runs before the Nest pipeline, so nothing
+  // else would give it the shared shape.
   return reply
     .status(status)
     .header('content-type', PROBLEM_CONTENT_TYPE)
     .header('x-request-id', requestId)
-    .send({
-      type: 'about:blank',
-      title,
-      status,
-      code,
-      detail,
-      instance: req.url,
-      requestId,
-      timestamp: new Date().toISOString(),
-    });
+    .send(buildProblemDetails({ status, title, detail, code, instance: req.url, requestId }));
 }
 
 // Adds the idempotency hooks directly to the root Fastify instance (NOT via register(), whose
@@ -185,15 +178,28 @@ export function registerIdempotency(fastify: FastifyInstance, options: Idempoten
 
     try {
       const status = reply.statusCode;
-      if (status >= 200 && status < 300 && typeof payload === 'string') {
-        const completed = await store.complete(ctx.storeKey, ctx.ownerToken, {
-          fingerprint: ctx.fingerprint,
-          status,
-          contentType: String(reply.getHeader('content-type') ?? 'application/json'),
-          body: payload,
-        });
-        if (!completed) {
-          reportError('idempotency completion skipped because request no longer owns the lock');
+      const isSuccess = status >= 200 && status < 300;
+      // Branch on status first: a 2xx is a completed mutation regardless of body shape. Gating on
+      // `typeof payload === 'string'` would send an empty-bodied success (204) down the failure
+      // path and release the lock, letting a retry re-run the side effect it already performed.
+      if (isSuccess) {
+        const body = replayableBody(payload);
+        if (body === undefined) {
+          // Streams/Buffers can't be captured for byte-exact replay without consuming them. Leave
+          // the record pending so a duplicate gets 409 rather than re-executing the mutation.
+          reportError(
+            `idempotency cannot replay a non-text ${status} body; leaving key pending until TTL`,
+          );
+        } else {
+          const completed = await store.complete(ctx.storeKey, ctx.ownerToken, {
+            fingerprint: ctx.fingerprint,
+            status,
+            contentType: String(reply.getHeader('content-type') ?? 'application/json'),
+            body,
+          });
+          if (!completed) {
+            reportError('idempotency completion skipped because request no longer owns the lock');
+          }
         }
       } else if (status === HttpStatus.GATEWAY_TIMEOUT) {
         // Timeout cannot cancel the underlying promise. Retain the pending record until its TTL so
@@ -208,4 +214,12 @@ export function registerIdempotency(fastify: FastifyInstance, options: Idempoten
 
     return payload;
   });
+}
+
+// An empty body (204 and friends) replays as an empty string. Anything not already text is not
+// safely capturable here — signalled with undefined so the caller can keep the key pending.
+function replayableBody(payload: unknown): string | undefined {
+  if (payload === null || payload === undefined) return '';
+  if (typeof payload === 'string') return payload;
+  return undefined;
 }

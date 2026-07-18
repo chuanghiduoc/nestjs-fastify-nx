@@ -34,7 +34,7 @@ Respond to the maintainer in chat in **Vietnamese by default** — reviews, expl
 
 ## Stack quick reference
 
-- **Runtime**: Node 22, pnpm 10.33, TypeScript 6
+- **Runtime**: Node 24, pnpm 10.33, TypeScript 6
 - **Framework**: NestJS 11 + Fastify 5
 - **ORM**: Prisma 7 with `@prisma/adapter-pg`; schema at `prisma/schema.prisma`
 - **Auth**: Better Auth 1.6 — **NOT** JWT. Cookie name is `better-auth.session_token`. Mounted at `/api/auth/*` by `BetterAuthModule` (in `libs/infra/auth`). The auth surface is published at `/api/auth/reference`.
@@ -46,14 +46,17 @@ Respond to the maintainer in chat in **Vietnamese by default** — reviews, expl
 The monorepo enforces DDD layering via Nx tags + `@nx/enforce-module-boundaries` (see `eslint.config.mjs`):
 
 ```
-scope:api / scope:worker / scope:scheduler
+scope:api
   → modules, composition, infra, core, shared, contracts
+
+scope:worker / scope:scheduler
+  → modules, infra, core, shared, contracts     # NO composition — api owns the HTTP surface
 
 scope:migration
   → empty allow-list (intentional — migration is a thin prisma deploy wrapper)
 
 scope:composition  (cross-cutting modules, e.g. admin)
-  → modules, infra, core, shared, contracts
+  → modules, composition, infra, core, shared, contracts
 
 scope:modules  (bounded contexts: users, audit-log, …)
   → infra, core, shared, contracts        # NEVER another scope:modules
@@ -63,6 +66,15 @@ scope:infra
 
 scope:core / scope:contracts
   → shared
+
+scope:shared / scope:tools
+  → empty allow-list (leaves of the graph)
+
+scope:client  (libs/api-client — orval output)
+  → shared, contracts
+
+scope:testing
+  → modules, infra, core, shared, contracts
 ```
 
 **Key invariant**: `scope:modules` cannot depend on another `scope:modules`. Cross-context aggregation goes through `scope:composition` (one-way: composition → modules, never reverse). Do not "fix" lint errors by adding cross-module imports — extract a composition lib instead.
@@ -250,7 +262,7 @@ pnpm rm:project <name>             # remove a lib/app + clean refs/tags (nx work
 - `docs/creating-a-module.md` — DDD generator walkthrough
 - `docs/domain-module-anatomy.md` — every file type in a module explained (what/why/when/how, beginner walkthrough)
 - `docs/environment.md` — every env var, defaults, validation
-- `docs/deployment.md` — Docker, GHCR, Cosign, Coolify
+- `docs/deployment.md` — Docker, GHCR, Cosign, rollout options
 - `docs/security.md` — five-layer scan pipeline (Gitleaks, OSV, Semgrep, Trivy, Cosign)
 - `docs/observability.md` — logging, tracing, metrics, correlation-id design, resilience
 - `docs/observability-guide.md` — how to enable, explore, and extend observability (add a metric/span/log field/alert/dashboard)

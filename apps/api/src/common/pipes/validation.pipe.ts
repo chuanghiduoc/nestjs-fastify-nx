@@ -22,7 +22,6 @@ export class ProblemDetailsValidationPipe extends ValidationPipe {
       exceptionFactory: (validationErrors: ValidationError[] = []) => {
         const errors = flattenValidationErrors(validationErrors);
         return new UnprocessableEntityException({
-          statusCode: HttpStatus.UNPROCESSABLE_ENTITY,
           code: ERROR_CODES.VALIDATION_FAILED,
           // GlobalExceptionFilter rewrites title/message from these keys based on the resolved locale.
           title: I18N_KEYS.validation.failed_title,

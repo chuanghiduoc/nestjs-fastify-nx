@@ -2,14 +2,11 @@ import {
   Injectable,
   Logger,
   ConflictException,
-  BadRequestException,
-  HttpStatus,
   InternalServerErrorException,
 } from '@nestjs/common';
 import { I18N_KEYS } from '@nestjs-fastify-nx/infra-i18n';
 import { PrismaService } from '@nestjs-fastify-nx/infra-database';
 import { Prisma } from '@prisma/client';
-import { decodeCursor } from '@nestjs-fastify-nx/shared';
 import { User, UserRole, UserStatus } from '../../domain/entities/user.entity';
 import type {
   FindAllCursorOptions,
@@ -51,7 +48,6 @@ export class PrismaUserRepository implements UserRepositoryPort {
     if (err instanceof Prisma.PrismaClientKnownRequestError) {
       if (err.code === 'P2002') {
         throw new ConflictException({
-          statusCode: HttpStatus.CONFLICT,
           messageKey: I18N_KEYS.errors.users.already_exists,
           message: 'A record with this value already exists',
         });
@@ -59,7 +55,6 @@ export class PrismaUserRepository implements UserRepositoryPort {
     }
     this.logger.error({ err, context }, 'Database operation failed');
     throw new InternalServerErrorException({
-      statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
       messageKey: I18N_KEYS.errors.users.database_error,
       message: 'Database error',
     });
@@ -125,19 +120,11 @@ export class PrismaUserRepository implements UserRepositoryPort {
       ];
     }
     if (startingAfter) {
-      const decoded = decodeCursor(startingAfter);
-      if (!decoded) {
-        throw new BadRequestException({
-          statusCode: HttpStatus.BAD_REQUEST,
-          code: 'invalid_cursor',
-          message: 'startingAfter is not a valid cursor',
-        });
-      }
       where.AND = [
         {
           OR: [
-            { createdAt: { lt: decoded.createdAt } },
-            { AND: [{ createdAt: decoded.createdAt }, { id: { lt: decoded.id } }] },
+            { createdAt: { lt: startingAfter.createdAt } },
+            { AND: [{ createdAt: startingAfter.createdAt }, { id: { lt: startingAfter.id } }] },
           ],
         },
       ];

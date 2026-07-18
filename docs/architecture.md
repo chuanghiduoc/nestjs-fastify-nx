@@ -22,6 +22,7 @@ nestjs-fastify-nx/
 │   │   ├── redis/        # Cache + Queue modules + DLQ helpers
 │   │   ├── messaging/    # Event bus, transactional outbox publisher + relay
 │   │   ├── storage/      # S3 / MinIO adapter (StoragePort)
+│   │   ├── i18n/         # I18N_KEYS + locale resolution used by the error filter
 │   │   └── observability/# OpenTelemetry SDK bootstrap, metrics, Sentry init
 │   ├── core/         # Cross-cutting: base classes, decorators, errors
 │   ├── shared/       # Pure utilities (uuid v7, pagination, queue names)
@@ -140,11 +141,14 @@ Enforced by `@nx/enforce-module-boundaries` (see `eslint.config.mjs`):
 | `scope:worker`      | modules, infra, core, shared, contracts                          |
 | `scope:scheduler`   | modules, infra, core, shared, contracts                          |
 | `scope:migration`   | _(empty — intentional; thin prisma deploy wrapper)_              |
-| `scope:composition` | modules, infra, core, shared, contracts                          |
+| `scope:composition` | modules, composition, infra, core, shared, contracts             |
 | `scope:modules`     | infra, core, shared, contracts _(NEVER another `scope:modules`)_ |
 | `scope:infra`       | infra, core, shared, contracts                                   |
 | `scope:core`        | shared                                                           |
 | `scope:contracts`   | shared                                                           |
+| `scope:shared`      | _(empty — leaf of the graph)_                                    |
+| `scope:client`      | shared, contracts _(generated API client)_                       |
+| `scope:tools`       | _(empty — generators depend on nothing internal)_                |
 | `scope:testing`     | modules, infra, core, shared, contracts                          |
 
 Visualised — solid arrows are allowed dependencies; the dashed crossed arrow is
@@ -394,9 +398,15 @@ The same shape applies to the other two flows:
   WebSocket upgrades go through `createWsAuthMiddleware` which validates the
   same session cookie — see `apps/api/src/websocket/ws-auth.adapter.ts`.
 
-**Auth rate-limit**: Fastify hook `fastify-rate-limit` guards `/api/auth/*`
-with configurable per-IP limits (AUTH_RATE_LIMIT_MAX, AUTH_RATE_LIMIT_WINDOW_MS).
-Exceeding the limit returns 429 with `application/problem+json` response.
+**Auth rate-limit**: `@fastify/rate-limit` guards `/api/auth/*` in two tiers.
+Credential routes (sign-in, sign-up, password reset) get a strict bucket keyed by
+IP+email — `AUTH_RATE_LIMIT_MAX` (5) per `AUTH_RATE_LIMIT_WINDOW_MS` — plus a
+looser per-IP ceiling, `AUTH_IP_RATE_LIMIT_MAX` (50), so one address cannot
+enumerate accounts by rotating the email. Every other `/api/auth/*` route uses
+`AUTH_SESSION_RATE_LIMIT_MAX` (60) per `AUTH_SESSION_RATE_LIMIT_WINDOW_MS`.
+Exceeding a limit returns 429 as `application/problem+json`. Registration must
+precede the betterAuthHandler hook: it calls `reply.hijack()`, which skips
+NestJS's ThrottlerGuard entirely.
 
 ## API Response Contract
 

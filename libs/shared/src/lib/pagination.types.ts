@@ -29,6 +29,12 @@ export function buildPageMeta(page: number, pageSize: number, total: number): Pa
   };
 }
 
+// PaginationDto's @Min(1) only guards the HTTP path; a direct caller could otherwise hand Prisma a
+// negative skip, which it rejects with an error naming the driver rather than the bad page.
 export function paginationSkip(options: PaginationOptions): number {
-  return (options.page - 1) * options.pageSize;
+  const page = Number.isFinite(options.page) ? Math.max(1, Math.trunc(options.page)) : 1;
+  const pageSize = Number.isFinite(options.pageSize)
+    ? Math.max(0, Math.trunc(options.pageSize))
+    : 0;
+  return (page - 1) * pageSize;
 }
