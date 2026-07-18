@@ -435,7 +435,7 @@ export class UsersController {
 
   @Get('me')
   @ApiOkResponse({ type: UserProfileResponseDto, description: 'The current user profile.' })
-  @ApiCommonErrors({ auth: true, forbidden: false, validation: false })
+  @ApiCommonErrors({ auth: true, validation: false })
   getProfile(
     @Req() req: FastifyRequest & { user: AuthenticatedSession },
   ): Promise<UserProfileResponseDto> {

@@ -2,7 +2,7 @@ import {
   Injectable,
   CanActivate,
   ExecutionContext,
-  HttpStatus,
+  ForbiddenException,
   UnauthorizedException,
   Inject,
 } from '@nestjs/common';
@@ -45,7 +45,6 @@ export class BetterAuthGuard implements CanActivate {
 
     if (!session || !session.user || !session.session) {
       throw new UnauthorizedException({
-        statusCode: HttpStatus.UNAUTHORIZED,
         messageKey: I18N_KEYS.errors.auth.session_missing,
         message: 'Session not found or expired',
       });
@@ -56,7 +55,6 @@ export class BetterAuthGuard implements CanActivate {
     const expiresAt = session.session.expiresAt;
     if (expiresAt && new Date(expiresAt).getTime() < Date.now()) {
       throw new UnauthorizedException({
-        statusCode: HttpStatus.UNAUTHORIZED,
         messageKey: I18N_KEYS.errors.auth.session_expired,
         message: 'Session expired',
       });
@@ -70,9 +68,13 @@ export class BetterAuthGuard implements CanActivate {
       status: string;
     };
 
+    // 403, not 401: the session is valid and unexpired, so the credentials are not the problem —
+    // the server understood the request and refuses to authorize a deactivated/banned account.
+    // 401 also traps the client in a loop: Better Auth does not check this custom `status` field on
+    // sign-in, so an SPA reacting to 401 by redirecting to login gets a fresh session and another
+    // 401, forever. 403 lets it surface "account disabled" instead.
     if (user.status !== 'ACTIVE') {
-      throw new UnauthorizedException({
-        statusCode: HttpStatus.UNAUTHORIZED,
+      throw new ForbiddenException({
         messageKey: I18N_KEYS.errors.auth.account_inactive,
         message: 'Account is not active',
       });

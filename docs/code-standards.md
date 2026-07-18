@@ -19,15 +19,74 @@ Pino logs are structured JSON, correlated with `X-Request-Id`, and automatically
 
 ## Error Handling
 
-### Domain & Application Violations
+### Choosing a status code
 
-Throw `BusinessRuleException` from `@nestjs-fastify-nx/core` for domain violations (duplicate email, insufficient balance, etc.). The global exception filter converts it to a 422 or 409 Problem Details response.
+The status is part of the API contract — clients branch on it. Pick by what the caller can *do*
+about the answer, not by what is nearest to hand. `400` and `500` are not defaults.
+
+| Situation                                                                                                          | Status | How                                                             |
+| ------------------------------------------------------------------------------------------------------------------ | ------ | --------------------------------------------------------------- |
+| Request is malformed — bad JSON, an opaque cursor/token that will not decode, an unparseable header                  | `400`  | `BusinessRuleException` with `status: 400`                       |
+| Body or query failed `class-validator`                                                                               | `422`  | Nothing — `ProblemDetailsValidationPipe` owns it                 |
+| Request understood, but a domain rule says no, or the state it references violates policy                            | `422`  | `BusinessRuleException` (its default)                            |
+| No session, or the session expired — re-authenticating would fix it                                                  | `401`  | `UnauthorizedException`                                          |
+| Session is valid, but this principal may not do this — wrong role, deactivated/banned account                        | `403`  | `ForbiddenException`                                             |
+| Resource does not exist — or exists, but the caller must not learn that it does                                      | `404`  | `BusinessRuleException` with `status: 404` / `NotFoundException` |
+| State conflict a retry could resolve — duplicate key, concurrent update, work still in flight                        | `409`  | `BusinessRuleException` with `status: 409` / `ConflictException` |
+| The **request body itself** is over the size limit                                                                   | `413`  | Fastify body limit — never hand-rolled                           |
+| Rate limit hit                                                                                                       | `429`  | `@fastify/rate-limit` / `ThrottlerGuard`                         |
+| The server broke — DB down, S3 unreachable, a bug                                                                    | `500`  | `InternalServerErrorException`, with no specific `code`          |
+
+The three distinctions that actually get chosen wrong:
+
+- **401 vs 403** — ask whether authenticating again would help. It cannot help a banned account, so
+  that is `403`. Answering `401` traps any client that reacts to it by redirecting to login: it gets
+  a fresh valid session and the very next request `401`s again, forever.
+- **400 vs 422** — ask whether the server understood the request. `{"key":"uploads/a.png"}` is
+  understood perfectly; refusing it because the stored object is oversized is `422`. A cursor that
+  will not base64-decode was never understood at all: `400`.
+- **413 describes the request payload**, nothing the request refers to. A 40-byte confirm call that
+  names an oversized S3 object is `422` — answering `413` tells the client to shrink the wrong thing.
+
+`5xx` responses carry the generic code for their status. Never attach a specific one: the internal
+failure taxonomy is not the client's business.
+
+### Error codes
+
+`code` is what clients branch on programmatically. Set it explicitly whenever the caller could
+reasonably act differently per cause (`invalid_cursor`, `user_not_found`, `idempotency_key_mismatch`).
+Leave it unset when the status alone says everything — the filter then fills in the generic code for
+that status (`unauthorized`, `conflict`, …). Codes are `snake_case`; see `ERROR_CODES`.
+
+### Domain & application violations
+
+Throw `BusinessRuleException` from `@nestjs-fastify-nx/core` for domain violations. It takes an
+options object, and its `errors[]` shape matches validation failures so the frontend renders both
+through one path.
 
 ```typescript
-if (user.email === email) {
-  throw new BusinessRuleException('User already registered with this email', 'duplicate_email');
+if (await this.users.exists(email)) {
+  throw new BusinessRuleException({
+    // Omit `status` for the 422 default. Pass one for any other status — and pass `title` with it,
+    // because the class titles itself "Business rule violation", which only reads right on a 422.
+    status: HttpStatus.CONFLICT,
+    title: I18N_KEYS.common.conflict,
+    code: 'user_already_exists',
+    messageKey: I18N_KEYS.errors.users.already_exists,
+    violations: [
+      {
+        path: 'email',
+        code: 'already_exists',
+        message: 'That email is already registered',
+        messageKey: I18N_KEYS.errors.users.already_exists,
+      },
+    ],
+  });
 }
 ```
+
+Pass `messageKey`/`title` as i18n keys, not literals: `GlobalExceptionFilter` only translates dotted
+strings, so a literal silently ships English to every locale.
 
 ### Input Validation
 
@@ -47,27 +106,43 @@ export class CreateUserDto {
 
 ## DTOs
 
-**One DTO per shape.** Do not create parallel application + presentation DTOs unless there is a clear reason (e.g., an integration event schema differs from the REST request shape).
+**Application and presentation DTOs are separate, deliberately.** An application DTO is the transport
+type a handler returns; a presentation DTO is the HTTP shape. Reusing one for both is what makes the
+application layer import `@nestjs/swagger`, and the layering is gone the moment it does — a handler
+must stay callable from REST, GraphQL, or a queue consumer without dragging HTTP along.
 
 ```typescript
-// libs/modules/users/src/application/dtos/user.dto.ts
-export class UserDto {
+// libs/modules/users/src/application/dtos/user-list-item.dto.ts
+// Pure TS. No @nestjs/swagger, no class-validator — nothing framework-shaped.
+export interface UserListItemDto {
   id: string;
   email: string;
-  name: string;
   role: string;
 }
 
-// DO: use UserDto everywhere
-// DON'T: create UserApplicationDto and UserPresentationDto unless justified
+// libs/modules/users/src/presentation/dto/auth-response.dto.ts
+// Swagger + class-validator decorators live here and nowhere else.
+export class UserListItemResponseDto {
+  @ApiProperty()
+  id!: string;
+
+  @ApiProperty()
+  email!: string;
+
+  @ApiProperty()
+  role!: string;
+}
 ```
+
+The duplication is the point: it buys the boundary. Sensitive columns are kept out of responses by
+projecting into a purpose-built DTO that simply never declares them — not by `@Exclude`.
 
 **Re-export from module barrel only what is public.** Keep domain entities and repositories private. Command/query **handlers stay private** — they are registered with the global `CommandBus`/`QueryBus` by `CqrsModule.forRoot()`'s explorer and are never injected directly. Export the **command/query classes + their result types** so composition libs and cross-cutting resolvers can dispatch `commandBus.execute(new SomeCommand(...))` / `queryBus.execute(new SomeQuery(...))`. Queries/commands extend `Query<TResult>`/`Command<TResult>` so `execute()` infers the return type.
 
 ```typescript
 // libs/modules/users/src/index.ts
 export { UsersModule } from './users.module';
-export { UserDto } from './application/dtos/user.dto';
+export type { UserListItemDto } from './application/dtos/user-list-item.dto';
 // Query class + result type — consumers dispatch via QueryBus, no handler injection.
 export {
   GetUserProfileQuery,

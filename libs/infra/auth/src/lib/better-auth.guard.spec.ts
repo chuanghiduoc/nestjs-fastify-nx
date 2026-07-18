@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import * as Sentry from '@sentry/nestjs';
 import { BetterAuthGuard } from './better-auth.guard';
-import { UnauthorizedException } from '@nestjs/common';
+import { ForbiddenException, UnauthorizedException } from '@nestjs/common';
 import type { ExecutionContext } from '@nestjs/common';
 import type { Reflector } from '@nestjs/core';
 import type { ClsService } from 'nestjs-cls';
@@ -48,13 +48,20 @@ describe('BetterAuthGuard', () => {
     await expect(guard.canActivate(makeContext())).rejects.toThrow(UnauthorizedException);
   });
 
-  it('throws UnauthorizedException when user is inactive', async () => {
-    const session = {
-      user: { id: 'u1', email: 'a@b.com', name: 'A', role: 'USER', status: 'INACTIVE' },
-      session: { id: 's1', token: 'tok' },
-    };
-    const guard = new BetterAuthGuard(makeAuth(session), makeReflector(), makeCls());
-    await expect(guard.canActivate(makeContext())).rejects.toThrow(UnauthorizedException);
+  // Forbidden, not Unauthorized: the session is valid, so re-authenticating cannot help. 401 would
+  // send an SPA back to login, where Better Auth (which does not check this custom `status` field)
+  // hands out a fresh session — and the next request 401s again, forever.
+  it('throws ForbiddenException when the session is valid but the account is not active', async () => {
+    for (const status of ['INACTIVE', 'BANNED']) {
+      const session = {
+        user: { id: 'u1', email: 'a@b.com', name: 'A', role: 'USER', status },
+        session: { id: 's1', token: 'tok' },
+      };
+      const guard = new BetterAuthGuard(makeAuth(session), makeReflector(), makeCls());
+
+      await expect(guard.canActivate(makeContext())).rejects.toThrow(ForbiddenException);
+      await expect(guard.canActivate(makeContext())).rejects.not.toThrow(UnauthorizedException);
+    }
   });
 
   it('returns true and attaches AuthenticatedSession for valid active session', async () => {

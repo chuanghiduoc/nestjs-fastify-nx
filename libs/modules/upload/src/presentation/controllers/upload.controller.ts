@@ -11,6 +11,7 @@ import {
   NotFoundException,
   Post,
   Req,
+  UnprocessableEntityException,
 } from '@nestjs/common';
 import { createHash } from 'node:crypto';
 import { InjectQueue } from '@nestjs/bullmq';
@@ -36,6 +37,7 @@ import {
   ALLOWED_MIME_TYPES,
   detectFileType,
   generateId,
+  MIME_EXTENSIONS,
   positiveIntEnv,
   STORED_FILE_STATUS,
 } from '@nestjs-fastify-nx/shared';
@@ -57,14 +59,6 @@ export function verificationJobId(storageKey: string): string {
   // object key so retries deduplicate while distinct uploads can never share a BullMQ job id.
   return `verify__${createHash('sha256').update(storageKey).digest('hex')}`;
 }
-
-const MIME_EXTENSIONS: Record<string, string> = {
-  'image/jpeg': 'jpg',
-  'image/png': 'png',
-  'image/gif': 'gif',
-  'image/webp': 'webp',
-  'application/pdf': 'pdf',
-};
 
 @ApiTags('upload')
 @Controller('upload')
@@ -94,15 +88,14 @@ export class UploadController {
   })
   @ApiBody({ type: PresignUploadDto })
   @ApiCreatedResponse({ type: PresignedUploadDto, description: 'Presigned upload policy issued.' })
-  @ApiCommonErrors({ auth: true, forbidden: false })
+  @ApiCommonErrors({ auth: true })
   async presign(
     @Req() req: FastifyRequest & { user: AuthenticatedSession },
     @Body() dto: PresignUploadDto,
   ): Promise<PresignedUpload> {
-    const extension = MIME_EXTENSIONS[dto.contentType];
+    const extension = MIME_EXTENSIONS.get(dto.contentType);
     if (!extension) {
       throw new BadRequestException({
-        statusCode: HttpStatus.BAD_REQUEST,
         messageKey: I18N_KEYS.errors.upload.mime_not_allowed,
         args: { contentType: dto.contentType },
         message: `Mime type "${dto.contentType}" is not allowed`,
@@ -128,7 +121,7 @@ export class UploadController {
   })
   @ApiBody({ type: ConfirmUploadDto })
   @ApiOkResponse({ type: StoredFileDto, description: 'Object verified.' })
-  @ApiCommonErrors({ auth: true, forbidden: false, notFound: true })
+  @ApiCommonErrors({ auth: true, notFound: true })
   async confirm(
     @Req() req: FastifyRequest & { user: AuthenticatedSession },
     @Body() dto: ConfirmUploadDto,
@@ -149,10 +142,13 @@ export class UploadController {
       throw this.objectNotFound(dto.key);
     }
 
+    // 422, not 400: the request body is well-formed JSON that already passed ConfirmUploadDto. The
+    // server understood it perfectly and refuses because the *referenced S3 object* violates upload
+    // policy. (413 would be wrong for the oversize case too — the request payload is a few bytes;
+    // it is the stored object that is too large.)
     if (!ALLOWED_MIME_TYPES.has(meta.contentType)) {
       await this.safeDelete(dto.key);
-      throw new BadRequestException({
-        statusCode: HttpStatus.BAD_REQUEST,
+      throw new UnprocessableEntityException({
         messageKey: I18N_KEYS.errors.upload.mime_not_allowed,
         args: { contentType: meta.contentType },
         message: `Mime type "${meta.contentType}" is not allowed`,
@@ -161,8 +157,7 @@ export class UploadController {
 
     if (meta.size <= 0 || meta.size > this.maxFileSize) {
       await this.safeDelete(dto.key);
-      throw new BadRequestException({
-        statusCode: HttpStatus.BAD_REQUEST,
+      throw new UnprocessableEntityException({
         messageKey: I18N_KEYS.errors.upload.size_out_of_range,
         args: { size: meta.size, max: this.maxFileSize },
         message: `Object size ${meta.size} bytes is outside the allowed range (1..${this.maxFileSize})`,
@@ -174,16 +169,14 @@ export class UploadController {
     const detected = detectFileType(head);
     if (!detected || detected.mimeType !== meta.contentType) {
       await this.safeDelete(dto.key);
-      throw new BadRequestException(
+      throw new UnprocessableEntityException(
         detected
           ? {
-              statusCode: HttpStatus.BAD_REQUEST,
               messageKey: I18N_KEYS.errors.upload.magic_bytes_mismatch,
               args: { detected: detected.mimeType, declared: meta.contentType },
               message: `Magic bytes indicate "${detected.mimeType}" but Content-Type is "${meta.contentType}"`,
             }
           : {
-              statusCode: HttpStatus.BAD_REQUEST,
               messageKey: I18N_KEYS.errors.upload.magic_bytes_unknown,
               args: { key: dto.key },
               message: `Object at "${dto.key}" has no recognized binary signature`,
@@ -235,7 +228,6 @@ export class UploadController {
         'upload finalize failed — staging object remains lifecycle-managed',
       );
       throw new InternalServerErrorException({
-        statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
         messageKey: I18N_KEYS.errors.upload.commit_failed,
         message: 'Failed to finalize upload; please retry',
       });
@@ -276,7 +268,6 @@ export class UploadController {
     const finalMeta = await this.storage.head(record.key, record.bucket);
     if (!finalMeta) {
       throw new ConflictException({
-        statusCode: HttpStatus.CONFLICT,
         message: 'Upload confirmation is still in progress; retry shortly',
       });
     }
@@ -325,7 +316,6 @@ export class UploadController {
 
   private objectNotFound(key: string): NotFoundException {
     return new NotFoundException({
-      statusCode: HttpStatus.NOT_FOUND,
       messageKey: I18N_KEYS.errors.upload.object_not_found,
       args: { key },
       message: `No object stored at "${key}"`,
