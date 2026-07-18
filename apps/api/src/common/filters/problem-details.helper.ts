@@ -39,6 +39,11 @@ export const HTTP_STATUS_CODES: Record<number, string> = {
   [HttpStatus.GATEWAY_TIMEOUT]: ERROR_CODES.REQUEST_TIMEOUT,
 };
 
+// Per-dependency health breakdown carried on a 503 from the health probes. RFC 9457 extension
+// member — without it the filter would flatten a health failure to a bare "Service Unavailable"
+// and the caller could not tell which dependency is down.
+export type HealthChecks = Record<string, { status: string; message?: string }>;
+
 export interface ProblemDetailsArgs {
   status: number;
   title: string;
@@ -47,6 +52,7 @@ export interface ProblemDetailsArgs {
   instance?: string;
   requestId?: string;
   errors?: ValidationErrorItemDto[];
+  checks?: HealthChecks;
 }
 
 export interface ProblemDetailsBody {
@@ -59,6 +65,7 @@ export interface ProblemDetailsBody {
   requestId?: string;
   timestamp: string;
   errors?: ValidationErrorItemDto[];
+  checks?: HealthChecks;
 }
 
 export function buildProblemDetails(args: ProblemDetailsArgs): ProblemDetailsBody {
@@ -74,6 +81,9 @@ export function buildProblemDetails(args: ProblemDetailsArgs): ProblemDetailsBod
   };
   if (args.errors && args.errors.length > 0) {
     body.errors = args.errors;
+  }
+  if (args.checks && Object.keys(args.checks).length > 0) {
+    body.checks = args.checks;
   }
   return body;
 }

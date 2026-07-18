@@ -1,4 +1,4 @@
-import { Controller, Get, HttpStatus } from '@nestjs/common';
+import { applyDecorators, Controller, Get, HttpStatus } from '@nestjs/common';
 import { HealthCheck, HealthCheckService, MemoryHealthIndicator } from '@nestjs/terminus';
 import { SkipThrottle } from '@nestjs/throttler';
 import { ApiOkResponse, ApiOperation, ApiProperty, ApiResponse, ApiTags } from '@nestjs/swagger';
@@ -80,6 +80,20 @@ class LivenessResponseDto {
 
 const PROBLEM_JSON = 'application/problem+json';
 
+// A health failure is a ServiceUnavailableException the global filter renders as problem+json with
+// a `checks` map. @HealthCheck's own swagger is turned off so it cannot document the other shape.
+function ApiServiceUnavailableProblem(description: string) {
+  return applyDecorators(
+    ApiResponse({
+      status: HttpStatus.SERVICE_UNAVAILABLE,
+      description,
+      content: {
+        [PROBLEM_JSON]: { schema: { $ref: '#/components/schemas/ProblemDetailsDto' } },
+      },
+    }),
+  );
+}
+
 @ApiTags('health')
 @SkipThrottle()
 @Public()
@@ -97,20 +111,14 @@ export class HealthController {
   ) {}
 
   @Get()
-  @HealthCheck()
+  @ApiServiceUnavailableProblem('One or more dependencies are unhealthy.')
+  @HealthCheck({ noCache: true, swaggerDocumentation: false })
   @ApiOperation({
     summary: 'Full health check (DB + memory + Redis cache + Redis queue).',
     description:
-      'Returns 200 with the per-indicator breakdown when everything is up; 503 with a Problem Details payload when at least one critical dependency is down.',
+      'Returns 200 with the per-indicator breakdown when everything is up; 503 problem+json (with a `checks` map of the failing dependencies) when at least one critical dependency is down.',
   })
   @ApiOkResponse({ type: HealthCheckResultDto, description: 'All systems healthy.' })
-  @ApiResponse({
-    status: HttpStatus.SERVICE_UNAVAILABLE,
-    description: 'One or more dependencies are unhealthy.',
-    content: {
-      [PROBLEM_JSON]: { schema: { $ref: '#/components/schemas/ProblemDetailsDto' } },
-    },
-  })
   @ApiCommonErrors({ auth: false, forbidden: false, validation: false })
   check() {
     return this.health.check([
@@ -122,7 +130,8 @@ export class HealthController {
   }
 
   @Get('ready')
-  @HealthCheck()
+  @ApiServiceUnavailableProblem('A core dependency is unreachable.')
+  @HealthCheck({ noCache: true, swaggerDocumentation: false })
   @ApiOperation({
     summary: 'Readiness probe (DB primary + Redis cache + Redis queue).',
     description:
@@ -137,13 +146,6 @@ export class HealthController {
     type: HealthCheckResultDto,
     description: 'Core dependencies reachable — pod can serve traffic.',
   })
-  @ApiResponse({
-    status: HttpStatus.SERVICE_UNAVAILABLE,
-    description: 'A core dependency is unreachable.',
-    content: {
-      [PROBLEM_JSON]: { schema: { $ref: '#/components/schemas/ProblemDetailsDto' } },
-    },
-  })
   @ApiCommonErrors({ auth: false, forbidden: false, validation: false })
   readiness() {
     return this.health.check([
@@ -154,7 +156,8 @@ export class HealthController {
   }
 
   @Get('dependencies')
-  @HealthCheck()
+  @ApiServiceUnavailableProblem('A deep dependency is degraded or unreachable.')
+  @HealthCheck({ noCache: true, swaggerDocumentation: false })
   @ApiOperation({
     summary: 'Deep dependency check (BullMQ + pgbouncer + replica lag).',
     description:
@@ -163,13 +166,6 @@ export class HealthController {
       'at once when a shared dependency degrades. Returns 503 when a deep check fails so alert rules can fire.',
   })
   @ApiOkResponse({ type: HealthCheckResultDto, description: 'All deep dependencies healthy.' })
-  @ApiResponse({
-    status: HttpStatus.SERVICE_UNAVAILABLE,
-    description: 'A deep dependency is degraded or unreachable.',
-    content: {
-      [PROBLEM_JSON]: { schema: { $ref: '#/components/schemas/ProblemDetailsDto' } },
-    },
-  })
   @ApiCommonErrors({ auth: false, forbidden: false, validation: false })
   dependencies() {
     return this.health.check([

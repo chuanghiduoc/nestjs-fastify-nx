@@ -18,36 +18,34 @@
  * Every response carries an `X-Request-Id` header (also mirrored as `requestId` in error bodies). Quote it when filing support tickets.
  * OpenAPI spec version: 1.0.0
  */
-import type {
-  HealthCheck200,
-  HealthDependencies200,
-  HealthReadiness200,
-  LivenessResponseDto,
-} from './api.schemas';
+import type { HealthCheckResultDto, LivenessResponseDto } from './api.schemas';
 
 import { customAxiosInstance } from '../lib/axios-instance';
 
 export const getHealth = () => {
   /**
-   * Returns 200 with the per-indicator breakdown when everything is up; 503 with a Problem Details payload when at least one critical dependency is down.
+   * Returns 200 with the per-indicator breakdown when everything is up; 503 problem+json (with a `checks` map of the failing dependencies) when at least one critical dependency is down.
    * @summary Full health check (DB + memory + Redis cache + Redis queue).
    */
   const healthCheck = () => {
-    return customAxiosInstance<HealthCheck200>({ url: `/api/v1/health`, method: 'GET' });
+    return customAxiosInstance<HealthCheckResultDto>({ url: `/api/v1/health`, method: 'GET' });
   };
   /**
    * Use as the Kubernetes readiness probe. Checks ONLY what this pod needs to serve its core traffic. Shared-but-non-blocking dependencies (replica lag, queue depth, pgbouncer) are deliberately excluded: because every replica shares the same Postgres/Redis, wiring them here would flip all pods to NotReady at once on a single dependency blip — a correlated, cluster-wide outage even though the app is healthy. Those live on /health/dependencies for dashboards/alerting instead. Returns 503 so the orchestrator removes the pod from the load balancer when a core dependency is unreachable.
    * @summary Readiness probe (DB primary + Redis cache + Redis queue).
    */
   const healthReadiness = () => {
-    return customAxiosInstance<HealthReadiness200>({ url: `/api/v1/health/ready`, method: 'GET' });
+    return customAxiosInstance<HealthCheckResultDto>({
+      url: `/api/v1/health/ready`,
+      method: 'GET',
+    });
   };
   /**
    * Deep health of shared infrastructure — meant for dashboards and alerting, NOT for the Kubernetes readiness/liveness probes. Wiring these into a probe would remove every replica from the load balancer at once when a shared dependency degrades. Returns 503 when a deep check fails so alert rules can fire.
    * @summary Deep dependency check (BullMQ + pgbouncer + replica lag).
    */
   const healthDependencies = () => {
-    return customAxiosInstance<HealthDependencies200>({
+    return customAxiosInstance<HealthCheckResultDto>({
       url: `/api/v1/health/dependencies`,
       method: 'GET',
     });
