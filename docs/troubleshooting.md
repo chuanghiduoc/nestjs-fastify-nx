@@ -27,9 +27,12 @@ and matches every module library.
 
 ### `cannot find module '@nestjs-fastify-nx/...'` after a fresh checkout
 
-Run `pnpm prisma generate && pnpm nx sync`. The Prisma client is generated
-into `node_modules/.prisma`, and Nx path mappings flow through `tsconfig`
-references that `nx sync` regenerates from `project.json`.
+Run `pnpm prisma generate && pnpm nx sync`. The Prisma 7 `prisma-client`
+generator emits the client into `libs/infra/database/src/generated/prisma`
+(gitignored — regenerated on `postinstall`), and Nx path mappings flow through
+`tsconfig` references that `nx sync` regenerates from `project.json`. Consumers
+import Prisma types from the `@nestjs-fastify-nx/infra-database` barrel, not from
+`@prisma/client` directly.
 
 ### Import `@nestjs-fastify-nx/admin` not found (moved library)
 

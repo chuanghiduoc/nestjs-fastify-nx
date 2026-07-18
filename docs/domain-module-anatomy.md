@@ -387,8 +387,10 @@ here). BullMQ custom `jobId`s must never contain `:`.
 ### `infrastructure/repositories/` — Prisma adapters
 
 An `@Injectable()` implementing a domain port, talking to Prisma — the only
-place in the module importing `@nestjs-fastify-nx/infra-database` or
-`@prisma/client`. Create one per repository port.
+place in the module importing `@nestjs-fastify-nx/infra-database`. Prisma types
+(`Prisma`, model rows) come from that same barrel, not from `@prisma/client`
+directly (the Prisma 7 `prisma-client` generator emits into the database lib and
+re-exports through its barrel). Create one per repository port.
 
 ```typescript
 // infrastructure/repositories/prisma-user.repository.ts

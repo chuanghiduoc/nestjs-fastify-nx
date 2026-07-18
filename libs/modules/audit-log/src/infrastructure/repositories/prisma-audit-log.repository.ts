@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '@nestjs-fastify-nx/infra-database';
-import { Prisma } from '@prisma/client';
+import { Prisma } from '@nestjs-fastify-nx/infra-database';
 import type { AuditLogRepositoryPort } from '../../domain/ports/audit-log-repository.port';
 import type { AuditLog } from '../../domain/entities/audit-log.entity';
 

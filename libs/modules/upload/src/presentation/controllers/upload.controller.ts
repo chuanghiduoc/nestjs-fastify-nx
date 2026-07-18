@@ -42,7 +42,7 @@ import {
   STORED_FILE_STATUS,
 } from '@nestjs-fastify-nx/shared';
 
-import type { StoredFile as StoredFileRecord } from '@prisma/client';
+import type { StoredFile as StoredFileRecord } from '@nestjs-fastify-nx/infra-database';
 import { PresignUploadDto } from '../dto/presign-upload.dto';
 import { ConfirmUploadDto } from '../dto/confirm-upload.dto';
 import { PresignedUploadDto } from '../dto/presigned-upload.dto';

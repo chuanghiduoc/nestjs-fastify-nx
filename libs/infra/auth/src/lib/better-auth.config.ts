@@ -3,7 +3,7 @@ import { betterAuth } from 'better-auth';
 import type { BetterAuthOptions } from 'better-auth';
 import { prismaAdapter } from 'better-auth/adapters/prisma';
 import { openAPI } from 'better-auth/plugins';
-import type { PrismaClient } from '@prisma/client';
+import type { PrismaClient } from '@nestjs-fastify-nx/infra-database';
 import { I18nService } from 'nestjs-i18n';
 import {
   I18N_KEYS,
