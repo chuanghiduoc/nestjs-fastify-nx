@@ -122,7 +122,14 @@ jobs:
       # compose.dev.yml overrides DB/Redis/S3/SMTP hosts to service names, so the
       # example's dev defaults are sufficient — no secrets needed for a smoke boot.
       - name: Seed .env from example
-        run: cp .env.example .env
+        run: |
+          cp .env.example .env
+          # Exercise the first-boot admin seed through the migration container.
+          {
+            echo "RUN_SEED=true"
+            echo "SEED_ADMIN_EMAIL=admin@smoke.test"
+            echo "SEED_ADMIN_PASSWORD=SmokeAdmin123!"
+          } >> .env
 
       # depends_on chains every service (infra + migration + minio-init), so this
       # one command builds all four app images and boots the whole stack. --wait
@@ -133,19 +140,23 @@ jobs:
           docker compose --env-file .env up -d --build --wait --wait-timeout 300 \
             migration api worker scheduler
 
-      - name: Smoke test — API health
+      - name: Smoke test — API liveness + readiness
         run: |
           for _ in $(seq 1 30); do
-            if curl -sf -m 2 http://127.0.0.1:3000/api/v1/health/live; then
-              echo; echo "API healthy"; exit 0
-            fi
+            curl -sf -m 2 http://127.0.0.1:3000/api/v1/health/live >/dev/null && break
             sleep 2
           done
-          echo "API did not become healthy within 60s"; exit 1
+          curl -sf -m 5 http://127.0.0.1:3000/api/v1/health/live >/dev/null \
+            || { echo "API liveness failed within 60s"; exit 1; }
+          # Readiness checks the core serving deps (DB primary + Redis cache + Redis queue) —
+          # proves the API can reach them, not just that the process is up.
+          curl -sf -m 5 http://127.0.0.1:3000/api/v1/health/ready >/dev/null \
+            || { echo "API readiness failed — core deps unreachable from api"; exit 1; }
+          echo "API live + ready"
 
       # migration is a one-shot (prisma migrate deploy then exit); it won't appear
       # in `ps -q`, so query stopped containers and assert a clean exit.
-      - name: Assert migration completed successfully
+      - name: Assert migration completed + admin seeded
         run: |
           cid=$(docker compose --env-file .env ps -aq migration)
           [ -n "$cid" ] || { echo "migration container not found"; exit 1; }
@@ -154,6 +165,12 @@ jobs:
           echo "migration: status=$status exit=$code"
           { [ "$status" = "exited" ] && [ "$code" -eq 0 ]; } \
             || { echo "migration did not complete cleanly"; exit 1; }
+          # RUN_SEED=true, so the bootstrap admin row must exist (peer auth inside the container).
+          admins=$(docker compose --env-file .env exec -T postgres \
+            psql -U postgres -d nestjs_db -tAc \
+            "SELECT count(*) FROM users WHERE email='admin@smoke.test' AND role='ADMIN'")
+          echo "seeded admin rows: ${admins}"
+          [ "${admins}" = "1" ] || { echo "admin seed row missing — seed path broken"; exit 1; }
 
       - name: Assert services are not crash-looping
         run: |
@@ -166,6 +183,39 @@ jobs:
             { [ "$status" = "running" ] && [ "$restarts" -le 1 ]; } || fail=1
           done
           exit $fail
+
+      - name: Worker functional — welcome email delivered via mailpit
+        run: |
+          email="worker-smoke-$(date +%s)@smoke.test"
+          curl -sf -m 10 -X POST http://127.0.0.1:3000/api/auth/sign-up/email \
+            -H 'content-type: application/json' \
+            -d "{\"email\":\"${email}\",\"password\":\"password123\",\"name\":\"WorkerSmoke\"}" >/dev/null \
+            || { echo "sign-up failed"; exit 1; }
+          # sign-up → users.registered outbox trigger → relay → BullMQ → worker → SMTP → mailpit.
+          for _ in $(seq 1 30); do
+            total=$(curl -sf -m 5 http://127.0.0.1:8025/api/v1/messages | jq -r '.total // 0')
+            echo "mailpit messages: ${total}"
+            [ "${total}" -ge 1 ] && { echo "worker consumed job → email delivered"; exit 0; }
+            sleep 2
+          done
+          echo "no welcome email in mailpit within 60s — worker/outbox chain broken"; exit 1
+
+      - name: Scheduler functional — heartbeat cron + startup
+        run: |
+          cid=$(docker compose --env-file .env ps -q scheduler)
+          health=$(docker inspect -f '{{.State.Health.Status}}' "$cid")
+          echo "scheduler health: ${health}"
+          # 'healthy' requires the heartbeat cron to have refreshed /tmp/scheduler-alive within 60s.
+          [ "${health}" = "healthy" ] || { echo "scheduler heartbeat cron not firing"; exit 1; }
+          docker compose --env-file .env logs scheduler | grep -q "cron jobs are active" \
+            || { echo "scheduler did not report cron startup"; exit 1; }
+          echo "scheduler cron active + heartbeat healthy"
+
+      # Functional coverage the boot checks can't give: auth recovery/self-service, Bull Board,
+      # GraphQL and WebSocket, driven against the live Dockerised stack. Aggregates failures and
+      # exits non-zero, so a broken endpoint fails the job.
+      - name: Expanded functional smoke (auth, GraphQL, WebSocket, Bull Board)
+        run: bash scripts/smoke-expanded.sh
 
       - name: Dump logs on failure
         if: ${{ failure() }}
