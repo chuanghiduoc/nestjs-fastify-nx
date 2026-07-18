@@ -185,15 +185,28 @@ export function registerIdempotency(fastify: FastifyInstance, options: Idempoten
 
     try {
       const status = reply.statusCode;
-      if (status >= 200 && status < 300 && typeof payload === 'string') {
-        const completed = await store.complete(ctx.storeKey, ctx.ownerToken, {
-          fingerprint: ctx.fingerprint,
-          status,
-          contentType: String(reply.getHeader('content-type') ?? 'application/json'),
-          body: payload,
-        });
-        if (!completed) {
-          reportError('idempotency completion skipped because request no longer owns the lock');
+      const isSuccess = status >= 200 && status < 300;
+      // Branch on status first: a 2xx is a completed mutation regardless of body shape. Gating on
+      // `typeof payload === 'string'` would send an empty-bodied success (204) down the failure
+      // path and release the lock, letting a retry re-run the side effect it already performed.
+      if (isSuccess) {
+        const body = replayableBody(payload);
+        if (body === undefined) {
+          // Streams/Buffers can't be captured for byte-exact replay without consuming them. Leave
+          // the record pending so a duplicate gets 409 rather than re-executing the mutation.
+          reportError(
+            `idempotency cannot replay a non-text ${status} body; leaving key pending until TTL`,
+          );
+        } else {
+          const completed = await store.complete(ctx.storeKey, ctx.ownerToken, {
+            fingerprint: ctx.fingerprint,
+            status,
+            contentType: String(reply.getHeader('content-type') ?? 'application/json'),
+            body,
+          });
+          if (!completed) {
+            reportError('idempotency completion skipped because request no longer owns the lock');
+          }
         }
       } else if (status === HttpStatus.GATEWAY_TIMEOUT) {
         // Timeout cannot cancel the underlying promise. Retain the pending record until its TTL so
@@ -208,4 +221,12 @@ export function registerIdempotency(fastify: FastifyInstance, options: Idempoten
 
     return payload;
   });
+}
+
+// An empty body (204 and friends) replays as an empty string. Anything not already text is not
+// safely capturable here — signalled with undefined so the caller can keep the key pending.
+function replayableBody(payload: unknown): string | undefined {
+  if (payload === null || payload === undefined) return '';
+  if (typeof payload === 'string') return payload;
+  return undefined;
 }

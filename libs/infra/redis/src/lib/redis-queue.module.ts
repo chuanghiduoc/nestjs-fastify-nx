@@ -19,6 +19,19 @@ interface RedisQueueEnv {
   REDIS_QUEUE_PREFIX: string;
 }
 
+const RECONNECT_DELAY_STEP_MS = 200;
+const RECONNECT_DELAY_CAP_MS = 3000;
+
+/**
+ * Always returns a delay, never a non-number. ioredis treats a non-number return as "stop
+ * reconnecting for good", which would strand workers permanently after any Redis outage that
+ * outlasts the attempt budget — with no self-healing and no healthcheck tied to Redis liveness.
+ * Bounding in-flight commands is `maxRetriesPerRequest`'s job, not this one's.
+ */
+export function queueRetryStrategy(times: number): number {
+  return Math.min(times * RECONNECT_DELAY_STEP_MS, RECONNECT_DELAY_CAP_MS);
+}
+
 /**
  * Wraps the ioredis client used by processors for idempotency guards.
  * Registered as the `REDIS_QUEUE_CLIENT` token so consumers see `Redis`
@@ -35,8 +48,7 @@ export class RedisQueueClientProvider implements OnModuleDestroy {
       host: config.get('REDIS_QUEUE_HOST', { infer: true }),
       port: config.get('REDIS_QUEUE_PORT', { infer: true }),
       maxRetriesPerRequest: null,
-      retryStrategy: (times: number): number | null =>
-        times >= 10 ? null : Math.min(times * 200, 3000),
+      retryStrategy: queueRetryStrategy,
       // lazyConnect prevents opening a socket until the first command —
       // importers that never call redis (e.g. health checks) pay no fd cost.
       lazyConnect: true,
@@ -60,8 +72,7 @@ export class RedisQueueClientProvider implements OnModuleDestroy {
           // BullMQ requires `maxRetriesPerRequest: null` — without it BullMQ
           // throws on every connection blip instead of letting ioredis retry.
           maxRetriesPerRequest: null,
-          retryStrategy: (times: number): number | null =>
-            times >= 10 ? null : Math.min(times * 200, 3000),
+          retryStrategy: queueRetryStrategy,
         },
         prefix: config.get('REDIS_QUEUE_PREFIX', { infer: true }),
         defaultJobOptions: {

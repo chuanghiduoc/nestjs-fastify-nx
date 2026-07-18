@@ -13,7 +13,7 @@ vi.mock('ioredis', () => {
 });
 
 // Import AFTER the mock is registered.
-import { RedisQueueClientProvider } from './redis-queue.module';
+import { RedisQueueClientProvider, queueRetryStrategy } from './redis-queue.module';
 
 function buildConfig(): ConfigService {
   const map: Record<string, unknown> = {
@@ -23,6 +23,27 @@ function buildConfig(): ConfigService {
   };
   return { get: (key: string) => map[key] } as unknown as ConfigService;
 }
+
+describe('queueRetryStrategy', () => {
+  // ioredis stops reconnecting for good when retryStrategy returns a non-number. A previous
+  // version returned null past 10 attempts, so any Redis outage lasting longer than ~9s stranded
+  // the queue connection permanently — no self-healing, and no healthcheck watching for it.
+  it('always returns a number, however many attempts have failed', () => {
+    for (const attempt of [1, 2, 9, 10, 11, 100, 10_000]) {
+      const delay = queueRetryStrategy(attempt);
+      expect(typeof delay, `attempt ${attempt} must yield a retry delay`).toBe('number');
+      expect(Number.isFinite(delay)).toBe(true);
+      expect(delay).toBeGreaterThan(0);
+    }
+  });
+
+  it('backs off linearly then holds at the 3s cap', () => {
+    expect(queueRetryStrategy(1)).toBe(200);
+    expect(queueRetryStrategy(5)).toBe(1000);
+    expect(queueRetryStrategy(15)).toBe(3000);
+    expect(queueRetryStrategy(1000)).toBe(3000);
+  });
+});
 
 describe('RedisQueueClientProvider', () => {
   let provider: RedisQueueClientProvider;
