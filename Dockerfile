@@ -45,8 +45,7 @@ RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
     && pnpm install --offline --frozen-lockfile
 COPY . .
 RUN --mount=type=cache,id=nx-cache-v23,target=/app/.nx/cache \
-    pnpm prisma generate \
-    && node tools/docker/prisma-runtime-artifact.js export /app/.generated-prisma-runtime
+    pnpm prisma generate
 
 # ===========================================================================
 # Single build pass — every shared lib compiles once, dist/apps/* feed every
@@ -91,29 +90,23 @@ RUN --mount=type=cache,id=nx-cache-v23,target=/app/.nx/cache \
 FROM base AS api-dev-deps
 ENV NODE_ENV=production
 COPY --from=build-dev /app/dist/apps/api/package.json /app/dist/apps/api/pnpm-lock.yaml ./
-COPY --from=workspace /app/.generated-prisma-runtime /tmp/prisma-runtime
 RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
     pnpm config set store-dir /pnpm/store \
-    && pnpm install --prod --frozen-lockfile --ignore-scripts \
-    && node /tmp/prisma-runtime/install.js install /tmp/prisma-runtime
+    && pnpm install --prod --frozen-lockfile --ignore-scripts
 
 FROM base AS worker-dev-deps
 ENV NODE_ENV=production
 COPY --from=build-dev /app/dist/apps/worker/package.json /app/dist/apps/worker/pnpm-lock.yaml ./
-COPY --from=workspace /app/.generated-prisma-runtime /tmp/prisma-runtime
 RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
     pnpm config set store-dir /pnpm/store \
-    && pnpm install --prod --frozen-lockfile --ignore-scripts \
-    && node /tmp/prisma-runtime/install.js install /tmp/prisma-runtime
+    && pnpm install --prod --frozen-lockfile --ignore-scripts
 
 FROM base AS scheduler-dev-deps
 ENV NODE_ENV=production
 COPY --from=build-dev /app/dist/apps/scheduler/package.json /app/dist/apps/scheduler/pnpm-lock.yaml ./
-COPY --from=workspace /app/.generated-prisma-runtime /tmp/prisma-runtime
 RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
     pnpm config set store-dir /pnpm/store \
-    && pnpm install --prod --frozen-lockfile --ignore-scripts \
-    && node /tmp/prisma-runtime/install.js install /tmp/prisma-runtime
+    && pnpm install --prod --frozen-lockfile --ignore-scripts
 
 FROM runtime AS api-dev
 ENV NODE_ENV=development \
@@ -145,29 +138,23 @@ CMD ["node", "dist/main.js"]
 FROM base AS api-deps
 ENV NODE_ENV=production
 COPY --from=build-prod /app/dist/apps/api/package.json /app/dist/apps/api/pnpm-lock.yaml ./
-COPY --from=workspace /app/.generated-prisma-runtime /tmp/prisma-runtime
 RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
     pnpm config set store-dir /pnpm/store \
-    && pnpm install --prod --frozen-lockfile --ignore-scripts \
-    && node /tmp/prisma-runtime/install.js install /tmp/prisma-runtime
+    && pnpm install --prod --frozen-lockfile --ignore-scripts
 
 FROM base AS worker-deps
 ENV NODE_ENV=production
 COPY --from=build-prod /app/dist/apps/worker/package.json /app/dist/apps/worker/pnpm-lock.yaml ./
-COPY --from=workspace /app/.generated-prisma-runtime /tmp/prisma-runtime
 RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
     pnpm config set store-dir /pnpm/store \
-    && pnpm install --prod --frozen-lockfile --ignore-scripts \
-    && node /tmp/prisma-runtime/install.js install /tmp/prisma-runtime
+    && pnpm install --prod --frozen-lockfile --ignore-scripts
 
 FROM base AS scheduler-deps
 ENV NODE_ENV=production
 COPY --from=build-prod /app/dist/apps/scheduler/package.json /app/dist/apps/scheduler/pnpm-lock.yaml ./
-COPY --from=workspace /app/.generated-prisma-runtime /tmp/prisma-runtime
 RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
     pnpm config set store-dir /pnpm/store \
-    && pnpm install --prod --frozen-lockfile --ignore-scripts \
-    && node /tmp/prisma-runtime/install.js install /tmp/prisma-runtime
+    && pnpm install --prod --frozen-lockfile --ignore-scripts
 
 FROM base AS migration-deps
 ENV NODE_ENV=production
