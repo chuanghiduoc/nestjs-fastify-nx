@@ -64,3 +64,6 @@ libs/infra/database/src/generated/
 .code-review-graph/
 .claude/settings.json.bak
 plans/
+
+# Local MCP server config — machine-specific (hardcoded cwd), not shared.
+.mcp.json
