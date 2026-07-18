@@ -15,6 +15,11 @@ const workerEnvSchema = z
     DATABASE_APPLICATION_NAME: z.string().default('nestjs-fastify-worker'),
     DB_PASSWORD_FILE: z.string().trim().min(1).optional(),
     DATABASE_SLOW_QUERY_MS: z.coerce.number().int().min(1).default(200),
+    // Dev-only full query logging (incl. params) at debug level. PrismaService ignores it in production.
+    DATABASE_LOG_QUERIES: z
+      .string()
+      .default('false')
+      .transform((v) => v === 'true'),
 
     // Redis queue
     REDIS_QUEUE_HOST: z.string().default('localhost'),

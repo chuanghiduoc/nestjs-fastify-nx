@@ -7,10 +7,10 @@ import { instrumentBusExecution } from './instrument-execution';
 // app's existing QueryBus singleton (see cqrs-instrumentation.initializer.ts for why), so
 // every constructor-injected `QueryBus` gains this override with zero callsite changes.
 export class TracedQueryBus extends QueryBus {
-  // `TResult = any` mirrors QueryBus's own overload set exactly — narrowing the default
-  // here would make this override incompatible with the base class's public signature.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  override execute<T extends IQuery, TResult = any>(
+  // Callers inject the base `QueryBus`, so they keep the typed `Query<TResult>` inference — this
+  // override only has to stay assignable to the base's untyped legacy overload. `unknown` (not the
+  // base's `any`) as the fallback keeps that assignable without reintroducing `any` here.
+  override execute<T extends IQuery, TResult = unknown>(
     query: T,
     asyncContext?: AsyncContext,
   ): Promise<TResult> {

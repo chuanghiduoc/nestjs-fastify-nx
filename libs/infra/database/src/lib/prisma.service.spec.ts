@@ -207,3 +207,91 @@ describe('PrismaService — slow query logging', () => {
     expect(warnSpy).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('PrismaService — DATABASE_LOG_QUERIES full query debug logging', () => {
+  const originalEnv = process.env;
+
+  beforeEach(() => {
+    process.env = { ...originalEnv };
+    process.env['DATABASE_URL'] = 'postgresql://test:test@localhost:5432/test';
+    delete process.env['DATABASE_REPLICA_URL'];
+    delete process.env['NODE_ENV'];
+    delete process.env['DATABASE_LOG_QUERIES'];
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
+    vi.restoreAllMocks();
+  });
+
+  function captureQueryListener(): { listener: QueryListener | undefined } {
+    const captured: { listener: QueryListener | undefined } = { listener: undefined };
+    vi.spyOn(PrismaClient.prototype, '$on').mockImplementation(((
+      event: string,
+      cb: QueryListener,
+    ) => {
+      if (event === 'query') captured.listener = cb;
+    }) as typeof PrismaClient.prototype.$on);
+    return captured;
+  }
+
+  it('logs every query at debug WITH params when enabled outside production', () => {
+    process.env['DATABASE_LOG_QUERIES'] = 'true';
+    const captured = captureQueryListener();
+    const debugSpy = vi.spyOn(Logger.prototype, 'debug').mockImplementation(() => undefined);
+
+    new PrismaService();
+
+    captured.listener?.({
+      query: 'SELECT * FROM "User" WHERE "id" = $1',
+      params: '["a-real-value"]',
+      duration: 3,
+    });
+
+    expect(debugSpy).toHaveBeenCalledWith(
+      { durationMs: 3, query: 'SELECT * FROM "User" WHERE "id" = $1', params: '["a-real-value"]' },
+      'Database query',
+    );
+  });
+
+  it('does not debug-log any query when DATABASE_LOG_QUERIES is unset', () => {
+    const captured = captureQueryListener();
+    const debugSpy = vi.spyOn(Logger.prototype, 'debug').mockImplementation(() => undefined);
+
+    new PrismaService();
+    captured.listener?.({ query: 'SELECT 1', params: '["x"]', duration: 3 });
+
+    expect(debugSpy).not.toHaveBeenCalled();
+  });
+
+  it('ignores the flag in production so params never reach a log', () => {
+    process.env['NODE_ENV'] = 'production';
+    process.env['DATABASE_LOG_QUERIES'] = 'true';
+    process.env['DATABASE_URL'] = 'postgresql://user:pass@db:5432/prod';
+    process.env['BETTER_AUTH_SECRET'] = 'x'.repeat(32);
+    const captured = captureQueryListener();
+    const debugSpy = vi.spyOn(Logger.prototype, 'debug').mockImplementation(() => undefined);
+    const warnSpy = vi.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+
+    new PrismaService();
+    captured.listener?.({ query: 'SELECT 1', params: '["secret"]', duration: 3 });
+
+    expect(debugSpy).not.toHaveBeenCalled();
+    // The boot warning must announce that the flag was ignored.
+    const warnedIgnore = warnSpy.mock.calls.some((c) =>
+      String(c[0]).includes('ignored in production'),
+    );
+    expect(warnedIgnore).toBe(true);
+  });
+
+  it('DATABASE_LOG_QUERIES=false does not enable debug logging (string, not coerced)', () => {
+    process.env['DATABASE_LOG_QUERIES'] = 'false';
+    const captured = captureQueryListener();
+    const debugSpy = vi.spyOn(Logger.prototype, 'debug').mockImplementation(() => undefined);
+
+    new PrismaService();
+    captured.listener?.({ query: 'SELECT 1', params: '["x"]', duration: 3 });
+
+    expect(debugSpy).not.toHaveBeenCalled();
+  });
+});
