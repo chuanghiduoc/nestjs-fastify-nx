@@ -1,11 +1,16 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject } from '@nestjs/common';
+import { CommandHandler, type ICommandHandler } from '@nestjs/cqrs';
 import { Create<%= className %>Command } from './create-<%= fileName %>.command';
 import { <%= constantName %>_REPOSITORY } from '../../../domain';
 import type { <%= className %>RepositoryPort } from '../../../domain';
 import { <%= className %> } from '../../../domain';
 
-@Injectable()
-export class Create<%= className %>Handler {
+// @CommandHandler (not @Injectable) is what CqrsModule's explorer looks for. Consumers dispatch
+// `commandBus.execute(new Create<%= className %>Command(...))` — never inject this class directly.
+@CommandHandler(Create<%= className %>Command)
+export class Create<%= className %>Handler
+  implements ICommandHandler<Create<%= className %>Command, <%= className %>>
+{
   constructor(
     @Inject(<%= constantName %>_REPOSITORY)
     private readonly repository: <%= className %>RepositoryPort,

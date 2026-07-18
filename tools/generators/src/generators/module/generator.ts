@@ -73,6 +73,7 @@ export async function moduleGenerator(tree: Tree, options: ModuleGeneratorSchema
   generateFiles(tree, path.join(__dirname, 'files'), projectRoot, {
     ...moduleNames,
     withCqrs,
+    projectName,
     projectRoot,
     offsetFromRoot: offset,
     template: '',

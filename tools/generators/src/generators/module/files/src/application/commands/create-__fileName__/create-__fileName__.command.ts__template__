@@ -1,3 +1,9 @@
-export class Create<%= className %>Command {
-  constructor(readonly requestedBy: string) {}
+import { Command } from '@nestjs/cqrs';
+import type { <%= className %> } from '../../../domain';
+
+// Command<TResult> carries the result type so CommandBus.execute() infers it end-to-end.
+export class Create<%= className %>Command extends Command<<%= className %>> {
+  constructor(readonly requestedBy: string) {
+    super();
+  }
 }
