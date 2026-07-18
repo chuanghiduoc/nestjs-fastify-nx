@@ -128,7 +128,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=${{ matrix.app }}
 
       - name: Trivy security scan (${{ matrix.app }})
-        uses: aquasecurity/trivy-action@6c175e9c4083a92bbca2f9af4af0408e91440ef0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: scan-candidate/${{ matrix.app }}:${{ github.sha }}
           format: sarif
