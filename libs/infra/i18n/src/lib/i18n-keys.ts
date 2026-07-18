@@ -53,6 +53,9 @@ export const I18N_KEYS = {
       already_exists: 'errors.users.already_exists',
       database_error: 'errors.users.database_error',
     },
+    pagination: {
+      invalid_cursor: 'errors.pagination.invalid_cursor',
+    },
     auth: {
       session_missing: 'errors.auth.session_missing',
       session_expired: 'errors.auth.session_expired',

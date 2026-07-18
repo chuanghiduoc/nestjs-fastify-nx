@@ -5,7 +5,7 @@ import {
   deployTestMigrations,
 } from '@nestjs-fastify-nx/testing';
 import type { TestContainers } from '@nestjs-fastify-nx/testing';
-import { encodeCursor } from '@nestjs-fastify-nx/shared';
+import type { DecodedCursor } from '@nestjs-fastify-nx/shared';
 import { UserFactory } from '../../testing/user.factory';
 import { PrismaUserRepository } from './prisma-user.repository';
 import { PrismaService } from '@nestjs-fastify-nx/infra-database';
@@ -113,7 +113,7 @@ describe('PrismaUserRepository (integration)', () => {
       }
 
       const seenIds = new Set<string>();
-      let cursor: string | undefined;
+      let cursor: DecodedCursor | undefined;
       let pagesRead = 0;
 
       for (let page = 0; page < 3; page++) {
@@ -126,7 +126,7 @@ describe('PrismaUserRepository (integration)', () => {
         }
 
         const last = result.items[result.items.length - 1];
-        cursor = encodeCursor(last.createdAt, last.id);
+        cursor = { createdAt: last.createdAt, id: last.id };
         pagesRead++;
 
         if (page < 2) {
@@ -138,14 +138,6 @@ describe('PrismaUserRepository (integration)', () => {
 
       expect(pagesRead).toBe(3);
       expect(seenIds.size).toBe(30);
-    });
-
-    it('rejects an invalid cursor before querying Postgres', async () => {
-      await repository.save(UserFactory.create({ email: 'any@test.com' }));
-
-      await expect(
-        repository.findAllCursor({ limit: 10, startingAfter: '!!!bad!!!' }),
-      ).rejects.toMatchObject({ status: 400 });
     });
 
     it('filters by search term', async () => {

@@ -18,6 +18,9 @@ export class GetUserProfileHandler implements IQueryHandler<
     if (!user) {
       throw new BusinessRuleException({
         status: HttpStatus.NOT_FOUND,
+        // Without this the response titles a 404 "Business rule violation" — the class default only
+        // fits its default 422 — and the literal skips i18n because it isn't a dotted key.
+        title: I18N_KEYS.common.not_found,
         code: 'user_not_found',
         messageKey: I18N_KEYS.errors.users.not_found,
         violations: [

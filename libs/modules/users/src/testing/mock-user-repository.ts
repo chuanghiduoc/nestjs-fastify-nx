@@ -1,4 +1,3 @@
-import { decodeCursor } from '@nestjs-fastify-nx/shared';
 import type {
   FindAllCursorOptions,
   FindAllCursorResult,
@@ -40,15 +39,12 @@ export class MockUserRepository implements UserRepositoryPort {
     });
 
     if (startingAfter) {
-      const decoded = decodeCursor(startingAfter);
-      if (decoded) {
-        rows = rows.filter((u) => {
-          const tDiff = u.createdAt.getTime() - decoded.createdAt.getTime();
-          if (tDiff < 0) return true;
-          if (tDiff === 0) return u.id < decoded.id;
-          return false;
-        });
-      }
+      rows = rows.filter((u) => {
+        const tDiff = u.createdAt.getTime() - startingAfter.createdAt.getTime();
+        if (tDiff < 0) return true;
+        if (tDiff === 0) return u.id < startingAfter.id;
+        return false;
+      });
     }
 
     const hasMore = rows.length > limit;

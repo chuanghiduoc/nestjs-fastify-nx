@@ -32,5 +32,8 @@
     "delete_failed": "Storage delete failed",
     "commit_failed": "Storage commit failed",
     "read_range_failed": "Storage readRange failed"
+  },
+  "pagination": {
+    "invalid_cursor": "startingAfter is not a valid cursor"
   }
 }
