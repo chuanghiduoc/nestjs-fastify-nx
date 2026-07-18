@@ -35,7 +35,10 @@ Trade-offs:
   `pg_stat_activity` (set `DATABASE_APPLICATION_NAME` to identify connections)
 - **Pro**: native PostgreSQL 18 features like `uuidv7()` work without engine
   workarounds
-- **Con**: requires `previewFeatures = ["driverAdapters"]` in `schema.prisma`
+- **Note**: driver adapters are GA in Prisma 7 — no `previewFeatures` flag is
+  needed, and the Rust query-engine binary is dropped entirely. The client is
+  emitted by the `prisma-client` generator into `src/generated/prisma` and
+  re-exported from this lib's barrel
 
 ## Pool tuning
 
