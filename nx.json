@@ -53,9 +53,11 @@
     "version": {
       "specifierSource": "conventional-commits",
       "currentVersionResolver": "git-tag",
-      "manifestRootsToUpdate": ["."]
+      "fallbackCurrentVersionResolver": "disk",
+      "manifestRootsToUpdate": [".", "apps/api"]
     },
     "changelog": {
+      "automaticFromRef": true,
       "projectChangelogs": false,
       "workspaceChangelog": {
         "file": "{workspaceRoot}/CHANGELOG.md",

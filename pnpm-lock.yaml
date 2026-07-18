@@ -364,6 +364,8 @@ importers:
         specifier: ^5.1.4
         version: 5.1.4(webpack-dev-server@5.2.5)(webpack@5.107.2)
 
+  apps/api: {}
+
   tools/generators: {}
 
 packages:

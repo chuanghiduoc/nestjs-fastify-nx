@@ -97,6 +97,9 @@ services:
       # Self-identify in logs/metrics/traces. Without this the worker inherits the
       # Override the shared .env default so logs/traces have the worker identity.
       OTEL_SERVICE_NAME: nestjs-fastify-worker
+      # PrismaService reads this from the env directly (not ConfigService), so the per-app zod
+      # default never reaches it — set it here so pg_stat_activity distinguishes worker connections.
+      DATABASE_APPLICATION_NAME: nestjs-fastify-worker
     healthcheck:
       test:
         [
@@ -116,6 +119,8 @@ services:
       TZ: ${TZ:-UTC}
       # Self-identify in logs/metrics/traces (see worker note above).
       OTEL_SERVICE_NAME: nestjs-fastify-scheduler
+      # See worker note — makes pg_stat_activity distinguish scheduler connections.
+      DATABASE_APPLICATION_NAME: nestjs-fastify-scheduler
     healthcheck:
       test:
         [

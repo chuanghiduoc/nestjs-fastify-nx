@@ -1,7 +1,13 @@
 import { z } from 'zod';
+// The package version is the single source of truth for APP_VERSION's default; nx release bumps it
+// (and root) in lockstep. Operators can still override APP_VERSION/APP_NAME via env.
+import pkg from '../../package.json';
 
 const envSchema = z
   .object({
+    // Service identity — exposed at `GET /`. Defaults derive from the build; override via env.
+    APP_NAME: z.string().default('nestjs-fastify-nx'),
+    APP_VERSION: z.string().default(pkg.version),
     // Database
     DATABASE_URL: z.string().trim().min(1),
     // Prisma CLI uses this to bypass transaction-mode poolers (pgbouncer, RDS Proxy) for migrations.

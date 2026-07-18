@@ -34,8 +34,8 @@ export function wsData(socket: Socket): WsSocketData {
   return socket.data as WsSocketData;
 }
 
-// Browser SPAs forward the Cookie header directly; non-browser clients pass auth.token, which is
-// wrapped into a synthetic cookie so both code paths are identical.
+// Browser SPAs forward the Cookie header directly; non-browser clients pass auth.token, forwarded
+// as an Authorization: Bearer header for the Better Auth bearer plugin to validate.
 // Redis sorted-set leases cap sockets per IP without leaking counts after process crashes.
 export interface WsAuthOptions {
   redis?: Redis;
@@ -45,15 +45,16 @@ export interface WsAuthOptions {
 
 export async function revalidateWsSession(auth: BetterAuthInstance, socket: Socket): Promise<void> {
   const cookieHeader = socket.handshake.headers['cookie'];
-  const fallbackToken =
+  const bearerToken =
     (socket.handshake.auth['token'] as string | undefined) ||
     extractBearer(socket.handshake.headers['authorization']);
 
-  const headers: Record<string, string> = cookieHeader
-    ? { cookie: cookieHeader }
-    : fallbackToken
-      ? { cookie: `better-auth.session_token=${fallbackToken}` }
-      : {};
+  const headers: Record<string, string> = {};
+  if (cookieHeader) headers['cookie'] = cookieHeader;
+  // Non-browser clients pass the session token via auth.token / Authorization. Hand it to the
+  // bearer plugin as-is — it verifies the signature and maps it to the correctly-named session
+  // cookie (incl. __Secure- under useSecureCookies), which a synthetic cookie can't do reliably.
+  if (bearerToken) headers['authorization'] = `Bearer ${bearerToken}`;
 
   if (Object.keys(headers).length === 0) {
     throw new Error('UNAUTHORIZED: No session credentials provided');
