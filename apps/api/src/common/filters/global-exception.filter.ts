@@ -161,7 +161,6 @@ export class GlobalExceptionFilter implements ExceptionFilter {
 interface HttpExceptionResponseObject {
   message?: string | string[];
   error?: string;
-  statusCode?: number;
   code?: string;
   title?: string;
   messageKey?: string;

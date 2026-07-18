@@ -3,7 +3,6 @@ import {
   CanActivate,
   ExecutionContext,
   ForbiddenException,
-  HttpStatus,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { GqlContextType, GqlExecutionContext } from '@nestjs/graphql';
@@ -33,7 +32,6 @@ export class RolesGuard implements CanActivate {
 
     if (!user || !requiredRoles.includes(user.role)) {
       throw new ForbiddenException({
-        statusCode: HttpStatus.FORBIDDEN,
         messageKey: I18N_KEYS.errors.auth.insufficient_permissions,
         message: 'Insufficient permissions',
       });

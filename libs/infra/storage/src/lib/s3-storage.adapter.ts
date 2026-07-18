@@ -2,7 +2,6 @@ import {
   Injectable,
   Logger,
   BadRequestException,
-  HttpStatus,
   InternalServerErrorException,
   type OnModuleInit,
 } from '@nestjs/common';
@@ -139,7 +138,6 @@ export class S3StorageAdapter implements StoragePort, OnModuleInit {
   async upload(key: string, body: Buffer, options?: UploadOptions): Promise<StoredFile> {
     if (body.length === 0) {
       throw new BadRequestException({
-        statusCode: HttpStatus.BAD_REQUEST,
         messageKey: I18N_KEYS.errors.storage.body_empty,
         args: { key },
         message: `Upload rejected — body is empty for key "${key}"`,
@@ -162,7 +160,6 @@ export class S3StorageAdapter implements StoragePort, OnModuleInit {
     } catch (err) {
       this.logger.error({ err, key }, 'S3 upload failed');
       throw new InternalServerErrorException({
-        statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
         messageKey: I18N_KEYS.errors.storage.upload_failed,
         message: 'Storage upload failed',
       });
@@ -196,7 +193,6 @@ export class S3StorageAdapter implements StoragePort, OnModuleInit {
     } catch (err) {
       this.logger.error({ err, key }, 'S3 presign upload failed');
       throw new InternalServerErrorException({
-        statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
         messageKey: I18N_KEYS.errors.storage.presign_failed,
         message: 'Storage presign failed',
       });
@@ -226,7 +222,6 @@ export class S3StorageAdapter implements StoragePort, OnModuleInit {
       }
       this.logger.error({ err, key }, 'S3 head failed');
       throw new InternalServerErrorException({
-        statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
         messageKey: I18N_KEYS.errors.storage.head_failed,
         message: 'Storage head failed',
       });
@@ -248,7 +243,6 @@ export class S3StorageAdapter implements StoragePort, OnModuleInit {
     } catch (err) {
       this.logger.error({ err, key }, 'S3 getSignedUrl failed');
       throw new InternalServerErrorException({
-        statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
         messageKey: I18N_KEYS.errors.storage.signed_url_failed,
         message: 'Storage signed URL generation failed',
       });
@@ -266,7 +260,6 @@ export class S3StorageAdapter implements StoragePort, OnModuleInit {
     } catch (err) {
       this.logger.error({ err, key }, 'S3 delete failed');
       throw new InternalServerErrorException({
-        statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
         messageKey: I18N_KEYS.errors.storage.delete_failed,
         message: 'Storage delete failed',
       });
@@ -295,7 +288,6 @@ export class S3StorageAdapter implements StoragePort, OnModuleInit {
     } catch (err) {
       this.logger.error({ err, sourceKey, finalKey }, 'S3 finalize copy failed');
       throw new InternalServerErrorException({
-        statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
         messageKey: I18N_KEYS.errors.storage.commit_failed,
         message: 'Storage finalize failed; retry confirmation',
       });
@@ -328,7 +320,6 @@ export class S3StorageAdapter implements StoragePort, OnModuleInit {
     } catch (err) {
       this.logger.error({ err, key, byteCount }, 'S3 readRange failed');
       throw new InternalServerErrorException({
-        statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
         messageKey: I18N_KEYS.errors.storage.read_range_failed,
         message: 'Storage readRange failed',
       });
