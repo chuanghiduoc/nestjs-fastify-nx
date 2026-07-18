@@ -59,7 +59,7 @@ export type ValidationErrorItemDtoConstraint = { [key: string]: unknown };
 export type ValidationErrorItemDtoReceived = { [key: string]: unknown };
 
 export interface ValidationErrorItemDto {
-  /** Path to the offending field. Dotted notation for objects, bracket for arrays. Prefixed with `query.`/`header.`/`path.` when the violation is not in the request body. */
+  /** Path to the offending field. Dotted notation for objects, bracket for arrays. */
   path: string;
   /** Stable error code for this specific violation (snake_case). */
   code: string;
@@ -270,7 +270,7 @@ export interface ListResponseDto {
    * @nullable
    */
   lastCursor?: ListResponseDtoLastCursor;
-  /** Total matching rows. Only present when `?withTotalCount=true` is requested (COUNT is expensive on large tables). */
+  /** Total matching rows. Omitted (undefined) on large/growth tables where COUNT would be a hot path — clients navigate via `hasMore`, not this. */
   totalCount?: number;
   /** Current page (1-based). Present only on offset-paginated endpoints. */
   page?: number;

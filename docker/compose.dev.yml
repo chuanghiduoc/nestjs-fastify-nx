@@ -109,8 +109,6 @@ services:
         condition: service_healthy
       migration:
         condition: service_completed_successfully
-      redis-cache:
-        condition: service_healthy
       redis-queue:
         condition: service_healthy
       minio:
@@ -156,8 +154,6 @@ services:
         condition: service_healthy
       migration:
         condition: service_completed_successfully
-      redis-cache:
-        condition: service_healthy
       redis-queue:
         condition: service_healthy
       minio:

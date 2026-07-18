@@ -312,4 +312,4 @@ or alias to `db` when `DATABASE_REPLICA_URL` is unset).
 - No `TODO` comments without a task ID and plan to fix
 - No temporary solutions or hacks
 - All code paths tested (including error paths)
-- All breaking changes documented in `docs/project-changelog.md`
+- All breaking changes documented in `CHANGELOG.md`

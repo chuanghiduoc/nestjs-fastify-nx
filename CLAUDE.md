@@ -92,9 +92,10 @@ apps/
     src/common/ filters, interceptors, swagger, throttler, health
   worker/       BullMQ consumer
   scheduler/    cron jobs (@nestjs/schedule)
-  migration/    one-shot `prisma migrate deploy` + optional seed (Docker CMD bypasses
-                main.ts; the file exists only so Nx sees an entry point. Gated by orchestrator
-                via `depends_on: service_completed_successfully` before api/worker/scheduler boot)
+  migration/    one-shot `prisma migrate deploy` + optional seed. main.ts holds the real logic
+                (retry/backoff around migrate deploy, DB_PASSWORD_FILE injection, RUN_SEED gate) and
+                the Docker CMD runs it. Gated by orchestrator via
+                `depends_on: service_completed_successfully` before api/worker/scheduler boot)
 
 libs/
   modules/      bounded contexts (DDD per module — see below)

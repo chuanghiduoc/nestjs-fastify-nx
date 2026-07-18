@@ -58,11 +58,8 @@ updates:
         update-types: [major]
 
   - package-ecosystem: docker
-    directories:
-      - /apps/api
-      - /apps/worker
-      - /apps/scheduler
-      - /apps/migration
+    # Single multi-stage Dockerfile at the repo root builds all four app images.
+    directory: /
     schedule:
       interval: weekly
       day: monday
