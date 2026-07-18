@@ -29,6 +29,11 @@ export function buildPageMeta(page: number, pageSize: number, total: number): Pa
   };
 }
 
+// Clamped, as libs/shared/README.md promises. PaginationDto's @Min(1) only guards the HTTP path —
+// a service, queue consumer, or test calling this directly could otherwise produce a negative skip,
+// which Prisma rejects at the driver with an error that says nothing about which page caused it.
 export function paginationSkip(options: PaginationOptions): number {
-  return (options.page - 1) * options.pageSize;
+  const page = Number.isFinite(options.page) ? Math.max(1, Math.trunc(options.page)) : 1;
+  const pageSize = Number.isFinite(options.pageSize) ? Math.max(0, Math.trunc(options.pageSize)) : 0;
+  return (page - 1) * pageSize;
 }
