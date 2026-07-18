@@ -1,0 +1,82 @@
+name: Version and Tag
+
+# Cuts a release with Nx Release: derives the next version from conventional
+# commits, updates package.json + CHANGELOG.md, commits, and pushes a
+# `v{version}` git tag. That tag triggers `release.yml`, which builds, scans,
+# signs, and publishes the container images.
+#
+# Manual trigger only — releasing is a deliberate act, not every push to main.
+#
+# RELEASE_TOKEN: a PAT (or GitHub App token) allowed to push to the protected
+# `main` branch and to create tags/releases. The default GITHUB_TOKEN cannot
+# bypass the branch-protection pull-request requirement, so the version-bump
+# commit would be rejected. Scope: contents:write. Set it in repo secrets.
+
+on:
+  workflow_dispatch:
+    inputs:
+      specifier:
+        description: 'Version bump — leave as "auto" to derive from conventional commits'
+        required: true
+        type: choice
+        options:
+          - auto
+          - patch
+          - minor
+          - major
+        default: auto
+      dry-run:
+        description: 'Preview only — no commit, tag, or push'
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  group: release-version
+  cancel-in-progress: false
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          # Full history + tags so Nx Release resolves the current version from
+          # the last `v*` tag and computes the diff since it.
+          fetch-depth: 0
+          token: ${{ secrets.RELEASE_TOKEN }}
+
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
+        with:
+          version: 11.14.0
+
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Configure git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Nx Release
+        env:
+          # Nx Release creates the GitHub Release through this token.
+          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+        run: |
+          SPECIFIER=""
+          if [ "${{ inputs.specifier }}" != "auto" ]; then
+            SPECIFIER="${{ inputs.specifier }}"
+          fi
+          if [ "${{ inputs.dry-run }}" = "true" ]; then
+            pnpm nx release $SPECIFIER --dry-run --verbose
+          else
+            pnpm nx release $SPECIFIER --yes
+          fi

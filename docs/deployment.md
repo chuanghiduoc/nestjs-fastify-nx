@@ -191,9 +191,26 @@ For a team that needs persistent access, put the host on a private network (VPN 
 
 ## Release Process
 
-1. Merge to `main`
-2. Tag the release: `git tag v1.2.3 && git push origin v1.2.3`
-3. The [release workflow](../.github/workflows/release.yml) automatically, per app:
+Versioning and the changelog are driven by [Nx Release](https://nx.dev/features/manage-releases)
+from your [Conventional Commits](https://www.conventionalcommits.org/) — you never
+hand-edit `CHANGELOG.md` or bump `package.json` manually.
+
+1. Merge your work to `main`.
+2. Cut the version + tag. Either trigger the **Version and Tag** workflow
+   (`.github/workflows/version.yml`, `workflow_dispatch`) or run it locally:
+
+   ```bash
+   pnpm release:dry     # preview the next version + changelog, no writes
+   pnpm release         # bump package.json, write CHANGELOG.md, commit, tag v{version}, push
+   ```
+
+   Nx derives the bump from commit types (`feat` → minor, `fix`/`perf`/`refactor`
+   → patch, `feat!`/`BREAKING CHANGE` → major; `chore`/`ci`/`test` are hidden).
+   The current version is resolved from the last `v*` git tag, and the new version
+   is written to the root `package.json`.
+
+3. Pushing the `v*.*.*` tag triggers the [release workflow](../.github/workflows/release.yml),
+   which automatically, per app:
    - Builds the image into the runner's local daemon — nothing is published yet.
    - Gates on **Trivy** (HIGH/CRITICAL, fixable only). A failing scan stops here,
      so a vulnerable image is never pushed and never signed.
@@ -208,6 +225,18 @@ For a team that needs persistent access, put the host on a private network (VPN 
 
 See [docs/security.md](./security.md) for the full scanner inventory and how
 to verify a signed tag locally with `cosign verify`.
+
+**Prerequisites:**
+
+- **First release** — Nx resolves the current version from the last `v*` tag, so
+  the very first release must be seeded once. Tag the current baseline and push it:
+  `git tag v1.1.0 && git push origin v1.1.0`. That tag also triggers `release.yml`,
+  publishing the `1.1.0` images. Every later release is fully derived from commits.
+- **`RELEASE_TOKEN` secret** (CI only) — the Version and Tag workflow pushes the
+  version-bump commit to the protected `main` branch. `GITHUB_TOKEN` cannot bypass
+  the branch-protection pull-request requirement, so a PAT (or GitHub App token)
+  with `contents:write` and permission to push to `main` is required. Running
+  `pnpm release` locally uses your own credentials and needs no secret.
 
 ## Health Checks
 
