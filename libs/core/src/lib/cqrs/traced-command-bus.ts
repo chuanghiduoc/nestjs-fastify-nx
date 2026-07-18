@@ -7,10 +7,13 @@ import { instrumentBusExecution } from './instrument-execution';
 // app's existing CommandBus singleton (see cqrs-instrumentation.initializer.ts for why), so
 // every constructor-injected `CommandBus` gains this override with zero callsite changes.
 export class TracedCommandBus extends CommandBus {
-  // `R = any` mirrors CommandBus's own overload set exactly — narrowing the default here
-  // would make this override incompatible with the base class's public signature.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  override execute<T extends ICommand, R = any>(command: T, context?: AsyncContext): Promise<R> {
+  // Callers inject the base `CommandBus`, so they keep the typed `Command<R>` inference — this
+  // override only has to stay assignable to the base's untyped legacy overload. `unknown` (not the
+  // base's `any`) as the fallback keeps that assignable without reintroducing `any` here.
+  override execute<T extends ICommand, R = unknown>(
+    command: T,
+    context?: AsyncContext,
+  ): Promise<R> {
     return instrumentBusExecution<R>(
       'command',
       command,

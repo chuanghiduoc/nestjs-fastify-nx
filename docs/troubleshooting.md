@@ -70,6 +70,25 @@ Prevention: exclude the workspace folder from Windows Defender real-time scannin
 (Settings → Virus & threat protection → Exclusions), which removes the main source of the
 lock contention. CI on Linux runners does not hit this.
 
+A second, distinct flavour is a hard native crash — `Assertion failed: (insertion_info.second)
+== (true)` with exit code 134/130 — from the TypeScript 7 native compiler (`@typescript/native`,
+the `typecheck`/`build` engine) or esbuild under Vitest. It is a bug in those pre-release native
+binaries that only surfaces on **Windows** under Nx's concurrent task execution; there is no newer
+`typescript@7` patch to bump to yet, and it does **not** reproduce on Linux — the `full-check` and
+`CI` workflows run the same `nx run-many -t typecheck --all` green on every push to `main`, which
+is the authoritative signal. It is not a code or type error. Treat a run that ends in this crash as
+a flake:
+
+```bash
+# Re-run; it passes. To see every project's real result instead of aborting on the first flake:
+pnpm nx run-many -t typecheck --nx-bail=false
+# Or lower concurrency so fewer native processes race:
+pnpm nx run-many -t typecheck --parallel=1
+```
+
+Never conclude "typecheck is failing" from this crash alone — confirm with `grep "error TS"`
+(zero matches means no type error) or a single-project `pnpm nx run <project>:typecheck`.
+
 ### `pnpm codegen` crashes with `js-yaml does not provide an export named 'default'`
 
 Symptom: `pnpm codegen` (orval) aborts before generating the client:
