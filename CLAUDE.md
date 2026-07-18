@@ -34,7 +34,7 @@ Respond to the maintainer in chat in **Vietnamese by default** — reviews, expl
 
 ## Stack quick reference
 
-- **Runtime**: Node 24, pnpm 10.33, TypeScript 6
+- **Runtime**: Node 24, pnpm 11.14, TypeScript 6
 - **Framework**: NestJS 11 + Fastify 5
 - **ORM**: Prisma 7 with `@prisma/adapter-pg`; schema at `prisma/schema.prisma`
 - **Auth**: Better Auth 1.6 — **NOT** JWT. Cookie name is `better-auth.session_token`. Mounted at `/api/auth/*` by `BetterAuthModule` (in `libs/infra/auth`). The auth surface is published at `/api/auth/reference`.

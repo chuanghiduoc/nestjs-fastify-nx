@@ -5,8 +5,66 @@ packages:
   - 'libs/modules/*'
   - 'tools/*'
 
-# Reduce exposure to freshly published supply-chain attacks while still allowing
-# Dependabot's reviewed weekly updates. Existing lockfile resolutions remain reproducible.
-minimumReleaseAge: 10080
-trustPolicy: no-downgrade
+# pnpm 11 ships these two on by default; kept explicit as the repo's stated posture.
+# minimumReleaseAge (1 day) skips just-published releases — the window a compromised package is
+# usually caught and pulled in — and blockExoticSubdeps refuses non-registry transitive sources.
+# `trustPolicy: no-downgrade` is deliberately NOT enabled: it fires on long-trusted packages
+# (semver, chokidar) whose maintainers merely didn't re-sign provenance, costing far more in
+# false positives than it buys.
+minimumReleaseAge: 1440
 blockExoticSubdeps: true
+
+# pnpm 11 no longer reads config from package.json#pnpm or non-auth .npmrc keys —
+# both moved here.
+strictPeerDependencies: false
+autoInstallPeers: true
+# Docker builds run `pnpm install --offline`; verifyDepsBeforeRun would trigger a
+# network install on every `pnpm run`/`pnpm nx` and break the offline layer.
+verifyDepsBeforeRun: false
+
+# Deny dependency build scripts by default (was onlyBuiltDependencies). Only the four that
+# genuinely need to compile/generate at install run; the rest ship prebuilt binaries and worked
+# fine denied under pnpm 10, so they stay denied — deny-by-default, not a blanket allow.
+allowBuilds:
+  '@prisma/engines': true
+  argon2: true
+  nx: true
+  prisma: true
+  '@parcel/watcher': false
+  '@scarf/scarf': false
+  '@sentry/node-cpu-profiler': false
+  '@swc/core': false
+  cpu-features: false
+  esbuild: false
+  lefthook: false
+  less: false
+  msgpackr-extract: false
+  ssh2: false
+  unrs-resolver: false
+
+overrides:
+  fastify: '>=5.8.5'
+  '@hono/node-server': '>=1.19.13'
+  brace-expansion: '>=5.0.6'
+  yaml: '>=2.8.3'
+  follow-redirects: '>=1.16.0'
+  picomatch: '>=4.0.4'
+  uuid: '^14.0.1'
+  fast-uri: '>=3.1.2'
+  fast-xml-builder: '>=1.2.0'
+  hono: '>=4.12.25'
+  '@babel/plugin-transform-modules-systemjs': '>=7.29.4'
+  esbuild: '>=0.28.1'
+  kysely: '>=0.28.17'
+  protobufjs: '>=8.0.2'
+  qs: '>=6.15.2'
+  tmp: '>=0.2.7'
+  webpack-dev-server: '>=5.2.5'
+  ws: '>=8.21.0'
+  form-data: '>=4.0.6'
+  multer: '>=2.2.0'
+  launch-editor: '>=2.14.1'
+  js-yaml: '^4.2.0'
+  http-proxy-middleware: '^3.0.6'
+  '@opentelemetry/core': '>=2.8.0'
+  undici: '>=8.5.0'

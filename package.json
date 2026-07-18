@@ -148,47 +148,12 @@
   },
   "engines": {
     "node": ">=24.0.0",
-    "pnpm": ">=10.0.0"
+    "pnpm": ">=11.0.0"
   },
-  "packageManager": "pnpm@10.33.0",
+  "packageManager": "pnpm@11.14.0",
   "prisma": {
     "schema": "prisma/schema.prisma",
     "config": "prisma.config.ts",
     "seed": "node prisma/seed.mjs"
-  },
-  "pnpm": {
-    "overrides": {
-      "fastify": ">=5.8.5",
-      "@hono/node-server": ">=1.19.13",
-      "brace-expansion": ">=5.0.6",
-      "yaml": ">=2.8.3",
-      "follow-redirects": ">=1.16.0",
-      "picomatch": ">=4.0.4",
-      "uuid": "^14.0.1",
-      "fast-uri": ">=3.1.2",
-      "fast-xml-builder": ">=1.2.0",
-      "hono": ">=4.12.25",
-      "@babel/plugin-transform-modules-systemjs": ">=7.29.4",
-      "esbuild": ">=0.28.1",
-      "kysely": ">=0.28.17",
-      "protobufjs": ">=8.0.2",
-      "qs": ">=6.15.2",
-      "tmp": ">=0.2.7",
-      "webpack-dev-server": ">=5.2.5",
-      "ws": ">=8.21.0",
-      "form-data": ">=4.0.6",
-      "multer": ">=2.2.0",
-      "launch-editor": ">=2.14.1",
-      "js-yaml": "^4.2.0",
-      "http-proxy-middleware": "^3.0.6",
-      "@opentelemetry/core": ">=2.8.0",
-      "undici": ">=8.5.0"
-    },
-    "onlyBuiltDependencies": [
-      "@prisma/engines",
-      "argon2",
-      "nx",
-      "prisma"
-    ]
   }
 }

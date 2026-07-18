@@ -123,18 +123,18 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 4. pnpm >= 10
+# 4. pnpm >= 11
 # ---------------------------------------------------------------------------
 step "Checking pnpm version..."
 if command -v pnpm >/dev/null 2>&1; then
   PNPM_VER=$(pnpm --version)
-  if version_gte "${PNPM_VER}" "10.0.0"; then
+  if version_gte "${PNPM_VER}" "11.0.0"; then
     pass "pnpm ${PNPM_VER}"
   else
-    fail "pnpm ${PNPM_VER} found but >= 10 required — run: 'corepack enable && corepack prepare pnpm@10.33.0 --activate'"
+    fail "pnpm ${PNPM_VER} found but >= 11 required — run: 'corepack enable && corepack prepare pnpm@11.14.0 --activate'"
   fi
 else
-  fail "pnpm not found — run: 'corepack enable && corepack prepare pnpm@10.33.0 --activate'"
+  fail "pnpm not found — run: 'corepack enable && corepack prepare pnpm@11.14.0 --activate'"
 fi
 
 # ---------------------------------------------------------------------------
