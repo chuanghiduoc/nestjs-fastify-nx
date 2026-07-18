@@ -6,6 +6,8 @@ import Redis from 'ioredis';
 import type { EnvConfig } from '../../config/env.validation';
 
 const PROBE_TIMEOUT_MS = 2_000;
+const PROBE_RECONNECT_STEP_MS = 200;
+const PROBE_RECONNECT_CAP_MS = 2_000;
 
 interface RedisTarget {
   readonly host: string;
@@ -33,8 +35,15 @@ abstract class BaseRedisHealthIndicator implements OnModuleDestroy {
       port: target.port,
       lazyConnect: true,
       connectTimeout: PROBE_TIMEOUT_MS,
+      // Fail the *probe* fast, but keep the client alive: one retry per command, a short connect
+      // timeout, and withTimeout() below already bound how long isHealthy() can block.
       maxRetriesPerRequest: 1,
-      retryStrategy: () => null,
+      // Never return a non-number. ioredis reads that as "stop reconnecting for good", so a Redis
+      // blip would kill this probe client permanently — the probe then reports down forever, long
+      // after Redis is healthy again, and every replica stays NotReady until someone restarts it.
+      // That turns a seconds-long blip into an outage that only ends by hand.
+      retryStrategy: (times: number) =>
+        Math.min(times * PROBE_RECONNECT_STEP_MS, PROBE_RECONNECT_CAP_MS),
     });
     this.redis.on('error', () => {
       // swallow connection errors — surfaced via isHealthy()
