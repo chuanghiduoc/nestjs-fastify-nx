@@ -18,6 +18,7 @@ import { OutboxCleanupTask } from './tasks/outbox-cleanup.task';
 import { SchedulerHealthService } from './health/scheduler-health.service';
 import { SchedulerLeadershipModule } from './leadership/scheduler-leadership.module';
 import { StoredFileCleanupTask } from './tasks/stored-file-cleanup.task';
+import { VerificationCleanupTask } from './tasks/verification-cleanup.task';
 
 @Module({
   imports: [
@@ -46,6 +47,7 @@ import { StoredFileCleanupTask } from './tasks/stored-file-cleanup.task';
     OutboxCleanupTask,
     SchedulerHealthService,
     StoredFileCleanupTask,
+    VerificationCleanupTask,
     // Tracing only here — the scheduler has no Prometheus registry, so cqrs_* metrics are
     // skipped (CqrsMetricsRecorderHolder stays unset). See CqrsInstrumentationInitializer.
     CqrsInstrumentationInitializer,

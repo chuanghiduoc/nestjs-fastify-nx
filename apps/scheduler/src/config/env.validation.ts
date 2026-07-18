@@ -76,6 +76,10 @@ const schedulerEnvSchema = z
     OUTBOX_PURGE_BATCH_SIZE: z.coerce.number().int().min(100).max(10_000).default(1_000),
     OUTBOX_PURGE_MAX_BATCHES: z.coerce.number().int().min(1).max(10_000).default(200),
 
+    VERIFICATION_PURGE_GRACE_DAYS: z.coerce.number().int().min(1).max(365).default(1),
+    VERIFICATION_PURGE_BATCH_SIZE: z.coerce.number().int().min(100).max(10_000).default(1_000),
+    VERIFICATION_PURGE_MAX_BATCHES: z.coerce.number().int().min(1).max(10_000).default(200),
+
     EVENT_PUBLISHER_DRIVER: z.enum(['inprocess', 'outbox']).default('inprocess'),
 
     SENTRY_DSN: z.string().optional().default(''),

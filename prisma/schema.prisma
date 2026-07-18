@@ -78,6 +78,11 @@ model Verification {
   createdAt  DateTime? @default(now())
   updatedAt  DateTime? @updatedAt
 
+  // Better Auth reads this table only by `identifier` (ordered by createdAt desc, limit 1) on every
+  // password-reset, email-verification, and delete-account confirmation. Without this index each of
+  // those is a sequential scan. `expiresAt` backs the scheduler's expired-token purge.
+  @@index([identifier, createdAt(sort: Desc)])
+  @@index([expiresAt])
   @@map("verifications")
 }
 

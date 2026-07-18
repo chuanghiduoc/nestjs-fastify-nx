@@ -198,6 +198,9 @@ safe because command handlers roll back their transaction on error.
 | `STORED_FILE_CLEANUP_BATCH_SIZE`       | `500`   | Stored-file lifecycle records scanned per hour |
 | `STORED_FILE_FINALIZING_STALE_MINUTES` | `60`    | FINALIZING age considered abandoned            |
 | `STORED_FILE_VERIFYING_STALE_HOURS`    | `24`    | VERIFYING age considered abandoned             |
+| `VERIFICATION_PURGE_GRACE_DAYS`        | `1`     | Age past `expiresAt` before a token is deleted |
+| `VERIFICATION_PURGE_BATCH_SIZE`        | `1000`  | Verification rows deleted per batch            |
+| `VERIFICATION_PURGE_MAX_BATCHES`       | `200`   | Maximum verification purge batches per run     |
 
 ## Bull Board
 
