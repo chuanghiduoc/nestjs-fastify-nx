@@ -25,7 +25,7 @@
   <img alt="Nx" src="https://img.shields.io/badge/Nx-23-143055?logo=nx&logoColor=white&style=flat-square" />
   <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-6-3178C6?logo=typescript&logoColor=white&style=flat-square" />
   <img alt="Node" src="https://img.shields.io/badge/Node.js-24-339933?logo=node.js&logoColor=white&style=flat-square" />
-  <img alt="pnpm" src="https://img.shields.io/badge/pnpm-10.33-F69220?logo=pnpm&logoColor=white&style=flat-square" />
+  <img alt="pnpm" src="https://img.shields.io/badge/pnpm-11.14-F69220?logo=pnpm&logoColor=white&style=flat-square" />
   <img alt="Prisma" src="https://img.shields.io/badge/Prisma-7-2D3748?logo=prisma&logoColor=white&style=flat-square" />
   <img alt="PostgreSQL" src="https://img.shields.io/badge/PostgreSQL-18-336791?logo=postgresql&logoColor=white&style=flat-square" />
   <img alt="Redis" src="https://img.shields.io/badge/Redis-8-DC382D?logo=redis&logoColor=white&style=flat-square" />
@@ -95,7 +95,7 @@ If you've ever shipped a Node service to production, you've written this code al
 
 | Layer          | Technology                                                          |
 | -------------- | ------------------------------------------------------------------- |
-| Runtime        | Node.js 24, pnpm 10.33, TypeScript 6                                |
+| Runtime        | Node.js 24, pnpm 11.14, TypeScript 6                                |
 | Framework      | NestJS 11 + Fastify 5                                               |
 | ORM            | Prisma 7 (driver adapter `@prisma/adapter-pg`)                      |
 | Database       | PostgreSQL 18 (native `uuidv7()`, async I/O via io_uring)           |
@@ -150,7 +150,7 @@ See [docs/architecture.md](docs/architecture.md) for the full module map.
 
 ## Quick Start
 
-> **Prerequisites** — Docker 24+, Node 24 LTS, pnpm 10.33 (`corepack enable && corepack prepare pnpm@10.33.0 --activate`).
+> **Prerequisites** — Docker 24+, Node 24 LTS, pnpm 11.14 (`corepack enable && corepack prepare pnpm@11.14.0 --activate`).
 
 ```bash
 git clone https://github.com/chuanghiduoc/nestjs-fastify-nx.git

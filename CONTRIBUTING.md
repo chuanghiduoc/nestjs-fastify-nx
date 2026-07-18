@@ -5,7 +5,7 @@ Welcome. This guide gets you from clone → first PR in under 30 minutes.
 ## Prerequisites
 
 - Docker Desktop / Docker Engine with Compose v2+
-- Node 24+, pnpm 10+
+- Node 24+, pnpm 11+
 - Git with conventional commits awareness
 - 2 GB free disk (for containers + node_modules)
 
