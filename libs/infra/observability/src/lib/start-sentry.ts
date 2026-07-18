@@ -6,7 +6,11 @@ export interface StartSentryOptions {
   readonly profiling?: boolean;
 }
 
-const SENSITIVE_KEY = /authorization|password|token|secret|cookie|api[-_]?key/i;
+// Defense-in-depth key-name redaction on every Sentry event (sendDefaultPii is
+// already false). Covers auth secrets and direct PII so a stray breadcrumb or
+// `extra` field never ships credentials or personal data off-box.
+const SENSITIVE_KEY =
+  /authorization|password|token|secret|cookie|api[-_]?key|email|phone|ssn|credit[-_]?card|card[-_]?number|tax[-_]?id/i;
 const MAX_SCRUB_DEPTH = 8;
 
 function scrub(value: unknown, depth = 0, seen = new WeakSet<object>()): void {

@@ -94,7 +94,9 @@ async function bootstrap() {
     maxAge: 600,
   });
 
-  // CSP disabled in dev so Scalar/Bull Board can load CDN assets.
+  // CSP is disabled in dev so Scalar/Bull Board load freely. In prod the policy
+  // is same-origin only: Bull Board serves its own bundled assets and Scalar
+  // docs never mount in production, so no third-party CDN needs allowlisting.
   await fastify.register(fastifyHelmet, {
     contentSecurityPolicy: isProduction
       ? {
@@ -106,20 +108,10 @@ async function bootstrap() {
             frameAncestors: ["'self'"],
             imgSrc: ["'self'", 'data:', 'https:'],
             objectSrc: ["'none'"],
-            scriptSrc: [
-              "'self'",
-              "'unsafe-inline'",
-              'https://cdn.jsdelivr.net',
-              'https://*.scalar.com',
-            ],
+            scriptSrc: ["'self'", "'unsafe-inline'"],
             scriptSrcAttr: ["'none'"],
             styleSrc: ["'self'", 'https:', "'unsafe-inline'"],
-            connectSrc: [
-              "'self'",
-              'https://cdn.jsdelivr.net',
-              'https://*.scalar.com',
-              'https://api.scalar.com',
-            ],
+            connectSrc: ["'self'"],
             upgradeInsecureRequests: [],
             workerSrc: ["'self'", 'blob:'],
           },
