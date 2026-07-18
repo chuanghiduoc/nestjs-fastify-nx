@@ -2,7 +2,7 @@ import { Logger } from '@nestjs/common';
 import { betterAuth } from 'better-auth';
 import type { BetterAuthOptions } from 'better-auth';
 import { prismaAdapter } from 'better-auth/adapters/prisma';
-import { openAPI } from 'better-auth/plugins';
+import { bearer, openAPI } from 'better-auth/plugins';
 import type { PrismaClient } from '@nestjs-fastify-nx/infra-database';
 import type { I18nService } from 'nestjs-i18n';
 import {
@@ -191,7 +191,11 @@ export function createBetterAuth(
       useSecureCookies:
         process.env['NODE_ENV'] === 'production' || (baseURL?.startsWith('https://') ?? false),
     },
-    plugins: [openAPI()],
+    // bearer() lets non-browser clients (WebSocket, mobile, service-to-service) authenticate with
+    // `Authorization: Bearer <session-token>`. Better Auth verifies the token signature and maps it
+    // to the correctly-named session cookie (incl. the __Secure- prefix under useSecureCookies),
+    // which a hand-rolled synthetic cookie can't do reliably.
+    plugins: [openAPI(), bearer()],
   });
 }
 
