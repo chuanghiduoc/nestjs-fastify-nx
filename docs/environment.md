@@ -31,7 +31,6 @@ Copy `.env.example` to `.env` and fill in the values.
 | ---------------------------- | ----------- | -------- | -------------------------------------------------------------- |
 | `REDIS_CACHE_HOST`           | `localhost` | Yes      | Cache Redis hostname                                           |
 | `REDIS_CACHE_PORT`           | `6379`      | Yes      | Cache Redis port                                               |
-| `REDIS_CACHE_TTL_MS`         | `300000`    | No       | Default cache TTL                                              |
 | `REDIS_QUEUE_HOST`           | `localhost` | Yes      | Queue Redis hostname                                           |
 | `REDIS_QUEUE_PORT`           | `6380`      | Yes      | Queue Redis port                                               |
 | `REDIS_QUEUE_PREFIX`         | `bull`      | No       | BullMQ key prefix                                              |
@@ -206,6 +205,7 @@ safe because command handlers roll back their transaction on error.
 | `STORED_FILE_CLEANUP_BATCH_SIZE`       | `500`   | Stored-file lifecycle records scanned per hour   |
 | `STORED_FILE_FINALIZING_STALE_MINUTES` | `60`    | FINALIZING age considered abandoned              |
 | `STORED_FILE_VERIFYING_STALE_HOURS`    | `24`    | VERIFYING age considered abandoned               |
+| `STORED_FILE_ORPHAN_GRACE_MINUTES`     | `60`    | Grace before an owner-deleted file is reclaimed  |
 | `VERIFICATION_PURGE_GRACE_DAYS`        | `1`     | Age past `expiresAt` before a token is deleted   |
 | `VERIFICATION_PURGE_BATCH_SIZE`        | `1000`  | Verification rows deleted per batch              |
 | `VERIFICATION_PURGE_MAX_BATCHES`       | `200`   | Maximum verification purge batches per run       |

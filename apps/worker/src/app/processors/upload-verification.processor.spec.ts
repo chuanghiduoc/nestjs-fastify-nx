@@ -113,4 +113,25 @@ describe('UploadVerificationProcessor', () => {
     );
     expect(storage.delete).not.toHaveBeenCalled();
   });
+
+  it('does not delete when the record is no longer VERIFYING (already processed by another execution)', async () => {
+    const storage = makeStorage(JPEG_HEADER);
+    prisma = {
+      db: {
+        storedFile: { updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
+      },
+    } as unknown as PrismaService;
+    processor = new UploadVerificationProcessor(storage, prisma);
+
+    await processor.process(
+      makeJob({ key: 'uploads/tampered.png', declaredContentType: 'image/png', bucket: 'b' }),
+    );
+
+    expect(prisma.db.storedFile.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { key: 'uploads/tampered.png', status: 'VERIFYING' },
+      }),
+    );
+    expect(storage.delete).not.toHaveBeenCalled();
+  });
 });

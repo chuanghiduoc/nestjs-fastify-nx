@@ -1,7 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
+import { Client as PgClient } from 'pg';
 import { PrismaService } from '@nestjs-fastify-nx/infra-database';
-import { positiveIntEnv } from '@nestjs-fastify-nx/shared';
+import { injectDatabasePassword, positiveIntEnv } from '@nestjs-fastify-nx/shared';
 import { UserStatus } from '@nestjs-fastify-nx/modules-users';
 import { SchedulerLeaderService } from '../leadership/scheduler-leader.service';
 
@@ -72,11 +73,31 @@ export class CleanupTask {
     if (!this.leadership.isLeader()) return;
     this.logger.log('Running VACUUM ANALYZE');
 
+    // Dedicated connection: the pooled client carries DATABASE_STATEMENT_TIMEOUT_MS (30s) and can't
+    // guarantee `SET statement_timeout` + VACUUM land on the same backend (VACUUM also can't run in
+    // a transaction, ruling out SET LOCAL). DATABASE_DIRECT_URL bypasses a pgbouncer transaction-mode
+    // pooler that would otherwise split the two statements across backends; it falls back to
+    // DATABASE_URL when no pooler is deployed.
+    const client = new PgClient({
+      connectionString: injectDatabasePassword(
+        process.env['DATABASE_DIRECT_URL'] ?? process.env['DATABASE_URL'],
+        process.env['DB_PASSWORD_FILE'],
+      ),
+    });
+
     try {
-      await this.prisma.db.$executeRaw`VACUUM ANALYZE`;
+      await client.connect();
+      await client.query('SET statement_timeout = 0');
+      await client.query('VACUUM ANALYZE');
       this.logger.log('VACUUM ANALYZE complete');
     } catch (error) {
       this.logger.error(`VACUUM ANALYZE failed: ${String(error)}`);
+    } finally {
+      try {
+        await client.end();
+      } catch (closeError) {
+        this.logger.error(`Failed to close VACUUM connection: ${String(closeError)}`);
+      }
     }
   }
 

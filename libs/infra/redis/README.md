@@ -1,7 +1,10 @@
 # infra-redis
 
-Redis modules for cache and queue — two separate Redis instances on different
-ports so cache eviction never disrupts queued jobs.
+Redis modules for the queue tier — two separate Redis instances on different
+ports so cache/rate-limit traffic never disrupts queued jobs. This lib owns the
+BullMQ queue + dead-letter wiring; the cache instance (`REDIS_CACHE_HOST` /
+`REDIS_CACHE_PORT`) is consumed directly by rate-limit, idempotency, the
+Socket.io pub/sub adapter, and the health probe — not through a module here.
 
 **Tag**: `scope:infra`.
 
@@ -9,8 +12,6 @@ ports so cache eviction never disrupts queued jobs.
 
 ```ts
 import {
-  RedisCacheModule,
-  RedisCacheService,
   RedisQueueModule,
   REDIS_QUEUE_CLIENT,
   DeadLetterModule,
@@ -24,15 +25,6 @@ import {
 `REDIS_QUEUE_CLIENT` resolves to the ioredis client already connected to the queue instance. Inject
 it (`@Inject(REDIS_QUEUE_CLIENT) redis: Redis`) rather than opening a second connection for things
 like a processor's SETNX idempotency guard.
-
-## Cache
-
-`RedisCacheModule` wires `cache-manager` over `Keyv` against the cache
-instance (`REDIS_CACHE_HOST` / `REDIS_CACHE_PORT`). `RedisCacheService` is a
-thin typed wrapper exposing `get` / `set` / `del` / `reset`. `get`, `set` and
-`del` take an optional `namespace` that prefixes the key.
-
-Default TTL: `REDIS_CACHE_TTL_MS` (5 minutes).
 
 ## Queue
 

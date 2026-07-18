@@ -14,6 +14,15 @@ import type {
   UserRepositoryPort,
 } from '../../domain/ports/user-repository.port';
 
+// Postgres LIKE/ILIKE treats '%', '_' and the escape character itself as pattern metacharacters
+// even when the value arrives as a bound parameter. Prisma's `contains` does not escape them, so
+// an unescaped search term like "50%off" would silently behave as a wildcard match instead of a
+// literal one. Backslash is the default LIKE escape character, so prefixing each metacharacter
+// with it here is sufficient without an explicit ESCAPE clause.
+function escapeLikePattern(value: string): string {
+  return value.replace(/[\\%_]/g, (char) => `\\${char}`);
+}
+
 type UserRow = {
   id: string;
   name: string;
@@ -114,9 +123,10 @@ export class PrismaUserRepository implements UserRepositoryPort {
     if (role) where.role = role;
     if (status) where.status = status;
     if (search) {
+      const escapedSearch = escapeLikePattern(search);
       where.OR = [
-        { email: { contains: search, mode: 'insensitive' } },
-        { name: { contains: search, mode: 'insensitive' } },
+        { email: { contains: escapedSearch, mode: 'insensitive' } },
+        { name: { contains: escapedSearch, mode: 'insensitive' } },
       ];
     }
     if (startingAfter) {

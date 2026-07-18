@@ -206,6 +206,78 @@ describe('OutboxRelayService', () => {
     expect(dbExecuteCalls[1].sql).toMatch(/processedAt/);
   });
 
+  it('dispatches the whole batch sequentially and records mixed at-least-once results', async () => {
+    const rows: OutboxRow[] = [
+      buildRow({
+        id: 'a1',
+        aggregateId: 'agg-a',
+        payload: { eventId: 'a1', occurredAt: '2026-04-28T00:00:00.000Z', payload: {} },
+      }),
+      buildRow({
+        id: 'a2',
+        aggregateId: 'agg-a',
+        payload: { eventId: 'a2', occurredAt: '2026-04-28T00:00:01.000Z', payload: {} },
+      }),
+      buildRow({
+        id: 'b1',
+        aggregateId: 'agg-b',
+        payload: { eventId: 'b1', occurredAt: '2026-04-28T00:00:00.000Z', payload: {} },
+      }),
+    ];
+    const { prisma, dbExecuteCalls } = buildPrisma({ claim: () => rows });
+    const bus = buildBus();
+    bus.publish.mockImplementation(async (event: { eventId: string }) => {
+      // a2 fails; a1 and b1 succeed. A failed row does not block the rest of the batch — every
+      // claimed row is attempted (claimBatch already consumed each row's attempt).
+      if (event.eventId === 'a2') throw new Error('listener failed for a2');
+    });
+    const relay = new OutboxRelayService(prisma, bus);
+
+    const dispatchedCount = await relay.tick();
+
+    expect(dispatchedCount).toBe(2);
+    expect(bus.publish).toHaveBeenCalledTimes(3);
+
+    const publishedIds = bus.publish.mock.calls.map(
+      (call) => (call[0] as { eventId: string }).eventId,
+    );
+    // Claim order is preserved by sequential dispatch.
+    expect(publishedIds).toEqual(['a1', 'a2', 'b1']);
+
+    // All three rows got a per-row outcome recorded (2 processedAt, 1 lastError-only).
+    // markProcessed's UPDATE also clears lastError, so distinguish recordError by the
+    // absence of processedAt rather than by presence of the lastError substring alone.
+    expect(dbExecuteCalls).toHaveLength(3);
+    const processedCalls = dbExecuteCalls.filter((c) => c.sql.includes('processedAt'));
+    const errorOnlyCalls = dbExecuteCalls.filter(
+      (c) => c.sql.includes('lastError') && !c.sql.includes('processedAt'),
+    );
+    expect(processedCalls).toHaveLength(2);
+    expect(errorOnlyCalls).toHaveLength(1);
+    expect(errorOnlyCalls[0].args[1]).toBe('a2');
+  });
+
+  it('records a poison row as failed but keeps dispatching the rest of the batch', async () => {
+    const bad = buildRow({
+      id: 'p1',
+      aggregateId: 'agg-a',
+      payload: null as unknown as OutboxRow['payload'],
+    });
+    const good = buildRow({
+      id: 'p2',
+      aggregateId: 'agg-a',
+      payload: { eventId: 'p2', occurredAt: '2026-04-28T00:00:01.000Z', payload: {} },
+    });
+    const { prisma } = buildPrisma({ claim: () => [bad, good] });
+    const bus = buildBus();
+    const relay = new OutboxRelayService(prisma, bus);
+
+    // A permanently-undeliverable row must not block its aggregate forever — good still dispatches.
+    expect(await relay.tick()).toBe(1);
+    const publishedIds = bus.publish.mock.calls.map((c) => (c[0] as { eventId: string }).eventId);
+    expect(publishedIds).toEqual(['p2']);
+  });
+
   it('does not hold the claim transaction across the publish call', async () => {
     // Build prisma where the tx callback resolves before publish is awaited.
     // We assert ordering by recording the sequence in which the two side

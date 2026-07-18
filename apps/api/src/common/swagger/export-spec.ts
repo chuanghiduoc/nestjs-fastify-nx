@@ -5,7 +5,7 @@ import 'reflect-metadata';
 import './codegen-env';
 
 // The spec exporter only needs the DI graph for swagger introspection — no
-// Redis traffic is required. BullMQ Queue / KeyvRedis / throttler still open
+// Redis traffic is required. BullMQ Queue / throttler still open
 // sockets on import; when CI runs codegen without a Redis service they spam
 // stderr with ECONNREFUSED loops. Silence ONLY those specific noises; any
 // other stderr write (including the final `Failed to export spec:` message

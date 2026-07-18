@@ -172,7 +172,7 @@ interface HttpExceptionResponseObject {
   errors?: ValidationErrorItemDto[];
 }
 
-function normalizeException(exception: unknown): NormalizedError {
+export function normalizeException(exception: unknown): NormalizedError {
   if (exception instanceof BusinessRuleException) {
     const body = exception.getResponse() as HttpExceptionResponseObject;
     return {
@@ -227,9 +227,18 @@ function normalizeException(exception: unknown): NormalizedError {
   const res = exception.getResponse();
   const defaultTitle = HTTP_STATUS_TITLES[status] ?? 'Error';
   const defaultCode = HTTP_STATUS_CODES[status] ?? ERROR_CODES.INTERNAL_SERVER_ERROR;
+  // Any 5xx HttpException is an unclassified server fault, not a deliberate client-facing 4xx —
+  // its `message`/`res` may carry internals (stack fragments, driver errors, file paths). Mirrors
+  // the redaction already applied to non-HttpException and Fastify-level errors below.
+  const shouldRedactServerError = status >= 500 && process.env['NODE_ENV'] === 'production';
 
   if (typeof res === 'string') {
-    return { status, title: defaultTitle, detail: res, code: defaultCode };
+    return {
+      status,
+      title: defaultTitle,
+      detail: shouldRedactServerError ? defaultTitle : res,
+      code: defaultCode,
+    };
   }
 
   const healthChecks = extractFailingHealthChecks(res);
@@ -248,23 +257,32 @@ function normalizeException(exception: unknown): NormalizedError {
   const code = typeof body.code === 'string' ? body.code : defaultCode;
   // body.messageKey wins over message — domain code that throws with a key gets translated; raw NestJS exceptions fall back to their message string.
   const detailSource = body.messageKey ?? body.message;
+  // A messageKey is an intentional, translatable detail — never redact it. Its absence on a 5xx
+  // means the message is whatever the throw site happened to pass, which is the leak this guards.
+  const redactDetail = shouldRedactServerError && typeof body.messageKey !== 'string';
 
   if (Array.isArray(body.errors) && body.errors.length > 0) {
     return {
       status,
       title,
-      detail: typeof detailSource === 'string' ? detailSource : I18N_KEYS.validation.failed_detail,
+      detail: redactDetail
+        ? title
+        : typeof detailSource === 'string'
+          ? detailSource
+          : I18N_KEYS.validation.failed_detail,
       code: code === defaultCode ? ERROR_CODES.VALIDATION_FAILED : code,
       args: body.args,
       errors: body.errors,
     };
   }
 
-  const detail = Array.isArray(detailSource)
-    ? detailSource.join('; ')
-    : typeof detailSource === 'string'
-      ? detailSource
-      : exception.message;
+  const detail = redactDetail
+    ? title
+    : Array.isArray(detailSource)
+      ? detailSource.join('; ')
+      : typeof detailSource === 'string'
+        ? detailSource
+        : exception.message;
 
   return { status, title, detail, code, args: body.args };
 }

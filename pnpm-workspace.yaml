@@ -22,12 +22,11 @@ autoInstallPeers: true
 # network install on every `pnpm run`/`pnpm nx` and break the offline layer.
 verifyDepsBeforeRun: false
 
-# Deny dependency build scripts by default (was onlyBuiltDependencies). Only the four that
+# Deny dependency build scripts by default (was onlyBuiltDependencies). Only the three that
 # genuinely need to compile/generate at install run; the rest ship prebuilt binaries and worked
 # fine denied under pnpm 10, so they stay denied — deny-by-default, not a blanket allow.
 allowBuilds:
   '@prisma/engines': true
-  argon2: true
   nx: true
   prisma: true
   '@parcel/watcher': false

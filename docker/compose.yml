@@ -31,6 +31,9 @@ services:
       TZ: ${TZ:-UTC}
     ports:
       - '${REDIS_CACHE_PORT:-6379}:6379'
+    # No persistent volume by design: this instance holds only rate-limit counters
+    # and idempotency replay keys. Both fail open on loss, so ephemeral storage is
+    # acceptable and avoids fsync overhead on the request hot path.
     healthcheck:
       test: ['CMD', 'redis-cli', 'ping']
       interval: 10s
@@ -44,7 +47,12 @@ services:
       TZ: ${TZ:-UTC}
     ports:
       - '${REDIS_QUEUE_PORT:-6380}:6380'
-    command: redis-server --port 6380
+    # AOF + a named volume make BullMQ jobs durable. Without them, every container
+    # recreation (rolling deploy) drops waiting/delayed/active jobs and the DLQ —
+    # a dead-letter store on ephemeral storage is not a dead-letter store.
+    command: redis-server --port 6380 --appendonly yes --appendfsync everysec
+    volumes:
+      - redis_queue_data:/data
     healthcheck:
       test: ['CMD', 'redis-cli', '-p', '6380', 'ping']
       interval: 10s
@@ -124,3 +132,4 @@ services:
 volumes:
   postgres_data:
   minio_data:
+  redis_queue_data:

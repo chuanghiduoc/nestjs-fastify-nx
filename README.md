@@ -67,7 +67,7 @@
 Most NestJS starters stop at "hello world + auth". This one ships the parts you actually rewrite on every project:
 
 - **Real DDD layout** with module-boundary lint rules (`@nx/enforce-module-boundaries`) so cross-context imports fail in CI, not in code review.
-- **Cookie-session auth** (Better Auth + argon2) reused on REST, GraphQL **and** Socket.io — no JWT, no refresh-token plumbing.
+- **Cookie-session auth** (Better Auth) reused on REST, GraphQL **and** Socket.io — no JWT, no refresh-token plumbing.
 - **Stripe-style + RFC 9457 contract** — 2xx returns the resource directly, errors are `application/problem+json` with stable `code`s and a flat `errors[]` for both validation and business-rule failures, every response carries an `X-Request-Id` for log/trace correlation.
 - **Three API surfaces on one Fastify instance** — REST/OpenAPI, GraphQL (Mercurius), and WebSockets — with Redis pub/sub for horizontal scale.
 - **Background processing** wired correctly: BullMQ + Bull Board UI behind admin auth, transactional outbox so domain events survive crashes.
@@ -82,7 +82,7 @@ If you've ever shipped a Node service to production, you've written this code al
 
 - **Four runnable services** — `api`, `worker`, `scheduler`, `migration` — sharing a single Nx workspace and one pnpm lockfile.
 - **DDD + CQRS layout** with bounded contexts under `libs/modules/*`, infrastructure adapters under `libs/infra/*`, cross-cutting plumbing under `libs/core/*`.
-- **Better Auth (cookie sessions, argon2)** with WebSocket session reuse via a custom Socket.io adapter.
+- **Better Auth (cookie sessions, scrypt hashing)** with WebSocket session reuse via a custom Socket.io adapter.
 - **REST (OpenAPI/Swagger) + GraphQL (Mercurius) + Socket.io** all running on the same Fastify instance, with Redis pub/sub for cross-pod broadcast.
 - **BullMQ + Bull Board** UI mounted behind admin auth; transactional outbox pattern wires domain events to durable jobs.
 - **OpenTelemetry + Sentry + Prometheus `/metrics`** — traces, errors, and Prometheus-scrapeable metrics out of the box.
@@ -99,9 +99,9 @@ If you've ever shipped a Node service to production, you've written this code al
 | Framework      | NestJS 11 + Fastify 5                                               |
 | ORM            | Prisma 7 (driver adapter `@prisma/adapter-pg`)                      |
 | Database       | PostgreSQL 18 (native `uuidv7()`, async I/O via io_uring)           |
-| Cache          | Redis 8 + `cache-manager` + Keyv                                    |
+| Cache          | Redis 8 (rate-limit, idempotency, Socket.io pub/sub)                |
 | Queues         | BullMQ + `@nestjs/bullmq`, Bull Board UI                            |
-| Authentication | Better Auth 1.6 (cookie sessions, argon2)                           |
+| Authentication | Better Auth 1.6 (cookie sessions, scrypt password hashing)          |
 | API surfaces   | REST (`@nestjs/swagger`), GraphQL (`@nestjs/mercurius`), Socket.io  |
 | Realtime       | Socket.io 4 + `@socket.io/redis-adapter`                            |
 | Object storage | AWS S3 SDK v3 + presigned URLs (MinIO compatible in dev)            |

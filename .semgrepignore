@@ -1,0 +1,8 @@
+# Semgrep's supply-chain pack (p/ci) flags these config files against opinionated defaults that
+# this repo addresses deliberately:
+#   - minimumReleaseAge IS set (1440m) in pnpm-workspace.yaml; pnpm 11 no longer reads it from .npmrc.
+#   - build scripts are deny-by-default via `allowBuilds` (only prisma/nx compile at install).
+#   - .npmrc is an intentional empty placeholder kept so the Dockerfile `COPY .npmrc*` layer matches.
+# App source is still fully scanned — only these two config files are excluded.
+.npmrc
+pnpm-workspace.yaml

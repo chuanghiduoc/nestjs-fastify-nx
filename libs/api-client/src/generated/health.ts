@@ -41,7 +41,7 @@ export const getHealth = () => {
     });
   };
   /**
-   * Deep health of shared infrastructure — meant for dashboards and alerting, NOT for the Kubernetes readiness/liveness probes. Wiring these into a probe would remove every replica from the load balancer at once when a shared dependency degrades. Returns 503 when a deep check fails so alert rules can fire.
+   * Deep health of shared infrastructure — meant for dashboards and alerting, NOT for the Kubernetes readiness/liveness probes. Wiring these into a probe would remove every replica from the load balancer at once when a shared dependency degrades. Returns 503 when a deep check fails so alert rules can fire. Restricted to IPs in METRICS_ALLOW_CIDRS (same allowlist as /metrics).
    * @summary Deep dependency check (BullMQ + pgbouncer + replica lag).
    */
   const healthDependencies = () => {

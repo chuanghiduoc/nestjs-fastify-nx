@@ -28,10 +28,9 @@ const envSchema = z
       .default('false')
       .transform((v) => v === 'true'),
 
-    // Redis cache
+    // Redis cache instance (rate-limit counters, idempotency replay, Socket.io pub/sub, health probe)
     REDIS_CACHE_HOST: z.string().default('localhost'),
     REDIS_CACHE_PORT: z.coerce.number().int().min(1).max(65535).default(6379),
-    REDIS_CACHE_TTL_MS: z.coerce.number().default(300000),
 
     // Redis queue
     REDIS_QUEUE_HOST: z.string().default('localhost'),
@@ -120,6 +119,9 @@ const envSchema = z
     // Per-IP WebSocket cap — prevents a single client from OOMing the gateway.
     WS_CONNECTION_LIMIT_PER_IP: z.coerce.number().int().min(1).default(50),
     WS_SESSION_REVALIDATE_MS: z.coerce.number().int().min(5_000).max(300_000).default(60_000),
+    // Caps concurrent Better Auth getSession() calls when the revalidation timer fires; combined
+    // with per-socket jitter (spread across WS_SESSION_REVALIDATE_MS) to avoid a thundering herd.
+    WS_SESSION_REVALIDATE_CONCURRENCY: z.coerce.number().int().min(1).max(1_000).default(20),
     // Allow requests through when Redis is unreachable (brief unbounded rate) instead of cascading 500s.
     THROTTLER_FAIL_OPEN: z
       .string()

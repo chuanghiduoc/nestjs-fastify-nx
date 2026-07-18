@@ -93,7 +93,9 @@ export function toListResponse<T>(args: {
   includeTotal?: boolean;
 }): ListResponseDto<T> {
   const includeTotal = args.includeTotal ?? true;
-  const lastPage = Math.max(1, Math.ceil(args.total / args.pageSize));
+  // Clamp pageSize: @Min(1) only guards the HTTP boundary, and pageSize=0 here yields Infinity,
+  // which would leave hasMore permanently true.
+  const lastPage = Math.max(1, Math.ceil(args.total / Math.max(1, args.pageSize)));
   const response = new ListResponseDto<T>();
   response.url = args.url;
   response.data = [...args.items];

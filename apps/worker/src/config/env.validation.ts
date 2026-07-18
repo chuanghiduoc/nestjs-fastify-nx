@@ -65,6 +65,16 @@ const workerEnvSchema = z
     WORKER_EMAIL_CONCURRENCY: z.coerce.number().int().min(1).max(500).default(5),
     WORKER_UPLOAD_CONCURRENCY: z.coerce.number().int().min(1).max(500).default(5),
 
+    // BullMQ rate limiter for the email queue — deliveries per duration window, independent of
+    // WORKER_EMAIL_CONCURRENCY. Tune to the SMTP provider's own rate limit.
+    WORKER_EMAIL_LIMITER_MAX: z.coerce.number().int().min(1).max(100_000).default(100),
+    WORKER_EMAIL_LIMITER_DURATION_MS: z.coerce
+      .number()
+      .int()
+      .min(1_000)
+      .max(3_600_000)
+      .default(60_000),
+
     // App
     NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
     LOG_LEVEL: z.string().default('info'),

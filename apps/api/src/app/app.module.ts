@@ -6,7 +6,7 @@ import { GqlThrottlerGuard } from '../common/throttler/gql-throttler.guard';
 import { SentryModule } from '@sentry/nestjs/setup';
 import { CqrsInstrumentationInitializer } from '@nestjs-fastify-nx/core';
 import { DatabaseModule } from '@nestjs-fastify-nx/infra-database';
-import { RedisCacheModule, RedisQueueModule } from '@nestjs-fastify-nx/infra-redis';
+import { RedisQueueModule } from '@nestjs-fastify-nx/infra-redis';
 import { MessagingModule } from '@nestjs-fastify-nx/infra-messaging';
 import { StorageModule } from '@nestjs-fastify-nx/infra-storage';
 import { BetterAuthModule, BetterAuthGuard, RolesGuard } from '@nestjs-fastify-nx/infra-auth';
@@ -40,7 +40,6 @@ const conditionalImports = process.env['ENABLE_METRICS'] === 'true' ? [MetricsMo
     LoggingModule,
     HealthModule,
     DatabaseModule,
-    RedisCacheModule,
     RedisQueueModule,
     MessagingModule,
     StorageModule,

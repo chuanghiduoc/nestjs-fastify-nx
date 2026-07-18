@@ -2,6 +2,21 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { CleanupTask } from './cleanup.task';
 import type { PrismaService } from '@nestjs-fastify-nx/infra-database';
 
+const mockPgClient = {
+  connect: vi.fn(),
+  query: vi.fn(),
+  end: vi.fn(),
+};
+
+// Hoisted by vitest above the `CleanupTask` import above, so the mock is in place before
+// cleanup.task.ts's own `import { Client } from 'pg'` resolves. Must be a real constructor
+// (not an arrow function) since the production code calls `new Client(...)`.
+vi.mock('pg', () => ({
+  Client: vi.fn().mockImplementation(function PgClientMock() {
+    return mockPgClient;
+  }),
+}));
+
 /** Minimal PrismaService mock that covers the methods used by CleanupTask. */
 function makePrismaMock() {
   return {
@@ -10,7 +25,6 @@ function makePrismaMock() {
         findMany: vi.fn(),
         deleteMany: vi.fn(),
       },
-      $executeRaw: vi.fn(),
       $executeRawUnsafe: vi.fn(),
       $queryRaw: vi.fn(),
     },
@@ -24,6 +38,9 @@ describe('CleanupTask', () => {
   beforeEach(() => {
     prisma = makePrismaMock();
     task = new CleanupTask(prisma, { isLeader: () => true } as never);
+    mockPgClient.connect.mockReset().mockResolvedValue(undefined);
+    mockPgClient.query.mockReset().mockResolvedValue(undefined);
+    mockPgClient.end.mockReset().mockResolvedValue(undefined);
   });
 
   // ── purgeInactiveUsers ──────────────────────────────────────────────────────
@@ -103,22 +120,32 @@ describe('CleanupTask', () => {
   // ── vacuumDatabase ──────────────────────────────────────────────────────────
 
   describe('vacuumDatabase', () => {
-    it('calls $executeRaw to run VACUUM ANALYZE', async () => {
-      vi.mocked(prisma.db.$executeRaw).mockResolvedValue(0);
-
+    it('opens a dedicated connection, disables the statement timeout, then runs VACUUM ANALYZE', async () => {
       await task.vacuumDatabase();
 
-      expect(prisma.db.$executeRaw).toHaveBeenCalledOnce();
+      expect(mockPgClient.connect).toHaveBeenCalledOnce();
+      expect(mockPgClient.query).toHaveBeenNthCalledWith(1, 'SET statement_timeout = 0');
+      expect(mockPgClient.query).toHaveBeenNthCalledWith(2, 'VACUUM ANALYZE');
+      expect(mockPgClient.end).toHaveBeenCalledOnce();
     });
 
-    it('does not throw when $executeRaw succeeds', async () => {
-      vi.mocked(prisma.db.$executeRaw).mockResolvedValue(0);
-
+    it('does not throw when VACUUM succeeds', async () => {
       await expect(task.vacuumDatabase()).resolves.toBeUndefined();
     });
 
-    it('does not throw when $executeRaw fails (error is only logged)', async () => {
-      vi.mocked(prisma.db.$executeRaw).mockRejectedValue(new Error('VACUUM failed'));
+    it('closes the connection even when VACUUM fails', async () => {
+      mockPgClient.query
+        .mockReset()
+        .mockResolvedValueOnce(undefined)
+        .mockRejectedValueOnce(new Error('VACUUM failed'));
+
+      await expect(task.vacuumDatabase()).resolves.toBeUndefined();
+
+      expect(mockPgClient.end).toHaveBeenCalledOnce();
+    });
+
+    it('does not throw when the connection itself fails to close', async () => {
+      mockPgClient.end.mockReset().mockRejectedValue(new Error('close failed'));
 
       await expect(task.vacuumDatabase()).resolves.toBeUndefined();
     });

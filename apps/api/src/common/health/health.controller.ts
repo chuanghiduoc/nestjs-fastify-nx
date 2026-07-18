@@ -1,10 +1,11 @@
-import { applyDecorators, Controller, Get, HttpStatus } from '@nestjs/common';
+import { applyDecorators, Controller, Get, HttpStatus, UseGuards } from '@nestjs/common';
 import { HealthCheck, HealthCheckService, MemoryHealthIndicator } from '@nestjs/terminus';
 import { SkipThrottle } from '@nestjs/throttler';
 import { ApiOkResponse, ApiOperation, ApiProperty, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { ApiCommonErrors } from '@nestjs-fastify-nx/contracts';
 import { Public } from '@nestjs-fastify-nx/infra-auth';
 import { PrismaReplicationLagHealthIndicator } from '@nestjs-fastify-nx/infra-database';
+import { MetricsIpAllowGuard } from '../metrics/metrics-ip-allow.guard';
 import { PrismaHealthIndicator } from './prisma-health.indicator';
 import { RedisCacheHealthIndicator, RedisQueueHealthIndicator } from './redis.health';
 import { BullMqHealthIndicator } from './bullmq-health.indicator';
@@ -155,7 +156,11 @@ export class HealthController {
     ]);
   }
 
+  // Deep checks expose infra topology (BullMQ depth, replica lag, pgbouncer) that /health and
+  // /health/ready deliberately do not — restrict to the same trusted-network allowlist as
+  // /metrics rather than leaving it @Public() like the LB/k8s probes above.
   @Get('dependencies')
+  @UseGuards(MetricsIpAllowGuard)
   @ApiServiceUnavailableProblem('A deep dependency is degraded or unreachable.')
   @HealthCheck({ noCache: true, swaggerDocumentation: false })
   @ApiOperation({
@@ -163,10 +168,11 @@ export class HealthController {
     description:
       'Deep health of shared infrastructure — meant for dashboards and alerting, NOT for the Kubernetes ' +
       'readiness/liveness probes. Wiring these into a probe would remove every replica from the load balancer ' +
-      'at once when a shared dependency degrades. Returns 503 when a deep check fails so alert rules can fire.',
+      'at once when a shared dependency degrades. Returns 503 when a deep check fails so alert rules can fire. ' +
+      'Restricted to IPs in METRICS_ALLOW_CIDRS (same allowlist as /metrics).',
   })
   @ApiOkResponse({ type: HealthCheckResultDto, description: 'All deep dependencies healthy.' })
-  @ApiCommonErrors({ auth: false, forbidden: false, validation: false })
+  @ApiCommonErrors({ auth: false, forbidden: true, validation: false })
   dependencies() {
     return this.health.check([
       () => this.bullmq.isHealthy('bullmq'),

@@ -271,8 +271,9 @@ DELETE FROM _prisma_migrations WHERE migration_name = '20260516_failing_migratio
 
 - Always use additive-only migrations in production (add columns nullable first, backfill, then add NOT NULL constraint in a second migration).
 - Test migrations against a production-sized DB snapshot in staging before merging.
+- Take a backup immediately before any migration run: `./scripts/pg-backup.sh backup` (see **Backups** below).
 
-**Escalation:** If the schema is in an unknown state and the DB cannot be brought back online, restore from the last snapshot taken before the migration run. Engage the DBA team and document the incident timeline.
+**Escalation:** If the schema is in an unknown state and the DB cannot be brought back online, restore the backup taken before the migration run with `./scripts/pg-backup.sh restore <dump-file>`. This assumes such a backup exists — the repo ships the script but does NOT schedule it; if your deployment has no pre-migration backup, there is nothing to restore from, so wire the backup into your rollout before relying on this step. Engage the DBA team and document the incident timeline.
 
 ### 5a. Migration "drift detected" after pulling boilerplate updates
 
@@ -307,7 +308,7 @@ docker compose run --rm migration
 
 Faster alternative for staging / sandbox: `prisma migrate resolve --applied 20260501000000_init` (requires Prisma CLI access). Production should prefer the explicit UPDATE so the change is reviewable.
 
-**Escalation:** If `prisma migrate diff` shows ACTUAL schema differences (not just metadata), treat as a real migration mismatch — restore from snapshot or manually apply the missing DDL before resolving the checksum. Never resolve drift on a DB whose schema you have not personally verified.
+**Escalation:** If `prisma migrate diff` shows ACTUAL schema differences (not just metadata), treat as a real migration mismatch — restore a pre-change backup (`./scripts/pg-backup.sh restore <dump-file>`) or manually apply the missing DDL before resolving the checksum. Never resolve drift on a DB whose schema you have not personally verified.
 
 ---
 
@@ -539,3 +540,27 @@ Set `OUTBOX_PURGE_MAX_BATCHES` to at least that value and redeploy.
 3. Repeated false positives from a single user — review whether the allow-list in the `presign` DTO is too narrow for the use case.
 
 **Escalation:** Surge of deletions correlated with a single IP range may indicate an automated probe. Tighten `/upload/presign` rate-limit (currently 10/min per session — see `PRESIGN_LIMIT` in `upload.controller.ts`) or add a global ban list.
+
+## 10. Backups
+
+**Reality check:** this repo does NOT schedule database backups. It ships `scripts/pg-backup.sh` (on-demand `pg_dump` in custom format) so the restore steps elsewhere in this runbook have something to restore from — but scheduling and off-host retention are the operator's responsibility. A backup on the same volume/host as the database it protects is not a backup.
+
+**On-demand backup:**
+
+```bash
+./scripts/pg-backup.sh backup ./backups        # writes ./backups/<db>-<UTC-timestamp>.dump
+# then copy the artifact OFF-HOST (object storage that is NOT the app's own MinIO/S3)
+```
+
+**Restore (destructive — overwrites the target DB):**
+
+```bash
+./scripts/pg-backup.sh restore ./backups/<db>-<timestamp>.dump
+```
+
+**Before going to production, wire this in:**
+
+- Schedule it (cron / systemd timer / CI job) at a cadence that matches your RPO.
+- Push each dump to durable, off-host storage with its own retention policy.
+- Periodically test a restore into a scratch DB — an untested backup is a guess.
+- For low-RPO needs, graduate from logical dumps to continuous WAL archiving (pgBackRest / wal-g) against a managed Postgres or a replica; `pg_dump` alone cannot give point-in-time recovery.
