@@ -1,0 +1,5 @@
+# Consolidate the maintainer's multiple git identities into one canonical
+# name + email. Used by `git shortlog`, `git log`, GitHub, and Nx Release's
+# changelog "Thank You" section.
+Lê Vạn Bảo Trọng <32262183+chuanghiduoc@users.noreply.github.com> <levanbaotrong03@gmail.com>
+Lê Vạn Bảo Trọng <32262183+chuanghiduoc@users.noreply.github.com> <tronglvb@phanmemmkt.vn>

@@ -12,8 +12,6 @@ import {
 } from '@nestjs-fastify-nx/contracts';
 import { BETTER_AUTH_INSTANCE, type BetterAuthInstance } from '@nestjs-fastify-nx/infra-auth';
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
-import * as fs from 'node:fs';
-import * as path from 'node:path';
 import ScalarApiReference from '@scalar/fastify-api-reference';
 
 const API_TITLE = 'NestJS Fastify Nx Boilerplate';
@@ -43,29 +41,12 @@ const DESCRIPTION = [
   `Every response carries an \`${REQUEST_ID_HEADER}\` header (also mirrored as \`requestId\` in error bodies). Quote it when filing support tickets.`,
 ].join('\n');
 
-// Walks up from cwd looking for package.json — handles `nx serve` (root cwd) and the generated dist/apps/api/package.json from generatePackageJson alike.
-function readWorkspaceVersion(): string {
-  const candidates = [
-    path.join(process.cwd(), 'package.json'),
-    path.join(__dirname, '..', '..', '..', '..', '..', 'package.json'),
-    path.join(__dirname, '..', '..', '..', 'package.json'),
-  ];
-  for (const candidate of candidates) {
-    try {
-      const raw = fs.readFileSync(candidate, 'utf-8');
-      const parsed = JSON.parse(raw) as { version?: string };
-      if (parsed.version) return parsed.version;
-    } catch {
-      // try next candidate
-    }
-  }
-  return '0.0.0';
-}
-
-const API_VERSION = readWorkspaceVersion();
-
-const REPOSITORY_URL = 'https://github.com/baotrong/nestjs-fastify-nx';
-const SUPPORT_EMAIL = 'hoangproo2624@gmail.com';
+// OpenAPI contract version — deliberately decoupled from the package release
+// version. `nx release` bumps package.json on every release; tying the spec to
+// it would regenerate the entire api-client (orval) on each bump for a no-op
+// comment change. This only moves on a breaking REST contract change, which
+// also introduces a new URI version (/api/v2). Matches the URI default "1".
+const API_VERSION = '1.0.0';
 
 function camelCase(input: string): string {
   return input.length === 0 ? input : input[0].toLowerCase() + input.slice(1);
@@ -77,9 +58,6 @@ export async function buildSwaggerDocument(app: INestApplication): Promise<OpenA
     .setDescription(DESCRIPTION)
     .setVersion(API_VERSION)
     .setLicense('MIT', 'https://opensource.org/licenses/MIT')
-    .setContact('API support', REPOSITORY_URL, SUPPORT_EMAIL)
-    .setTermsOfService(`${REPOSITORY_URL}/blob/main/LICENSE`)
-    .setExternalDoc('Architecture & runbook', `${REPOSITORY_URL}/blob/main/docs/architecture.md`)
     .addServer('/', 'Current host')
     .addTag('app', 'Service metadata')
     .addTag('health', 'Liveness, readiness, dependency checks')

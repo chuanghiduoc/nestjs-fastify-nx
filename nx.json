@@ -28,7 +28,9 @@
     "lint": {
       "cache": true,
       "inputs": ["default", "{workspaceRoot}/eslint.config.mjs", "{workspaceRoot}/.prettierrc"],
-      "options": { "args": "--max-warnings=0" }
+      "options": {
+        "args": "--max-warnings=0"
+      }
     },
     "test": {
       "cache": true,
@@ -41,6 +43,100 @@
   },
   "sync": {
     "applyChanges": true
+  },
+  "release": {
+    "projects": ["api"],
+    "projectsRelationship": "fixed",
+    "releaseTag": {
+      "pattern": "v{version}"
+    },
+    "version": {
+      "specifierSource": "conventional-commits",
+      "currentVersionResolver": "git-tag",
+      "manifestRootsToUpdate": ["."]
+    },
+    "changelog": {
+      "projectChangelogs": false,
+      "workspaceChangelog": {
+        "file": "{workspaceRoot}/CHANGELOG.md",
+        "createRelease": "github",
+        "renderOptions": {
+          "authors": false
+        }
+      }
+    },
+    "conventionalCommits": {
+      "types": {
+        "feat": {
+          "semverBump": "minor",
+          "changelog": {
+            "title": "Features"
+          }
+        },
+        "fix": {
+          "semverBump": "patch",
+          "changelog": {
+            "title": "Bug Fixes"
+          }
+        },
+        "perf": {
+          "semverBump": "patch",
+          "changelog": {
+            "title": "Performance"
+          }
+        },
+        "refactor": {
+          "semverBump": "patch",
+          "changelog": {
+            "title": "Refactors"
+          }
+        },
+        "revert": {
+          "semverBump": "patch",
+          "changelog": {
+            "title": "Reverts"
+          }
+        },
+        "docs": {
+          "semverBump": "none",
+          "changelog": {
+            "hidden": false,
+            "title": "Documentation"
+          }
+        },
+        "build": {
+          "semverBump": "none",
+          "changelog": {
+            "hidden": false,
+            "title": "Build System"
+          }
+        },
+        "chore": {
+          "semverBump": "none",
+          "changelog": {
+            "hidden": true
+          }
+        },
+        "ci": {
+          "semverBump": "none",
+          "changelog": {
+            "hidden": true
+          }
+        },
+        "test": {
+          "semverBump": "none",
+          "changelog": {
+            "hidden": true
+          }
+        },
+        "style": {
+          "semverBump": "none",
+          "changelog": {
+            "hidden": true
+          }
+        }
+      }
+    }
   },
   "generators": {
     "@nx/js:library": {

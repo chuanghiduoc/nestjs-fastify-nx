@@ -1,6 +1,6 @@
 {
   "name": "nestjs-fastify-nx",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "license": "MIT",
   "scripts": {
     "postinstall": "node -e \"require('fs').existsSync('prisma/schema.prisma')&&require('child_process').execSync('pnpm exec prisma generate',{stdio:'inherit'})\"",
@@ -19,6 +19,8 @@
     "gen:app": "nx g @nx/nest:application",
     "rm:project": "bash scripts/remove-project.sh",
     "graph": "nx graph",
+    "release": "nx release",
+    "release:dry": "nx release --dry-run",
     "sync": "nx sync",
     "reset": "nx reset",
     "clean": "nx reset && node -e \"const fs=require('fs');['dist','tmp','.nx/cache'].forEach(d=>fs.rmSync(d,{recursive:true,force:true}))\"",
