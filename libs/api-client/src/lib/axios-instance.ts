@@ -7,9 +7,13 @@ import type { AxiosRequestConfig } from 'axios';
 const _globalThis = globalThis as Record<string, unknown>;
 const _isBrowser = typeof _globalThis['window'] !== 'undefined';
 
+// Origin only — never a path. Every generated operation already carries its full server path
+// (`/api/v1/users/me`, `/api/auth/get-session`), and axios concatenates baseURL with a relative url,
+// so a baseURL ending in `/api/v1` produced `/api/v1/api/v1/users/me` and 404'd every call. The
+// browser default is empty on purpose: same-origin requests need no prefix at all.
 const BASE_URL = _isBrowser
-  ? ((_globalThis['__API_URL__'] as string | undefined) ?? '/api/v1')
-  : (process.env['API_BASE_URL'] ?? 'http://localhost:3000/api/v1');
+  ? ((_globalThis['__API_URL__'] as string | undefined) ?? '')
+  : (process.env['API_BASE_URL'] ?? 'http://localhost:3000');
 
 export const axiosInstance = axios.create({
   baseURL: BASE_URL,
