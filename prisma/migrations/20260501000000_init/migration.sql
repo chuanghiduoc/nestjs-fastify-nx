@@ -56,6 +56,28 @@ CREATE TABLE "verifications" (
     CONSTRAINT "verifications_pkey" PRIMARY KEY ("id")
 );
 
+-- Durable ownership and lifecycle state for finalized uploads. `userId` deliberately has no
+-- foreign key: the scheduler must still see and delete S3 objects after a user row is purged.
+CREATE TABLE "stored_files" (
+    "id" UUID NOT NULL,
+    "userId" UUID NOT NULL,
+    "sourceKey" TEXT NOT NULL,
+    "key" TEXT NOT NULL,
+    "bucket" TEXT NOT NULL,
+    "contentType" TEXT NOT NULL,
+    "size" INTEGER NOT NULL,
+    "etag" TEXT NOT NULL,
+    "status" TEXT NOT NULL DEFAULT 'FINALIZING',
+    "failureReason" TEXT,
+    "verifiedAt" TIMESTAMP(3),
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "stored_files_pkey" PRIMARY KEY ("id"),
+    CONSTRAINT "stored_files_size_check" CHECK ("size" > 0),
+    CONSTRAINT "stored_files_status_check" CHECK ("status" IN ('FINALIZING', 'VERIFYING', 'READY', 'REJECTED'))
+);
+
 -- `id` is application-stamped UUIDv7 so producers can correlate aggregate
 -- writes with the outbox row inside the same transaction.
 CREATE TABLE "outbox_events" (
@@ -106,9 +128,19 @@ CREATE INDEX "users_name_trgm_idx" ON "users" USING gin ("name" gin_trgm_ops);
 
 CREATE UNIQUE INDEX "sessions_token_key" ON "sessions"("token");
 CREATE INDEX "sessions_userId_idx" ON "sessions"("userId");
+-- Backs the scheduler's expired-session purge (SessionCleanupTask). Better Auth never deletes a
+-- session row itself, so without this index "WHERE expiresAt < cutoff" degrades into a sequential
+-- scan as the table grows unbounded.
+CREATE INDEX "sessions_expiresAt_idx" ON "sessions"("expiresAt");
 
 CREATE UNIQUE INDEX "accounts_providerId_accountId_key" ON "accounts"("providerId", "accountId");
 CREATE INDEX "accounts_userId_idx" ON "accounts"("userId");
+
+-- Better Auth reads "verifications" only by "identifier", ordered by "createdAt" — every
+-- password-reset, email-verification and delete-account confirmation takes that path.
+-- "expiresAt" backs the scheduler's expired-token purge.
+CREATE INDEX "verifications_identifier_createdAt_idx" ON "verifications"("identifier", "createdAt" DESC);
+CREATE INDEX "verifications_expiresAt_idx" ON "verifications"("expiresAt");
 
 -- Relay claim path uses (processedAt, createdAt); the (eventType, processedAt) index
 -- backs ops debugging ("show me all undelivered users.registered events").
@@ -120,6 +152,11 @@ CREATE INDEX "audit_logs_action_createdAt_idx" ON "audit_logs"("action", "create
 CREATE INDEX "audit_logs_createdAt_idx" ON "audit_logs"("createdAt");
 -- Compliance query path — "every admin action on resource X in window Y".
 CREATE INDEX "audit_logs_resource_createdAt_idx" ON "audit_logs"("resource", "createdAt");
+
+CREATE UNIQUE INDEX "stored_files_sourceKey_key" ON "stored_files"("sourceKey");
+CREATE UNIQUE INDEX "stored_files_key_key" ON "stored_files"("key");
+CREATE INDEX "stored_files_userId_status_idx" ON "stored_files"("userId", "status");
+CREATE INDEX "stored_files_status_updatedAt_idx" ON "stored_files"("status", "updatedAt");
 
 ALTER TABLE "sessions" ADD CONSTRAINT "sessions_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 ALTER TABLE "accounts" ADD CONSTRAINT "accounts_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
