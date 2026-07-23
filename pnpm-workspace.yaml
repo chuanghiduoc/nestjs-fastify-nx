@@ -1,6 +1,7 @@
 packages:
   - 'apps/*'
   - 'libs/*'
+  - 'libs/composition/*'
   - 'libs/infra/*'
   - 'libs/modules/*'
   - 'tools/*'
@@ -16,7 +17,7 @@ blockExoticSubdeps: true
 
 # pnpm 11 no longer reads config from package.json#pnpm or non-auth .npmrc keys —
 # both moved here.
-strictPeerDependencies: false
+strictPeerDependencies: true
 autoInstallPeers: true
 # Docker builds run `pnpm install --offline`; verifyDepsBeforeRun would trigger a
 # network install on every `pnpm run`/`pnpm nx` and break the offline layer.

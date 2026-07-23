@@ -17,6 +17,7 @@ export default defineConfig(
   {
     ignores: [
       '**/dist/**',
+      '**/out-tsc/**',
       '**/node_modules/**',
       '**/.nx/**',
       '**/coverage/**',
@@ -45,7 +46,11 @@ export default defineConfig(
     ],
     languageOptions: {
       parserOptions: {
-        project: ['./tsconfig.base.json'],
+        // Let TypeScript resolve the nearest referenced project for each file.
+        // Pointing every Nx lint task at tsconfig.base.json created a separate
+        // workspace-wide Program per process and also pulled cache/build output
+        // into typed linting.
+        projectService: true,
         tsconfigRootDir: import.meta.dirname,
       },
     },
@@ -234,7 +239,7 @@ export default defineConfig(
     files: ['**/*.spec.ts', '**/*.integration.ts', '**/e2e/**/*.ts'],
     languageOptions: {
       parserOptions: {
-        project: ['./tsconfig.base.json'],
+        projectService: true,
         tsconfigRootDir: import.meta.dirname,
       },
     },

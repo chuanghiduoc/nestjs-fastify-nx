@@ -7,6 +7,7 @@ export default defineConfig(() => ({
   cacheDir: '../../../node_modules/.vite/libs/modules/upload',
   resolve: { tsconfigPaths: true },
   test: {
+    maxWorkers: 2,
     name: 'modules-upload',
     watch: false,
     globals: true,

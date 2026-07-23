@@ -7,6 +7,7 @@ export default defineConfig(() => ({
   cacheDir: '../../../node_modules/.vite/libs/composition/admin',
   resolve: { tsconfigPaths: true },
   test: {
+    maxWorkers: 2,
     name: 'composition-admin',
     watch: false,
     globals: true,

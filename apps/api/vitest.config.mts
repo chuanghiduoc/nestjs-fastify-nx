@@ -7,6 +7,7 @@ export default defineConfig(() => ({
   cacheDir: '../../node_modules/.vite/apps/api',
   resolve: { tsconfigPaths: true },
   test: {
+    maxWorkers: 2,
     name: 'api',
     watch: false,
     globals: true,

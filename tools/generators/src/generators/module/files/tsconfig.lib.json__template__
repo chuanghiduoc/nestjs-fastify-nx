@@ -1,16 +1,11 @@
 {
-  "extends": "./tsconfig.json",
+  "extends": "<%= offsetFromRoot %>tsconfig.base.json",
   "compilerOptions": {
-    "outDir": "<%= offsetFromRoot %>dist/out-tsc/<%= projectRoot %>",
-    "declaration": true,
-    "composite": true,
-    "types": [
-      "node"
-    ]
+    "outDir": "./out-tsc/lib",
+    "rootDir": "./src",
+    "types": ["node"]
   },
-  "include": [
-    "src/**/*.ts"
-  ],
+  "include": ["src/**/*.ts"],
   "exclude": [
     "vite.config.ts",
     "vite.config.mts",

@@ -1,7 +1,69 @@
 {
   "extends": "./tsconfig.base.json",
-  "compilerOptions": {
-    "noEmit": true
-  },
-  "references": []
+  "files": [],
+  "references": [
+    {
+      "path": "./libs/infra/observability"
+    },
+    {
+      "path": "./libs/composition/admin"
+    },
+    {
+      "path": "./libs/modules/audit-log"
+    },
+    {
+      "path": "./libs/infra/messaging"
+    },
+    {
+      "path": "./libs/infra/database"
+    },
+    {
+      "path": "./libs/modules/upload"
+    },
+    {
+      "path": "./libs/infra/storage"
+    },
+    {
+      "path": "./libs/modules/users"
+    },
+    {
+      "path": "./libs/infra/redis"
+    },
+    {
+      "path": "./tools/generators"
+    },
+    {
+      "path": "./libs/api-client"
+    },
+    {
+      "path": "./libs/infra/auth"
+    },
+    {
+      "path": "./libs/infra/i18n"
+    },
+    {
+      "path": "./libs/contracts"
+    },
+    {
+      "path": "./apps/migration"
+    },
+    {
+      "path": "./apps/scheduler"
+    },
+    {
+      "path": "./libs/testing"
+    },
+    {
+      "path": "./libs/shared"
+    },
+    {
+      "path": "./apps/worker"
+    },
+    {
+      "path": "./libs/core"
+    },
+    {
+      "path": "./apps/api"
+    }
+  ]
 }

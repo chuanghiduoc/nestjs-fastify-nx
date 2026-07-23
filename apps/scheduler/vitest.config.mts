@@ -7,6 +7,7 @@ export default defineConfig(() => ({
   cacheDir: '../../node_modules/.vite/apps/scheduler',
   resolve: { tsconfigPaths: true },
   test: {
+    maxWorkers: 2,
     name: 'scheduler',
     watch: false,
     globals: true,

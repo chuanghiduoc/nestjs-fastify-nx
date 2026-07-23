@@ -4,5 +4,55 @@
   "sourceRoot": "libs/infra/database/src",
   "projectType": "library",
   "tags": ["scope:infra"],
-  "targets": {}
+  "targets": {
+    "prisma-generate": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "inputs": [
+        "sharedGlobals",
+        "{workspaceRoot}/prisma/schema.prisma",
+        "{workspaceRoot}/prisma.config.ts",
+        {
+          "externalDependencies": ["prisma", "@prisma/client"]
+        }
+      ],
+      "outputs": ["{projectRoot}/src/generated/prisma"],
+      "options": {
+        "command": "prisma generate"
+      }
+    },
+    "typecheck": {
+      "dependsOn": ["prisma-generate", "^typecheck"],
+      "inputs": [
+        "sharedGlobals",
+        "{projectRoot}/package.json",
+        "{workspaceRoot}/tsconfig.base.json",
+        "{projectRoot}/tsconfig.json",
+        "{projectRoot}/tsconfig.lib.json",
+        "{projectRoot}/tsconfig.spec.json",
+        "{projectRoot}/src/**/*.ts",
+        "{projectRoot}/vitest.config.mts",
+        "{workspaceRoot}/prisma/schema.prisma",
+        "{workspaceRoot}/prisma.config.ts",
+        {
+          "dependentTasksOutputFiles": "**/*.{d.ts,d.cts,d.mts,tsbuildinfo}",
+          "transitive": true
+        },
+        {
+          "fileset": "{projectRoot}/**/*.{d.ts,d.cts,d.mts}",
+          "dependencies": true
+        }
+      ]
+    },
+    "test": {
+      "dependsOn": ["prisma-generate"],
+      "inputs": [
+        "unitTest",
+        "^production",
+        "{workspaceRoot}/vitest.setup.ts",
+        "{workspaceRoot}/prisma/schema.prisma",
+        "{workspaceRoot}/prisma.config.ts"
+      ]
+    }
+  }
 }

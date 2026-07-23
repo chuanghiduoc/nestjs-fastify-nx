@@ -10,7 +10,7 @@ describe('module generator', () => {
   beforeEach(() => {
     tree = createTreeWithEmptyWorkspace();
     if (!tree.exists('tsconfig.base.json')) {
-      tree.write('tsconfig.base.json', JSON.stringify({ compilerOptions: { paths: {} } }, null, 2));
+      tree.write('tsconfig.base.json', JSON.stringify({ compilerOptions: { composite: true } }));
     }
   });
 
@@ -22,23 +22,28 @@ describe('module generator', () => {
     expect(config.tags).toContain('scope:modules');
     expect(config.tags).toContain('type:feature');
     expect(config.tags).not.toContain('module:orders');
-    // No explicit targets — build/typecheck/lint/test are all inferred by the
+    // No explicit targets — typecheck/lint/test are all inferred by the
     // workspace plugins from tsconfig/eslint/vitest configs.
     expect(config.targets?.['test']).toBeUndefined();
   });
 
-  it('emits tsconfig and vitest config so build/typecheck targets are inferred', async () => {
+  it('emits package, tsconfig, and vitest config for workspace linking and inference', async () => {
     await moduleGenerator(tree, { name: 'orders', directory: 'modules', withCqrs: false });
 
     expect(tree.exists('libs/modules/orders/tsconfig.json')).toBe(true);
     expect(tree.exists('libs/modules/orders/tsconfig.lib.json')).toBe(true);
     expect(tree.exists('libs/modules/orders/tsconfig.spec.json')).toBe(true);
     expect(tree.exists('libs/modules/orders/vitest.config.mts')).toBe(true);
+    expect(tree.exists('libs/modules/orders/package.json')).toBe(true);
 
     const specConfig = readJson(tree, 'libs/modules/orders/tsconfig.spec.json');
-    expect(specConfig.compilerOptions.outDir).toBe(
-      '../../../dist/out-tsc/libs/modules/orders/spec',
-    );
+    expect(specConfig.extends).toBe('../../../tsconfig.base.json');
+    expect(specConfig.compilerOptions.outDir).toBe('./out-tsc/spec');
+
+    const packageJson = readJson(tree, 'libs/modules/orders/package.json');
+    expect(packageJson.name).toBe('@nestjs-fastify-nx/modules-orders');
+    expect(packageJson.exports['.'].types).toBe('./src/index.ts');
+    expect(packageJson.devDependencies['@nestjs-fastify-nx/shared']).toBe('workspace:*');
 
     const vitestConfig = tree.read('libs/modules/orders/vitest.config.mts', 'utf-8');
     expect(vitestConfig).toContain('resolve: { tsconfigPaths: true }');
@@ -117,13 +122,11 @@ describe('module generator', () => {
     }
   });
 
-  it('adds path alias to tsconfig.base.json', async () => {
+  it('does not add legacy path aliases to tsconfig.base.json', async () => {
     await moduleGenerator(tree, { name: 'invoices', directory: 'modules', withCqrs: false });
 
     const tsconfig = readJson(tree, 'tsconfig.base.json');
-    expect(tsconfig.compilerOptions.paths['@nestjs-fastify-nx/modules-invoices']).toEqual([
-      './libs/modules/invoices/src/index.ts',
-    ]);
+    expect(tsconfig.compilerOptions.paths?.['@nestjs-fastify-nx/modules-invoices']).toBeUndefined();
   });
 
   it('generates cqrs command files when withCqrs=true', async () => {
@@ -216,14 +219,11 @@ describe('module generator', () => {
     expect(tree.exists('libs/composition/admin/src/admin.module.ts')).toBe(true);
   });
 
-  it('composition module tsconfig path uses composition- prefix', async () => {
+  it('composition module workspace package uses composition- prefix', async () => {
     await moduleGenerator(tree, { name: 'billing', directory: 'composition', withCqrs: false });
 
-    const tsconfig = readJson(tree, 'tsconfig.base.json');
-    expect(tsconfig.compilerOptions.paths['@nestjs-fastify-nx/composition-billing']).toEqual([
-      './libs/composition/billing/src/index.ts',
-    ]);
-    expect(tsconfig.compilerOptions.paths['@nestjs-fastify-nx/modules-billing']).toBeUndefined();
+    const packageJson = readJson(tree, 'libs/composition/billing/package.json');
+    expect(packageJson.name).toBe('@nestjs-fastify-nx/composition-billing');
   });
 
   it('modules module gets scope:modules tag (boundary integrity)', async () => {

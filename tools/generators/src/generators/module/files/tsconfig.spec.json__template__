@@ -1,9 +1,9 @@
 {
-  "extends": "./tsconfig.json",
+  "extends": "<%= offsetFromRoot %>tsconfig.base.json",
   "compilerOptions": {
-    "outDir": "<%= offsetFromRoot %>dist/out-tsc/<%= projectRoot %>/spec",
-    "types": ["vitest/globals", "vitest/importMeta", "node", "vitest"],
-    "declaration": true
+    "outDir": "./out-tsc/spec",
+    "rootDir": ".",
+    "types": ["vitest/globals", "vitest/importMeta", "node", "vitest"]
   },
   "include": [
     "vite.config.ts",

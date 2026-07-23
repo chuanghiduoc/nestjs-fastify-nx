@@ -4,7 +4,7 @@
 # Compiled output
 /dist
 /tmp
-/out-tsc
+out-tsc
 /bazel-out
 
 # Node
@@ -48,6 +48,7 @@ Thumbs.db
 
 # pnpm
 .pnpm-debug.log*
+.pnpm-store/
 
 # env files
 .env
@@ -62,6 +63,7 @@ vitest.config.*.timestamp*
 libs/infra/database/src/generated/
 .test-tmp/
 .code-review-graph/
+.serena/
 .claude/settings.json.bak
 plans/
 

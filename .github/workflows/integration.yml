@@ -93,7 +93,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Sync Nx workspace
-        run: pnpm nx sync
+        run: pnpm nx sync:check
 
       - name: Run database migrations
         run: pnpm prisma migrate deploy

@@ -1,0 +1,19 @@
+{
+  "name": "@nestjs-fastify-nx/infra-auth",
+  "version": "0.0.1",
+  "private": true,
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "devDependencies": {
+    "@nestjs-fastify-nx/core": "workspace:*",
+    "@nestjs-fastify-nx/infra-database": "workspace:*",
+    "@nestjs-fastify-nx/infra-i18n": "workspace:*",
+    "@nestjs-fastify-nx/shared": "workspace:*"
+  }
+}

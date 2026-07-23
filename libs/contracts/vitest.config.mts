@@ -7,6 +7,7 @@ export default defineConfig(() => ({
   cacheDir: '../../node_modules/.vite/libs/contracts',
   resolve: { tsconfigPaths: true },
   test: {
+    maxWorkers: 2,
     name: 'contracts',
     watch: false,
     globals: true,

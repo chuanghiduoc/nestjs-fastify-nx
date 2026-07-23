@@ -7,6 +7,7 @@ export default defineConfig(() => ({
   cacheDir: '../../node_modules/.vite/libs/shared',
   resolve: { tsconfigPaths: true },
   test: {
+    maxWorkers: 2,
     name: 'shared',
     watch: false,
     globals: true,

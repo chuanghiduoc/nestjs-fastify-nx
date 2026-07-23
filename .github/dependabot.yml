@@ -34,7 +34,8 @@ updates:
         update-types: [version-update:semver-major]
       # TypeScript 7 (the native/Go `@typescript/native` compiler) is not yet
       # supported by the tools that bind to the TS 6 Compiler API — verified by
-      # bumping typescript 6.0.3 -> 7.0.2, which crashes eslint across every
+      # replacing the @typescript/typescript6 6.0.2 API package with 7.0.2,
+      # which crashes eslint across every
       # project with "Cannot read properties of undefined (reading 'Ts')" /
       # "(reading 'Intrinsic')" (typescript-eslint 8.63). The repo already runs
       # TS 7 for typecheck/build via the separate `@typescript/native` package,
