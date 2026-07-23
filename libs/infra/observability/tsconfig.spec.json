@@ -1,9 +1,9 @@
 {
-  "extends": "./tsconfig.json",
+  "extends": "../../../tsconfig.base.json",
   "compilerOptions": {
-    "outDir": "../../../dist/out-tsc/libs/infra/observability/spec",
+    "outDir": "./out-tsc/spec",
     "types": ["vitest/globals", "vitest/importMeta", "node", "vitest"],
-    "declaration": true
+    "rootDir": "."
   },
   "include": [
     "vite.config.ts",

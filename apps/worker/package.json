@@ -1,0 +1,12 @@
+{
+  "name": "worker",
+  "version": "0.0.1",
+  "private": true,
+  "devDependencies": {
+    "@nestjs-fastify-nx/infra-database": "workspace:*",
+    "@nestjs-fastify-nx/infra-observability": "workspace:*",
+    "@nestjs-fastify-nx/infra-redis": "workspace:*",
+    "@nestjs-fastify-nx/infra-storage": "workspace:*",
+    "@nestjs-fastify-nx/shared": "workspace:*"
+  }
+}

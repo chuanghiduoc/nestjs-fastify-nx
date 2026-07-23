@@ -7,6 +7,7 @@ export default defineConfig(() => ({
   cacheDir: '../../../node_modules/.vite/libs/infra/storage',
   resolve: { tsconfigPaths: true },
   test: {
+    maxWorkers: 2,
     name: 'infra-storage',
     watch: false,
     globals: true,

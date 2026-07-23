@@ -1,0 +1,16 @@
+{
+  "name": "scheduler",
+  "version": "0.0.1",
+  "private": true,
+  "devDependencies": {
+    "@nestjs-fastify-nx/core": "workspace:*",
+    "@nestjs-fastify-nx/infra-database": "workspace:*",
+    "@nestjs-fastify-nx/infra-messaging": "workspace:*",
+    "@nestjs-fastify-nx/infra-observability": "workspace:*",
+    "@nestjs-fastify-nx/infra-redis": "workspace:*",
+    "@nestjs-fastify-nx/infra-storage": "workspace:*",
+    "@nestjs-fastify-nx/modules-audit-log": "workspace:*",
+    "@nestjs-fastify-nx/modules-users": "workspace:*",
+    "@nestjs-fastify-nx/shared": "workspace:*"
+  }
+}

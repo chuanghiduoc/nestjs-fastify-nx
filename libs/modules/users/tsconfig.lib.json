@@ -1,10 +1,9 @@
 {
-  "extends": "./tsconfig.json",
+  "extends": "../../../tsconfig.base.json",
   "compilerOptions": {
-    "outDir": "../../../dist/out-tsc/libs/modules/users",
-    "declaration": true,
-    "composite": true,
-    "types": ["node"]
+    "outDir": "./out-tsc/lib",
+    "types": ["node"],
+    "rootDir": "./src"
   },
   "include": ["src/**/*.ts"],
   "exclude": [

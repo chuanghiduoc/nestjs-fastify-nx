@@ -8,6 +8,7 @@ export default defineConfig({
   root: __dirname,
   resolve: { tsconfigPaths: true },
   test: {
+    maxWorkers: 1,
     globals: true,
     environment: 'node',
     include: ['e2e/**/*.e2e-spec.ts'],

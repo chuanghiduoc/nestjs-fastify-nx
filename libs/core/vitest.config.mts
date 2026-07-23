@@ -7,6 +7,7 @@ export default defineConfig(() => ({
   cacheDir: '../../node_modules/.vite/libs/core',
   resolve: { tsconfigPaths: true },
   test: {
+    maxWorkers: 2,
     name: 'core',
     watch: false,
     globals: true,

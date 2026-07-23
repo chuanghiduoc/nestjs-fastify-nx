@@ -20,8 +20,15 @@
     },
     "codegen-build": {
       "executor": "nx:run-commands",
-      "dependsOn": ["^build"],
-      "inputs": ["production", "^production"],
+      "dependsOn": [
+        "^build",
+        {
+          "projects": ["infra-database"],
+          "target": "prisma-generate",
+          "params": "ignore"
+        }
+      ],
+      "inputs": ["backendBuild", "^production"],
       "cache": true,
       "outputs": ["{workspaceRoot}/dist/apps/api-codegen"],
       "options": {
@@ -32,35 +39,12 @@
     "codegen-export": {
       "executor": "nx:run-commands",
       "dependsOn": ["codegen-build"],
+      "cache": true,
+      "inputs": ["sharedGlobals", "{workspaceRoot}/dist/apps/api-codegen/**/*"],
       "outputs": ["{workspaceRoot}/dist/swagger"],
       "options": {
         "command": "node dist/apps/api-codegen/main.js"
       }
-    },
-    "prune-lockfile": {
-      "dependsOn": ["build"],
-      "cache": true,
-      "executor": "@nx/js:prune-lockfile",
-      "outputs": [
-        "{workspaceRoot}/dist/apps/api/package.json",
-        "{workspaceRoot}/dist/apps/api/pnpm-lock.yaml"
-      ],
-      "options": {
-        "buildTarget": "build"
-      }
-    },
-    "copy-workspace-modules": {
-      "dependsOn": ["build"],
-      "cache": true,
-      "outputs": ["{workspaceRoot}/dist/apps/api/workspace_modules"],
-      "executor": "@nx/js:copy-workspace-modules",
-      "options": {
-        "buildTarget": "build"
-      }
-    },
-    "prune": {
-      "dependsOn": ["prune-lockfile", "copy-workspace-modules"],
-      "executor": "nx:noop"
     },
     "serve": {
       "continuous": true,
@@ -83,6 +67,14 @@
     },
     "e2e": {
       "executor": "nx:run-commands",
+      "parallelism": false,
+      "dependsOn": [
+        {
+          "projects": ["infra-database"],
+          "target": "prisma-generate",
+          "params": "ignore"
+        }
+      ],
       "options": {
         "command": "vitest --run --config apps/api/vite.e2e.config.ts"
       }

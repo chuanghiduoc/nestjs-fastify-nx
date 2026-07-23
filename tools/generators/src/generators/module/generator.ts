@@ -4,7 +4,6 @@ import {
   names,
   offsetFromRoot,
   addProjectConfiguration,
-  updateJson,
 } from '@nx/devkit';
 import type { Tree } from '@nx/devkit';
 import * as path from 'path';
@@ -47,7 +46,7 @@ export async function moduleGenerator(tree: Tree, options: ModuleGeneratorSchema
   const scopeTag = `scope:${rawDir}`;
 
   // All targets are inferred from config files by the workspace plugins:
-  // `build`/`typecheck` by `@nx/js/typescript` (tsconfig.lib.json), `lint` by
+  // `typecheck` by `@nx/js/typescript` (tsconfig.lib.json), `lint` by
   // `@nx/eslint/plugin`, and `test` by `@nx/vitest` (vitest.config.mts — see the
   // template in files/). No explicit target is declared, so the module needs no
   // hand-maintained `nx.json` include entry.
@@ -64,20 +63,11 @@ export async function moduleGenerator(tree: Tree, options: ModuleGeneratorSchema
   // bounded-context module, `@nestjs-fastify-nx/composition-admin` is a
   // cross-cutting aggregate. Keep name and path in lockstep.
   const importPath = `@nestjs-fastify-nx/${projectName}`;
-  updateJson<{ compilerOptions: { paths?: Record<string, string[]> } }>(
-    tree,
-    'tsconfig.base.json',
-    (json) => {
-      json.compilerOptions.paths ??= {};
-      json.compilerOptions.paths[importPath] = [`./${projectRoot}/src/index.ts`];
-      return json;
-    },
-  );
-
-  generateFiles(tree, path.join(__dirname, 'files'), projectRoot, {
+  generateFiles(tree, path.join(import.meta.dirname, 'files'), projectRoot, {
     ...moduleNames,
     withCqrs,
     projectName,
+    importPath,
     projectRoot,
     offsetFromRoot: offset,
     template: '',

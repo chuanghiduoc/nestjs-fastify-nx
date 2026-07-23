@@ -1,8 +1,18 @@
 {
   "$schema": "./node_modules/nx/schemas/nx-schema.json",
   "defaultBase": "main",
+  "parallel": 1,
   "namedInputs": {
-    "default": ["{projectRoot}/**/*", "sharedGlobals"],
+    "default": [
+      "{projectRoot}/**/*",
+      "sharedGlobals",
+      "!{projectRoot}/out-tsc/**/*",
+      "!{projectRoot}/coverage/**/*"
+    ],
+    "sharedGlobals": [
+      { "runtime": "node --version" },
+      { "runtime": "node -p \"process.platform + '-' + process.arch\"" }
+    ],
     "production": [
       "default",
       "!{projectRoot}/**/*.spec.[jt]s",
@@ -10,9 +20,31 @@
       "!{projectRoot}/**/*.integration.[jt]s",
       "!{projectRoot}/eslint.config.[cm]?[jt]s",
       "!{projectRoot}/**/?(*.)+(spec|test).[jt]s?(x)?(.snap)",
-      "!{projectRoot}/tsconfig.spec.json"
+      "!{projectRoot}/tsconfig.spec.json",
+      "!{projectRoot}/vitest.config.*",
+      "!{projectRoot}/vite.e2e.config.*",
+      "!{projectRoot}/**/e2e/**/*"
     ],
-    "sharedGlobals": ["{workspaceRoot}/.github/workflows/*.yml"]
+    "backendBuild": [
+      "production",
+      "{workspaceRoot}/tools/webpack/**/*",
+      "{workspaceRoot}/prisma/schema.prisma",
+      "{workspaceRoot}/prisma.config.ts"
+    ],
+    "unitTest": ["default", "!{projectRoot}/vite.e2e.config.*", "!{projectRoot}/**/e2e/**/*"],
+    "e2eTest": [
+      "default",
+      "!{projectRoot}/**/*.spec.[jt]s",
+      "!{projectRoot}/**/*.test.[jt]s",
+      "!{projectRoot}/**/*.integration.[jt]s",
+      "!{projectRoot}/eslint.config.[cm]?[jt]s",
+      "!{projectRoot}/**/?(*.)+(spec|test).[jt]s?(x)?(.snap)",
+      "!{projectRoot}/tsconfig.spec.json",
+      "!{projectRoot}/vitest.config.*",
+      "{workspaceRoot}/prisma/schema.prisma",
+      "{workspaceRoot}/prisma.config.ts",
+      "{workspaceRoot}/prisma/migrations/**/*"
+    ]
   },
   "targetDefaults": {
     "@nx/js:tsc": {
@@ -20,10 +52,21 @@
       "dependsOn": ["^build"],
       "inputs": ["production", "^production"]
     },
+    "typecheck": {
+      "cache": true,
+      "outputs": ["{projectRoot}/out-tsc"]
+    },
     "build": {
       "cache": true,
-      "dependsOn": ["^build"],
-      "inputs": ["production", "^production"]
+      "dependsOn": [
+        "^build",
+        {
+          "projects": ["infra-database"],
+          "target": "prisma-generate",
+          "params": "ignore"
+        }
+      ],
+      "inputs": ["backendBuild", "^production"]
     },
     "lint": {
       "cache": true,
@@ -34,11 +77,20 @@
     },
     "test": {
       "cache": true,
-      "inputs": ["default", "^production"]
+      "inputs": [
+        "unitTest",
+        "^production",
+        "{workspaceRoot}/vitest.setup.ts",
+        { "env": "DATABASE_URL" },
+        { "env": "NODE_ENV" },
+        { "env": "VITEST_VERBOSE" }
+      ],
+      "outputs": []
     },
     "e2e": {
       "cache": true,
-      "inputs": ["default", "^production"]
+      "inputs": ["e2eTest", "^production"],
+      "outputs": []
     }
   },
   "sync": {
@@ -160,11 +212,6 @@
       "options": {
         "typecheck": {
           "targetName": "typecheck"
-        },
-        "build": {
-          "targetName": "build",
-          "configName": "tsconfig.lib.json",
-          "buildDepsName": "build-deps"
         }
       }
     },

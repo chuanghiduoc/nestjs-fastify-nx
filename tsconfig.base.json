@@ -1,9 +1,10 @@
 {
   "compileOnSave": false,
   "compilerOptions": {
-    "rootDir": ".",
+    "composite": true,
     "sourceMap": true,
-    "declaration": false,
+    "declaration": true,
+    "declarationMap": true,
     "moduleResolution": "bundler",
     "emitDecoratorMetadata": true,
     "experimentalDecorators": true,
@@ -12,7 +13,6 @@
     "module": "esnext",
     "lib": ["ES2022"],
     "skipLibCheck": true,
-    "skipDefaultLibCheck": true,
     "strict": true,
     "esModuleInterop": true,
     "isolatedModules": true,
@@ -20,25 +20,6 @@
     "noFallthroughCasesInSwitch": true,
     "noImplicitOverride": true,
     "noImplicitReturns": true,
-    "noPropertyAccessFromIndexSignature": true,
-    "paths": {
-      "@nestjs-fastify-nx/core": ["./libs/core/src/index.ts"],
-      "@nestjs-fastify-nx/shared": ["./libs/shared/src/index.ts"],
-      "@nestjs-fastify-nx/contracts": ["./libs/contracts/src/index.ts"],
-      "@nestjs-fastify-nx/testing": ["./libs/testing/src/index.ts"],
-      "@nestjs-fastify-nx/infra-database": ["./libs/infra/database/src/index.ts"],
-      "@nestjs-fastify-nx/infra-redis": ["./libs/infra/redis/src/index.ts"],
-      "@nestjs-fastify-nx/infra-storage": ["./libs/infra/storage/src/index.ts"],
-      "@nestjs-fastify-nx/infra-messaging": ["./libs/infra/messaging/src/index.ts"],
-      "@nestjs-fastify-nx/infra-observability": ["./libs/infra/observability/src/index.ts"],
-      "@nestjs-fastify-nx/infra-auth": ["./libs/infra/auth/src/index.ts"],
-      "@nestjs-fastify-nx/infra-i18n": ["./libs/infra/i18n/src/index.ts"],
-      "@nestjs-fastify-nx/modules-users": ["./libs/modules/users/src/index.ts"],
-      "@nestjs-fastify-nx/composition-admin": ["./libs/composition/admin/src/index.ts"],
-      "@nestjs-fastify-nx/modules-upload": ["./libs/modules/upload/src/index.ts"],
-      "@nestjs-fastify-nx/modules-audit-log": ["./libs/modules/audit-log/src/index.ts"],
-      "@nestjs-fastify-nx/api-client": ["./libs/api-client/src/index.ts"]
-    }
-  },
-  "exclude": ["node_modules", "tmp"]
+    "noPropertyAccessFromIndexSignature": true
+  }
 }

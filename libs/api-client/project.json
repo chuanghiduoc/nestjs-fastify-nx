@@ -8,13 +8,22 @@
   "targets": {
     "codegen": {
       "executor": "nx:run-commands",
+      "cache": true,
       "dependsOn": [
         {
           "projects": ["api"],
           "target": "codegen-export"
         }
       ],
-      "inputs": ["{workspaceRoot}/dist/swagger/openapi.json", "{workspaceRoot}/orval.config.ts"],
+      "inputs": [
+        "sharedGlobals",
+        "{workspaceRoot}/dist/swagger/openapi.json",
+        "{workspaceRoot}/orval.config.ts",
+        "{workspaceRoot}/.prettierrc",
+        {
+          "externalDependencies": ["orval", "prettier"]
+        }
+      ],
       "outputs": ["{projectRoot}/src/generated"],
       "options": {
         "command": "pnpm codegen",

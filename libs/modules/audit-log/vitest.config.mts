@@ -7,6 +7,7 @@ export default defineConfig(() => ({
   cacheDir: '../../../node_modules/.vite/libs/modules/audit-log',
   resolve: { tsconfigPaths: true },
   test: {
+    maxWorkers: 2,
     name: 'modules-audit-log',
     watch: false,
     globals: true,

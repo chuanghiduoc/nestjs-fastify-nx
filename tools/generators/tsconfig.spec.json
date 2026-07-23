@@ -1,9 +1,9 @@
 {
-  "extends": "./tsconfig.json",
+  "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "outDir": "../../dist/out-tsc/tools/generators/spec",
+    "outDir": "./out-tsc/spec",
     "types": ["vitest/globals", "vitest/importMeta", "node", "vitest"],
-    "declaration": true
+    "rootDir": "."
   },
   "include": [
     "vite.config.ts",
@@ -19,5 +19,10 @@
     "src/**/*.test.jsx",
     "src/**/*.spec.jsx",
     "src/**/*.d.ts"
+  ],
+  "references": [
+    {
+      "path": "./tsconfig.lib.json"
+    }
   ]
 }

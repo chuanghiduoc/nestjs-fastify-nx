@@ -153,8 +153,8 @@ async function mergeBetterAuthSpec(app: INestApplication, document: OpenAPIObjec
   // Better Auth emits OpenAPI 3.1.1; @nestjs/swagger emits 3.0.0. Down-convert
   // the auth sub-document so every 3.1-only construct is normalised in one pass.
   // Loaded lazily: @apiture/openapi-down-convert is a devDependency (docs/codegen only). A
-  // top-level import would crash the production image on boot, where Nx prunes it from the
-  // generated package.json — setupSwagger never runs in production, so this path is dev/codegen-only.
+  // top-level import would crash the production image on boot because the generated runtime
+  // package omits it — setupSwagger never runs in production, so this path is dev/codegen-only.
   const { Converter } = await import(/* webpackIgnore: true */ '@apiture/openapi-down-convert');
   const converted = new Converter(authSchema, { verbose: false }).convert() as AuthOpenApiDocument;
 

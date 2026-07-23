@@ -1,5 +1,6 @@
 dist
 node_modules
 .nx
+.serena
 coverage
 pnpm-lock.yaml

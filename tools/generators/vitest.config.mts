@@ -7,6 +7,7 @@ export default defineConfig(() => ({
   cacheDir: '../../node_modules/.vite/tools/generators',
   resolve: { tsconfigPaths: true },
   test: {
+    maxWorkers: 2,
     name: 'tools-generators',
     watch: false,
     globals: true,

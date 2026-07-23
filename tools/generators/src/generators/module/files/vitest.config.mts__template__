@@ -7,6 +7,7 @@ export default defineConfig(() => ({
   cacheDir: '<%= offsetFromRoot %>node_modules/.vite/<%= projectRoot %>',
   resolve: { tsconfigPaths: true },
   test: {
+    maxWorkers: 2,
     name: '<%= projectName %>',
     watch: false,
     globals: true,

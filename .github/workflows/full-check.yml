@@ -48,4 +48,4 @@ jobs:
         run: pnpm nx format:check --all
 
       - name: Lint + typecheck ALL projects
-        run: pnpm nx run-many -t lint typecheck --all --parallel=3
+        run: pnpm nx run-many -t lint typecheck --all

@@ -7,6 +7,7 @@ export default defineConfig(() => ({
   cacheDir: '../../../node_modules/.vite/libs/modules/users',
   resolve: { tsconfigPaths: true },
   test: {
+    maxWorkers: 2,
     name: 'modules-users',
     watch: false,
     globals: true,

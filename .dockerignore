@@ -71,13 +71,13 @@ vitest.workspace.ts
 **/vite.config.*
 **/vite.e2e.config.*
 
-# Linting / formatting / type-checking configs are dev-time only.
+# Linting and formatting configs are dev-time only. Keep tsconfig.spec.json:
+# project tsconfig files reference it, and Nx validates those references before builds.
 .eslintrc*
 eslint.config.*
 .prettierrc*
 .prettierignore
 .editorconfig
-**/tsconfig.spec.json
 **/tsconfig.test.json
 
 # Documentation, planning, examples — irrelevant for production runtime.

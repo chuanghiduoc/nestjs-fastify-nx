@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.7
 #
-# Build all four apps in a single workspace pass so Nx compiles shared libs
-# (libs/shared, libs/infra/*, libs/modules/*) once instead of N times.
+# Build all four apps in a single workspace pass. Shared libraries are bundled
+# from source and their TypeScript project references are cached independently.
 #
 # Targets: api-dev / worker-dev / scheduler-dev / migration-dev (compose.dev.yml)
 #          api / worker / scheduler / migration (compose.prod.yml)
@@ -35,53 +35,54 @@ STOPSIGNAL SIGTERM
 ENTRYPOINT ["/sbin/tini", "--"]
 
 FROM base AS workspace
+ENV CI=true \
+    NX_DAEMON=false
 COPY pnpm-lock.yaml pnpm-workspace.yaml .npmrc* ./
 RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
     pnpm config set store-dir /pnpm/store \
     && pnpm fetch --frozen-lockfile
-COPY package.json ./
+# pnpm must see every workspace package manifest when it links dependencies.
+# Installing before this copy leaves @nestjs-fastify-nx/* absent from
+# node_modules and makes Webpack fail only inside Docker.
+COPY . .
 RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
     pnpm config set store-dir /pnpm/store \
     && pnpm install --offline --frozen-lockfile
-COPY . .
-RUN --mount=type=cache,id=nx-cache-v23,target=/app/.nx/cache \
+RUN --mount=type=cache,id=nx-cache-v23-linux-v2,target=/app/.nx/cache,sharing=locked \
     pnpm prisma generate
 
 # ===========================================================================
-# Single build pass — every shared lib compiles once, dist/apps/* feed every
-# downstream stage. `--parallel=2` keeps memory bounded on small builders.
+# Single build pass — each app bundles shared source into dist/apps/* for every
+# downstream stage. Concurrency comes from nx.json for one consistent RAM limit.
 # ===========================================================================
 
 FROM workspace AS build-prod
-ENV NODE_ENV=production \
-    NX_DAEMON=false
-RUN --mount=type=cache,id=nx-cache-v23,target=/app/.nx/cache \
-    --mount=type=cache,id=webpack-cache,target=/app/.cache/webpack \
+ENV NODE_ENV=production
+RUN --mount=type=cache,id=nx-cache-v23-linux-v2,target=/app/.nx/cache,sharing=locked \
+    --mount=type=cache,id=webpack-cache-linux-v2,target=/app/.cache/webpack,sharing=locked \
     pnpm nx run-many \
       --target=build \
       --projects=api,worker,scheduler,migration \
       --configuration=production \
-      --parallel=2
+      --output-style=static
 
 FROM workspace AS build-dev
-ENV NODE_ENV=development \
-    NX_DAEMON=false
-RUN --mount=type=cache,id=nx-cache-v23,target=/app/.nx/cache \
-    --mount=type=cache,id=webpack-cache,target=/app/.cache/webpack \
+ENV NODE_ENV=development
+RUN --mount=type=cache,id=nx-cache-v23-linux-v2,target=/app/.nx/cache,sharing=locked \
+    --mount=type=cache,id=webpack-cache-linux-v2,target=/app/.cache/webpack,sharing=locked \
     pnpm nx run-many \
       --target=build \
       --projects=api,worker,scheduler \
       --configuration=development \
-      --parallel=2
+      --output-style=static
 
 # Dev compose needs the one-shot migration image as well, but should not pay for
 # a production build of every long-running service just to produce it.
 FROM workspace AS build-migration-dev
-ENV NODE_ENV=production \
-    NX_DAEMON=false
-RUN --mount=type=cache,id=nx-cache-v23,target=/app/.nx/cache \
-    --mount=type=cache,id=webpack-cache,target=/app/.cache/webpack \
-    pnpm nx build migration --configuration=production
+ENV NODE_ENV=production
+RUN --mount=type=cache,id=nx-cache-v23-linux-v2,target=/app/.nx/cache,sharing=locked \
+    --mount=type=cache,id=webpack-cache-linux-v2,target=/app/.cache/webpack,sharing=locked \
+    pnpm nx build migration --configuration=production --output-style=static
 
 # ===========================================================================
 # Dev images — single stage off build-dev. Drop privileges, keep devDeps.
@@ -132,7 +133,7 @@ USER appuser
 CMD ["node", "dist/main.js"]
 
 # ===========================================================================
-# Production dependencies are pruned per service; every long-running service uses Prisma.
+# Webpack emits a minimal runtime package and lockfile per service.
 # ===========================================================================
 
 FROM base AS api-deps
