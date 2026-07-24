@@ -22,10 +22,15 @@ const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 const SCOPED_PATH_PREFIX = '/api/v1/';
 const MAX_KEY_LENGTH = 255;
 
-interface IdempotencyContext {
+// Exported so TimeoutInterceptor can record a completion the response pipeline missed.
+export interface IdempotencyContext {
   storeKey: string;
   fingerprint: string;
   ownerToken: string;
+  // Records a 2xx result the onSend hook couldn't — e.g. the handler finished AFTER a 504 timeout
+  // already replied, so a retry replays the stored response instead of re-running the mutation.
+  // Best-effort: if the pending lock already expired (handler slower than the lock TTL) it no-ops.
+  completeLate(status: number, value: unknown): Promise<void>;
 }
 
 interface RequestWithIdempotency extends FastifyRequest {
@@ -132,10 +137,31 @@ export function registerIdempotency(fastify: FastifyInstance, options: Idempoten
     }
 
     if (result.acquired) {
+      const ownerToken = result.ownerToken;
       (req as RequestWithIdempotency).idempotency = {
         storeKey,
         fingerprint,
-        ownerToken: result.ownerToken,
+        ownerToken,
+        completeLate: async (status, value) => {
+          if (status < 200 || status >= 300) return;
+          let body: string;
+          try {
+            // Matches Fastify's default object serialization for this repo's plain-DTO responses.
+            body = JSON.stringify(value ?? null);
+          } catch {
+            return; // non-serializable — cannot be replayed byte-for-byte, leave pending until TTL
+          }
+          try {
+            await store.complete(storeKey, ownerToken, {
+              fingerprint,
+              status,
+              contentType: 'application/json',
+              body,
+            });
+          } catch (err) {
+            reportError(`idempotency late-complete failed: ${(err as Error).message}`);
+          }
+        },
       };
       return;
     }
