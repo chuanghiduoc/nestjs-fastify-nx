@@ -118,7 +118,7 @@ module/src/
   presentation/
     controllers/       # HTTP handlers
     dto/               # Request/response DTOs
-    decorators/        # Route-scoped decorators (e.g. @CurrentUser)
+    decorators/        # Module-specific param decorators (shared @CurrentUser lives in infra-auth)
   module.ts
   index.ts             # Public barrel — re-export only what consumers need
 ```

@@ -14,7 +14,6 @@ import type {
 } from '@nestjs-fastify-nx/infra-database';
 import type { ObjectMetadata, StoragePort } from '@nestjs-fastify-nx/infra-storage';
 import type { AuthenticatedSession } from '@nestjs-fastify-nx/infra-auth';
-import type { FastifyRequest } from 'fastify';
 import { STORED_FILE_STATUS } from '@nestjs-fastify-nx/shared';
 import type { ConfirmUploadDto } from '../dto/confirm-upload.dto';
 import type { PresignUploadDto } from '../dto/presign-upload.dto';
@@ -34,18 +33,16 @@ const MAX_FILE_SIZE = 10 * 1024 * 1024;
 const PNG_HEADER = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 const JPEG_HEADER = Buffer.from([0xff, 0xd8, 0xff]);
 
-function createRequest(userId = USER_ID): FastifyRequest & { user: AuthenticatedSession } {
+function createUser(userId = USER_ID): AuthenticatedSession {
   return {
-    user: {
-      userId,
-      email: 'u@test.com',
-      name: 'U',
-      role: 'USER',
-      status: 'ACTIVE',
-      sessionId: 's',
-      sessionToken: 't',
-    },
-  } as FastifyRequest & { user: AuthenticatedSession };
+    userId,
+    email: 'u@test.com',
+    name: 'U',
+    role: 'USER',
+    status: 'ACTIVE',
+    sessionId: 's',
+    sessionToken: 't',
+  };
 }
 
 interface StorageMock {
@@ -106,10 +103,13 @@ function createController() {
   const storage = createStorageMock();
   const prisma = createPrismaMock();
   const queue = createQueueMock();
+  // ClsService stub — no active request context in a unit test, so correlationId resolves to undefined.
+  const cls = { get: vi.fn().mockReturnValue(undefined) };
   const controller = new UploadController(
     storage as unknown as StoragePort,
     queue as unknown as Queue,
     prisma as unknown as PrismaService,
+    cls as unknown as ConstructorParameters<typeof UploadController>[3],
   );
   return { controller, storage, prisma, queue };
 }
@@ -128,7 +128,7 @@ describe('UploadController', () => {
   describe('presign', () => {
     it('issues a policy scoped under the caller user id and mirrors size/expiry config', async () => {
       const { controller, storage } = createController();
-      const req = createRequest();
+      const user = createUser();
       const dto: PresignUploadDto = { contentType: 'image/png' };
       const policy = {
         url: 'https://s3.example.com/uploads',
@@ -140,7 +140,7 @@ describe('UploadController', () => {
       };
       storage.presignUpload.mockResolvedValue(policy);
 
-      const result = await controller.presign(req, dto);
+      const result = await controller.presign(user, dto);
 
       expect(result).toBe(policy);
       expect(storage.presignUpload).toHaveBeenCalledTimes(1);
@@ -155,11 +155,11 @@ describe('UploadController', () => {
 
     it('rejects a MIME type outside the allow-list before ever calling storage', async () => {
       const { controller, storage } = createController();
-      const req = createRequest();
+      const user = createUser();
       // Bypasses DTO-level validation to exercise the controller's own defense-in-depth check.
       const dto = { contentType: 'application/x-msdownload' } as PresignUploadDto;
 
-      await expect(controller.presign(req, dto)).rejects.toBeInstanceOf(BadRequestException);
+      await expect(controller.presign(user, dto)).rejects.toBeInstanceOf(BadRequestException);
       expect(storage.presignUpload).not.toHaveBeenCalled();
     });
   });
@@ -167,10 +167,10 @@ describe('UploadController', () => {
   describe('confirm — ownership (IDOR)', () => {
     it('rejects a key that does not belong to the caller without touching storage or the DB', async () => {
       const { controller, storage, prisma } = createController();
-      const req = createRequest(USER_ID);
+      const user = createUser(USER_ID);
       const dto: ConfirmUploadDto = { key: `uploads/${OTHER_USER_ID}/file.png` };
 
-      await expect(controller.confirm(req, dto)).rejects.toBeInstanceOf(NotFoundException);
+      await expect(controller.confirm(user, dto)).rejects.toBeInstanceOf(NotFoundException);
       expect(prisma.db.storedFile.findUnique).not.toHaveBeenCalled();
       expect(storage.head).not.toHaveBeenCalled();
     });
@@ -179,12 +179,12 @@ describe('UploadController', () => {
   describe('confirm — MIME rejection', () => {
     it('rejects and deletes the object when the actual Content-Type is not allow-listed', async () => {
       const { controller, storage, prisma } = createController();
-      const req = createRequest();
+      const user = createUser();
       const key = `uploads/${USER_ID}/file.exe`;
       const dto: ConfirmUploadDto = { key };
       storage.head.mockResolvedValue(validMeta({ contentType: 'application/x-msdownload' }));
 
-      const err = await controller.confirm(req, dto).catch((e: unknown) => e);
+      const err = await controller.confirm(user, dto).catch((e: unknown) => e);
 
       expect(err).toBeInstanceOf(UnprocessableEntityException);
       expect((err as UnprocessableEntityException).getResponse()).toMatchObject({
@@ -198,12 +198,12 @@ describe('UploadController', () => {
   describe('confirm — size rejection', () => {
     it('rejects and deletes the object when size exceeds the configured cap', async () => {
       const { controller, storage, prisma } = createController();
-      const req = createRequest();
+      const user = createUser();
       const key = `uploads/${USER_ID}/file.png`;
       const dto: ConfirmUploadDto = { key };
       storage.head.mockResolvedValue(validMeta({ size: MAX_FILE_SIZE + 1 }));
 
-      const err = await controller.confirm(req, dto).catch((e: unknown) => e);
+      const err = await controller.confirm(user, dto).catch((e: unknown) => e);
 
       expect(err).toBeInstanceOf(UnprocessableEntityException);
       expect((err as UnprocessableEntityException).getResponse()).toMatchObject({
@@ -215,12 +215,12 @@ describe('UploadController', () => {
 
     it('rejects a zero-byte object', async () => {
       const { controller, storage } = createController();
-      const req = createRequest();
+      const user = createUser();
       const key = `uploads/${USER_ID}/file.png`;
       const dto: ConfirmUploadDto = { key };
       storage.head.mockResolvedValue(validMeta({ size: 0 }));
 
-      const err = await controller.confirm(req, dto).catch((e: unknown) => e);
+      const err = await controller.confirm(user, dto).catch((e: unknown) => e);
 
       expect(err).toBeInstanceOf(UnprocessableEntityException);
       expect((err as UnprocessableEntityException).getResponse()).toMatchObject({
@@ -232,7 +232,7 @@ describe('UploadController', () => {
   describe('confirm — magic-byte rejection', () => {
     it('rejects and deletes the object when the binary signature disagrees with the declared Content-Type', async () => {
       const { controller, storage, prisma } = createController();
-      const req = createRequest();
+      const user = createUser();
       const key = `uploads/${USER_ID}/file.png`;
       const dto: ConfirmUploadDto = { key };
       storage.head.mockResolvedValue(
@@ -242,7 +242,7 @@ describe('UploadController', () => {
       // both are allow-listed types individually.
       storage.readRange.mockResolvedValue(JPEG_HEADER);
 
-      const err = await controller.confirm(req, dto).catch((e: unknown) => e);
+      const err = await controller.confirm(user, dto).catch((e: unknown) => e);
 
       expect(err).toBeInstanceOf(UnprocessableEntityException);
       expect((err as UnprocessableEntityException).getResponse()).toMatchObject({
@@ -255,13 +255,13 @@ describe('UploadController', () => {
 
     it('rejects an object with no recognized binary signature', async () => {
       const { controller, storage } = createController();
-      const req = createRequest();
+      const user = createUser();
       const key = `uploads/${USER_ID}/file.png`;
       const dto: ConfirmUploadDto = { key };
       storage.head.mockResolvedValue(validMeta());
       storage.readRange.mockResolvedValue(Buffer.from([0x00, 0x00, 0x00, 0x00]));
 
-      const err = await controller.confirm(req, dto).catch((e: unknown) => e);
+      const err = await controller.confirm(user, dto).catch((e: unknown) => e);
 
       expect(err).toBeInstanceOf(UnprocessableEntityException);
       expect((err as UnprocessableEntityException).getResponse()).toMatchObject({
@@ -273,7 +273,7 @@ describe('UploadController', () => {
   describe('confirm — P2002 concurrent-confirm recovery', () => {
     it('recovers via the existing row when a duplicate sourceKey insert races the create', async () => {
       const { controller, storage, prisma, queue } = createController();
-      const req = createRequest();
+      const user = createUser();
       const key = `uploads/${USER_ID}/file.png`;
       const dto: ConfirmUploadDto = { key };
       const concurrentRecord: StoredFileRecord = {
@@ -298,7 +298,7 @@ describe('UploadController', () => {
       prisma.db.storedFile.create.mockRejectedValue({ code: 'P2002' });
       storage.getSignedUrl.mockResolvedValue(`http://signed/${concurrentRecord.key}`);
 
-      const result = await controller.confirm(req, dto);
+      const result = await controller.confirm(user, dto);
 
       expect(result).toEqual({
         key: concurrentRecord.key,
@@ -317,7 +317,7 @@ describe('UploadController', () => {
 
     it('re-throws when the create fails for a reason other than a unique-constraint race', async () => {
       const { controller, storage, prisma } = createController();
-      const req = createRequest();
+      const user = createUser();
       const key = `uploads/${USER_ID}/file.png`;
       const dto: ConfirmUploadDto = { key };
       storage.head.mockResolvedValue(validMeta());
@@ -325,12 +325,12 @@ describe('UploadController', () => {
       const dbError = new Error('connection lost');
       prisma.db.storedFile.create.mockRejectedValue(dbError);
 
-      await expect(controller.confirm(req, dto)).rejects.toBe(dbError);
+      await expect(controller.confirm(user, dto)).rejects.toBe(dbError);
     });
 
     it('returns 409 when the concurrent row exists but the final object is not yet visible on storage', async () => {
       const { controller, storage, prisma } = createController();
-      const req = createRequest();
+      const user = createUser();
       const key = `uploads/${USER_ID}/file.png`;
       const dto: ConfirmUploadDto = { key };
       const concurrentRecord: StoredFileRecord = {
@@ -352,14 +352,14 @@ describe('UploadController', () => {
       storage.readRange.mockResolvedValue(PNG_HEADER);
       prisma.db.storedFile.create.mockRejectedValue({ code: 'P2002' });
 
-      await expect(controller.confirm(req, dto)).rejects.toBeInstanceOf(ConflictException);
+      await expect(controller.confirm(user, dto)).rejects.toBeInstanceOf(ConflictException);
     });
   });
 
   describe('confirm — finalize-failure rollback', () => {
     it('deletes the FINALIZING row and returns 500 without enqueueing verification when finalize() throws', async () => {
       const { controller, storage, prisma, queue } = createController();
-      const req = createRequest();
+      const user = createUser();
       const key = `uploads/${USER_ID}/file.png`;
       const dto: ConfirmUploadDto = { key };
       storage.head.mockResolvedValue(validMeta());
@@ -368,7 +368,7 @@ describe('UploadController', () => {
       prisma.db.storedFile.create.mockResolvedValue(undefined);
       storage.finalize.mockRejectedValue(new Error('S3 copy failed'));
 
-      const err = await controller.confirm(req, dto).catch((e: unknown) => e);
+      const err = await controller.confirm(user, dto).catch((e: unknown) => e);
 
       expect(err).toBeInstanceOf(InternalServerErrorException);
       expect((err as InternalServerErrorException).getResponse()).toMatchObject({
@@ -385,7 +385,7 @@ describe('UploadController', () => {
   describe('confirm — happy path', () => {
     it('finalizes to an immutable key, transitions to VERIFYING, and enqueues the magic-byte recheck', async () => {
       const { controller, storage, prisma, queue } = createController();
-      const req = createRequest();
+      const user = createUser();
       const key = `uploads/${USER_ID}/file.png`;
       const dto: ConfirmUploadDto = { key };
       storage.head.mockResolvedValue(validMeta());
@@ -394,7 +394,7 @@ describe('UploadController', () => {
       prisma.db.storedFile.create.mockResolvedValue(undefined);
       storage.finalize.mockResolvedValue(undefined);
 
-      const result = await controller.confirm(req, dto);
+      const result = await controller.confirm(user, dto);
 
       expect(result.key).toMatch(new RegExp(`^files/${USER_ID}/[0-9a-f-]{36}\\.png$`));
       expect(result).toMatchObject({
@@ -427,7 +427,7 @@ describe('UploadController', () => {
 
     it('short-circuits to the persisted record when the sourceKey was already confirmed (idempotent replay)', async () => {
       const { controller, storage, prisma, queue } = createController();
-      const req = createRequest();
+      const user = createUser();
       const key = `uploads/${USER_ID}/file.png`;
       const dto: ConfirmUploadDto = { key };
       const existing: StoredFileRecord = {
@@ -445,7 +445,7 @@ describe('UploadController', () => {
       storage.head.mockResolvedValue(validMeta({ bucket: existing.bucket }));
       storage.getSignedUrl.mockResolvedValue(`http://signed/${existing.key}`);
 
-      const result = await controller.confirm(req, dto);
+      const result = await controller.confirm(user, dto);
 
       expect(result).toEqual({
         key: existing.key,
@@ -460,7 +460,7 @@ describe('UploadController', () => {
 
     it('treats a REJECTED existing row as not found', async () => {
       const { controller, prisma } = createController();
-      const req = createRequest();
+      const user = createUser();
       const key = `uploads/${USER_ID}/file.png`;
       const dto: ConfirmUploadDto = { key };
       const rejected: StoredFileRecord = {
@@ -476,7 +476,7 @@ describe('UploadController', () => {
       } as StoredFileRecord;
       prisma.db.storedFile.findUnique.mockResolvedValueOnce(rejected);
 
-      await expect(controller.confirm(req, dto)).rejects.toBeInstanceOf(NotFoundException);
+      await expect(controller.confirm(user, dto)).rejects.toBeInstanceOf(NotFoundException);
     });
   });
 });

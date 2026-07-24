@@ -24,6 +24,7 @@ export class OutboxCleanupTask {
     }
     return raw;
   })();
+  private running = false;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -33,7 +34,8 @@ export class OutboxCleanupTask {
   // UTC-pinned to guard against host TZ drift; 03:15 runs after weekly VACUUM at 03:00 Sun.
   @Cron('15 3 * * *', { name: 'outbox-purge', timeZone: 'UTC' })
   async purgeOldOutboxEvents(): Promise<void> {
-    if (!this.leadership.isLeader()) return;
+    if (!this.leadership.isLeader() || this.running) return;
+    this.running = true;
     const cutoffDays = this.retentionDays;
     this.logger.log(
       `Starting outbox purge: processedAt IS NOT NULL AND createdAt < NOW() - ${cutoffDays} days`,
@@ -60,6 +62,8 @@ export class OutboxCleanupTask {
       this.logger.log(`Outbox purge complete: ${totalPurged} row(s) deleted`);
     } catch (err) {
       this.logger.error(`Outbox purge failed after ${totalPurged} deletion(s): ${String(err)}`);
+    } finally {
+      this.running = false;
     }
   }
 }

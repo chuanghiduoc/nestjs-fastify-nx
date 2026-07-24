@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { HttpStatus } from '@nestjs/common';
+import { parse as parseCookie } from 'cookie';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type Redis from 'ioredis';
 import { ERROR_CODES } from '@nestjs-fastify-nx/contracts';
@@ -21,10 +22,15 @@ const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 const SCOPED_PATH_PREFIX = '/api/v1/';
 const MAX_KEY_LENGTH = 255;
 
-interface IdempotencyContext {
+// Exported so TimeoutInterceptor can record a completion the response pipeline missed.
+export interface IdempotencyContext {
   storeKey: string;
   fingerprint: string;
   ownerToken: string;
+  // Records a 2xx result the onSend hook couldn't — e.g. the handler finished AFTER a 504 timeout
+  // already replied, so a retry replays the stored response instead of re-running the mutation.
+  // Best-effort: if the pending lock already expired (handler slower than the lock TTL) it no-ops.
+  completeLate(status: number, value: unknown): Promise<void>;
 }
 
 interface RequestWithIdempotency extends FastifyRequest {
@@ -49,12 +55,16 @@ function canonicalize(value: unknown): unknown {
 // Authenticated requests scope by session token, anonymous ones by client IP. Two principals thus
 // never collide on — nor replay — each other's cached response for the same key.
 function extractPrincipal(req: FastifyRequest): string {
-  const cookie = req.headers.cookie;
-  if (typeof cookie === 'string') {
-    // Better Auth prefixes secure production cookies with `__Secure-`. Missing that variant
-    // falls back to IP scope and lets users behind the same NAT collide on idempotency records.
-    const match = cookie.match(/(?:^|;\s*)(?:__Secure-)?better-auth\.session_token=([^;]+)/);
-    if (match) return `s:${match[1]}`;
+  const cookieHeader = req.headers.cookie;
+  if (typeof cookieHeader === 'string') {
+    const parsed = parseCookie(cookieHeader);
+    // Better Auth uses the `__Secure-` cookie in production (HTTPS) and the bare name in dev. Prefer
+    // `__Secure-`, and use `||` (not `??`) so an empty leftover cookie value (`...session_token=`)
+    // does NOT shadow a real token and silently drop the request to IP scope — which would let two
+    // users behind the same NAT collide on idempotency records.
+    const token =
+      parsed['__Secure-better-auth.session_token'] || parsed['better-auth.session_token'];
+    if (token) return `s:${token}`;
   }
   return `ip:${req.ip}`;
 }
@@ -127,10 +137,32 @@ export function registerIdempotency(fastify: FastifyInstance, options: Idempoten
     }
 
     if (result.acquired) {
+      const ownerToken = result.ownerToken;
       (req as RequestWithIdempotency).idempotency = {
         storeKey,
         fingerprint,
-        ownerToken: result.ownerToken,
+        ownerToken,
+        completeLate: async (status, value) => {
+          if (status < 200 || status >= 300) return;
+          // Same capture contract as the onSend hook (replayableBody): undefined => non-capturable
+          // (Buffer/stream) — leave the record pending until TTL rather than store a wrong body.
+          const body = serializeReplayBody(value);
+          if (body === undefined) return;
+          try {
+            await store.complete(storeKey, ownerToken, {
+              fingerprint,
+              status,
+              contentType: 'application/json',
+              body,
+            });
+          } catch (err) {
+            try {
+              reportError(`idempotency late-complete failed: ${(err as Error).message}`);
+            } catch {
+              // Never let the error reporter's own failure escape completeLate (interceptor voids it).
+            }
+          }
+        },
       };
       return;
     }
@@ -222,4 +254,20 @@ function replayableBody(payload: unknown): string | undefined {
   if (payload === null || payload === undefined) return '';
   if (typeof payload === 'string') return payload;
   return undefined;
+}
+
+// Late-completion (TimeoutInterceptor) captures the handler's RETURN value, not the already-serialized
+// payload replayableBody sees — so it also JSON-encodes objects. Mirrors replayableBody's contract:
+// empty/absent => '', Buffer/stream => undefined (non-capturable, leave pending), else JSON.
+export function serializeReplayBody(value: unknown): string | undefined {
+  if (value === undefined || value === null) return '';
+  if (typeof value === 'string') return value;
+  if (Buffer.isBuffer(value) || typeof (value as { pipe?: unknown }).pipe === 'function') {
+    return undefined;
+  }
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return undefined;
+  }
 }

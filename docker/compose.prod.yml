@@ -123,6 +123,8 @@ services:
       REDIS_CACHE_HOST: redis-cache
       REDIS_QUEUE_HOST: redis-queue
       REDIS_QUEUE_PORT: '6380'
+      # Durable, crash-safe domain events (required in production — enforced by env validation).
+      EVENT_PUBLISHER_DRIVER: outbox
     # Loopback by default — not internet-facing. Set API_BIND_HOST=0.0.0.0 for
     # direct exposure, but Docker's port publishing BYPASSES ufw/firewalld; gate
     # it with a cloud security group or a DOCKER-USER rule, not the host firewall.
@@ -230,6 +232,8 @@ services:
       REDIS_CACHE_HOST: redis-cache
       REDIS_QUEUE_HOST: redis-queue
       REDIS_QUEUE_PORT: '6380'
+      # Durable, crash-safe domain events (required in production — enforced by env validation).
+      EVENT_PUBLISHER_DRIVER: outbox
     # Every cron and the outbox relay are guarded by a Redis ownership lease.
     # Multiple replicas provide failover; only the elected instance executes.
     # 30s grace period: VACUUM and partition DDL jobs can run up to ~20s;

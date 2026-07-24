@@ -35,7 +35,15 @@ export async function routeFailedJobToDlq(
 ): Promise<void> {
   try {
     const job = await source.getJob(args.jobId);
-    if (!job) return;
+    if (!job) {
+      // The job was already evicted by removeOnFail (count/age) before this failed-event was
+      // processed. Distinguish it from a successfully routed job so a silently missing DLQ entry
+      // is traceable rather than an unexplained gap.
+      logger.warn(
+        `Failed job ${args.jobId} on queue "${source.name}" was reaped before dead-lettering — not routed to DLQ`,
+      );
+      return;
+    }
 
     const maxAttempts = job.opts?.attempts ?? 1;
     if (job.attemptsMade < maxAttempts) return;

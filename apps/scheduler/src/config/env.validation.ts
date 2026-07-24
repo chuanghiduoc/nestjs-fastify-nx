@@ -118,6 +118,16 @@ const schedulerEnvSchema = z
         message: 'Must not use default value in production',
       });
     }
+    // The scheduler drains the outbox; in production it must run in outbox mode so relayed events are
+    // durable. In-process publishing would silently drop events on crash/rollback.
+    if (data.NODE_ENV === 'production' && data.EVENT_PUBLISHER_DRIVER !== 'outbox') {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['EVENT_PUBLISHER_DRIVER'],
+        message:
+          'EVENT_PUBLISHER_DRIVER must be "outbox" in production for durable, crash-safe event delivery',
+      });
+    }
   });
 
 export type SchedulerEnvConfig = z.infer<typeof schedulerEnvSchema>;

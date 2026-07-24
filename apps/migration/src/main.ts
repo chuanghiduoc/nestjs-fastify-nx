@@ -48,16 +48,30 @@ async function runWithRetry(
   }
 }
 
+// Deliberate copy of libs/shared/src/lib/db-password-file.ts — scope:migration has an empty module
+// boundary allow-list on purpose, so it can't import shared. Keep this in sync with that file: WHATWG
+// URL parsing (not regex — the old regex missed `user:@host` empty-password DSNs) + encodeURIComponent
+// (the URL setter leaves a literal `%` un-encoded, which pg would mis-decode).
 function injectDatabasePassword(
   url: string | undefined,
   passwordFile: string | undefined,
 ): string | undefined {
   if (!url || !passwordFile || !existsSync(passwordFile)) return url;
-  const match = url.match(/^(postgres(?:ql)?:\/\/)([^@:/]+)@(.+)$/);
-  if (!match) return url;
+
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return url;
+  }
+  if (parsed.protocol !== 'postgres:' && parsed.protocol !== 'postgresql:') return url;
+  if (parsed.password !== '' || parsed.username === '') return url;
+
   const password = readFileSync(passwordFile, 'utf8').trim();
   if (!password) return url;
-  return `${match[1]}${match[2]}:${encodeURIComponent(password)}@${match[3]}`;
+
+  parsed.password = encodeURIComponent(password);
+  return parsed.toString();
 }
 
 async function bootstrap(): Promise<void> {

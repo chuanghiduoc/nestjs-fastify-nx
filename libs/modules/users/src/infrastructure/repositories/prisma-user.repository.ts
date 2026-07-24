@@ -41,6 +41,18 @@ export class PrismaUserRepository implements UserRepositoryPort {
 
   constructor(private readonly prisma: PrismaService) {}
 
+  // Participate in the caller's interactive transaction when one is open, so a repository write commits
+  // atomically with the outbox row a command handler publishes in the SAME prisma.transaction(...) —
+  // mirrors OutboxPublisher. Outside a transaction this is the primary (writes) / replica (reads).
+  private get writer() {
+    return this.prisma.currentTransaction ?? this.prisma.db;
+  }
+
+  private get reader() {
+    // Inside a transaction, read through it so uncommitted writes are visible; otherwise the replica.
+    return this.prisma.currentTransaction ?? this.prisma.dbRead;
+  }
+
   private mapToEntity(raw: UserRow): User {
     return User.reconstitute({
       id: raw.id,
@@ -72,7 +84,7 @@ export class PrismaUserRepository implements UserRepositoryPort {
   // Primary (not dbRead) — /users/me reads immediately after sign-up; replica lag would return null.
   async findById(id: string): Promise<User | null> {
     try {
-      const raw = await this.prisma.db.user.findUnique({ where: { id } });
+      const raw = await this.writer.user.findUnique({ where: { id } });
       return raw ? this.mapToEntity(raw) : null;
     } catch (err) {
       if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2025') {
@@ -84,16 +96,20 @@ export class PrismaUserRepository implements UserRepositoryPort {
 
   async findByEmail(email: string): Promise<User | null> {
     try {
-      const raw = await this.prisma.db.user.findUnique({ where: { email } });
+      const raw = await this.writer.user.findUnique({ where: { email } });
       return raw ? this.mapToEntity(raw) : null;
     } catch (err) {
       return this.handleError(err, 'findByEmail');
     }
   }
 
+  // NOTE: full-entity upsert with no optimistic-concurrency guard. Two handlers that load → mutate →
+  // save the same user concurrently can lose an update (the later save overwrites all columns from its
+  // stale snapshot). No caller exists today; a real fix needs an aggregate `version` column (schema
+  // migration) or field-scoped updates — track before wiring an update-user command to this method.
   async save(user: User): Promise<void> {
     try {
-      await this.prisma.db.user.upsert({
+      await this.writer.user.upsert({
         where: { id: user.id },
         create: {
           id: user.id,
@@ -140,7 +156,7 @@ export class PrismaUserRepository implements UserRepositoryPort {
       ];
     }
     try {
-      const rows = await this.prisma.dbRead.user.findMany({
+      const rows = await this.reader.user.findMany({
         where,
         orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
         take: limit + 1,
@@ -155,7 +171,7 @@ export class PrismaUserRepository implements UserRepositoryPort {
 
   async exists(email: string): Promise<boolean> {
     try {
-      const count = await this.prisma.dbRead.user.count({ where: { email } });
+      const count = await this.reader.user.count({ where: { email } });
       return count > 0;
     } catch (err) {
       return this.handleError(err, 'exists');

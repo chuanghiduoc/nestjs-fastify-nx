@@ -18,4 +18,5 @@ export { intEnv, positiveIntEnv, boolEnv } from './lib/env-readers';
 export { redisReconnectStrategy } from './lib/redis-reconnect';
 export { encodeCursor, decodeCursor, type DecodedCursor } from './lib/cursor-pagination';
 export { injectDatabasePassword } from './lib/db-password-file';
+export { withTimeout } from './lib/with-timeout';
 export { STORED_FILE_STATUS, type StoredFileStatus } from './lib/stored-file-status';

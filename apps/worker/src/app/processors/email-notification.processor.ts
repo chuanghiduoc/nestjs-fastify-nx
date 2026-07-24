@@ -13,6 +13,9 @@ export interface EmailNotificationPayload {
   body: string;
   templateId?: string;
   variables?: Record<string, string>;
+  // Set by request-scoped producers so worker logs correlate to the origin. Outbox-originated jobs
+  // (e.g. welcome-email) leave it unset — they are traced by the outbox eventId embedded in the jobId.
+  correlationId?: string;
 }
 
 const EMAIL_CONCURRENCY = positiveIntEnv('WORKER_EMAIL_CONCURRENCY', 5);
@@ -51,7 +54,7 @@ export class EmailNotificationProcessor extends WorkerHost {
       throw new Error('Email job has no id; deterministic delivery identity cannot be established');
     }
     const jobId = String(job.id);
-    const { to, subject, body } = job.data;
+    const { to, subject, body, correlationId } = job.data;
     const toMasked = redactEmail(to);
     this.logger.log(
       `Processing email job #${job.id} → to="${toMasked}" subject="${subject}" attempt=${job.attemptsMade + 1}`,
@@ -72,14 +75,14 @@ export class EmailNotificationProcessor extends WorkerHost {
         .set(key, '1', 'EX', IDEMPOTENCY_TTL_SECONDS)
         .catch((markerError: unknown) => {
           this.logger.error(
-            { jobId: job.id, recipient: toMasked, cause: markerError },
+            { jobId: job.id, recipient: toMasked, correlationId, cause: markerError },
             'Email delivered but sent-marker persistence failed',
           );
         });
       this.logger.log(`Email job #${job.id} delivered to "${toMasked}"`);
     } catch (err) {
       this.logger.error(
-        { err, jobId: job.id, to: toMasked, attempt: job.attemptsMade + 1 },
+        { err, jobId: job.id, to: toMasked, correlationId, attempt: job.attemptsMade + 1 },
         `Email job #${job.id} failed`,
       );
       throw err;

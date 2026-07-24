@@ -19,6 +19,7 @@ function buildTask(opts?: {
   leader?: boolean;
   claimed?: number;
   queryRaw?: ReturnType<typeof vi.fn>;
+  head?: ReturnType<typeof vi.fn>;
 }) {
   const prisma = {
     db: {
@@ -29,7 +30,11 @@ function buildTask(opts?: {
       },
     },
   } as unknown as PrismaService;
-  const storage = { delete: vi.fn().mockResolvedValue(undefined) } as unknown as StoragePort;
+  // Default: object absent (HEAD → null) so FINALIZING/VERIFYING candidates proceed down the delete path.
+  const storage = {
+    delete: vi.fn().mockResolvedValue(undefined),
+    head: opts?.head ?? vi.fn().mockResolvedValue(null),
+  } as unknown as StoragePort;
   const leadership = {
     isLeader: vi.fn().mockReturnValue(opts?.leader ?? true),
   } as unknown as SchedulerLeaderService;
@@ -81,6 +86,48 @@ describe('StoredFileCleanupTask', () => {
       await task.cleanup();
 
       expect(prisma.db.$queryRaw).not.toHaveBeenCalled();
+    });
+
+    it('recovers a FINALIZING row to READY (not delete) when its object still exists on storage', async () => {
+      const candidate = makeCandidate({ status: 'FINALIZING' });
+      const queryRaw = vi
+        .fn()
+        .mockResolvedValueOnce([]) // REJECTED
+        .mockResolvedValueOnce([candidate]) // FINALIZING (stale)
+        .mockResolvedValueOnce([]); // VERIFYING (stale)
+      const head = vi
+        .fn()
+        .mockResolvedValue({ contentType: 'image/png', size: 10, bucket: 'uploads', etag: 'e' });
+      const { task, prisma, storage } = buildTask({ queryRaw, head });
+
+      await task.cleanup();
+
+      expect(storage.head).toHaveBeenCalledWith('files/user/file.png', 'uploads');
+      expect(storage.delete).not.toHaveBeenCalled();
+      expect(prisma.db.storedFile.delete).not.toHaveBeenCalled();
+      // Promoted to READY via CAS, never REJECTED.
+      expect(prisma.db.storedFile.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ status: 'READY' }) }),
+      );
+      expect(prisma.db.storedFile.updateMany).not.toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ status: 'REJECTED' }) }),
+      );
+    });
+
+    it('skips deletion when the HEAD check itself fails (never delete a possibly-live object)', async () => {
+      const candidate = makeCandidate({ status: 'VERIFYING' });
+      const queryRaw = vi
+        .fn()
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([candidate]);
+      const head = vi.fn().mockRejectedValue(new Error('S3 timeout'));
+      const { task, storage, prisma } = buildTask({ queryRaw, head });
+
+      await expect(task.cleanup()).resolves.toBeUndefined();
+
+      expect(storage.delete).not.toHaveBeenCalled();
+      expect(prisma.db.storedFile.delete).not.toHaveBeenCalled();
     });
 
     it('continues to the remaining scans when one status scan fails', async () => {

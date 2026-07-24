@@ -1,5 +1,7 @@
+import type { IncomingMessage } from 'node:http';
 import type { Socket } from 'socket.io';
 import { fromNodeHeaders } from 'better-auth/node';
+import proxyaddr from 'proxy-addr';
 import type { BetterAuthInstance } from '@nestjs-fastify-nx/infra-auth';
 import type Redis from 'ioredis';
 
@@ -104,6 +106,15 @@ export async function renewWsConnectionLease(redis: Redis, socket: Socket): Prom
   );
 }
 
+// Frees the per-IP concurrency lease for a socket. Used both on normal disconnect and on graceful
+// shutdown — otherwise a rolling deploy leaves leases dangling until WS_CONN_TTL_MS, wrongly rejecting
+// NAT'd users who reconnect to the new pod.
+export async function releaseWsConnectionLease(redis: Redis, socket: Socket): Promise<void> {
+  const lease = wsData(socket).connectionLease;
+  if (!lease) return;
+  await redis.eval(RELEASE_CONNECTION_SCRIPT, 1, lease.key, lease.member);
+}
+
 export function createWsAuthMiddleware(auth: BetterAuthInstance, options: WsAuthOptions = {}) {
   const { redis, maxConcurrentPerIp = 50, trustProxyHops = 0 } = options;
 
@@ -145,24 +156,29 @@ export function createWsAuthMiddleware(auth: BetterAuthInstance, options: WsAuth
   };
 }
 
-// Mirror Fastify's numeric trust-proxy model: walk right-to-left from the TCP peer and skip
-// exactly the configured proxy hops. With zero hops, forwarded headers are never trusted.
+// Mirror Fastify's numeric trust-proxy model via `proxy-addr` (the same package Fastify uses
+// internally): trust exactly the configured number of hops walking in from the TCP peer, then
+// return the first untrusted (i.e. client) address. With zero hops, forwarded headers are never
+// trusted — proxy-addr's trust callback receives a hop index, not a raw count, so it cannot accept
+// a bare number the way Fastify's `trustProxy` option does; the index-based predicate below
+// reproduces that same "trust N hops" semantics.
 function resolveClientIp(socket: Socket, trustProxyHops: number): string | undefined {
   const direct = socket.conn.remoteAddress;
   if (!direct || trustProxyHops <= 0) return direct;
 
-  const raw = socket.handshake.headers['x-forwarded-for'];
-  const value = Array.isArray(raw) ? raw[0] : raw;
-  if (!value) return direct;
+  const forwardedFor = socket.handshake.headers['x-forwarded-for'];
+  const reqLike = {
+    headers: {
+      ...socket.handshake.headers,
+      // Node joins duplicate x-forwarded-for headers into one comma string; the array branch is
+      // defensive — join it (not [0]) so every hop is preserved for proxy-addr to parse.
+      'x-forwarded-for': Array.isArray(forwardedFor) ? forwardedFor.join(', ') : forwardedFor,
+    },
+    socket: { remoteAddress: direct },
+    connection: { remoteAddress: direct },
+  } as unknown as IncomingMessage;
 
-  const forwarded = value
-    .split(',')
-    .map((address) => address.trim())
-    .filter(Boolean);
-  if (forwarded.length === 0) return direct;
-
-  const chain = [...forwarded, direct];
-  return chain[Math.max(0, chain.length - 1 - trustProxyHops)];
+  return proxyaddr(reqLike, (_addr, hopIndex) => hopIndex < trustProxyHops);
 }
 
 function extractBearer(header: string | string[] | undefined): string | undefined {

@@ -522,35 +522,31 @@ controller's `@ApiOkResponse`, create the presentation counterpart instead.
 
 ### `presentation/decorators/` & `presentation/types/` — route-scoped helpers
 
-A `createParamDecorator` (e.g. `@CurrentUser()`) plus the type it returns —
-centralizes reading the authenticated user off the request.
+A `createParamDecorator` plus the type it returns — a place for helpers that read
+something off the request for THIS module's routes only.
+
+Reading the authenticated user is NOT module-specific, so it does **not** live
+here: use the shared `@CurrentUser()` from `@nestjs-fastify-nx/infra-auth`, which
+returns `AuthenticatedSession` and works for both REST and GraphQL:
 
 ```typescript
-// presentation/decorators/current-user.decorator.ts
-export const CurrentUser = createParamDecorator(
-  (_data: unknown, ctx: ExecutionContext): AuthenticatedUser => {
-    const request = ctx.switchToHttp().getRequest<FastifyRequest & { user: AuthenticatedUser }>();
-    return request.user;
-  },
-);
+import { CurrentUser, type AuthenticatedSession } from '@nestjs-fastify-nx/infra-auth';
 
-// presentation/types/authenticated-user.type.ts
-export interface AuthenticatedUser {
-  userId: string;
-  email: string;
-  name: string;
-  role: string;
-  status: string;
-  sessionId: string;
-  sessionToken: string;
+@Get('me')
+getProfile(@CurrentUser() user: AuthenticatedSession) {
+  return this.queryBus.execute(new GetUserProfileQuery(user.userId));
 }
 ```
 
-Create one only if a controller needs something off the request beyond
-NestJS's built-ins (`@Req`, `@Body`, `@Param`).
+It lives in `infra-auth` (not a module) because any `scope:modules` lib may share
+it without crossing a module boundary — a per-module copy would duplicate the type
+and force every module to re-cast `@Req() req: FastifyRequest & { user }`.
 
-**Rules**: `AuthenticatedUser` is presentation-only — what `BetterAuthGuard`
-attaches to the request. Don't confuse it with the `User` entity.
+Create a decorator under `presentation/decorators/` only for something genuinely
+module-specific that NestJS's built-ins (`@Req`, `@Body`, `@Param`) don't cover.
+
+**Rules**: `AuthenticatedSession` is what `BetterAuthGuard` attaches to the
+request — don't confuse it with the `User` entity, and don't redefine it per module.
 
 ### `<context>.module.ts` — the module wiring
 

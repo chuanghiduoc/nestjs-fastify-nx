@@ -13,6 +13,7 @@ const GRACE_DAYS = positiveIntEnv('VERIFICATION_PURGE_GRACE_DAYS', 1);
 @Injectable()
 export class VerificationCleanupTask {
   private readonly logger = new Logger(VerificationCleanupTask.name);
+  private running = false;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -22,7 +23,8 @@ export class VerificationCleanupTask {
   // UTC-pinned to guard against host TZ drift; 03:45 keeps it clear of the other purge windows.
   @Cron('45 3 * * *', { name: 'verification-purge', timeZone: 'UTC' })
   async purgeExpiredVerifications(): Promise<void> {
-    if (!this.leadership.isLeader()) return;
+    if (!this.leadership.isLeader() || this.running) return;
+    this.running = true;
     this.logger.log(`Starting verification purge: expiresAt < NOW() - ${GRACE_DAYS} days`);
 
     let totalPurged = 0;
@@ -48,6 +50,8 @@ export class VerificationCleanupTask {
       this.logger.error(
         `Verification purge failed after ${totalPurged} deletion(s): ${String(err)}`,
       );
+    } finally {
+      this.running = false;
     }
   }
 }

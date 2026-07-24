@@ -12,6 +12,11 @@ import { ListUsersCursorArgs } from '../dto/list-users-cursor.args';
 export class UserResolver {
   constructor(private readonly queryBus: QueryBus) {}
 
+  // Auth-required, mirroring REST `GET /users/me`: the global BetterAuthGuard resolves the session and
+  // populates `req.user` before this runs, so an unauthenticated request fails with 401 and never
+  // reaches here (marking it @Public would skip the guard and leave req.user unset — `me` would then
+  // return null even for signed-in users). `nullable` exists ONLY for the deleted-account race handled
+  // in the catch below; the `!userId` guard is defensive against the optional context type.
   @Query(() => UserType, { name: 'me', nullable: true })
   async me(@Context() context: { req: { user?: AuthenticatedSession } }): Promise<UserType | null> {
     const userId = context.req.user?.userId;
