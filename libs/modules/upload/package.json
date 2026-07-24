@@ -12,6 +12,7 @@
   },
   "devDependencies": {
     "@nestjs-fastify-nx/contracts": "workspace:*",
+    "@nestjs-fastify-nx/core": "workspace:*",
     "@nestjs-fastify-nx/infra-auth": "workspace:*",
     "@nestjs-fastify-nx/infra-database": "workspace:*",
     "@nestjs-fastify-nx/infra-i18n": "workspace:*",

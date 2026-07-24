@@ -233,6 +233,72 @@ describe('registerIdempotency', () => {
     expect(callCount()).toBe(2);
   });
 
+  it('extracts the session token from a cookie header carrying several unrelated cookies', async () => {
+    const { app, callCount } = await buildApp(redis);
+    const multiCookieHeader = 'theme=dark; better-auth.session_token=user-a; locale=en-US; other=1';
+
+    const first = await app.inject({
+      method: 'POST',
+      url: '/api/v1/echo',
+      headers: { ...KEY_HEADER, cookie: multiCookieHeader },
+      payload: { a: 1 },
+    });
+    // Same principal, same key/payload -> replay, proving the plain (non-secure) variant was
+    // parsed correctly out of a header with noisy surrounding cookies.
+    const second = await app.inject({
+      method: 'POST',
+      url: '/api/v1/echo',
+      headers: { ...KEY_HEADER, cookie: multiCookieHeader },
+      payload: { a: 1 },
+    });
+
+    expect(first.json().calls).toBe(1);
+    expect(second.headers['idempotent-replayed']).toBe('true');
+    expect(callCount()).toBe(1);
+  });
+
+  it('prefers the `__Secure-` cookie variant when both it and other cookies are present', async () => {
+    const { app, callCount } = await buildApp(redis);
+
+    const first = await app.inject({
+      method: 'POST',
+      url: '/api/v1/echo',
+      headers: {
+        ...KEY_HEADER,
+        cookie: 'theme=dark; __Secure-better-auth.session_token=user-a; locale=en-US',
+      },
+      payload: { a: 1 },
+    });
+    const second = await app.inject({
+      method: 'POST',
+      url: '/api/v1/echo',
+      headers: {
+        ...KEY_HEADER,
+        cookie: 'theme=dark; __Secure-better-auth.session_token=user-b; locale=en-US',
+      },
+      payload: { a: 1 },
+    });
+
+    // Different session tokens must scope to different principals even though every other cookie
+    // on the request is identical.
+    expect(first.json().calls).toBe(1);
+    expect(second.json().calls).toBe(2);
+    expect(callCount()).toBe(2);
+  });
+
+  it('falls back to IP scope for a malformed cookie header instead of throwing', async () => {
+    const { app } = await buildApp(redis);
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/echo',
+      headers: { ...KEY_HEADER, cookie: ';;;===garbage;;' },
+      payload: { a: 1 },
+    });
+
+    expect(res.statusCode).toBe(200);
+  });
+
   it('keeps the lock on 504 because timed-out handler work may still be running', async () => {
     const { app, callCount } = await buildApp(redis);
 

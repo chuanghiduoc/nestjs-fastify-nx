@@ -9,5 +9,6 @@
   "payload_too_large": "The request body is larger than the server accepts.",
   "unsupported_media_type": "The request media type is not supported.",
   "unprocessable_entity": "The request was understood but could not be processed.",
-  "request_timeout": "The server took too long to process the request. Please try again."
+  "request_timeout": "The server took too long to process the request. Please try again.",
+  "service_unavailable": "The service is temporarily unavailable. Please try again shortly."
 }

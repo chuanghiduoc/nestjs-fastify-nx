@@ -9,15 +9,18 @@ describe('injectDatabasePassword', () => {
   let passwordFile: string;
   let emptyFile: string;
   let specialFile: string;
+  let percentFile: string;
 
   beforeAll(() => {
     workdir = mkdtempSync(join(tmpdir(), 'db-pw-'));
     passwordFile = join(workdir, 'postgres_password');
     emptyFile = join(workdir, 'empty_password');
     specialFile = join(workdir, 'special_password');
+    percentFile = join(workdir, 'percent_password');
     writeFileSync(passwordFile, 'super-secret\n');
     writeFileSync(emptyFile, '');
     writeFileSync(specialFile, 'p@ss:wo/rd?#&');
+    writeFileSync(percentFile, 'has%25and%enc');
   });
 
   afterAll(() => {
@@ -35,9 +38,18 @@ describe('injectDatabasePassword', () => {
   });
 
   it('percent-encodes special characters in the password', () => {
-    // Password contains @ : / ? # & — all URL-reserved.
+    // Password contains @ : / ? # & — all URL-reserved and encoded via encodeURIComponent.
     const out = injectDatabasePassword('postgresql://app@db:5432/x', specialFile);
     expect(out).toBe('postgresql://app:p%40ss%3Awo%2Frd%3F%23%26@db:5432/x');
+  });
+
+  it('round-trips a password containing literal % (would corrupt without encodeURIComponent)', () => {
+    // The WHATWG URL setter leaves a bare `%` untouched, producing ambiguous `%XX` that pg mis-decodes.
+    // encodeURIComponent escapes `%`→`%25`, so pg-connection-string decodes back to the exact password.
+    const out = injectDatabasePassword('postgresql://app@db:5432/x', percentFile);
+    expect(out).toBe('postgresql://app:has%2525and%25enc@db:5432/x');
+    // Sanity: decoding the userinfo password segment yields the original file content.
+    expect(decodeURIComponent('has%2525and%25enc')).toBe('has%25and%enc');
   });
 
   it('returns the URL unchanged when DB_PASSWORD_FILE is undefined', () => {

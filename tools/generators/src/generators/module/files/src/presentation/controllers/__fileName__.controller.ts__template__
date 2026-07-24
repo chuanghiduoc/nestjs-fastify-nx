@@ -1,14 +1,18 @@
-import { Controller, Get, Param, HttpCode, HttpStatus } from '@nestjs/common';
+import { Controller, Get, Param, ParseUUIDPipe, HttpCode, HttpStatus } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { ApiCommonErrors } from '@nestjs-fastify-nx/contracts';
 
 @ApiTags('<%= fileName %>')
 @Controller('<%= fileName %>')
 export class <%= className %>Controller {
+  // The id path param is validated declaratively by ParseUUIDPipe (UUID v7 — this repo's id format):
+  // a malformed id is rejected with a 400 problem+json before the handler runs, so never hand-roll an
+  // `if (!isUuid(id))` check here. Use `new ParseUUIDPipe()` (any version) only if a route accepts
+  // externally-minted non-v7 ids.
   @Get(':id')
   @HttpCode(HttpStatus.OK)
-  @ApiCommonErrors({ auth: false, validation: false })
-  findOne(@Param('id') id: string): { id: string } {
+  @ApiCommonErrors({ auth: false, validation: false, notFound: true })
+  findOne(@Param('id', new ParseUUIDPipe({ version: '7' })) id: string): { id: string } {
     return { id };
   }
 }

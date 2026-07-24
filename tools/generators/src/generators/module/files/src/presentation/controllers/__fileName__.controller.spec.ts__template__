@@ -18,8 +18,11 @@ describe('<%= className %>Controller', () => {
     const module = await buildModule();
     const controller = module.get(<%= className %>Controller);
 
-    const result = controller.findOne('test-id-123');
+    // A direct method call bypasses ParseUUIDPipe (pipes run only in the HTTP pipeline). Pass a valid
+    // UUID v7 for realism; the pipe's rejection of malformed ids is exercised by an e2e/HTTP test.
+    const id = '019dd1a5-9235-70db-8d57-54ef901d8185';
+    const result = controller.findOne(id);
 
-    expect(result).toEqual({ id: 'test-id-123' });
+    expect(result).toEqual({ id });
   });
 });

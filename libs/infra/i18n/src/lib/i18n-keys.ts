@@ -13,6 +13,7 @@ export const I18N_KEYS = {
     unsupported_media_type: 'common.unsupported_media_type',
     unprocessable_entity: 'common.unprocessable_entity',
     request_timeout: 'common.request_timeout',
+    service_unavailable: 'common.service_unavailable',
   },
   validation: {
     failed_title: 'validation.failed_title',

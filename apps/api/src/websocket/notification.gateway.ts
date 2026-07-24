@@ -19,6 +19,7 @@ import type { BetterAuthInstance } from '@nestjs-fastify-nx/infra-auth';
 import { redisReconnectStrategy } from '@nestjs-fastify-nx/shared';
 import {
   createWsAuthMiddleware,
+  releaseWsConnectionLease,
   renewWsConnectionLease,
   revalidateWsSession,
   wsData,
@@ -133,6 +134,15 @@ export class NotificationGateway
     // the graceful Redis-client close for up to WS_SESSION_REVALIDATE_MS.
     this.revalidationAbort?.abort();
     await this.revalidationInFlight;
+    // Release each connected socket's per-IP lease before closing the Redis client — otherwise a
+    // rolling deploy leaves the leases dangling until WS_CONN_TTL_MS and NAT'd users reconnecting to
+    // the new pod get wrongly rejected as over-limit. Best-effort; a failure just falls back to TTL.
+    if (this.rateLimitClient && this.server) {
+      const sockets = [...this.server.sockets.sockets.values()];
+      await Promise.allSettled(
+        sockets.map((socket) => releaseWsConnectionLease(this.rateLimitClient, socket)),
+      );
+    }
     // Guard the optional chaining — shutdown can fire before afterInit() ran.
     const closes: Promise<unknown>[] = [];
     if (this.pubClient) closes.push(this.pubClient.quit().catch(() => this.pubClient.disconnect()));

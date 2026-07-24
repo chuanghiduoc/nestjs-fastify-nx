@@ -25,7 +25,9 @@ export async function createTestContainers(): Promise<TestContainers> {
     postgres,
     redis,
     teardown: async () => {
-      await Promise.all([postgres.stop(), redis.stop()]);
+      // allSettled so one container failing to stop still lets the other be torn down (Promise.all
+      // would reject on the first failure and skip awaiting the second → a leaked container).
+      await Promise.allSettled([postgres.stop(), redis.stop()]);
     },
   };
 }

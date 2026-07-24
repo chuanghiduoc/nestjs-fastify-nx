@@ -15,6 +15,7 @@ const GRACE_DAYS = positiveIntEnv('SESSION_PURGE_GRACE_DAYS', 1);
 @Injectable()
 export class SessionCleanupTask {
   private readonly logger = new Logger(SessionCleanupTask.name);
+  private running = false;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -25,7 +26,8 @@ export class SessionCleanupTask {
   // verification purge (03:45).
   @Cron('30 3 * * *', { name: 'session-purge', timeZone: 'UTC' })
   async purgeExpiredSessions(): Promise<void> {
-    if (!this.leadership.isLeader()) return;
+    if (!this.leadership.isLeader() || this.running) return;
+    this.running = true;
     this.logger.log(`Starting session purge: expiresAt < NOW() - ${GRACE_DAYS} days`);
 
     let totalPurged = 0;
@@ -49,6 +51,8 @@ export class SessionCleanupTask {
       this.logger.log(`Session purge complete: ${totalPurged} row(s) deleted`);
     } catch (err) {
       this.logger.error(`Session purge failed after ${totalPurged} deletion(s): ${String(err)}`);
+    } finally {
+      this.running = false;
     }
   }
 }

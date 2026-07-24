@@ -160,6 +160,14 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
     fn: (client: TransactionClient) => Promise<R>,
     options?: { maxWait?: number; timeout?: number },
   ): Promise<R> {
+    // Fail loud on nesting: a nested call would open a SECOND independent physical transaction on a
+    // different pooled connection (no shared atomicity, and it can self-deadlock on rows the outer tx
+    // locks). Reuse the active client via prisma.currentTransaction instead.
+    if (this.transactionContext.getStore()) {
+      throw new Error(
+        'Nested prisma.transaction() is not supported — reuse the active client via prisma.currentTransaction',
+      );
+    }
     return this._writeClient.$transaction(
       (client) => this.transactionContext.run(client, () => fn(client)),
       options,

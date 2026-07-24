@@ -19,6 +19,7 @@ const baseProdEnv = {
   BULL_BOARD_PASSWORD: 'strong-pw',
   MAIL_IGNORE_TLS: 'false',
   MAIL_REQUIRE_TLS: 'true',
+  EVENT_PUBLISHER_DRIVER: 'outbox',
 };
 
 describe('validateConfig', () => {
@@ -165,6 +166,15 @@ describe('validateConfig', () => {
 
   it('treats empty BETTER_AUTH_URL as unset (not as a malformed url)', () => {
     expect(() => validateConfig({ ...baseDevEnv, BETTER_AUTH_URL: '' })).not.toThrow();
+  });
+
+  it('requires EVENT_PUBLISHER_DRIVER=outbox in production', () => {
+    expect(() => validateConfig({ ...baseProdEnv, EVENT_PUBLISHER_DRIVER: 'inprocess' })).toThrow(
+      /EVENT_PUBLISHER_DRIVER/,
+    );
+    // Default is inprocess, so omitting it entirely must also fail in production.
+    const { EVENT_PUBLISHER_DRIVER: _omit, ...withoutDriver } = baseProdEnv;
+    expect(() => validateConfig(withoutDriver)).toThrow(/EVENT_PUBLISHER_DRIVER/);
   });
 
   it('accepts a valid production environment', () => {

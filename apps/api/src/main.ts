@@ -35,6 +35,13 @@ const STRICT_AUTH_PATHS = new Set([
   '/api/auth/reset-password',
 ]);
 
+// Relaxed CSP applied ONLY to the Bull Board admin path (its bundled UI uses inline script/style).
+// Kept as tight as Bull Board allows: inline script/style but no third-party origins.
+const BULL_BOARD_CSP =
+  "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'self'; " +
+  "script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; " +
+  "img-src 'self' data: https:; font-src 'self' https: data:; connect-src 'self'";
+
 const AUTH_ACCOUNT_RATE_LIMIT_SCRIPT = `
 local count = redis.call('incr', KEYS[1])
 if count == 1 then redis.call('pexpire', KEYS[1], ARGV[1]) end
@@ -52,7 +59,14 @@ async function bootstrap() {
 
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
-    new FastifyAdapter({ trustProxy: trustProxyHops, bodyLimit: bodyLimitBytes }),
+    // ignoreTrailingSlash so `/api/auth/sign-in/email/` matches the same strict route as the
+    // non-slash form — otherwise the trailing-slash variant falls through to the looser wildcard
+    // bucket and skips the account-wide credential-stuffing limiter.
+    new FastifyAdapter({
+      trustProxy: trustProxyHops,
+      bodyLimit: bodyLimitBytes,
+      ignoreTrailingSlash: true,
+    }),
     { bufferLogs: true },
   );
 
@@ -93,9 +107,11 @@ async function bootstrap() {
     maxAge: 600,
   });
 
-  // CSP is disabled in dev so Scalar/Bull Board load freely. In prod the policy
-  // is same-origin only: Bull Board serves its own bundled assets and Scalar
-  // docs never mount in production, so no third-party CDN needs allowlisting.
+  // CSP is disabled in dev so Scalar/Bull Board load freely. In prod the JSON API surface gets a
+  // strict same-origin policy WITHOUT script/style 'unsafe-inline' (an inline-script XSS in any HTML
+  // response would otherwise execute). The one HTML surface — Bull Board — ships inline bootstrap
+  // script/style we cannot attach a nonce to (its HTML is not ours to template), so its admin path is
+  // relaxed by the scoped hook below rather than weakening the global policy for everything.
   await fastify.register(fastifyHelmet, {
     contentSecurityPolicy: isProduction
       ? {
@@ -107,9 +123,9 @@ async function bootstrap() {
             frameAncestors: ["'self'"],
             imgSrc: ["'self'", 'data:', 'https:'],
             objectSrc: ["'none'"],
-            scriptSrc: ["'self'", "'unsafe-inline'"],
+            scriptSrc: ["'self'"],
             scriptSrcAttr: ["'none'"],
-            styleSrc: ["'self'", 'https:', "'unsafe-inline'"],
+            styleSrc: ["'self'", 'https:'],
             connectSrc: ["'self'"],
             upgradeInsecureRequests: [],
             workerSrc: ["'self'", 'blob:'],
@@ -126,6 +142,17 @@ async function bootstrap() {
     crossOriginOpenerPolicy: { policy: 'same-origin' },
     crossOriginResourcePolicy: { policy: 'same-site' },
   });
+
+  // Bull Board's bundled admin UI requires inline script/style. Override the strict global CSP for
+  // that path ONLY (prod, where the global policy is active); the JSON API keeps the strict policy.
+  if (isProduction) {
+    fastify.addHook('onSend', async (req, reply, payload) => {
+      if (req.url.startsWith('/api/admin/queues')) {
+        reply.header('content-security-policy', BULL_BOARD_CSP);
+      }
+      return payload;
+    });
+  }
 
   // Idempotency-Key replay for mutating /api/v1/* writes (Stripe pattern). Registered before
   // @fastify/compress so its onSend hook stores the uncompressed JSON body. db=5 isolates the
@@ -256,8 +283,11 @@ async function bootstrap() {
   // (sign-in, sign-up, request-password-reset). reset-password submits only { token, newPassword }
   // and is covered by the per-IP bucket alone — its token is unguessable, so that is sufficient.
   fastify.addHook('preHandler', async (req, reply) => {
-    const path = req.url.split('?', 1)[0];
-    if (!STRICT_AUTH_PATHS.has(path)) return;
+    // Match on the ROUTE Fastify resolved, not the raw URL: find-my-way percent-decodes before
+    // routing, so a raw-string check on req.url (`/sign-in/%65mail`) would miss a request that
+    // actually hit the strict credential route and let it skip the account-wide limiter.
+    const matchedRoute = req.routeOptions?.url;
+    if (!matchedRoute || !STRICT_AUTH_PATHS.has(matchedRoute)) return;
     const body = req.body as Record<string, unknown> | undefined;
     const email = typeof body?.['email'] === 'string' ? body['email'].trim().toLowerCase() : '';
     if (!email) return;
@@ -345,6 +375,12 @@ async function bootstrap() {
     },
   };
 
+  // reply.hijack() detaches the request from Fastify, so neither the Nest TimeoutInterceptor nor any
+  // Fastify timeout bounds this handler. Watchdog it so a Better Auth handler that hangs without
+  // throwing (e.g. an OAuth token exchange stuck on an unresponsive upstream) can't pin a connection
+  // open forever. 0 (timeout disabled) skips the watchdog.
+  const authHandlerTimeoutMs = config.get('HTTP_REQUEST_TIMEOUT_MS', { infer: true });
+
   const authRouteHandler = async (req: FastifyRequest, reply: FastifyReply): Promise<void> => {
     // These routes are registered directly on Fastify, so Nest middleware never seeds their
     // request context. Establish the same IDs before hijacking the response lifecycle.
@@ -359,38 +395,77 @@ async function bootstrap() {
       (req.raw as unknown as { body: unknown }).body = req.body;
     }
     reply.hijack();
+
+    let timedOut = false;
+    let timer: NodeJS.Timeout | undefined;
+    const handlerPromise = betterAuthHandler(req.raw, reply.raw);
+    // Node can't cancel the handler; if it settles AFTER the watchdog already responded, swallow the
+    // result/error here so it never surfaces as an unhandled rejection.
+    handlerPromise.catch((late: unknown) => {
+      if (timedOut) {
+        // The real failure only surfaces here (after the watchdog already sent 503), so report it to
+        // Sentry too — otherwise a genuine hung-then-failed handler would be invisible beyond a warn.
+        Sentry.captureException(late, { tags: { requestId, correlationId } });
+        app
+          .get(Logger)
+          .warn(
+            { err: late, requestId, correlationId, url: req.url },
+            `Better Auth handler rejected after the ${authHandlerTimeoutMs}ms watchdog fired`,
+          );
+      }
+    });
+
     try {
-      await betterAuthHandler(req.raw, reply.raw);
+      if (authHandlerTimeoutMs > 0) {
+        await Promise.race([
+          handlerPromise,
+          new Promise<never>((_resolve, reject) => {
+            timer = setTimeout(() => {
+              timedOut = true;
+              reject(new Error('BETTER_AUTH_HANDLER_TIMEOUT'));
+            }, authHandlerTimeoutMs);
+            timer.unref();
+          }),
+        ]);
+      } else {
+        await handlerPromise;
+      }
     } catch (err) {
       // After hijack(), Fastify's error handler won't run — close manually to prevent slowloris hang.
       Sentry.captureException(err, { tags: { requestId, correlationId } });
-      const logger = app.get(Logger);
-      logger.error(
-        { err, requestId, correlationId, url: req.url },
-        'Better Auth handler threw unexpectedly',
-      );
+      app
+        .get(Logger)
+        .error(
+          { err, requestId, correlationId, url: req.url },
+          timedOut ? 'Better Auth handler timed out' : 'Better Auth handler threw unexpectedly',
+        );
       if (!reply.raw.headersSent) {
+        const status = timedOut ? HttpStatus.SERVICE_UNAVAILABLE : HttpStatus.INTERNAL_SERVER_ERROR;
         const body = JSON.stringify(
           buildProblemDetails({
-            status: HttpStatus.INTERNAL_SERVER_ERROR,
-            title: 'Internal Server Error',
-            code: ERROR_CODES.INTERNAL_SERVER_ERROR,
+            status,
+            title: timedOut ? 'Service Unavailable' : 'Internal Server Error',
+            code: timedOut ? ERROR_CODES.SERVICE_UNAVAILABLE : ERROR_CODES.INTERNAL_SERVER_ERROR,
             instance: req.url,
             requestId,
           }),
         );
-        reply.raw.writeHead(HttpStatus.INTERNAL_SERVER_ERROR, {
+        const headers: Record<string, string | number> = {
           'Content-Type': 'application/problem+json',
           'Content-Length': Buffer.byteLength(body),
           'X-Request-Id': requestId,
           'X-Correlation-Id': correlationId,
-        });
+        };
+        if (timedOut) headers['Retry-After'] = '5';
+        reply.raw.writeHead(status, headers);
         reply.raw.end(body);
       } else if (!reply.raw.writableEnded) {
         // The delegated handler may have started a response before throwing. It is too late to
         // replace the status/body, but ending the stream avoids leaving a half-open connection.
         reply.raw.end();
       }
+    } finally {
+      if (timer) clearTimeout(timer);
     }
   };
 

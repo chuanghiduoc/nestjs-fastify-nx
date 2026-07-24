@@ -10,7 +10,6 @@ import {
   Logger,
   NotFoundException,
   Post,
-  Req,
   UnprocessableEntityException,
 } from '@nestjs/common';
 import { createHash } from 'node:crypto';
@@ -26,13 +25,14 @@ import {
   ApiOperation,
   ApiTags,
 } from '@nestjs/swagger';
+import { ClsService } from 'nestjs-cls';
+import { REQUEST_CONTEXT_KEYS, type RequestContextStore } from '@nestjs-fastify-nx/core';
 import { ApiCommonErrors } from '@nestjs-fastify-nx/contracts';
 import { I18N_KEYS } from '@nestjs-fastify-nx/infra-i18n';
 import { PrismaService } from '@nestjs-fastify-nx/infra-database';
 import { STORAGE_PORT } from '@nestjs-fastify-nx/infra-storage';
 import type { PresignedUpload, StoragePort, StoredFile } from '@nestjs-fastify-nx/infra-storage';
-import type { AuthenticatedSession } from '@nestjs-fastify-nx/infra-auth';
-import type { FastifyRequest } from 'fastify';
+import { CurrentUser, type AuthenticatedSession } from '@nestjs-fastify-nx/infra-auth';
 import {
   ALLOWED_MIME_TYPES,
   detectFileType,
@@ -74,9 +74,16 @@ export class UploadController {
     @Inject(STORAGE_PORT) private readonly storage: StoragePort,
     @InjectQueue(QUEUE_NAMES.UPLOAD_VERIFICATION) private readonly verifyQueue: Queue,
     private readonly prisma: PrismaService,
+    private readonly cls: ClsService<RequestContextStore>,
   ) {
     this.maxFileSize = positiveIntEnv('UPLOAD_MAX_FILE_BYTES', DEFAULT_MAX_FILE_SIZE);
     this.presignExpiresSeconds = positiveIntEnv('UPLOAD_PRESIGN_EXPIRES_SECONDS', 300);
+  }
+
+  // Carries the request's correlation id onto the enqueued job so the worker can tie its logs back to
+  // the originating /upload/confirm request (BullMQ processing runs outside the request's CLS context).
+  private get correlationId(): string | undefined {
+    return this.cls.get(REQUEST_CONTEXT_KEYS.correlationId);
   }
 
   @Post('presign')
@@ -91,7 +98,7 @@ export class UploadController {
   @ApiCreatedResponse({ type: PresignedUploadDto, description: 'Presigned upload policy issued.' })
   @ApiCommonErrors({ auth: true })
   async presign(
-    @Req() req: FastifyRequest & { user: AuthenticatedSession },
+    @CurrentUser() user: AuthenticatedSession,
     @Body() dto: PresignUploadDto,
   ): Promise<PresignedUpload> {
     const extension = MIME_EXTENSIONS.get(dto.contentType);
@@ -104,7 +111,7 @@ export class UploadController {
     }
 
     // The user id in the prefix makes the otherwise bearer-like storage key tenant-scoped.
-    const key = `uploads/${req.user.userId}/${generateId()}.${extension}`;
+    const key = `uploads/${user.userId}/${generateId()}.${extension}`;
     return this.storage.presignUpload(key, {
       contentType: dto.contentType,
       maxBytes: this.maxFileSize,
@@ -122,14 +129,16 @@ export class UploadController {
   })
   @ApiBody({ type: ConfirmUploadDto })
   @ApiOkResponse({ type: StoredFileDto, description: 'Object verified.' })
-  @ApiCommonErrors({ auth: true, notFound: true })
+  // 409: a concurrent confirm of the same key can still be finalizing when this one recovers it
+  // (recoverExisting → ConflictException). notFound: cross-user or missing key.
+  @ApiCommonErrors({ auth: true, notFound: true, conflict: true })
   async confirm(
-    @Req() req: FastifyRequest & { user: AuthenticatedSession },
+    @CurrentUser() user: AuthenticatedSession,
     @Body() dto: ConfirmUploadDto,
   ): Promise<StoredFile> {
     // Treat a cross-user key as missing so object existence is not disclosed. Shape validation
     // happens in ConfirmUploadDto; this ownership check must run before any S3 request.
-    if (!dto.key.startsWith(`uploads/${req.user.userId}/`)) {
+    if (!dto.key.startsWith(`uploads/${user.userId}/`)) {
       throw this.objectNotFound(dto.key);
     }
 
@@ -189,7 +198,7 @@ export class UploadController {
     const dotIndex = dto.key.lastIndexOf('.');
     const extension = dotIndex >= 0 ? dto.key.slice(dotIndex) : '';
     const fileId = generateId();
-    const finalKey = `files/${req.user.userId}/${fileId}${extension}`;
+    const finalKey = `files/${user.userId}/${fileId}${extension}`;
     // Signing is offline and does not require the destination to exist. Do it before the
     // destructive finalize step so a signing/configuration failure leaves staging retryable.
     const url = await this.storage.getSignedUrl(finalKey, undefined, meta.bucket);
@@ -197,7 +206,7 @@ export class UploadController {
       await this.prisma.db.storedFile.create({
         data: {
           id: fileId,
-          userId: req.user.userId,
+          userId: user.userId,
           sourceKey: dto.key,
           key: finalKey,
           bucket: meta.bucket,
@@ -253,7 +262,12 @@ export class UploadController {
     await this.verifyQueue
       .add(
         'verify-magic-bytes',
-        { key: finalKey, declaredContentType: meta.contentType, bucket: meta.bucket },
+        {
+          key: finalKey,
+          declaredContentType: meta.contentType,
+          bucket: meta.bucket,
+          correlationId: this.correlationId,
+        },
         {
           jobId: verificationJobId(finalKey),
           attempts: 3,
@@ -293,7 +307,12 @@ export class UploadController {
       await this.verifyQueue
         .add(
           'verify-magic-bytes',
-          { key: record.key, declaredContentType: record.contentType, bucket: record.bucket },
+          {
+            key: record.key,
+            declaredContentType: record.contentType,
+            bucket: record.bucket,
+            correlationId: this.correlationId,
+          },
           {
             jobId: verificationJobId(record.key),
             attempts: 3,

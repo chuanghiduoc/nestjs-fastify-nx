@@ -3,7 +3,7 @@ import type { HealthIndicatorResult } from '@nestjs/terminus';
 import { HealthIndicatorService } from '@nestjs/terminus';
 import { ConfigService } from '@nestjs/config';
 import { Queue } from 'bullmq';
-import { redisReconnectStrategy } from '@nestjs-fastify-nx/shared';
+import { redisReconnectStrategy, withTimeout } from '@nestjs-fastify-nx/shared';
 import type { EnvConfig } from '../../config/env.validation';
 import { QUEUE_NAMES } from '../../app/constants/queue.constants';
 
@@ -11,14 +11,6 @@ const PROBE_TIMEOUT_MS = 2_000;
 // Sanitized marker — Redis/BullMQ internals (host, prefix, key names) must not leak into the
 // public /health/dependencies response. Raw cause is logged server-side instead.
 const SANITIZED_ERROR = 'probe_failed';
-
-function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
-  let timer: NodeJS.Timeout | undefined;
-  const timeout = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(new Error(`Health probe timed out after ${ms}ms`)), ms);
-  });
-  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
-}
 
 @Injectable()
 export class BullMqHealthIndicator implements OnModuleDestroy {
@@ -56,7 +48,7 @@ export class BullMqHealthIndicator implements OnModuleDestroy {
       // getJobCounts exercises the queue end-to-end (Redis connection + prefix
       // + queue key lookup) without touching BullMQ's IRedisClient internals —
       // 5.77.x narrowed that type so `ping` is no longer publicly exposed.
-      await withTimeout(this.queue.getJobCounts('waiting'), PROBE_TIMEOUT_MS);
+      await withTimeout(this.queue.getJobCounts('waiting'), PROBE_TIMEOUT_MS, 'Health probe');
       return indicator.up();
     } catch (err) {
       this.logger.warn(`bullmq readiness probe failed: ${String(err)}`);

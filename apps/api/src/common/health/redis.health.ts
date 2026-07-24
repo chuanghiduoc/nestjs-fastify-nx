@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import type { HealthIndicatorResult } from '@nestjs/terminus';
 import { HealthIndicatorService } from '@nestjs/terminus';
 import Redis from 'ioredis';
+import { withTimeout } from '@nestjs-fastify-nx/shared';
 import type { EnvConfig } from '../../config/env.validation';
 
 const PROBE_TIMEOUT_MS = 2_000;
@@ -12,15 +13,6 @@ const PROBE_RECONNECT_CAP_MS = 2_000;
 interface RedisTarget {
   readonly host: string;
   readonly port: number;
-}
-
-function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
-  // Always clearTimeout in finally — otherwise the closure blocks clean shutdown.
-  let timer: NodeJS.Timeout | undefined;
-  const timeout = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(new Error(`Health probe timed out after ${ms}ms`)), ms);
-  });
-  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
 
 abstract class BaseRedisHealthIndicator implements OnModuleDestroy {
@@ -55,7 +47,7 @@ abstract class BaseRedisHealthIndicator implements OnModuleDestroy {
   async isHealthy(key: string): Promise<HealthIndicatorResult> {
     const indicator = this.healthIndicator.check(key);
     try {
-      const result = await withTimeout(this.redis.ping(), PROBE_TIMEOUT_MS);
+      const result = await withTimeout(this.redis.ping(), PROBE_TIMEOUT_MS, 'Health probe');
       if (result !== 'PONG') {
         return indicator.down({ message: `${key} ping returned ${String(result)}` });
       }

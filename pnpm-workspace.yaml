@@ -59,7 +59,10 @@ overrides:
   hono: '4.12.27'
   immutable: '5.1.8'
   svgo: '4.0.2'
-  '@babel/plugin-transform-modules-systemjs': '>=7.29.4'
+  # Security floor (>=7.29.4) but capped below 8: 8.x demands @babel/core ^8 while the toolchain
+  # (nx → @babel/preset-env 7.x) pins @babel/core 7, so an open >= let pnpm jump to 8.0.1 and fail
+  # strictPeerDependencies on any lockfile-updating install. 7.29.7 carries the same fix.
+  '@babel/plugin-transform-modules-systemjs': '>=7.29.4 <8'
   esbuild: '>=0.28.1'
   kysely: '>=0.28.17'
   protobufjs: '>=8.0.2'

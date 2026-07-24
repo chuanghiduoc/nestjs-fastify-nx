@@ -10,6 +10,8 @@ export interface UploadVerificationPayload {
   key: string;
   declaredContentType: string;
   bucket: string;
+  // Propagated from the originating /upload/confirm request so worker logs correlate with it.
+  correlationId?: string;
 }
 
 const MAGIC_BYTES_TO_READ = 16; // covers all signatures in file-signature.ts
@@ -27,14 +29,14 @@ export class UploadVerificationProcessor extends WorkerHost {
   }
 
   async process(job: Job<UploadVerificationPayload>): Promise<void> {
-    const { key, declaredContentType, bucket } = job.data;
+    const { key, declaredContentType, bucket, correlationId } = job.data;
 
     const head = Buffer.from(await this.storage.readRange(key, MAGIC_BYTES_TO_READ, bucket));
     const detected = detectFileType(head);
 
     if (!detected) {
       this.logger.warn(
-        { key, declaredContentType },
+        { key, declaredContentType, correlationId },
         `verify-magic-bytes: no signature match — deleting object as unrecognized binary`,
       );
       await this.reject(key, bucket, 'Unrecognized binary signature');
@@ -43,7 +45,7 @@ export class UploadVerificationProcessor extends WorkerHost {
 
     if (detected.mimeType !== declaredContentType) {
       this.logger.warn(
-        { key, declaredContentType, detected: detected.mimeType },
+        { key, declaredContentType, detected: detected.mimeType, correlationId },
         `verify-magic-bytes: MIME mismatch — deleting tampered upload`,
       );
       await this.reject(
@@ -59,7 +61,10 @@ export class UploadVerificationProcessor extends WorkerHost {
       data: { status: STORED_FILE_STATUS.READY, verifiedAt: new Date(), failureReason: null },
     });
 
-    this.logger.log(`verify-magic-bytes: ${key} matches declared ${declaredContentType}`);
+    this.logger.log(
+      { key, declaredContentType, correlationId },
+      `verify-magic-bytes: ${key} matches declared ${declaredContentType}`,
+    );
   }
 
   private async reject(key: string, bucket: string, failureReason: string): Promise<void> {

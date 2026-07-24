@@ -56,8 +56,37 @@ const HTTP_STATUS_TO_I18N_KEY: Record<number, string> = {
   [HttpStatus.UNPROCESSABLE_ENTITY]: I18N_KEYS.common.unprocessable_entity,
   [HttpStatus.TOO_MANY_REQUESTS]: I18N_KEYS.common.too_many_requests,
   [HttpStatus.INTERNAL_SERVER_ERROR]: I18N_KEYS.common.internal_server_error,
+  [HttpStatus.SERVICE_UNAVAILABLE]: I18N_KEYS.common.service_unavailable,
   [HttpStatus.GATEWAY_TIMEOUT]: I18N_KEYS.common.request_timeout,
 };
+
+// Safety-net for Prisma errors that reach the global filter unhandled — maps the well-known codes to a
+// correct client status instead of a blanket 500. The raw Prisma message (which can name tables,
+// columns, and constraints) is NEVER sent to the client: only the mapped status/code/title go out, and
+// the full error is logged server-side. Explicit domain handling (BusinessRuleException, per-handler
+// try/catch) still takes precedence — this only fires when nothing else classified the error.
+const PRISMA_ERROR_MAP: Record<string, { status: number; code: string }> = {
+  P2002: { status: HttpStatus.CONFLICT, code: ERROR_CODES.CONFLICT }, // unique constraint violation
+  P2003: { status: HttpStatus.CONFLICT, code: ERROR_CODES.CONFLICT }, // foreign-key constraint violation
+  P2025: { status: HttpStatus.NOT_FOUND, code: ERROR_CODES.NOT_FOUND }, // record required but not found
+  P2023: { status: HttpStatus.BAD_REQUEST, code: ERROR_CODES.BAD_REQUEST }, // inconsistent column data (e.g. malformed UUID)
+  P2028: { status: HttpStatus.SERVICE_UNAVAILABLE, code: ERROR_CODES.SERVICE_UNAVAILABLE }, // transaction API error/timeout
+  P2024: { status: HttpStatus.SERVICE_UNAVAILABLE, code: ERROR_CODES.SERVICE_UNAVAILABLE }, // connection-pool timeout
+};
+
+// Structural detection (not `instanceof`) so the filter needs no compile-time dependency on
+// @prisma/client internals. Matches Prisma's known-request errors, which always carry a `Pxxxx` code.
+export function isPrismaKnownError(
+  exception: unknown,
+): exception is { code: string; name: string } {
+  return (
+    typeof exception === 'object' &&
+    exception !== null &&
+    (exception as { name?: unknown }).name === 'PrismaClientKnownRequestError' &&
+    typeof (exception as { code?: unknown }).code === 'string' &&
+    /^P\d{4}$/.test((exception as { code: string }).code)
+  );
+}
 
 @Catch()
 export class GlobalExceptionFilter implements ExceptionFilter {
@@ -105,6 +134,18 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       this.logger.warn(
         { statusCode: normalized.status, url: request.url, code: normalized.code },
         'Auth rejected request',
+      );
+    } else if (isPrismaKnownError(exception)) {
+      // A Prisma error mapped to a 4xx would otherwise be swallowed silently — log the code (safe;
+      // no schema detail) so an unhandled DB condition reaching the global filter stays observable.
+      this.logger.warn(
+        {
+          prismaCode: exception.code,
+          statusCode: normalized.status,
+          url: request.url,
+          code: normalized.code,
+        },
+        'Prisma error mapped to client response by global filter',
       );
     }
 
@@ -207,6 +248,21 @@ export function normalizeException(exception: unknown): NormalizedError {
           ? problem.code
           : resolveFastifyCode(exception, status),
     };
+  }
+
+  // Prisma safety-net: only MAPPED codes are reclassified; an unmapped Prisma error falls through to
+  // the redacted 500 below (it is an unexpected fault, not a client-correctable condition). Detail is
+  // left undefined so translateNormalized fills a generic localized message — the raw Prisma message
+  // is never surfaced.
+  if (isPrismaKnownError(exception)) {
+    const mapped = PRISMA_ERROR_MAP[exception.code];
+    if (mapped) {
+      return {
+        status: mapped.status,
+        title: HTTP_STATUS_TITLES[mapped.status] ?? 'Error',
+        code: mapped.code,
+      };
+    }
   }
 
   if (!(exception instanceof HttpException)) {

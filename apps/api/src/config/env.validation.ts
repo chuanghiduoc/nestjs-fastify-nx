@@ -305,6 +305,17 @@ const envSchema = z
       });
     }
 
+    // In-process publishing (EventEmitter2) loses domain events on crash/rollback. Production must use
+    // the transactional outbox so events survive process death — matches the documented architecture.
+    if (data.EVENT_PUBLISHER_DRIVER !== 'outbox') {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['EVENT_PUBLISHER_DRIVER'],
+        message:
+          'EVENT_PUBLISHER_DRIVER must be "outbox" in production for durable, crash-safe event delivery',
+      });
+    }
+
     if (!/^postgres(ql)?:\/\//.test(data.DATABASE_URL)) {
       ctx.addIssue({
         code: 'custom',

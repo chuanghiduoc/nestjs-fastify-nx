@@ -174,6 +174,35 @@ describe('createWsAuthMiddleware', () => {
       );
     });
 
+    it('ignores a spoofed X-Forwarded-For when trustProxyHops is 0 (the default)', async () => {
+      const auth = makeAuth(VALID_SESSION);
+      const redis = makeRedis(1);
+      // trustProxyHops defaults to 0 -> XFF must never be consulted, even when an attacker sends it.
+      const middleware = createWsAuthMiddleware(auth, { redis, maxConcurrentPerIp: 50 });
+      const socket = makeSocket({
+        auth: { token: 'tok' },
+        connRemoteAddress: '10.0.0.10',
+        headers: { 'x-forwarded-for': '203.0.113.20' },
+      });
+
+      await middleware(socket as unknown as Socket, vi.fn());
+
+      expect(redis.eval).toHaveBeenCalledWith(
+        expect.any(String),
+        1,
+        expect.stringContaining('10.0.0.10'),
+        expect.any(String),
+        '600000',
+        'socket-1',
+      );
+      expect(redis.eval).not.toHaveBeenCalledWith(
+        expect.any(String),
+        1,
+        expect.stringContaining('203.0.113.20'),
+        expect.anything(),
+      );
+    });
+
     it('uses the first untrusted address behind the configured proxy hops', async () => {
       const auth = makeAuth(VALID_SESSION);
       const redis = makeRedis(1);
@@ -194,6 +223,36 @@ describe('createWsAuthMiddleware', () => {
         expect.any(String),
         1,
         expect.stringContaining('203.0.113.20'),
+        expect.any(String),
+        '600000',
+        'socket-1',
+      );
+    });
+
+    it('uses the first entry when X-Forwarded-For arrives as an array of header values', async () => {
+      const auth = makeAuth(VALID_SESSION);
+      const redis = makeRedis(1);
+      const middleware = createWsAuthMiddleware(auth, {
+        redis,
+        maxConcurrentPerIp: 50,
+        trustProxyHops: 1,
+      });
+      const socket = makeSocket({
+        auth: { token: 'tok' },
+        connRemoteAddress: '10.0.0.10',
+      });
+      // Node normalizes repeated headers into an array; proxy-addr's underlying `forwarded` parser
+      // only understands a single string, so this must be flattened before it is handed off.
+      (socket.handshake.headers as Record<string, unknown>)['x-forwarded-for'] = [
+        '203.0.113.20, 10.0.0.5',
+      ];
+
+      await middleware(socket as unknown as Socket, vi.fn());
+
+      expect(redis.eval).toHaveBeenCalledWith(
+        expect.any(String),
+        1,
+        expect.stringContaining('10.0.0.5'),
         expect.any(String),
         '600000',
         'socket-1',

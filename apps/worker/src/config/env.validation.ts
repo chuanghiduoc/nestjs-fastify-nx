@@ -142,6 +142,15 @@ const workerEnvSchema = z
         message: 'Must not use default value in production',
       });
     }
+    // The worker is the process that actually sends mail, so it must fail loudly at boot on a default
+    // SMTP host rather than let every email job fail at runtime (mirrors the api validator).
+    if (data.MAIL_HOST === 'localhost') {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['MAIL_HOST'],
+        message: 'MAIL_HOST must point to a real SMTP server in production',
+      });
+    }
     if (data.MAIL_DEFAULT_EMAIL === 'noreply@example.com') {
       ctx.addIssue({
         code: 'custom',

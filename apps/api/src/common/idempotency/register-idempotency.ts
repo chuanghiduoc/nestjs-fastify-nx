@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { HttpStatus } from '@nestjs/common';
+import { parse as parseCookie } from 'cookie';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type Redis from 'ioredis';
 import { ERROR_CODES } from '@nestjs-fastify-nx/contracts';
@@ -49,12 +50,16 @@ function canonicalize(value: unknown): unknown {
 // Authenticated requests scope by session token, anonymous ones by client IP. Two principals thus
 // never collide on — nor replay — each other's cached response for the same key.
 function extractPrincipal(req: FastifyRequest): string {
-  const cookie = req.headers.cookie;
-  if (typeof cookie === 'string') {
-    // Better Auth prefixes secure production cookies with `__Secure-`. Missing that variant
-    // falls back to IP scope and lets users behind the same NAT collide on idempotency records.
-    const match = cookie.match(/(?:^|;\s*)(?:__Secure-)?better-auth\.session_token=([^;]+)/);
-    if (match) return `s:${match[1]}`;
+  const cookieHeader = req.headers.cookie;
+  if (typeof cookieHeader === 'string') {
+    const parsed = parseCookie(cookieHeader);
+    // Better Auth uses the `__Secure-` cookie in production (HTTPS) and the bare name in dev. Prefer
+    // `__Secure-`, and use `||` (not `??`) so an empty leftover cookie value (`...session_token=`)
+    // does NOT shadow a real token and silently drop the request to IP scope — which would let two
+    // users behind the same NAT collide on idempotency records.
+    const token =
+      parsed['__Secure-better-auth.session_token'] || parsed['better-auth.session_token'];
+    if (token) return `s:${token}`;
   }
   return `ip:${req.ip}`;
 }

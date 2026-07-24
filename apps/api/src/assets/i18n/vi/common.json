@@ -9,5 +9,6 @@
   "payload_too_large": "Dữ liệu gửi lên vượt quá giới hạn cho phép.",
   "unsupported_media_type": "Định dạng nội dung không được hỗ trợ.",
   "unprocessable_entity": "Yêu cầu hợp lệ nhưng không thể xử lý.",
-  "request_timeout": "Máy chủ xử lý yêu cầu quá lâu. Vui lòng thử lại."
+  "request_timeout": "Máy chủ xử lý yêu cầu quá lâu. Vui lòng thử lại.",
+  "service_unavailable": "Dịch vụ tạm thời không khả dụng. Vui lòng thử lại sau giây lát."
 }
