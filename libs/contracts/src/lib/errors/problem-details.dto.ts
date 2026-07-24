@@ -127,12 +127,14 @@ export class ValidationErrorItemDto {
       'Value received from the client that failed validation. Free-form: mirrors the offending input, which may be any JSON type (string, number, boolean, object or array). Sensitive fields are redacted.',
     // `received` is genuinely polymorphic (class-validator's raw `err.value`). Declaring `oneOf`
     // makes @nestjs/swagger drop the reflected `type: 'object'`, so orval emits a truthful union
-    // instead of mis-typing every offending value as an object map.
+    // instead of mis-typing every offending value as an object map. The object branch is `nullable`
+    // because a field failing @IsNotEmpty can carry a `null` value — OpenAPI 3.0 admits null only via
+    // a per-branch `nullable`, not a top-level one.
     oneOf: [
       { type: 'string' },
       { type: 'number' },
       { type: 'boolean' },
-      { type: 'object' },
+      { type: 'object', nullable: true },
       { type: 'array', items: {} },
     ],
     example: 0,

@@ -190,7 +190,7 @@ async function mergeBetterAuthSpec(app: INestApplication, document: OpenAPIObjec
       ensurePathParameters(fullPath, tagged);
       normalizeAuthInfraErrors(tagged);
       assignMissingOperationIds(fullPath, tagged);
-      if (PUBLIC_AUTH_PATHS.has(fullPath)) clearOperationSecurity(tagged);
+      applyCookieOnlySecurity(fullPath, tagged);
       document.paths[fullPath] = tagged;
     }
   }
@@ -203,21 +203,15 @@ async function mergeBetterAuthSpec(app: INestApplication, document: OpenAPIObjec
     } as NonNullable<typeof document.components.schemas>;
   }
 
-  // Merge securitySchemes too: Better Auth's operations reference `bearerAuth`, whose definition
-  // lives here. Without this the referenced scheme is undefined — an invalid spec (dangling ref) that
-  // breaks strict validators and Scalar's Authorize for every /api/auth/* route.
-  if (converted.components?.securitySchemes) {
-    document.components = document.components ?? {};
-    document.components.securitySchemes = {
-      ...(document.components.securitySchemes ?? {}),
-      ...converted.components.securitySchemes,
-    } as NonNullable<typeof document.components.securitySchemes>;
-  }
+  // Deliberately DO NOT merge Better Auth's securitySchemes (`bearerAuth`, `apiKeyCookie`).
+  // applyCookieOnlySecurity rewrites every auth operation to reference our `session` cookie scheme,
+  // so those schemes would be unreferenced — and merging `bearerAuth` would advertise an access-token
+  // flow this repo does not use (auth is the `better-auth.session_token` cookie, never a bearer token).
 }
 
 interface AuthOpenApiDocument {
   paths?: Record<string, unknown>;
-  components?: { schemas?: Record<string, unknown>; securitySchemes?: Record<string, unknown> };
+  components?: { schemas?: Record<string, unknown> };
   [key: string]: unknown;
 }
 
@@ -253,12 +247,16 @@ function assignMissingOperationIds(fullPath: string, pathItem: Record<string, un
   }
 }
 
-// Public credential routes require no auth — drop the (bearer) security Better Auth attached so the
-// docs don't claim a token is needed to sign in / reset a password.
-function clearOperationSecurity(pathItem: Record<string, unknown>): void {
+// Better Auth's generated spec blanket-marks every operation with `bearerAuth` (access-token flow).
+// This repo authenticates auth routes with the `better-auth.session_token` COOKIE, never a bearer
+// token, so advertising bearer would contradict the auth contract (and the "NOT JWT" invariant).
+// Rewrite each merged auth operation to the cookie `session` scheme — public credential routes
+// (sign-in/up, password reset) need no session, so they get an empty requirement.
+function applyCookieOnlySecurity(fullPath: string, pathItem: Record<string, unknown>): void {
+  const isPublic = PUBLIC_AUTH_PATHS.has(fullPath);
   for (const method of HTTP_METHODS) {
     const op = pathItem[method] as { security?: unknown } | undefined;
-    if (op && typeof op === 'object') op.security = [];
+    if (op && typeof op === 'object') op.security = isPublic ? [] : [{ session: [] }];
   }
 }
 
