@@ -6,12 +6,15 @@ import { errorTypeUrl } from '../errors/error-codes';
 const PROBLEM_JSON = 'application/problem+json';
 
 // Fixed sample values so every documented error renders a self-consistent body. They are illustrative
-// only — `requestId`/`timestamp`/`instance` are populated per request at runtime.
+// only — at runtime `requestId`/`timestamp` are generated per request and `instance` is the actual
+// request path. `instance` is a neutral placeholder (NOT a real route) because this decorator is
+// shared across every controller and can't know the specific path at decoration time; a concrete
+// path like `/api/v1/users/me` would show under unrelated endpoints and misread as their real path.
 const EXAMPLE_REQUEST_ID = '4bf92f3577b34da6a3ce929d0e0e4736';
 const EXAMPLE_TIMESTAMP = '2026-04-30T22:28:27.356Z';
-const EXAMPLE_INSTANCE = '/api/v1/users/me';
+const EXAMPLE_INSTANCE = '/api/v1/resource';
 
-interface ProblemExampleInput {
+export interface ProblemExampleInput {
   status: number;
   code: string;
   title: string;
@@ -22,7 +25,9 @@ interface ProblemExampleInput {
 // Swagger UI would otherwise synthesize one body from the DTO's property-level examples and show the
 // SAME (404-flavoured) payload under every status tab. Attaching an explicit `example` per status is
 // what makes the 401/403/409/… tabs render a body whose `status`/`code`/`title` actually match the tab.
-const problemExample = ({ status, code, title, detail }: ProblemExampleInput) => ({
+// Exported so other spec spots that reuse `$ref: ProblemDetailsDto` (Better Auth 429/500, health 503)
+// attach a status-matched example the same way instead of falling back to the misleading default.
+export const buildProblemExample = ({ status, code, title, detail }: ProblemExampleInput) => ({
   type: errorTypeUrl(code),
   title,
   status,
@@ -39,7 +44,7 @@ const problemResponse = (input: ProblemExampleInput & { description: string }) =
   content: {
     [PROBLEM_JSON]: {
       schema: { $ref: '#/components/schemas/ProblemDetailsDto' },
-      example: problemExample(input),
+      example: buildProblemExample(input),
     },
   },
 });
@@ -51,18 +56,20 @@ const validationResponse = () => ({
     [PROBLEM_JSON]: {
       schema: { $ref: '#/components/schemas/ValidationProblemDetailsDto' },
       example: {
-        ...problemExample({
+        ...buildProblemExample({
           status: HttpStatus.UNPROCESSABLE_ENTITY,
           code: 'validation_failed',
           title: 'Unprocessable Entity',
           detail: 'The request failed validation — see `errors[]`.',
         }),
+        // Field-agnostic sample: this decorator is shared across every endpoint, so a concrete field
+        // like `email`/isEmail would appear (and mislead) on routes that have no such field.
         errors: [
           {
-            path: 'email',
+            path: 'fieldName',
             code: 'invalid',
-            message: 'Must be a valid email address.',
-            rule: 'isEmail',
+            message: 'This field failed validation.',
+            rule: 'isNotEmpty',
           },
         ],
       },

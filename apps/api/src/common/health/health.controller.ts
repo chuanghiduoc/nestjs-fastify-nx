@@ -2,7 +2,7 @@ import { applyDecorators, Controller, Get, HttpStatus, UseGuards } from '@nestjs
 import { HealthCheck, HealthCheckService, MemoryHealthIndicator } from '@nestjs/terminus';
 import { SkipThrottle } from '@nestjs/throttler';
 import { ApiOkResponse, ApiOperation, ApiProperty, ApiResponse, ApiTags } from '@nestjs/swagger';
-import { ApiCommonErrors } from '@nestjs-fastify-nx/contracts';
+import { ApiCommonErrors, buildProblemExample } from '@nestjs-fastify-nx/contracts';
 import { Public } from '@nestjs-fastify-nx/infra-auth';
 import { PrismaReplicationLagHealthIndicator } from '@nestjs-fastify-nx/infra-database';
 import { MetricsIpAllowGuard } from '../metrics/metrics-ip-allow.guard';
@@ -89,7 +89,20 @@ function ApiServiceUnavailableProblem(description: string) {
       status: HttpStatus.SERVICE_UNAVAILABLE,
       description,
       content: {
-        [PROBLEM_JSON]: { schema: { $ref: '#/components/schemas/ProblemDetailsDto' } },
+        [PROBLEM_JSON]: {
+          schema: { $ref: '#/components/schemas/ProblemDetailsDto' },
+          // Status-matched example: without it Swagger/Scalar renders the schema's default 404 body
+          // under the 503 tab. Includes the `checks` extension the filter attaches for probe failures.
+          example: {
+            ...buildProblemExample({
+              status: HttpStatus.SERVICE_UNAVAILABLE,
+              code: 'service_unavailable',
+              title: 'Service Unavailable',
+              detail: description,
+            }),
+            checks: { redis_cache: { status: 'down', message: 'redis_cache check failed' } },
+          },
+        },
       },
     }),
   );

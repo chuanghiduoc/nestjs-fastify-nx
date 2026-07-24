@@ -3,9 +3,8 @@ import { Logger } from '@nestjs/common';
 import type { OpenAPIObject } from '@nestjs/swagger';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import {
+  buildProblemExample,
   ListResponseDto,
-  PageMetaDto,
-  PaginationDto,
   ProblemDetailsDto,
   ValidationErrorItemDto,
   ValidationProblemDetailsDto,
@@ -16,30 +15,52 @@ import ScalarApiReference from '@scalar/fastify-api-reference';
 
 const API_TITLE = 'NestJS Fastify Nx Boilerplate';
 const PROBLEM_JSON = 'application/problem+json';
-const SESSION_COOKIE = 'better-auth.session_token';
+const SESSION_COOKIE_BASE = 'better-auth.session_token';
 const DOCS_ROUTE_PREFIX = '/docs';
 const REQUEST_ID_HEADER = 'X-Request-Id';
 const AUTH_PATH_PREFIX = '/api/auth';
 const AUTH_TAG = 'auth';
 
+// Credential paths that create a session (no auth required yet). Better Auth's generated spec marks
+// them as secured — strip that so they aren't documented as needing a token.
+const PUBLIC_AUTH_PATHS = new Set([
+  `${AUTH_PATH_PREFIX}/sign-in/email`,
+  `${AUTH_PATH_PREFIX}/sign-up/email`,
+  `${AUTH_PATH_PREFIX}/request-password-reset`,
+  `${AUTH_PATH_PREFIX}/reset-password`,
+  `${AUTH_PATH_PREFIX}/forget-password`,
+]);
+
 const logger = new Logger('Swagger');
 
-const DESCRIPTION = [
-  'Production-ready REST + GraphQL API built on NestJS, Fastify and Nx.',
-  '',
-  '### Authentication',
-  `Session-based via [Better Auth](https://better-auth.com). Endpoints under \`${AUTH_PATH_PREFIX}/*\` (tagged **${AUTH_TAG}**) cover sign-up, sign-in, sign-out, social providers, password reset and session lookup. Protected resource endpoints require the \`${SESSION_COOKIE}\` cookie — click **Authorize** and paste the value to try them out.`,
-  '',
-  '### Response shapes',
-  '',
-  '- **Success** — endpoints return the resource directly (Stripe-style: no envelope). List endpoints return a `ListResponseDto` with `object: "list"`, `data[]`, and `hasMore`.',
-  '- **Errors** — every error response uses [RFC 9457 Problem Details](https://www.rfc-editor.org/rfc/rfc9457) with `Content-Type: application/problem+json`. Branch on the `code` field (snake_case, stable) — never the human-readable `title`/`detail`.',
-  '- **Validation errors** carry an additional `errors[]` array with one entry per offending field; entries include `path`, `code`, `message`, `rule`, and `constraint`.',
-  '',
-  '### Correlation',
-  '',
-  `Every response carries an \`${REQUEST_ID_HEADER}\` header (also mirrored as \`requestId\` in error bodies). Quote it when filing support tickets.`,
-].join('\n');
+// Better Auth adds `__Secure-` to the cookie name when it issues secure cookies (production, or any
+// https baseURL). setupSwagger runs off-production, so resolve the real name for the https-staging
+// case rather than hardcoding — the Authorize field must match the cookie actually sent.
+function resolveSessionCookieName(): string {
+  const secure =
+    process.env['NODE_ENV'] === 'production' ||
+    (process.env['BETTER_AUTH_URL'] ?? '').startsWith('https://');
+  return secure ? `__Secure-${SESSION_COOKIE_BASE}` : SESSION_COOKIE_BASE;
+}
+
+function buildDescription(sessionCookie: string): string {
+  return [
+    'Production-ready REST + GraphQL API built on NestJS, Fastify and Nx.',
+    '',
+    '### Authentication',
+    `Session-based via [Better Auth](https://better-auth.com). Endpoints under \`${AUTH_PATH_PREFIX}/*\` (tagged **${AUTH_TAG}**) cover sign-up, sign-in, sign-out, social providers, password reset and session lookup. Protected resource endpoints require the \`${sessionCookie}\` cookie — click **Authorize** and paste the value to try them out.`,
+    '',
+    '### Response shapes',
+    '',
+    '- **Success** — endpoints return the resource directly (Stripe-style: no envelope). List endpoints return a `ListResponseDto` with `object: "list"`, `data[]`, and `hasMore`.',
+    '- **Errors** — every error response uses [RFC 9457 Problem Details](https://www.rfc-editor.org/rfc/rfc9457) with `Content-Type: application/problem+json`. Branch on the `code` field (snake_case, stable) — never the human-readable `title`/`detail`.',
+    '- **Validation errors** carry an additional `errors[]` array with one entry per offending field; entries include `path`, `code`, `message`, `rule`, and `constraint`.',
+    '',
+    '### Correlation',
+    '',
+    `Every response carries an \`${REQUEST_ID_HEADER}\` header (also mirrored as \`requestId\` in error bodies). Quote it when filing support tickets.`,
+  ].join('\n');
+}
 
 // OpenAPI contract version — deliberately decoupled from the package release
 // version. `nx release` bumps package.json on every release; tying the spec to
@@ -53,9 +74,10 @@ function camelCase(input: string): string {
 }
 
 export async function buildSwaggerDocument(app: INestApplication): Promise<OpenAPIObject> {
+  const sessionCookie = resolveSessionCookieName();
   const builder = new DocumentBuilder()
     .setTitle(API_TITLE)
-    .setDescription(DESCRIPTION)
+    .setDescription(buildDescription(sessionCookie))
     .setVersion(API_VERSION)
     .setLicense('MIT', 'https://opensource.org/licenses/MIT')
     .addServer('/', 'Current host')
@@ -66,11 +88,11 @@ export async function buildSwaggerDocument(app: INestApplication): Promise<OpenA
     .addTag('admin', 'Admin-only operations (requires ADMIN role)')
     .addTag('upload', 'File upload')
     .addCookieAuth(
-      SESSION_COOKIE,
+      sessionCookie,
       {
         type: 'apiKey',
         in: 'cookie',
-        name: SESSION_COOKIE,
+        name: sessionCookie,
         description: `Session cookie issued by POST ${AUTH_PATH_PREFIX}/sign-in/email.`,
       },
       'session',
@@ -85,13 +107,14 @@ export async function buildSwaggerDocument(app: INestApplication): Promise<OpenA
       const method = methodKey.charAt(0).toUpperCase() + methodKey.slice(1);
       return `${controller}${method}`;
     },
+    // Only models referenced by $ref that Nest can't auto-discover: the problem-details shapes and
+    // the generic list envelope (composed via allOf in ApiPaginatedResponse). The offset PaginationDto
+    // is a query DTO (inlined per-endpoint), so registering it here would only emit a dead schema.
     extraModels: [
       ProblemDetailsDto,
       ValidationProblemDetailsDto,
       ValidationErrorItemDto,
       ListResponseDto,
-      PageMetaDto,
-      PaginationDto,
     ],
   });
 
@@ -104,7 +127,6 @@ export async function buildSwaggerDocument(app: INestApplication): Promise<OpenA
 
 // Better Auth re-uses the same `operationId` across GET/POST variants of the same path. The OpenAPI spec requires uniqueness, and Orval's codegen breaks on collisions — suffix the duplicates with their HTTP method.
 function dedupeOperationIds(document: OpenAPIObject): void {
-  const HTTP_METHODS = ['get', 'put', 'post', 'delete', 'options', 'head', 'patch', 'trace'];
   const seen = new Set<string>();
 
   for (const pathItem of Object.values(document.paths ?? {})) {
@@ -167,6 +189,8 @@ async function mergeBetterAuthSpec(app: INestApplication, document: OpenAPIObjec
       const tagged = tagOperations(pathItem, AUTH_TAG) as Record<string, unknown>;
       ensurePathParameters(fullPath, tagged);
       normalizeAuthInfraErrors(tagged);
+      assignMissingOperationIds(fullPath, tagged);
+      applyCookieOnlySecurity(fullPath, tagged);
       document.paths[fullPath] = tagged;
     }
   }
@@ -178,6 +202,11 @@ async function mergeBetterAuthSpec(app: INestApplication, document: OpenAPIObjec
       ...converted.components.schemas,
     } as NonNullable<typeof document.components.schemas>;
   }
+
+  // Deliberately DO NOT merge Better Auth's securitySchemes (`bearerAuth`, `apiKeyCookie`).
+  // applyCookieOnlySecurity rewrites every auth operation to reference our `session` cookie scheme,
+  // so those schemes would be unreferenced — and merging `bearerAuth` would advertise an access-token
+  // flow this repo does not use (auth is the `better-auth.session_token` cookie, never a bearer token).
 }
 
 interface AuthOpenApiDocument {
@@ -186,12 +215,56 @@ interface AuthOpenApiDocument {
   [key: string]: unknown;
 }
 
+const HTTP_METHODS = ['get', 'put', 'post', 'delete', 'options', 'head', 'patch', 'trace'] as const;
+
+// Better Auth leaves many merged operations without an operationId. Orval then falls back to ugly
+// path-derived names (getApiAuthRevokeSession…), inconsistent with the clean names elsewhere. Derive
+// a camelCase id from the path segments after /api/auth so codegen method names stay idiomatic;
+// collisions across GET/POST are resolved afterwards by dedupeOperationIds.
+function assignMissingOperationIds(fullPath: string, pathItem: Record<string, unknown>): void {
+  const segments = fullPath
+    .replace(new RegExp(`^${AUTH_PATH_PREFIX}/?`), '')
+    .split('/')
+    .filter(Boolean)
+    .map((segment) => segment.replace(/\{|\}/g, ''));
+  const base = segments
+    .map((segment, index) =>
+      segment
+        .split(/[-_]/)
+        .map((part, partIndex) =>
+          index === 0 && partIndex === 0 ? part : part.charAt(0).toUpperCase() + part.slice(1),
+        )
+        .join(''),
+    )
+    .join('');
+  if (!base) return;
+
+  for (const method of HTTP_METHODS) {
+    const op = pathItem[method] as { operationId?: string } | undefined;
+    if (op && typeof op === 'object' && !op.operationId) {
+      op.operationId = base;
+    }
+  }
+}
+
+// Better Auth's generated spec blanket-marks every operation with `bearerAuth` (access-token flow).
+// This repo authenticates auth routes with the `better-auth.session_token` COOKIE, never a bearer
+// token, so advertising bearer would contradict the auth contract (and the "NOT JWT" invariant).
+// Rewrite each merged auth operation to the cookie `session` scheme — public credential routes
+// (sign-in/up, password reset) need no session, so they get an empty requirement.
+function applyCookieOnlySecurity(fullPath: string, pathItem: Record<string, unknown>): void {
+  const isPublic = PUBLIC_AUTH_PATHS.has(fullPath);
+  for (const method of HTTP_METHODS) {
+    const op = pathItem[method] as { security?: unknown } | undefined;
+    if (op && typeof op === 'object') op.security = isPublic ? [] : [{ session: [] }];
+  }
+}
+
 // Better Auth's spec sometimes inlines `{id}` in a path without declaring the parameter. Inject the missing parameter so strict validators (Orval) accept the merged document.
 function ensurePathParameters(url: string, pathItem: Record<string, unknown>): void {
   const placeholders = [...url.matchAll(/\{([^}]+)\}/g)].map((m) => m[1]);
   if (placeholders.length === 0) return;
 
-  const HTTP_METHODS = ['get', 'put', 'post', 'delete', 'options', 'head', 'patch', 'trace'];
   for (const method of HTTP_METHODS) {
     const op = pathItem[method] as
       { parameters?: Array<{ name?: string; in?: string }> } | undefined;
@@ -218,20 +291,31 @@ function ensurePathParameters(url: string, pathItem: Record<string, unknown>): v
 // route. Rewrite just those two so the documented shape matches the real runtime response.
 // Better Auth's own 2xx/400/401 semantics are left intact (they genuinely return `{ message }`).
 function normalizeAuthInfraErrors(pathItem: Record<string, unknown>): void {
-  const HTTP_METHODS = ['get', 'put', 'post', 'delete', 'options', 'head', 'patch', 'trace'];
-  const INFRA_CODES: Record<string, string> = {
-    '429': 'Rate limit exceeded — see the `Retry-After` response header.',
-    '500': 'Unexpected server error. Quote the `requestId` field when contacting support.',
+  const INFRA_RESPONSES: Record<string, { code: string; title: string; detail: string }> = {
+    '429': {
+      code: 'rate_limited',
+      title: 'Too Many Requests',
+      detail: 'Rate limit exceeded — see the `Retry-After` response header.',
+    },
+    '500': {
+      code: 'internal_server_error',
+      title: 'Internal Server Error',
+      detail: 'Unexpected server error. Quote the `requestId` field when contacting support.',
+    },
   };
   for (const method of HTTP_METHODS) {
     const op = pathItem[method] as { responses?: Record<string, unknown> } | undefined;
     if (!op?.responses) continue;
-    for (const [code, description] of Object.entries(INFRA_CODES)) {
+    for (const [code, cfg] of Object.entries(INFRA_RESPONSES)) {
       if (!op.responses[code]) continue;
       op.responses[code] = {
-        description,
+        description: cfg.detail,
         content: {
-          [PROBLEM_JSON]: { schema: { $ref: '#/components/schemas/ProblemDetailsDto' } },
+          [PROBLEM_JSON]: {
+            schema: { $ref: '#/components/schemas/ProblemDetailsDto' },
+            // Explicit example so the tab shows a 429/500 body, not the schema's default 404 example.
+            example: buildProblemExample({ status: Number(code), ...cfg }),
+          },
         },
       };
     }
@@ -241,7 +325,6 @@ function normalizeAuthInfraErrors(pathItem: Record<string, unknown>): void {
 // Better Auth's openAPI plugin tags every operation with `Default`. Replace it outright so Orval's `tags-split` mode doesn't emit each operation twice (once under `auth`, once under `default`).
 function tagOperations(pathItem: unknown, tag: string): unknown {
   if (!pathItem || typeof pathItem !== 'object') return pathItem;
-  const HTTP_METHODS = ['get', 'put', 'post', 'delete', 'options', 'head', 'patch', 'trace'];
   const cloned: Record<string, unknown> = { ...(pathItem as Record<string, unknown>) };
   for (const method of HTTP_METHODS) {
     const op = cloned[method] as { tags?: string[] } | undefined;
@@ -254,11 +337,12 @@ function tagOperations(pathItem: unknown, tag: string): unknown {
 
 // X-Request-Id is set on every response by CorrelationIdMiddleware + fastify-error-handler. Document it once globally instead of decorating every controller.
 function injectRequestIdResponseHeader(document: OpenAPIObject): void {
-  const HTTP_METHODS = ['get', 'put', 'post', 'delete', 'options', 'head', 'patch', 'trace'];
   const headerSpec = {
     description:
       'Correlation id echoed from the request (or freshly minted). Quote when filing support tickets.',
-    schema: { type: 'string', format: 'uuid' },
+    // Not `format: uuid`: the value is a 32-hex OTel trace id or a `randomBytes(16)` hex string
+    // (no dashes) — a strict validator would reject those against the uuid format.
+    schema: { type: 'string', example: '4bf92f3577b34da6a3ce929d0e0e4736' },
   };
 
   for (const pathItem of Object.values(document.paths ?? {})) {

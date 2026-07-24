@@ -6,7 +6,9 @@ export class ProblemDetailsDto {
     description:
       'A URI reference identifying the problem type. SHOULD resolve to human-readable docs.',
     example: '/errors/not-found',
-    format: 'uri',
+    // uri-reference (not uri): the value is relative when ERROR_DOCS_BASE_URL is unset, matching
+    // `instance`. A strict validator rejects a relative value declared as an absolute `uri`.
+    format: 'uri-reference',
   })
   type!: string;
 
@@ -26,13 +28,15 @@ export class ProblemDetailsDto {
 
   @ApiPropertyOptional({
     description: 'Human-readable explanation specific to this occurrence.',
-    example: 'Cannot GET /admin/queues',
+    example: 'The requested resource does not exist.',
   })
   detail?: string;
 
   @ApiPropertyOptional({
     description: 'URI reference identifying the specific occurrence (typically the request path).',
-    example: '/api/v1/admin/queues',
+    // Neutral placeholder — at runtime this is the actual request path; a real route here would
+    // misread as the failing endpoint under unrelated operations.
+    example: '/api/v1/resource',
     format: 'uri-reference',
   })
   instance?: string;
@@ -40,7 +44,9 @@ export class ProblemDetailsDto {
   @ApiProperty({
     description:
       'Stable, machine-readable error code (snake_case). Use this for client-side i18n keys and logic switching — message text may change without notice.',
-    example: 'route_not_found',
+    // Kept in sync with the `type`/`title`/`status` example above so the schema view renders one
+    // coherent 404 example (not a mix of 404 + route_not_found + 503 checks).
+    example: 'not_found',
   })
   code!: string;
 
@@ -62,7 +68,14 @@ export class ProblemDetailsDto {
     description:
       'Present only on a health-probe 503: the dependencies that reported `down`, so an operator can see which one failed without reading logs.',
     type: 'object',
-    additionalProperties: { type: 'object' },
+    additionalProperties: {
+      type: 'object',
+      properties: {
+        status: { type: 'string', example: 'down' },
+        message: { type: 'string' },
+      },
+      required: ['status'],
+    },
     example: { redis_cache: { status: 'down', message: 'redis_cache check failed' } },
   })
   checks?: Record<string, { status: string; message?: string }>;
@@ -110,7 +123,20 @@ export class ValidationErrorItemDto {
   constraint?: Record<string, unknown>;
 
   @ApiPropertyOptional({
-    description: 'Value received from the client. Sensitive fields are redacted.',
+    description:
+      'Value received from the client that failed validation. Free-form: mirrors the offending input, which may be any JSON type (string, number, boolean, object or array). Sensitive fields are redacted.',
+    // `received` is genuinely polymorphic (class-validator's raw `err.value`). Declaring `oneOf`
+    // makes @nestjs/swagger drop the reflected `type: 'object'`, so orval emits a truthful union
+    // instead of mis-typing every offending value as an object map. The object branch is `nullable`
+    // because a field failing @IsNotEmpty can carry a `null` value — OpenAPI 3.0 admits null only via
+    // a per-branch `nullable`, not a top-level one.
+    oneOf: [
+      { type: 'string' },
+      { type: 'number' },
+      { type: 'boolean' },
+      { type: 'object', nullable: true },
+      { type: 'array', items: {} },
+    ],
     example: 0,
   })
   received?: unknown;
