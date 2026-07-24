@@ -25,6 +25,7 @@ import { setupSwagger } from './common/swagger/swagger.config';
 import { createBullBoardPlugin } from './common/bull-board/create-bull-board-plugin';
 import { registerIdempotency } from './common/idempotency/register-idempotency';
 import { redisFixedWindowIncr } from './common/rate-limit/redis-fixed-window';
+import { flushBufferedReplyHeaders } from './common/http/flush-reply-headers';
 import { applyFastifyProblemDetailsHook } from './common/filters/fastify-error-handler';
 import { buildProblemDetails } from './common/filters/problem-details.helper';
 import type { EnvConfig } from './config/env.validation';
@@ -394,15 +395,10 @@ async function bootstrap() {
       (req.raw as unknown as { body: unknown }).body = req.body;
     }
 
-    // hijack() detaches from Fastify's send pipeline, which is the only thing that flushes headers
-    // buffered via reply.header(). Better Auth's node handler then writes straight to reply.raw and
-    // only MERGES its own headers on the success path, so anything still buffered is dropped —
-    // notably @fastify/cors's Access-Control-* (set in its onRequest hook), which breaks credentialed
-    // cross-origin auth, plus the x-request-id/x-correlation-id set above. Flush them onto the raw
-    // response first; Better Auth's own headers still win via setHeader after this.
-    for (const [name, value] of Object.entries(reply.getHeaders())) {
-      if (value !== undefined) reply.raw.setHeader(name, value);
-    }
+    // Preserve headers buffered by @fastify/cors (Access-Control-*) and the x-request-id/-correlation
+    // headers above across the hijack — Better Auth writes straight to reply.raw and drops whatever is
+    // still buffered. Shared with the e2e test app so the regression test exercises this exact path.
+    flushBufferedReplyHeaders(reply);
     reply.hijack();
 
     let timedOut = false;

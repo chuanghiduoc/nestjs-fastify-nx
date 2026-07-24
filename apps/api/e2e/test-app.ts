@@ -16,6 +16,7 @@ import { AppModule } from '../src/app/app.module';
 import { registerIdempotency } from '../src/common/idempotency/register-idempotency';
 import { ProblemDetailsValidationPipe } from '../src/common/pipes';
 import { applyFastifyProblemDetailsHook } from '../src/common/filters/fastify-error-handler';
+import { flushBufferedReplyHeaders } from '../src/common/http/flush-reply-headers';
 import { buildProblemDetails } from '../src/common/filters/problem-details.helper';
 
 // In-process stub — e2e covers controller logic, not the S3 wire format.
@@ -218,11 +219,9 @@ export async function createTestApp(): Promise<TestAppContext> {
     if (req.body !== undefined && (req.raw as unknown as { body?: unknown }).body === undefined) {
       (req.raw as unknown as { body: unknown }).body = req.body;
     }
-    // Mirror main.ts: flush headers buffered by @fastify/cors's onRequest hook onto the raw response
-    // before hijack, otherwise Better Auth's node handler drops them from the reply.
-    for (const [name, value] of Object.entries(reply.getHeaders())) {
-      if (value !== undefined) reply.raw.setHeader(name, value);
-    }
+    // Use the SAME production helper main.ts calls, so the CORS regression test exercises the real
+    // hijack header-flush path — not a divergent copy that could stay green after a prod regression.
+    flushBufferedReplyHeaders(reply);
     reply.hijack();
     await betterAuthHandler(req.raw, reply.raw);
   };
