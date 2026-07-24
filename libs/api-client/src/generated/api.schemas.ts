@@ -21,7 +21,12 @@
 /**
  * Present only on a health-probe 503: the dependencies that reported `down`, so an operator can see which one failed without reading logs.
  */
-export type ProblemDetailsDtoChecks = { [key: string]: { [key: string]: unknown } };
+export type ProblemDetailsDtoChecks = {
+  [key: string]: {
+    status: string;
+    message?: string;
+  };
+};
 
 export interface ProblemDetailsDto {
   /** A URI reference identifying the problem type. SHOULD resolve to human-readable docs. */
@@ -54,9 +59,10 @@ export interface ProblemDetailsDto {
 export type ValidationErrorItemDtoConstraint = { [key: string]: unknown };
 
 /**
- * Value received from the client. Sensitive fields are redacted.
+ * Value received from the client that failed validation. Free-form: mirrors the offending input, which may be any JSON type (string, number, boolean, object or array). Sensitive fields are redacted.
  */
-export type ValidationErrorItemDtoReceived = { [key: string]: unknown };
+export type ValidationErrorItemDtoReceived =
+  string | number | boolean | { [key: string]: unknown } | unknown[];
 
 export interface ValidationErrorItemDto {
   /** Path to the offending field. Dotted notation for objects, bracket for arrays. */
@@ -71,14 +77,19 @@ export interface ValidationErrorItemDto {
   rule?: string;
   /** Validator constraint parameters (e.g. `{ min: 1 }`, `{ max: 100 }`). */
   constraint?: ValidationErrorItemDtoConstraint;
-  /** Value received from the client. Sensitive fields are redacted. */
+  /** Value received from the client that failed validation. Free-form: mirrors the offending input, which may be any JSON type (string, number, boolean, object or array). Sensitive fields are redacted. */
   received?: ValidationErrorItemDtoReceived;
 }
 
 /**
  * Present only on a health-probe 503: the dependencies that reported `down`, so an operator can see which one failed without reading logs.
  */
-export type ValidationProblemDetailsDtoChecks = { [key: string]: { [key: string]: unknown } };
+export type ValidationProblemDetailsDtoChecks = {
+  [key: string]: {
+    status: string;
+    message?: string;
+  };
+};
 
 export interface ValidationProblemDetailsDto {
   /** A URI reference identifying the problem type. SHOULD resolve to human-readable docs. */
@@ -250,26 +261,20 @@ export const ListResponseDtoObject = {
   list: 'list',
 } as const;
 
-/**
- * Opaque cursor pointing at the last item in `data` — pass back as `startingAfter` to fetch the next page. Present only on cursor-paginated endpoints; null when the result set is empty. Format is `base64url(sortField.toISOString():id)` — clients MUST treat it as opaque. The cursor encodes ONLY the sort position; it does NOT remember filter parameters (`role`, `status`, `search`, etc.). Changing any filter between page requests is equivalent to a fresh first-page query starting at the encoded position — clients changing filters mid-pagination should drop the cursor and restart.
- * @nullable
- */
-export type ListResponseDtoLastCursor = { [key: string]: unknown } | null;
-
 export interface ListResponseDto {
   /** Discriminator value identifying this envelope as a list. */
   object: ListResponseDtoObject;
   /** Endpoint URL (without query string) — useful for SDK base path inference. */
   url: string;
   /** Items in the current page. Order is endpoint-defined and stable for cursor pagination. */
-  data: unknown[][];
+  data: unknown[];
   /** True when more items follow the last element. Use `lastCursor` as `startingAfter` to fetch the next page on cursor-paginated endpoints. */
   hasMore: boolean;
   /**
    * Opaque cursor pointing at the last item in `data` — pass back as `startingAfter` to fetch the next page. Present only on cursor-paginated endpoints; null when the result set is empty. Format is `base64url(sortField.toISOString():id)` — clients MUST treat it as opaque. The cursor encodes ONLY the sort position; it does NOT remember filter parameters (`role`, `status`, `search`, etc.). Changing any filter between page requests is equivalent to a fresh first-page query starting at the encoded position — clients changing filters mid-pagination should drop the cursor and restart.
    * @nullable
    */
-  lastCursor?: ListResponseDtoLastCursor;
+  lastCursor?: string | null;
   /** Total matching rows. Omitted (undefined) on large/growth tables where COUNT would be a hot path — clients navigate via `hasMore`, not this. */
   totalCount?: number;
   /** Current page (1-based). Present only on offset-paginated endpoints. */
@@ -363,22 +368,6 @@ export interface StoredFileDto {
   bucket: string;
   /** Size in bytes. */
   size: number;
-}
-
-export interface PageMetaDto {
-  page: number;
-  pageSize: number;
-  total: number;
-  totalPages: number;
-  hasPrevPage: boolean;
-  hasNextPage: boolean;
-}
-
-export interface PaginationDto {
-  /** Page number (1-based) */
-  page?: number;
-  /** Items per page */
-  pageSize?: number;
 }
 
 export interface User {
@@ -582,23 +571,23 @@ export type SocialSignIn404 = {
   message?: string;
 };
 
-export type GetApiAuthCallbackId400 = {
+export type CallbackId400 = {
   message: string;
 };
 
-export type GetApiAuthCallbackId401 = {
+export type CallbackId401 = {
   message: string;
 };
 
-export type GetApiAuthCallbackId403 = {
+export type CallbackId403 = {
   message?: string;
 };
 
-export type GetApiAuthCallbackId404 = {
+export type CallbackId404 = {
   message?: string;
 };
 
-export type PostApiAuthCallbackIdBody = {
+export type CallbackIdPostBody = {
   code?: string;
   error?: string;
   device_id?: string;
@@ -607,19 +596,19 @@ export type PostApiAuthCallbackIdBody = {
   user?: string;
 };
 
-export type PostApiAuthCallbackId400 = {
+export type CallbackIdPost400 = {
   message: string;
 };
 
-export type PostApiAuthCallbackId401 = {
+export type CallbackIdPost401 = {
   message: string;
 };
 
-export type PostApiAuthCallbackId403 = {
+export type CallbackIdPost403 = {
   message?: string;
 };
 
-export type PostApiAuthCallbackId404 = {
+export type CallbackIdPost404 = {
   message?: string;
 };
 
@@ -850,7 +839,7 @@ export type VerifyPassword404 = {
   message?: string;
 };
 
-export type GetApiAuthVerifyEmailParams = {
+export type VerifyEmailParams = {
   /**
    * The token to verify the email
    */
@@ -861,25 +850,25 @@ export type GetApiAuthVerifyEmailParams = {
   callbackURL?: string;
 };
 
-export type GetApiAuthVerifyEmail200 = {
+export type VerifyEmail200 = {
   user: User;
   /** Indicates if the email was verified successfully */
   status: boolean;
 };
 
-export type GetApiAuthVerifyEmail400 = {
+export type VerifyEmail400 = {
   message: string;
 };
 
-export type GetApiAuthVerifyEmail401 = {
+export type VerifyEmail401 = {
   message: string;
 };
 
-export type GetApiAuthVerifyEmail403 = {
+export type VerifyEmail403 = {
   message?: string;
 };
 
-export type GetApiAuthVerifyEmail404 = {
+export type VerifyEmail404 = {
   message?: string;
 };
 
@@ -1180,75 +1169,75 @@ export type ListUserSessions404 = {
   message?: string;
 };
 
-export type PostApiAuthRevokeSessionBody = {
+export type RevokeSessionBody = {
   /** The token to revoke */
   token: string;
 };
 
-export type PostApiAuthRevokeSession200 = {
+export type RevokeSession200 = {
   /** Indicates if the session was revoked successfully */
   status: boolean;
 };
 
-export type PostApiAuthRevokeSession400 = {
+export type RevokeSession400 = {
   message: string;
 };
 
-export type PostApiAuthRevokeSession401 = {
+export type RevokeSession401 = {
   message: string;
 };
 
-export type PostApiAuthRevokeSession403 = {
+export type RevokeSession403 = {
   message?: string;
 };
 
-export type PostApiAuthRevokeSession404 = {
+export type RevokeSession404 = {
   message?: string;
 };
 
-export type PostApiAuthRevokeSessionsBody = { [key: string]: unknown };
+export type RevokeSessionsBody = { [key: string]: unknown };
 
-export type PostApiAuthRevokeSessions200 = {
+export type RevokeSessions200 = {
   /** Indicates if all sessions were revoked successfully */
   status: boolean;
 };
 
-export type PostApiAuthRevokeSessions400 = {
+export type RevokeSessions400 = {
   message: string;
 };
 
-export type PostApiAuthRevokeSessions401 = {
+export type RevokeSessions401 = {
   message: string;
 };
 
-export type PostApiAuthRevokeSessions403 = {
+export type RevokeSessions403 = {
   message?: string;
 };
 
-export type PostApiAuthRevokeSessions404 = {
+export type RevokeSessions404 = {
   message?: string;
 };
 
-export type PostApiAuthRevokeOtherSessionsBody = { [key: string]: unknown };
+export type RevokeOtherSessionsBody = { [key: string]: unknown };
 
-export type PostApiAuthRevokeOtherSessions200 = {
+export type RevokeOtherSessions200 = {
   /** Indicates if all other sessions were revoked successfully */
   status: boolean;
 };
 
-export type PostApiAuthRevokeOtherSessions400 = {
+export type RevokeOtherSessions400 = {
   message: string;
 };
 
-export type PostApiAuthRevokeOtherSessions401 = {
+export type RevokeOtherSessions401 = {
   message: string;
 };
 
-export type PostApiAuthRevokeOtherSessions403 = {
+export type RevokeOtherSessions403 = {
   message?: string;
 };
 
-export type PostApiAuthRevokeOtherSessions404 = {
+export type RevokeOtherSessions404 = {
   message?: string;
 };
 
@@ -1363,7 +1352,7 @@ export type ListUserAccounts404 = {
   message?: string;
 };
 
-export type GetApiAuthDeleteUserCallbackParams = {
+export type DeleteUserCallbackParams = {
   /**
    * The token to verify the deletion request
    */
@@ -1377,62 +1366,62 @@ export type GetApiAuthDeleteUserCallbackParams = {
 /**
  * Confirmation message
  */
-export type GetApiAuthDeleteUserCallback200Message =
-  (typeof GetApiAuthDeleteUserCallback200Message)[keyof typeof GetApiAuthDeleteUserCallback200Message];
+export type DeleteUserCallback200Message =
+  (typeof DeleteUserCallback200Message)[keyof typeof DeleteUserCallback200Message];
 
-export const GetApiAuthDeleteUserCallback200Message = {
+export const DeleteUserCallback200Message = {
   User_deleted: 'User deleted',
 } as const;
 
-export type GetApiAuthDeleteUserCallback200 = {
+export type DeleteUserCallback200 = {
   /** Indicates if the deletion was successful */
   success: boolean;
   /** Confirmation message */
-  message: GetApiAuthDeleteUserCallback200Message;
+  message: DeleteUserCallback200Message;
 };
 
-export type GetApiAuthDeleteUserCallback400 = {
+export type DeleteUserCallback400 = {
   message: string;
 };
 
-export type GetApiAuthDeleteUserCallback401 = {
+export type DeleteUserCallback401 = {
   message: string;
 };
 
-export type GetApiAuthDeleteUserCallback403 = {
+export type DeleteUserCallback403 = {
   message?: string;
 };
 
-export type GetApiAuthDeleteUserCallback404 = {
+export type DeleteUserCallback404 = {
   message?: string;
 };
 
-export type PostApiAuthUnlinkAccountBody = {
+export type UnlinkAccountBody = {
   providerId: string;
   accountId?: string;
 };
 
-export type PostApiAuthUnlinkAccount200 = {
+export type UnlinkAccount200 = {
   status?: boolean;
 };
 
-export type PostApiAuthUnlinkAccount400 = {
+export type UnlinkAccount400 = {
   message: string;
 };
 
-export type PostApiAuthUnlinkAccount401 = {
+export type UnlinkAccount401 = {
   message: string;
 };
 
-export type PostApiAuthUnlinkAccount403 = {
+export type UnlinkAccount403 = {
   message?: string;
 };
 
-export type PostApiAuthUnlinkAccount404 = {
+export type UnlinkAccount404 = {
   message?: string;
 };
 
-export type PostApiAuthRefreshTokenBody = {
+export type RefreshTokenBody = {
   /** The provider ID for the OAuth provider */
   providerId: string;
   /** The account ID associated with the refresh token */
@@ -1441,7 +1430,7 @@ export type PostApiAuthRefreshTokenBody = {
   userId?: string;
 };
 
-export type PostApiAuthRefreshToken200 = {
+export type RefreshToken200 = {
   tokenType?: string;
   idToken?: string;
   accessToken?: string;
@@ -1450,19 +1439,19 @@ export type PostApiAuthRefreshToken200 = {
   refreshTokenExpiresAt?: string;
 };
 
-export type PostApiAuthRefreshToken401 = {
+export type RefreshToken401 = {
   message: string;
 };
 
-export type PostApiAuthRefreshToken403 = {
+export type RefreshToken403 = {
   message?: string;
 };
 
-export type PostApiAuthRefreshToken404 = {
+export type RefreshToken404 = {
   message?: string;
 };
 
-export type PostApiAuthGetAccessTokenBody = {
+export type GetAccessTokenBody = {
   /** The provider ID for the OAuth provider */
   providerId: string;
   /** The account ID associated with the refresh token */
@@ -1471,26 +1460,26 @@ export type PostApiAuthGetAccessTokenBody = {
   userId?: string;
 };
 
-export type PostApiAuthGetAccessToken200 = {
+export type GetAccessToken200 = {
   tokenType?: string;
   idToken?: string;
   accessToken?: string;
   accessTokenExpiresAt?: string;
 };
 
-export type PostApiAuthGetAccessToken401 = {
+export type GetAccessToken401 = {
   message: string;
 };
 
-export type PostApiAuthGetAccessToken403 = {
+export type GetAccessToken403 = {
   message?: string;
 };
 
-export type PostApiAuthGetAccessToken404 = {
+export type GetAccessToken404 = {
   message?: string;
 };
 
-export type GetApiAuthAccountInfo200User = {
+export type AccountInfo200User = {
   id: string;
   name?: string;
   email?: string;
@@ -1498,62 +1487,62 @@ export type GetApiAuthAccountInfo200User = {
   emailVerified: boolean;
 };
 
-export type GetApiAuthAccountInfo200Data = { [key: string]: unknown };
+export type AccountInfo200Data = { [key: string]: unknown };
 
-export type GetApiAuthAccountInfo200 = {
-  user: GetApiAuthAccountInfo200User;
-  data: GetApiAuthAccountInfo200Data;
+export type AccountInfo200 = {
+  user: AccountInfo200User;
+  data: AccountInfo200Data;
 };
 
-export type GetApiAuthAccountInfo400 = {
+export type AccountInfo400 = {
   message: string;
 };
 
-export type GetApiAuthAccountInfo401 = {
+export type AccountInfo401 = {
   message: string;
 };
 
-export type GetApiAuthAccountInfo403 = {
+export type AccountInfo403 = {
   message?: string;
 };
 
-export type GetApiAuthAccountInfo404 = {
+export type AccountInfo404 = {
   message?: string;
 };
 
-export type GetApiAuthOk200 = {
+export type Ok200 = {
   /** Indicates if the API is working */
   ok: boolean;
 };
 
-export type GetApiAuthOk400 = {
+export type Ok400 = {
   message: string;
 };
 
-export type GetApiAuthOk401 = {
+export type Ok401 = {
   message: string;
 };
 
-export type GetApiAuthOk403 = {
+export type Ok403 = {
   message?: string;
 };
 
-export type GetApiAuthOk404 = {
+export type Ok404 = {
   message?: string;
 };
 
-export type GetApiAuthError400 = {
+export type Error400 = {
   message: string;
 };
 
-export type GetApiAuthError401 = {
+export type Error401 = {
   message: string;
 };
 
-export type GetApiAuthError403 = {
+export type Error403 = {
   message?: string;
 };
 
-export type GetApiAuthError404 = {
+export type Error404 = {
   message?: string;
 };

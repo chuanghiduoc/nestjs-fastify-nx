@@ -19,43 +19,39 @@
  * OpenAPI spec version: 1.0.0
  */
 import type {
+  AccountInfo200,
+  CallbackIdPostBody,
   ChangeEmail200,
   ChangeEmailBody,
   ChangePassword200,
   ChangePasswordBody,
   DeleteUser200,
   DeleteUserBody,
-  GetApiAuthAccountInfo200,
-  GetApiAuthDeleteUserCallback200,
-  GetApiAuthDeleteUserCallbackParams,
-  GetApiAuthOk200,
-  GetApiAuthVerifyEmail200,
-  GetApiAuthVerifyEmailParams,
+  DeleteUserCallback200,
+  DeleteUserCallbackParams,
+  GetAccessToken200,
+  GetAccessTokenBody,
   GetSession200,
   GetSessionPost200,
   GetSessionPostBody,
   LinkSocialAccount200,
   LinkSocialAccountBody,
   ListUserAccounts200Item,
-  PostApiAuthCallbackIdBody,
-  PostApiAuthGetAccessToken200,
-  PostApiAuthGetAccessTokenBody,
-  PostApiAuthRefreshToken200,
-  PostApiAuthRefreshTokenBody,
-  PostApiAuthRevokeOtherSessions200,
-  PostApiAuthRevokeOtherSessionsBody,
-  PostApiAuthRevokeSession200,
-  PostApiAuthRevokeSessionBody,
-  PostApiAuthRevokeSessions200,
-  PostApiAuthRevokeSessionsBody,
-  PostApiAuthUnlinkAccount200,
-  PostApiAuthUnlinkAccountBody,
+  Ok200,
+  RefreshToken200,
+  RefreshTokenBody,
   RequestPasswordReset200,
   RequestPasswordResetBody,
   ResetPassword200,
   ResetPasswordBody,
   ResetPasswordCallback200,
   ResetPasswordCallbackParams,
+  RevokeOtherSessions200,
+  RevokeOtherSessionsBody,
+  RevokeSession200,
+  RevokeSessionBody,
+  RevokeSessions200,
+  RevokeSessionsBody,
   SendVerificationEmail200,
   SendVerificationEmailBody,
   Session,
@@ -67,10 +63,14 @@ import type {
   SignUpWithEmailAndPasswordBody,
   SocialSignIn200,
   SocialSignInBody,
+  UnlinkAccount200,
+  UnlinkAccountBody,
   UpdateSession200,
   UpdateSessionBody,
   UpdateUser200,
   UpdateUserBody,
+  VerifyEmail200,
+  VerifyEmailParams,
   VerifyPassword200,
   VerifyPasswordBody,
 } from './api.schemas';
@@ -89,18 +89,15 @@ export const getAuth = () => {
       data: socialSignInBody,
     });
   };
-  const getApiAuthCallbackId = (id: string) => {
+  const callbackId = (id: string) => {
     return customAxiosInstance<unknown>({ url: `/api/auth/callback/${id}`, method: 'GET' });
   };
-  const postApiAuthCallbackId = (
-    id: string,
-    postApiAuthCallbackIdBody?: PostApiAuthCallbackIdBody,
-  ) => {
+  const callbackIdPost = (id: string, callbackIdPostBody?: CallbackIdPostBody) => {
     return customAxiosInstance<unknown>({
       url: `/api/auth/callback/${id}`,
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      data: postApiAuthCallbackIdBody,
+      data: callbackIdPostBody,
     });
   };
   /**
@@ -180,8 +177,8 @@ export const getAuth = () => {
   /**
    * Verify the email of the user
    */
-  const getApiAuthVerifyEmail = (params: GetApiAuthVerifyEmailParams) => {
-    return customAxiosInstance<GetApiAuthVerifyEmail200>({
+  const verifyEmail = (params: VerifyEmailParams) => {
+    return customAxiosInstance<VerifyEmail200>({
       url: `/api/auth/verify-email`,
       method: 'GET',
       params,
@@ -280,40 +277,34 @@ export const getAuth = () => {
   /**
    * Revoke a single session
    */
-  const postApiAuthRevokeSession = (
-    postApiAuthRevokeSessionBody?: PostApiAuthRevokeSessionBody,
-  ) => {
-    return customAxiosInstance<PostApiAuthRevokeSession200>({
+  const revokeSession = (revokeSessionBody?: RevokeSessionBody) => {
+    return customAxiosInstance<RevokeSession200>({
       url: `/api/auth/revoke-session`,
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      data: postApiAuthRevokeSessionBody,
+      data: revokeSessionBody,
     });
   };
   /**
    * Revoke all sessions for the user
    */
-  const postApiAuthRevokeSessions = (
-    postApiAuthRevokeSessionsBody?: PostApiAuthRevokeSessionsBody,
-  ) => {
-    return customAxiosInstance<PostApiAuthRevokeSessions200>({
+  const revokeSessions = (revokeSessionsBody?: RevokeSessionsBody) => {
+    return customAxiosInstance<RevokeSessions200>({
       url: `/api/auth/revoke-sessions`,
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      data: postApiAuthRevokeSessionsBody,
+      data: revokeSessionsBody,
     });
   };
   /**
    * Revoke all other sessions for the user except the current one
    */
-  const postApiAuthRevokeOtherSessions = (
-    postApiAuthRevokeOtherSessionsBody?: PostApiAuthRevokeOtherSessionsBody,
-  ) => {
-    return customAxiosInstance<PostApiAuthRevokeOtherSessions200>({
+  const revokeOtherSessions = (revokeOtherSessionsBody?: RevokeOtherSessionsBody) => {
+    return customAxiosInstance<RevokeOtherSessions200>({
       url: `/api/auth/revoke-other-sessions`,
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      data: postApiAuthRevokeOtherSessionsBody,
+      data: revokeOtherSessionsBody,
     });
   };
   /**
@@ -339,8 +330,8 @@ export const getAuth = () => {
   /**
    * Callback to complete user deletion with verification token
    */
-  const getApiAuthDeleteUserCallback = (params?: GetApiAuthDeleteUserCallbackParams) => {
-    return customAxiosInstance<GetApiAuthDeleteUserCallback200>({
+  const deleteUserCallback = (params?: DeleteUserCallbackParams) => {
+    return customAxiosInstance<DeleteUserCallback200>({
       url: `/api/auth/delete-user/callback`,
       method: 'GET',
       params,
@@ -349,63 +340,58 @@ export const getAuth = () => {
   /**
    * Unlink an account
    */
-  const postApiAuthUnlinkAccount = (postApiAuthUnlinkAccountBody: PostApiAuthUnlinkAccountBody) => {
-    return customAxiosInstance<PostApiAuthUnlinkAccount200>({
+  const unlinkAccount = (unlinkAccountBody: UnlinkAccountBody) => {
+    return customAxiosInstance<UnlinkAccount200>({
       url: `/api/auth/unlink-account`,
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      data: postApiAuthUnlinkAccountBody,
+      data: unlinkAccountBody,
     });
   };
   /**
    * Refresh the access token using a refresh token
    */
-  const postApiAuthRefreshToken = (postApiAuthRefreshTokenBody: PostApiAuthRefreshTokenBody) => {
-    return customAxiosInstance<PostApiAuthRefreshToken200>({
+  const refreshToken = (refreshTokenBody: RefreshTokenBody) => {
+    return customAxiosInstance<RefreshToken200>({
       url: `/api/auth/refresh-token`,
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      data: postApiAuthRefreshTokenBody,
+      data: refreshTokenBody,
     });
   };
   /**
    * Get a valid access token, doing a refresh if needed
    */
-  const postApiAuthGetAccessToken = (
-    postApiAuthGetAccessTokenBody: PostApiAuthGetAccessTokenBody,
-  ) => {
-    return customAxiosInstance<PostApiAuthGetAccessToken200>({
+  const getAccessToken = (getAccessTokenBody: GetAccessTokenBody) => {
+    return customAxiosInstance<GetAccessToken200>({
       url: `/api/auth/get-access-token`,
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      data: postApiAuthGetAccessTokenBody,
+      data: getAccessTokenBody,
     });
   };
   /**
    * Get the account info provided by the provider
    */
-  const getApiAuthAccountInfo = () => {
-    return customAxiosInstance<GetApiAuthAccountInfo200>({
-      url: `/api/auth/account-info`,
-      method: 'GET',
-    });
+  const accountInfo = () => {
+    return customAxiosInstance<AccountInfo200>({ url: `/api/auth/account-info`, method: 'GET' });
   };
   /**
    * Check if the API is working
    */
-  const getApiAuthOk = () => {
-    return customAxiosInstance<GetApiAuthOk200>({ url: `/api/auth/ok`, method: 'GET' });
+  const ok = () => {
+    return customAxiosInstance<Ok200>({ url: `/api/auth/ok`, method: 'GET' });
   };
   /**
    * Displays an error page
    */
-  const getApiAuthError = () => {
+  const error = () => {
     return customAxiosInstance<string>({ url: `/api/auth/error`, method: 'GET' });
   };
   return {
     socialSignIn,
-    getApiAuthCallbackId,
-    postApiAuthCallbackId,
+    callbackId,
+    callbackIdPost,
     getSession,
     getSessionPost,
     signOut,
@@ -413,7 +399,7 @@ export const getAuth = () => {
     signInEmail,
     resetPassword,
     verifyPassword,
-    getApiAuthVerifyEmail,
+    verifyEmail,
     sendVerificationEmail,
     changeEmail,
     changePassword,
@@ -423,28 +409,28 @@ export const getAuth = () => {
     requestPasswordReset,
     resetPasswordCallback,
     listUserSessions,
-    postApiAuthRevokeSession,
-    postApiAuthRevokeSessions,
-    postApiAuthRevokeOtherSessions,
+    revokeSession,
+    revokeSessions,
+    revokeOtherSessions,
     linkSocialAccount,
     listUserAccounts,
-    getApiAuthDeleteUserCallback,
-    postApiAuthUnlinkAccount,
-    postApiAuthRefreshToken,
-    postApiAuthGetAccessToken,
-    getApiAuthAccountInfo,
-    getApiAuthOk,
-    getApiAuthError,
+    deleteUserCallback,
+    unlinkAccount,
+    refreshToken,
+    getAccessToken,
+    accountInfo,
+    ok,
+    error,
   };
 };
 export type SocialSignInResult = NonNullable<
   Awaited<ReturnType<ReturnType<typeof getAuth>['socialSignIn']>>
 >;
-export type GetApiAuthCallbackIdResult = NonNullable<
-  Awaited<ReturnType<ReturnType<typeof getAuth>['getApiAuthCallbackId']>>
+export type CallbackIdResult = NonNullable<
+  Awaited<ReturnType<ReturnType<typeof getAuth>['callbackId']>>
 >;
-export type PostApiAuthCallbackIdResult = NonNullable<
-  Awaited<ReturnType<ReturnType<typeof getAuth>['postApiAuthCallbackId']>>
+export type CallbackIdPostResult = NonNullable<
+  Awaited<ReturnType<ReturnType<typeof getAuth>['callbackIdPost']>>
 >;
 export type GetSessionResult = NonNullable<
   Awaited<ReturnType<ReturnType<typeof getAuth>['getSession']>>
@@ -465,8 +451,8 @@ export type ResetPasswordResult = NonNullable<
 export type VerifyPasswordResult = NonNullable<
   Awaited<ReturnType<ReturnType<typeof getAuth>['verifyPassword']>>
 >;
-export type GetApiAuthVerifyEmailResult = NonNullable<
-  Awaited<ReturnType<ReturnType<typeof getAuth>['getApiAuthVerifyEmail']>>
+export type VerifyEmailResult = NonNullable<
+  Awaited<ReturnType<ReturnType<typeof getAuth>['verifyEmail']>>
 >;
 export type SendVerificationEmailResult = NonNullable<
   Awaited<ReturnType<ReturnType<typeof getAuth>['sendVerificationEmail']>>
@@ -495,14 +481,14 @@ export type ResetPasswordCallbackResult = NonNullable<
 export type ListUserSessionsResult = NonNullable<
   Awaited<ReturnType<ReturnType<typeof getAuth>['listUserSessions']>>
 >;
-export type PostApiAuthRevokeSessionResult = NonNullable<
-  Awaited<ReturnType<ReturnType<typeof getAuth>['postApiAuthRevokeSession']>>
+export type RevokeSessionResult = NonNullable<
+  Awaited<ReturnType<ReturnType<typeof getAuth>['revokeSession']>>
 >;
-export type PostApiAuthRevokeSessionsResult = NonNullable<
-  Awaited<ReturnType<ReturnType<typeof getAuth>['postApiAuthRevokeSessions']>>
+export type RevokeSessionsResult = NonNullable<
+  Awaited<ReturnType<ReturnType<typeof getAuth>['revokeSessions']>>
 >;
-export type PostApiAuthRevokeOtherSessionsResult = NonNullable<
-  Awaited<ReturnType<ReturnType<typeof getAuth>['postApiAuthRevokeOtherSessions']>>
+export type RevokeOtherSessionsResult = NonNullable<
+  Awaited<ReturnType<ReturnType<typeof getAuth>['revokeOtherSessions']>>
 >;
 export type LinkSocialAccountResult = NonNullable<
   Awaited<ReturnType<ReturnType<typeof getAuth>['linkSocialAccount']>>
@@ -510,24 +496,20 @@ export type LinkSocialAccountResult = NonNullable<
 export type ListUserAccountsResult = NonNullable<
   Awaited<ReturnType<ReturnType<typeof getAuth>['listUserAccounts']>>
 >;
-export type GetApiAuthDeleteUserCallbackResult = NonNullable<
-  Awaited<ReturnType<ReturnType<typeof getAuth>['getApiAuthDeleteUserCallback']>>
+export type DeleteUserCallbackResult = NonNullable<
+  Awaited<ReturnType<ReturnType<typeof getAuth>['deleteUserCallback']>>
 >;
-export type PostApiAuthUnlinkAccountResult = NonNullable<
-  Awaited<ReturnType<ReturnType<typeof getAuth>['postApiAuthUnlinkAccount']>>
+export type UnlinkAccountResult = NonNullable<
+  Awaited<ReturnType<ReturnType<typeof getAuth>['unlinkAccount']>>
 >;
-export type PostApiAuthRefreshTokenResult = NonNullable<
-  Awaited<ReturnType<ReturnType<typeof getAuth>['postApiAuthRefreshToken']>>
+export type RefreshTokenResult = NonNullable<
+  Awaited<ReturnType<ReturnType<typeof getAuth>['refreshToken']>>
 >;
-export type PostApiAuthGetAccessTokenResult = NonNullable<
-  Awaited<ReturnType<ReturnType<typeof getAuth>['postApiAuthGetAccessToken']>>
+export type GetAccessTokenResult = NonNullable<
+  Awaited<ReturnType<ReturnType<typeof getAuth>['getAccessToken']>>
 >;
-export type GetApiAuthAccountInfoResult = NonNullable<
-  Awaited<ReturnType<ReturnType<typeof getAuth>['getApiAuthAccountInfo']>>
+export type AccountInfoResult = NonNullable<
+  Awaited<ReturnType<ReturnType<typeof getAuth>['accountInfo']>>
 >;
-export type GetApiAuthOkResult = NonNullable<
-  Awaited<ReturnType<ReturnType<typeof getAuth>['getApiAuthOk']>>
->;
-export type GetApiAuthErrorResult = NonNullable<
-  Awaited<ReturnType<ReturnType<typeof getAuth>['getApiAuthError']>>
->;
+export type OkResult = NonNullable<Awaited<ReturnType<ReturnType<typeof getAuth>['ok']>>>;
+export type ErrorResult = NonNullable<Awaited<ReturnType<ReturnType<typeof getAuth>['error']>>>;
