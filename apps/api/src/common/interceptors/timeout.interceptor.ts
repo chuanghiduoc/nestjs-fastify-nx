@@ -6,7 +6,7 @@ import {
   Injectable,
   NestInterceptor,
 } from '@nestjs/common';
-import { HTTP_CODE_METADATA } from '@nestjs/common/constants';
+import { HEADERS_METADATA, HTTP_CODE_METADATA } from '@nestjs/common/constants';
 import { Reflector } from '@nestjs/core';
 import { ConfigService } from '@nestjs/config';
 import { Observable, throwError, TimeoutError } from 'rxjs';
@@ -65,6 +65,7 @@ export class TimeoutInterceptor implements NestInterceptor {
 
     const idempotency = request.idempotency;
     const successStatus = this.resolveSuccessStatus(context, request.method);
+    const contentType = this.resolveContentType(context);
 
     return new Observable<unknown>((subscriber) => {
       let timedOut = false;
@@ -93,7 +94,7 @@ export class TimeoutInterceptor implements NestInterceptor {
           // Late success after the 504 already replied — record it so a retry replays instead of
           // re-running. completeLate swallows its own errors; guard again so nothing escapes here.
           if (lateTimer) clearTimeout(lateTimer);
-          void idempotency.completeLate(successStatus, value).catch(() => undefined);
+          void idempotency.completeLate(successStatus, value, contentType).catch(() => undefined);
           sub.unsubscribe();
         },
         error: (err: unknown) => {
@@ -142,5 +143,16 @@ export class TimeoutInterceptor implements NestInterceptor {
     );
     if (typeof explicit === 'number') return explicit;
     return method === 'POST' ? HttpStatus.CREATED : HttpStatus.OK;
+  }
+
+  // The content type a late completion should replay with: the handler's @Header('Content-Type'),
+  // else undefined so completeLate defaults to application/json. Preserves byte-for-byte replay for
+  // non-JSON responses (a handler that set it imperatively via reply.header is not captured here).
+  private resolveContentType(context: ExecutionContext): string | undefined {
+    const headers = this.reflector.get<{ name: string; value: string }[] | undefined>(
+      HEADERS_METADATA,
+      context.getHandler(),
+    );
+    return headers?.find((header) => header.name.toLowerCase() === 'content-type')?.value;
   }
 }

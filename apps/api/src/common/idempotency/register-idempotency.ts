@@ -29,8 +29,9 @@ export interface IdempotencyContext {
   ownerToken: string;
   // Records a 2xx result the onSend hook couldn't — e.g. the handler finished AFTER a 504 timeout
   // already replied, so a retry replays the stored response instead of re-running the mutation.
-  // Best-effort: if the pending lock already expired (handler slower than the lock TTL) it no-ops.
-  completeLate(status: number, value: unknown): Promise<void>;
+  // `contentType` preserves replay fidelity for non-JSON responses (@Header('Content-Type', ...));
+  // omit it to default to application/json. Best-effort: no-ops if the pending lock already expired.
+  completeLate(status: number, value: unknown, contentType?: string): Promise<void>;
 }
 
 interface RequestWithIdempotency extends FastifyRequest {
@@ -142,7 +143,7 @@ export function registerIdempotency(fastify: FastifyInstance, options: Idempoten
         storeKey,
         fingerprint,
         ownerToken,
-        completeLate: async (status, value) => {
+        completeLate: async (status, value, contentType) => {
           if (status < 200 || status >= 300) return;
           // Same capture contract as the onSend hook (replayableBody): undefined => non-capturable
           // (Buffer/stream) — leave the record pending until TTL rather than store a wrong body.
@@ -152,7 +153,7 @@ export function registerIdempotency(fastify: FastifyInstance, options: Idempoten
             await store.complete(storeKey, ownerToken, {
               fingerprint,
               status,
-              contentType: 'application/json',
+              contentType: contentType ?? 'application/json',
               body,
             });
           } catch (err) {

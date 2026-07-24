@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { HttpException, type CallHandler, type ExecutionContext } from '@nestjs/common';
+import { HEADERS_METADATA } from '@nestjs/common/constants';
 import type { ConfigService } from '@nestjs/config';
 import type { Reflector } from '@nestjs/core';
 import { firstValueFrom, of, Subject, throwError } from 'rxjs';
@@ -15,9 +16,14 @@ function makeContext(type: 'http' | 'ws', request?: unknown): ExecutionContext {
   } as unknown as ExecutionContext;
 }
 
-function makeInterceptor(timeoutMs: number): TimeoutInterceptor {
+function makeInterceptor(
+  timeoutMs: number,
+  headers?: { name: string; value: string }[],
+): TimeoutInterceptor {
   const config = { get: () => timeoutMs } as unknown as ConfigService<EnvConfig, true>;
-  const reflector = { get: () => undefined } as unknown as Reflector;
+  const reflector = {
+    get: (key: unknown) => (key === HEADERS_METADATA ? headers : undefined),
+  } as unknown as Reflector;
   return new TimeoutInterceptor(config, reflector);
 }
 
@@ -94,11 +100,30 @@ describe('TimeoutInterceptor', () => {
       expect((err as HttpException).getStatus()).toBe(504);
       expect(completeLate).not.toHaveBeenCalled();
 
-      // Handler finishes AFTER the 504 — must be recorded with the POST default status (201).
+      // Handler finishes AFTER the 504 — must be recorded with the POST default status (201) and no
+      // explicit content type (defaults to application/json inside completeLate).
       subject.next('late-result');
       subject.complete();
       await tick(0);
-      expect(completeLate).toHaveBeenCalledWith(201, 'late-result');
+      expect(completeLate).toHaveBeenCalledWith(201, 'late-result', undefined);
+    });
+
+    it("replays with the handler's @Header content-type for a late completion", async () => {
+      const completeLate = vi.fn().mockResolvedValue(undefined);
+      const request = { method: 'POST', idempotency: { completeLate } };
+      const subject = new Subject<unknown>();
+      const handler = { handle: () => subject.asObservable() } as unknown as CallHandler;
+      const interceptor = makeInterceptor(50, [{ name: 'Content-Type', value: 'text/csv' }]);
+
+      const settled = firstValueFrom(
+        interceptor.intercept(makeContext('http', request), handler),
+      ).catch((e: unknown) => e);
+      await settled;
+
+      subject.next('a,b,c');
+      subject.complete();
+      await tick(0);
+      expect(completeLate).toHaveBeenCalledWith(201, 'a,b,c', 'text/csv');
     });
 
     it('does not call completeLate when the idempotent handler finishes in time', async () => {
