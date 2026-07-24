@@ -45,6 +45,9 @@ allowBuilds:
 overrides:
   axios: '>=1.18.0'
   fastify: '>=5.8.5'
+  # GHSA-c96f-x56v-gq3h (high, HTTP/2 DoS). @nestjs/platform-fastify pins an exact 9.6.0, so this
+  # cannot be resolved by a plain update.
+  find-my-way: '>=9.7.0'
   '@hono/node-server': '2.0.10'
   brace-expansion: '>=5.0.6'
   yaml: '>=2.8.3'

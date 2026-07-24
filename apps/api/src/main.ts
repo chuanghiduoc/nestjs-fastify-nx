@@ -409,6 +409,8 @@ async function bootstrap() {
         redisHost: config.get('REDIS_QUEUE_HOST', { infer: true }),
         redisPort: config.get('REDIS_QUEUE_PORT', { infer: true }),
         queuePrefix: config.get('REDIS_QUEUE_PREFIX', { infer: true }),
+        // Reuses the rate-limit connection (db 4) so the failed-auth budget is shared across replicas.
+        redis: rateLimitRedis,
       }),
     );
   }

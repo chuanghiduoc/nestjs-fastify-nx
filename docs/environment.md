@@ -218,6 +218,11 @@ safe because command handlers roll back their transaction on error.
 | `BULL_BOARD_USER`     | `admin` | Yes (rotate in prod) | Basic-auth username                                                   |
 | `BULL_BOARD_PASSWORD` | `admin` | Yes (rotate in prod) | Basic-auth password; the env validator rejects defaults in production |
 
+Brute-force protection is not configurable: `/api/admin/queues` allows 10 **failed** Basic-auth
+attempts per IP per minute, counted in the shared rate-limit Redis (db 4) so the ceiling holds
+across replicas. Authenticated traffic is never counted — the dashboard polls its queue API every
+few seconds. If that Redis is unreachable the surface fails closed with `503`.
+
 ## Observability
 
 | Variable                         | Default                                  | Required | Description                                                                                                                                                          |
