@@ -82,13 +82,14 @@ describe('TimeoutInterceptor', () => {
       const request = { method: 'POST', idempotency: { completeLate } };
       const subject = new Subject<unknown>();
       const handler = { handle: () => subject.asObservable() } as unknown as CallHandler;
-      const interceptor = makeInterceptor(10);
+      // 50ms budget → the source stays subscribed for a ~50ms window after the 504 (late-capture
+      // safety-net), so emitting right after the 504 lands well inside it.
+      const interceptor = makeInterceptor(50);
 
       const settled = firstValueFrom(
         interceptor.intercept(makeContext('http', request), handler),
       ).catch((e: unknown) => e);
-      await tick(30); // let the 10ms watchdog fire
-      const err = await settled;
+      const err = await settled; // resolves when the 504 fires (~50ms)
       expect(err).toBeInstanceOf(HttpException);
       expect((err as HttpException).getStatus()).toBe(504);
       expect(completeLate).not.toHaveBeenCalled();

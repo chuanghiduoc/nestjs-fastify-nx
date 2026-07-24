@@ -25,9 +25,10 @@ type RequestWithIdempotency = FastifyRequest & { idempotency?: IdempotencyContex
 // prompt 504 and the socket is freed. WebSocket frames are exempt (connections are long-lived by
 // design); the GlobalExceptionFilter renders the HttpException below as RFC 9457 problem+json.
 //
-// For an idempotent request (carrying an Idempotency-Key), the source stays subscribed after the 504
-// so a late 2xx completion is recorded into the idempotency store — a retry then replays it instead
-// of re-executing the mutation (the double-execution the Idempotency-Key exists to prevent).
+// For an idempotent HTTP request (carrying an Idempotency-Key), the source stays subscribed for a
+// bounded window after the 504 so a late 2xx completion is recorded into the idempotency store — a
+// retry then replays it instead of re-executing the mutation (the double-execution the Idempotency-Key
+// exists to prevent).
 @Injectable()
 export class TimeoutInterceptor implements NestInterceptor {
   private readonly timeoutMs: number;
@@ -40,14 +41,18 @@ export class TimeoutInterceptor implements NestInterceptor {
   }
 
   intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
-    if (this.timeoutMs <= 0 || context.getType() === 'ws') {
+    const type = context.getType();
+    if (this.timeoutMs <= 0 || type === 'ws') {
       return next.handle();
     }
 
-    // getRequest() is meaningful only for HTTP; for GraphQL it yields a non-request value (no
-    // idempotency), so this falls through to the fast path.
-    const request = context.switchToHttp().getRequest<RequestWithIdempotency>() as
-      RequestWithIdempotency | undefined;
+    // Idempotency capture is HTTP-only: GraphQL (and anything non-http) never carries an idempotency
+    // context, and switchToHttp() would yield a non-request value there — so only touch it for http.
+    const request =
+      type === 'http'
+        ? (context.switchToHttp().getRequest<RequestWithIdempotency>() as
+            RequestWithIdempotency | undefined)
+        : undefined;
 
     // Fast path (unchanged): non-idempotent requests get a 504 on timeout and the orphaned work is
     // discarded (rxjs timeout() unsubscribes the source).
@@ -64,10 +69,17 @@ export class TimeoutInterceptor implements NestInterceptor {
     return new Observable<unknown>((subscriber) => {
       let timedOut = false;
       let settled = false;
+      let lateTimer: NodeJS.Timeout | undefined;
+
       const timer = setTimeout(() => {
         if (settled) return;
         timedOut = true;
         subscriber.error(this.timeoutException());
+        // Bounded window to capture a late completion, then release the subscription. Beyond it the
+        // pending idempotency lock has lapsed (lock TTL > request timeout) so completeLate would
+        // no-op anyway — holding the source (and this request) longer would only leak memory.
+        lateTimer = setTimeout(() => sub.unsubscribe(), this.timeoutMs);
+        lateTimer.unref();
       }, this.timeoutMs);
 
       const sub = next.handle().subscribe({
@@ -79,26 +91,32 @@ export class TimeoutInterceptor implements NestInterceptor {
             return;
           }
           // Late success after the 504 already replied — record it so a retry replays instead of
-          // re-running. Best-effort and never throws (no-ops if the pending lock already expired).
-          void idempotency.completeLate(successStatus, value);
+          // re-running. completeLate swallows its own errors; guard again so nothing escapes here.
+          if (lateTimer) clearTimeout(lateTimer);
+          void idempotency.completeLate(successStatus, value).catch(() => undefined);
+          sub.unsubscribe();
         },
         error: (err: unknown) => {
           if (!timedOut) {
             settled = true;
             clearTimeout(timer);
             subscriber.error(this.mapError(err));
+            return;
           }
           // Late failure: nothing to record; the pending lock lapses at its TTL.
+          if (lateTimer) clearTimeout(lateTimer);
+          sub.unsubscribe();
         },
         complete: () => {
           if (!timedOut) subscriber.complete();
         },
       });
 
-      // On the 504 path downstream unsubscribes immediately — keep the source alive to catch the late
-      // result; only tear it down on the normal path.
+      // On the 504 path downstream unsubscribes immediately — keep the source alive (bounded by
+      // lateTimer) to catch the late result; on the normal path, tear it down at once.
       return () => {
         clearTimeout(timer);
+        if (lateTimer) clearTimeout(lateTimer);
         if (!timedOut) sub.unsubscribe();
       };
     });

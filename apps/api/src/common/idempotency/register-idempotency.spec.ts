@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import Fastify, { type FastifyInstance } from 'fastify';
 import type Redis from 'ioredis';
-import { registerIdempotency } from './register-idempotency';
+import { registerIdempotency, serializeReplayBody } from './register-idempotency';
 
 // Minimal in-memory stand-in for the two ioredis commands the store uses. This is NOT a database
 // mock (the repo's no-mock rule targets Prisma/Postgres integration tests) — it is a deterministic
@@ -448,5 +448,29 @@ describe('registerIdempotency', () => {
     expect(res.statusCode).toBe(200);
     expect(callCount()).toBe(1);
     expect(errors.some((message) => message.includes('acquire failed'))).toBe(true);
+  });
+});
+
+describe('serializeReplayBody (late-completion capture)', () => {
+  it('treats empty/absent bodies as an empty string (matches the onSend path, not "null")', () => {
+    expect(serializeReplayBody(undefined)).toBe('');
+    expect(serializeReplayBody(null)).toBe('');
+  });
+
+  it('passes a string through and JSON-encodes plain objects', () => {
+    expect(serializeReplayBody('raw')).toBe('raw');
+    expect(serializeReplayBody({ id: 1, name: 'x' })).toBe('{"id":1,"name":"x"}');
+    expect(serializeReplayBody(42)).toBe('42');
+  });
+
+  it('refuses non-capturable bodies (Buffer / stream) so the record stays pending', () => {
+    expect(serializeReplayBody(Buffer.from('bytes'))).toBeUndefined();
+    expect(serializeReplayBody({ pipe: () => undefined })).toBeUndefined();
+  });
+
+  it('refuses a value that cannot be JSON-serialized (circular)', () => {
+    const circular: Record<string, unknown> = {};
+    circular['self'] = circular;
+    expect(serializeReplayBody(circular)).toBeUndefined();
   });
 });

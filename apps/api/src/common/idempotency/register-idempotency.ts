@@ -144,13 +144,10 @@ export function registerIdempotency(fastify: FastifyInstance, options: Idempoten
         ownerToken,
         completeLate: async (status, value) => {
           if (status < 200 || status >= 300) return;
-          let body: string;
-          try {
-            // Matches Fastify's default object serialization for this repo's plain-DTO responses.
-            body = JSON.stringify(value ?? null);
-          } catch {
-            return; // non-serializable — cannot be replayed byte-for-byte, leave pending until TTL
-          }
+          // Same capture contract as the onSend hook (replayableBody): undefined => non-capturable
+          // (Buffer/stream) — leave the record pending until TTL rather than store a wrong body.
+          const body = serializeReplayBody(value);
+          if (body === undefined) return;
           try {
             await store.complete(storeKey, ownerToken, {
               fingerprint,
@@ -159,7 +156,11 @@ export function registerIdempotency(fastify: FastifyInstance, options: Idempoten
               body,
             });
           } catch (err) {
-            reportError(`idempotency late-complete failed: ${(err as Error).message}`);
+            try {
+              reportError(`idempotency late-complete failed: ${(err as Error).message}`);
+            } catch {
+              // Never let the error reporter's own failure escape completeLate (interceptor voids it).
+            }
           }
         },
       };
@@ -253,4 +254,20 @@ function replayableBody(payload: unknown): string | undefined {
   if (payload === null || payload === undefined) return '';
   if (typeof payload === 'string') return payload;
   return undefined;
+}
+
+// Late-completion (TimeoutInterceptor) captures the handler's RETURN value, not the already-serialized
+// payload replayableBody sees — so it also JSON-encodes objects. Mirrors replayableBody's contract:
+// empty/absent => '', Buffer/stream => undefined (non-capturable, leave pending), else JSON.
+export function serializeReplayBody(value: unknown): string | undefined {
+  if (value === undefined || value === null) return '';
+  if (typeof value === 'string') return value;
+  if (Buffer.isBuffer(value) || typeof (value as { pipe?: unknown }).pipe === 'function') {
+    return undefined;
+  }
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return undefined;
+  }
 }
