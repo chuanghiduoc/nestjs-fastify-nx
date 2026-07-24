@@ -9,6 +9,7 @@ import type { Redis } from 'ioredis';
 import { timingSafeEqual } from 'node:crypto';
 import { ERROR_CODES } from '@nestjs-fastify-nx/contracts';
 import { QUEUE_NAMES } from '../../app/constants/queue.constants';
+import { redisFixedWindowIncr } from '../rate-limit/redis-fixed-window';
 import { resolveRequestId } from '../logging/request-id';
 import {
   buildProblemDetails,
@@ -24,12 +25,6 @@ import { resolveFastifyCode, resolveFastifyStatus } from '../filters/fastify-err
 const BULL_BOARD_AUTH_FAILURE_MAX = 10;
 const BULL_BOARD_AUTH_FAILURE_WINDOW_MS = 60_000;
 const AUTH_FAILURE_KEY_PREFIX = 'bull-board:auth-fail:';
-
-// PEXPIRE only on the first hit so a burst cannot keep pushing the window deadline out.
-const AUTH_FAILURE_SCRIPT = `
-local count = redis.call('incr', KEYS[1])
-if count == 1 then redis.call('pexpire', KEYS[1], ARGV[1]) end
-return {count, redis.call('pttl', KEYS[1])}`;
 
 const logger = new Logger('BullBoard');
 
@@ -132,20 +127,11 @@ function safeEqual(a: string, b: string): boolean {
 }
 
 export async function recordAuthFailure(redis: Redis, ip: string): Promise<AuthFailureState> {
-  const [countRaw, ttlRaw] = (await redis.eval(
-    AUTH_FAILURE_SCRIPT,
-    1,
+  return redisFixedWindowIncr(
+    redis,
     `${AUTH_FAILURE_KEY_PREFIX}${ip}`,
-    String(BULL_BOARD_AUTH_FAILURE_WINDOW_MS),
-  )) as [number | string, number | string];
-
-  const count = Number(countRaw);
-  const ttlMs = Number(ttlRaw);
-  // Surface a malformed reply as a store failure rather than silently granting an unbounded budget.
-  if (!Number.isFinite(count)) {
-    throw new Error(`Unexpected auth-failure counter reply: ${String(countRaw)}`);
-  }
-  return { count, ttlMs: Number.isFinite(ttlMs) ? Math.max(0, ttlMs) : 0 };
+    BULL_BOARD_AUTH_FAILURE_WINDOW_MS,
+  );
 }
 
 // Returned so the caller can `return sendProblem(...)` from an async hook — Fastify treats the

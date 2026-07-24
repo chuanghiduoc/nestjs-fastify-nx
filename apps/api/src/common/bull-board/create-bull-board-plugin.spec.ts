@@ -275,7 +275,7 @@ describe('recordAuthFailure', () => {
   it('throws when the counter reply is not numeric', async () => {
     const redis = { eval: vi.fn().mockResolvedValue(['nope', 1]) } as unknown as Redis;
     await expect(recordAuthFailure(redis, '10.0.0.1')).rejects.toThrow(
-      /Unexpected auth-failure counter reply/,
+      /Unexpected fixed-window counter reply/,
     );
   });
 

@@ -14,7 +14,10 @@ export class RolesGuard implements CanActivate {
   constructor(private readonly reflector: Reflector) {}
 
   canActivate(context: ExecutionContext): boolean {
-    // WS messages are handled at the socket.io layer, not by this HTTP/GraphQL guard.
+    // WS messages are handled at the socket.io layer, not by this HTTP/GraphQL guard. NOTE: WS auth
+    // (createWsAuthMiddleware) only checks session validity + status, NOT role — there is no WS role
+    // primitive today. A @Roles() on a @SubscribeMessage handler would silently no-op here, so add
+    // an explicit role check in the ws middleware before relying on @Roles for a socket event.
     if (context.getType() === 'ws') return true;
 
     // Mirror BetterAuthGuard: a @Public route never populates request.user, so RolesGuard must not

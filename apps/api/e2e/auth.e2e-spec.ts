@@ -1,7 +1,12 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import request from 'supertest';
 import { PrismaService } from '@nestjs-fastify-nx/infra-database';
-import { createTestApp, cookieHeaderFromSetCookies, type TestAppContext } from './test-app';
+import {
+  createTestApp,
+  cookieHeaderFromSetCookies,
+  E2E_CORS_ORIGIN,
+  type TestAppContext,
+} from './test-app';
 
 // Better Auth mounts its own routes under /api/auth/*. They live OUTSIDE the
 // /api/v1 prefix and are not wrapped by ResponseInterceptor — bodies are the
@@ -183,6 +188,19 @@ describe('Auth E2E (Better Auth)', () => {
 
       // Better Auth returns `null` (or empty object) when no session cookie is present.
       expect(res.body === null || Object.keys(res.body ?? {}).length === 0).toBe(true);
+    });
+
+    // Regression: reply.hijack() drops headers buffered via reply.header() (incl. @fastify/cors's
+    // Access-Control-*). The handler flushes them onto the raw response before hijacking; without
+    // that, credentialed cross-origin auth breaks even though the body is correct.
+    it('preserves CORS headers on the hijacked Better Auth response', async () => {
+      const res = await request(ctx.app.getHttpServer())
+        .get('/api/auth/get-session')
+        .set('Origin', E2E_CORS_ORIGIN)
+        .expect(200);
+
+      expect(res.headers['access-control-allow-origin']).toBe(E2E_CORS_ORIGIN);
+      expect(res.headers['access-control-allow-credentials']).toBe('true');
     });
 
     it('returns the active session when cookie is forwarded', async () => {

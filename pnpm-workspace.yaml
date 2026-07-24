@@ -77,3 +77,13 @@ overrides:
   http-proxy-middleware: '^3.0.6'
   '@opentelemetry/core': '>=2.8.0'
   undici: '>=8.5.0'
+  # GHSA-5qjj-4xww-7phc (moderate). Pulled transitively via prisma/@prisma/dev (and better-auth's
+  # validation stack). Capped below the next major so a 2.x can't slip a peer out from under the
+  # toolchain; 1.4.2 is the latest 1.x and carries the fix.
+  valibot: '>=1.4.2 <2'
+  # GHSA-83w8-p2f5-377r (high, 7.5) + GHSA-8pvw-jcv7-9cmj (medium). @nestjs/platform-fastify pins an
+  # exact 9.3.0 and @bull-board/fastify wants ^9.1.3, so a plain update can't reach the fix; both use
+  # it as a regular (non-peer) dependency for static asset serving, whose public API is stable across
+  # 9->10 (v10 only raises the engine floor to Fastify 5, already in use — mercurius already resolves
+  # 10.1.2). Capped below the next major. Also dedupes to a single @fastify/static version.
+  '@fastify/static': '>=10.1.2 <11'

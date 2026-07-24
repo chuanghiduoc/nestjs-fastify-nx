@@ -16,6 +16,7 @@ import { AppModule } from '../src/app/app.module';
 import { registerIdempotency } from '../src/common/idempotency/register-idempotency';
 import { ProblemDetailsValidationPipe } from '../src/common/pipes';
 import { applyFastifyProblemDetailsHook } from '../src/common/filters/fastify-error-handler';
+import { flushBufferedReplyHeaders } from '../src/common/http/flush-reply-headers';
 import { buildProblemDetails } from '../src/common/filters/problem-details.helper';
 
 // In-process stub — e2e covers controller logic, not the S3 wire format.
@@ -69,6 +70,9 @@ const e2eStorageStub: StoragePort = {
   readRange: async (key, byteCount) =>
     e2eObjects.get(key)?.body.subarray(0, byteCount) ?? Buffer.alloc(0),
 };
+
+// Allowed cross-origin used to assert CORS headers survive the Better Auth hijack path.
+export const E2E_CORS_ORIGIN = 'http://localhost:5173';
 
 export interface TestAppContext {
   app: NestFastifyApplication;
@@ -127,6 +131,12 @@ export async function createTestApp(): Promise<TestAppContext> {
   );
   app.setGlobalPrefix('api', { exclude: ['metrics'] });
   app.enableVersioning({ type: VersioningType.URI, defaultVersion: '1' });
+  // Mirror main.ts CORS so the hijacked-auth-response header-preservation invariant is covered e2e.
+  app.enableCors({
+    origin: [E2E_CORS_ORIGIN],
+    credentials: true,
+    exposedHeaders: ['Idempotent-Replayed', 'X-Request-Id', 'X-Correlation-Id'],
+  });
   app.useGlobalPipes(new ProblemDetailsValidationPipe());
 
   // Mirror main.ts: mount Better Auth before init so its routes win against the
@@ -209,6 +219,9 @@ export async function createTestApp(): Promise<TestAppContext> {
     if (req.body !== undefined && (req.raw as unknown as { body?: unknown }).body === undefined) {
       (req.raw as unknown as { body: unknown }).body = req.body;
     }
+    // Use the SAME production helper main.ts calls, so the CORS regression test exercises the real
+    // hijack header-flush path — not a divergent copy that could stay green after a prod regression.
+    flushBufferedReplyHeaders(reply);
     reply.hijack();
     await betterAuthHandler(req.raw, reply.raw);
   };
