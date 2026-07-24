@@ -70,6 +70,9 @@ const e2eStorageStub: StoragePort = {
     e2eObjects.get(key)?.body.subarray(0, byteCount) ?? Buffer.alloc(0),
 };
 
+// Allowed cross-origin used to assert CORS headers survive the Better Auth hijack path.
+export const E2E_CORS_ORIGIN = 'http://localhost:5173';
+
 export interface TestAppContext {
   app: NestFastifyApplication;
   cleaner: DatabaseCleaner;
@@ -127,6 +130,12 @@ export async function createTestApp(): Promise<TestAppContext> {
   );
   app.setGlobalPrefix('api', { exclude: ['metrics'] });
   app.enableVersioning({ type: VersioningType.URI, defaultVersion: '1' });
+  // Mirror main.ts CORS so the hijacked-auth-response header-preservation invariant is covered e2e.
+  app.enableCors({
+    origin: [E2E_CORS_ORIGIN],
+    credentials: true,
+    exposedHeaders: ['Idempotent-Replayed', 'X-Request-Id', 'X-Correlation-Id'],
+  });
   app.useGlobalPipes(new ProblemDetailsValidationPipe());
 
   // Mirror main.ts: mount Better Auth before init so its routes win against the
@@ -208,6 +217,11 @@ export async function createTestApp(): Promise<TestAppContext> {
   const authRouteHandler = async (req: FastifyRequest, reply: FastifyReply): Promise<void> => {
     if (req.body !== undefined && (req.raw as unknown as { body?: unknown }).body === undefined) {
       (req.raw as unknown as { body: unknown }).body = req.body;
+    }
+    // Mirror main.ts: flush headers buffered by @fastify/cors's onRequest hook onto the raw response
+    // before hijack, otherwise Better Auth's node handler drops them from the reply.
+    for (const [name, value] of Object.entries(reply.getHeaders())) {
+      if (value !== undefined) reply.raw.setHeader(name, value);
     }
     reply.hijack();
     await betterAuthHandler(req.raw, reply.raw);

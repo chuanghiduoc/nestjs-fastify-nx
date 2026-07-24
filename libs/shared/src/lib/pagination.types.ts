@@ -18,7 +18,9 @@ export interface Page<T> {
 }
 
 export function buildPageMeta(page: number, pageSize: number, total: number): PageMeta {
-  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  // Clamp the divisor, not just the result: a pageSize of 0 would make total/pageSize === Infinity,
+  // which Math.max(1, …) cannot rescue and leaves hasNextPage stuck true (mirrors toListResponse).
+  const totalPages = Math.max(1, Math.ceil(total / Math.max(1, pageSize)));
   return {
     page,
     pageSize,

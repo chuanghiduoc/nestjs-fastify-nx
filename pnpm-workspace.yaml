@@ -77,3 +77,7 @@ overrides:
   http-proxy-middleware: '^3.0.6'
   '@opentelemetry/core': '>=2.8.0'
   undici: '>=8.5.0'
+  # GHSA-5qjj-4xww-7phc (moderate). Pulled transitively via prisma/@prisma/dev (and better-auth's
+  # validation stack). Capped below the next major so a 2.x can't slip a peer out from under the
+  # toolchain; 1.4.2 is the latest 1.x and carries the fix.
+  valibot: '>=1.4.2 <2'

@@ -24,6 +24,7 @@ import { ProblemDetailsValidationPipe } from './common/pipes';
 import { setupSwagger } from './common/swagger/swagger.config';
 import { createBullBoardPlugin } from './common/bull-board/create-bull-board-plugin';
 import { registerIdempotency } from './common/idempotency/register-idempotency';
+import { redisFixedWindowIncr } from './common/rate-limit/redis-fixed-window';
 import { applyFastifyProblemDetailsHook } from './common/filters/fastify-error-handler';
 import { buildProblemDetails } from './common/filters/problem-details.helper';
 import type { EnvConfig } from './config/env.validation';
@@ -41,11 +42,6 @@ const BULL_BOARD_CSP =
   "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'self'; " +
   "script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; " +
   "img-src 'self' data: https:; font-src 'self' https: data:; connect-src 'self'";
-
-const AUTH_ACCOUNT_RATE_LIMIT_SCRIPT = `
-local count = redis.call('incr', KEYS[1])
-if count == 1 then redis.call('pexpire', KEYS[1], ARGV[1]) end
-return {count, redis.call('pttl', KEYS[1])}`;
 
 startSentry({ serviceName: 'nestjs-fastify-api', profiling: true });
 
@@ -92,6 +88,8 @@ async function bootstrap() {
     'http://127.0.0.1:4200',
     'http://127.0.0.1:5173',
   ];
+  // Prod defaults to an empty allow-list (deny) rather than reflecting the request origin: with
+  // credentials:true, reflecting arbitrary origins would open credentialed cross-site requests (CSRF).
   app.enableCors({
     origin: corsOrigins.length > 0 ? corsOrigins : isProduction ? [] : DEV_ALLOWED_ORIGINS,
     credentials: true,
@@ -179,6 +177,14 @@ async function bootstrap() {
       onError: (message) => app.get(Logger).warn(message),
     });
   }
+
+  // Normalize parser/plugin failures that surface before Nest's exception filter into RFC 9457
+  // problem+json, WITHOUT installing a second Fastify error handler in the same scope (that would
+  // trigger FSTWRN004 and shadow Nest's). Registered before @fastify/compress — like the idempotency
+  // hook above — so its onSend rewrites the UNcompressed body: after compress it could be handed a
+  // gzipped buffer it cannot JSON.parse, dropping the real code/detail and emitting a plaintext body
+  // under a stale Content-Encoding: gzip header.
+  applyFastifyProblemDetailsHook(fastify);
 
   // Load shedding: on event-loop saturation, reply 503 (problem+json) so a load balancer / k8s
   // drains this instance. Heap/RSS caps are env-specific and left off by default.
@@ -273,10 +279,6 @@ async function bootstrap() {
     },
   });
 
-  // Normalize parser/plugin failures that occur before Nest's exception filter without
-  // installing a second Fastify error handler in the same scope (which triggers FSTWRN004).
-  applyFastifyProblemDetailsHook(fastify);
-
   // A second, account-wide bucket complements the per-IP route bucket. Without both, attackers
   // can spray many accounts from one IP or distribute guesses for one account across many IPs.
   // This bucket keys on the request's email, so it only augments credential paths that carry one
@@ -294,17 +296,14 @@ async function bootstrap() {
 
     try {
       const key = `auth:account:${createHash('sha256').update(email).digest('hex')}`;
-      const [countRaw, ttlRaw] = (await rateLimitRedis.eval(
-        AUTH_ACCOUNT_RATE_LIMIT_SCRIPT,
-        1,
+      const { count, ttlMs } = await redisFixedWindowIncr(
+        rateLimitRedis,
         key,
-        String(authRateLimitWindowMs),
-      )) as [number | string, number | string];
-      const count = Number(countRaw);
-      const ttl = Math.max(0, Number(ttlRaw));
+        authRateLimitWindowMs,
+      );
       if (count <= authRateLimitMax) return;
 
-      const retryAfter = Math.max(1, Math.ceil(ttl / 1000));
+      const retryAfter = Math.max(1, Math.ceil(ttlMs / 1000));
       const requestId = resolveRequestId(req.headers);
       (req.raw as { requestId?: string }).requestId = requestId;
       return reply
@@ -393,6 +392,16 @@ async function bootstrap() {
     // Propagate Fastify's parsed body to req.raw so Better Auth's toNodeHandler can read it.
     if (req.body !== undefined && (req.raw as unknown as { body?: unknown }).body === undefined) {
       (req.raw as unknown as { body: unknown }).body = req.body;
+    }
+
+    // hijack() detaches from Fastify's send pipeline, which is the only thing that flushes headers
+    // buffered via reply.header(). Better Auth's node handler then writes straight to reply.raw and
+    // only MERGES its own headers on the success path, so anything still buffered is dropped —
+    // notably @fastify/cors's Access-Control-* (set in its onRequest hook), which breaks credentialed
+    // cross-origin auth, plus the x-request-id/x-correlation-id set above. Flush them onto the raw
+    // response first; Better Auth's own headers still win via setHeader after this.
+    for (const [name, value] of Object.entries(reply.getHeaders())) {
+      if (value !== undefined) reply.raw.setHeader(name, value);
     }
     reply.hijack();
 
@@ -490,7 +499,6 @@ async function bootstrap() {
     );
   }
 
-  // Never reflect arbitrary origins with credentials:true — prevents CSRF via cross-site authenticated requests.
   app.useGlobalPipes(new ProblemDetailsValidationPipe());
 
   if (!isProduction) {

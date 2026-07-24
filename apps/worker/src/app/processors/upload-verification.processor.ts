@@ -56,10 +56,19 @@ export class UploadVerificationProcessor extends WorkerHost {
       return;
     }
 
-    await this.prisma.db.storedFile.updateMany({
+    const result = await this.prisma.db.storedFile.updateMany({
       where: { key, status: STORED_FILE_STATUS.VERIFYING },
       data: { status: STORED_FILE_STATUS.READY, verifiedAt: new Date(), failureReason: null },
     });
+    if (result.count === 0) {
+      // Mirror reject()'s CAS guard: a duplicate/retried job — or a row already flipped or purged —
+      // is a safe no-op. Log it as skipped rather than reporting a READY flip that never happened.
+      this.logger.warn(
+        { key, declaredContentType, correlationId },
+        'verify-magic-bytes: ready-flip skipped — record not in VERIFYING state (already processed)',
+      );
+      return;
+    }
 
     this.logger.log(
       { key, declaredContentType, correlationId },

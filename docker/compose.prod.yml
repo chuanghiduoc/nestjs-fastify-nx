@@ -144,8 +144,8 @@ services:
       redis-queue:
         condition: service_healthy
     restart: unless-stopped
-    # Liveness probe — process is alive. Use /health/ready for K8s readiness;
-    # /health (full) for ops dashboards. Docker should only kill on liveness fail.
+    # Liveness probe — process is alive. Use /api/v1/health/ready for K8s readiness;
+    # /api/v1/health (full) for ops dashboards. Docker should only kill on liveness fail.
     healthcheck:
       test:
         [
