@@ -155,22 +155,29 @@ export class StoredFileCleanupTask {
           // validated version). Recover the row to READY via CAS rather than skipping it every tick
           // (which would re-HEAD + re-log hourly forever). The async verify recheck is redundant for
           // the current magic-byte-only worker; if a heavier scanner is added to that queue later,
-          // re-enqueue verification here instead of promoting straight to READY.
-          const recovered = await this.prisma.db.storedFile.updateMany({
-            where: {
-              id: candidate.id,
-              status: candidate.status,
-              updatedAt: candidate.updatedAt,
-            },
-            data: {
-              status: STORED_FILE_STATUS.READY,
-              verifiedAt: new Date(),
-              failureReason: null,
-            },
-          });
-          if (recovered.count > 0) {
-            this.logger.log(
-              `Recovered ${candidate.status} id=${candidate.id} key=${candidate.key} → READY (object committed and inline-validated)`,
+          // re-enqueue verification here instead of promoting straight to READY. Guarded like the
+          // delete path below so a transient DB error skips only this candidate, not the whole tick.
+          try {
+            const recovered = await this.prisma.db.storedFile.updateMany({
+              where: {
+                id: candidate.id,
+                status: candidate.status,
+                updatedAt: candidate.updatedAt,
+              },
+              data: {
+                status: STORED_FILE_STATUS.READY,
+                verifiedAt: new Date(),
+                failureReason: null,
+              },
+            });
+            if (recovered.count > 0) {
+              this.logger.log(
+                `Recovered ${candidate.status} id=${candidate.id} key=${candidate.key} → READY (object committed and inline-validated)`,
+              );
+            }
+          } catch (err) {
+            this.logger.error(
+              `Stored-file recovery failed: id=${candidate.id} key=${candidate.key} error=${String(err)}`,
             );
           }
           continue;

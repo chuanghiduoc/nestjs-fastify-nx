@@ -170,7 +170,9 @@ function resolveClientIp(socket: Socket, trustProxyHops: number): string | undef
   const reqLike = {
     headers: {
       ...socket.handshake.headers,
-      'x-forwarded-for': Array.isArray(forwardedFor) ? forwardedFor[0] : forwardedFor,
+      // Node joins duplicate x-forwarded-for headers into one comma string; the array branch is
+      // defensive — join it (not [0]) so every hop is preserved for proxy-addr to parse.
+      'x-forwarded-for': Array.isArray(forwardedFor) ? forwardedFor.join(', ') : forwardedFor,
     },
     socket: { remoteAddress: direct },
     connection: { remoteAddress: direct },

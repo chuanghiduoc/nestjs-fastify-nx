@@ -33,7 +33,10 @@ const SENSITIVE_KEYS = [
   'secret',
 ];
 
-const WILDCARD_PATHS = SENSITIVE_KEYS.flatMap((key) => [`*.${key}`, `*.*.${key}`]);
+// Root level (`{ password }`) plus one and two levels deep. A pino/fast-redact `*` matches exactly
+// one level and does NOT cover the root, so the bare key is listed too — otherwise a raw
+// `logger.info({ password })` would leak the secret.
+const WILDCARD_PATHS = SENSITIVE_KEYS.flatMap((key) => [key, `*.${key}`, `*.*.${key}`]);
 
 export const SENSITIVE_REDACT_PATHS = [...REQUEST_RESPONSE_PATHS, ...WILDCARD_PATHS];
 

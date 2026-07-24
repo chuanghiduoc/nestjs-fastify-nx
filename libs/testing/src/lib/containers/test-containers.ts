@@ -26,8 +26,15 @@ export async function createTestContainers(): Promise<TestContainers> {
     redis,
     teardown: async () => {
       // allSettled so one container failing to stop still lets the other be torn down (Promise.all
-      // would reject on the first failure and skip awaiting the second → a leaked container).
-      await Promise.allSettled([postgres.stop(), redis.stop()]);
+      // would reject on the first failure and skip awaiting the second → a leaked container). Then
+      // surface any failure so a leaked container is loud, not silent.
+      const results = await Promise.allSettled([postgres.stop(), redis.stop()]);
+      const failures = results.flatMap((result) =>
+        result.status === 'rejected' ? [String(result.reason)] : [],
+      );
+      if (failures.length > 0) {
+        throw new Error(`Failed to stop test container(s): ${failures.join('; ')}`);
+      }
     },
   };
 }
