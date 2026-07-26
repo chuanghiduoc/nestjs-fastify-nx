@@ -533,6 +533,9 @@ importers:
       '@nestjs-fastify-nx/shared':
         specifier: workspace:*
         version: link:../../shared
+      '@nestjs-fastify-nx/testing':
+        specifier: workspace:*
+        version: link:../../testing
 
   libs/infra/observability:
     devDependencies:
