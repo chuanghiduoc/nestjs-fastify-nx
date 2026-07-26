@@ -5,7 +5,7 @@ import type { IncomingMessage } from 'http';
 import { buildPinoLoggerConfig } from '@nestjs-fastify-nx/infra-observability';
 import { REQUEST_CONTEXT_KEYS } from '@nestjs-fastify-nx/core';
 import { CorrelationIdMiddleware } from './correlation-id.middleware';
-import { resolveCorrelationId, resolveRequestId } from './request-id';
+import { ensureRequestIds } from './request-id';
 
 @Module({
   imports: [
@@ -19,8 +19,11 @@ import { resolveCorrelationId, resolveRequestId } from './request-id';
       middleware: {
         mount: true,
         setup: (cls, req: IncomingMessage) => {
-          const requestId = resolveRequestId(req.headers);
-          const correlationId = resolveCorrelationId(req.headers, requestId);
+          // ensureRequestIds (not resolveRequestId) so a Fastify hook that already answered before
+          // this middleware — under-pressure's load-shedding handler registers its onRequest hook
+          // ahead of middie — shares the id it put on the wire instead of the log carrying a second,
+          // unrelated one.
+          const { requestId, correlationId } = ensureRequestIds(req, req.headers);
           cls.set(REQUEST_CONTEXT_KEYS.requestId, requestId);
           cls.set(REQUEST_CONTEXT_KEYS.correlationId, correlationId);
         },

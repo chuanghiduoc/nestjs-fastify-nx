@@ -4,6 +4,7 @@ import { fromNodeHeaders } from 'better-auth/node';
 import proxyaddr from 'proxy-addr';
 import type { BetterAuthInstance } from '@nestjs-fastify-nx/infra-auth';
 import type Redis from 'ioredis';
+import { extractBearerToken } from '../common/http/bearer-token';
 
 const WS_CONN_KEY_PREFIX = 'ws:conn:';
 const WS_CONN_TTL_MS = 600_000;
@@ -26,10 +27,62 @@ interface WsConnectionLease {
   member: string;
 }
 
+// Fixed window, per socket, in memory: a socket lives on exactly one process for its whole lifetime,
+// so a shared Redis counter would add a round-trip per frame to enforce a bound that is already
+// local. The per-IP connection lease (Redis) is what stops a client spreading load across replicas.
+interface WsMessageBudget {
+  windowStartedAt: number;
+  count: number;
+}
+
 // socket.io types `socket.data` as `any`; this is the shape this app stores on it.
 export interface WsSocketData {
   user?: { userId: string; email: string; role: string };
   connectionLease?: WsConnectionLease;
+  messageBudget?: WsMessageBudget;
+}
+
+export interface WsMessageRateLimitOptions {
+  readonly max: number;
+  readonly windowMs: number;
+}
+
+/**
+ * Caps inbound frames per socket.
+ *
+ * Every global APP_GUARD — GqlThrottlerGuard included — returns early on the `ws` context because
+ * the base ThrottlerGuard would read the socket as an HTTP req/res. That leaves @SubscribeMessage
+ * handlers with no rate limit at all: WS_CONNECTION_LIMIT_PER_IP bounds how many sockets exist, not
+ * how fast an already-authenticated one can talk. This closes that gap.
+ *
+ * Over-budget frames are rejected with an error to the client rather than a disconnect — a burst is
+ * usually a buggy client retry loop, and dropping the session would turn it into a reconnect storm.
+ */
+export function applyWsMessageRateLimit(socket: Socket, options: WsMessageRateLimitOptions): void {
+  socket.use((_packet, next) => {
+    const data = wsData(socket);
+    const now = Date.now();
+    const budget = data.messageBudget;
+
+    if (!budget || now - budget.windowStartedAt >= options.windowMs) {
+      data.messageBudget = { windowStartedAt: now, count: 1 };
+      next();
+      return;
+    }
+
+    budget.count++;
+    if (budget.count > options.max) {
+      const retryAfterMs = options.windowMs - (now - budget.windowStartedAt);
+      next(
+        new Error(
+          `TOO_MANY_MESSAGES: message rate limit exceeded (${options.max} per ${options.windowMs}ms); retry in ${Math.ceil(retryAfterMs / 1000)}s`,
+        ),
+      );
+      return;
+    }
+
+    next();
+  });
 }
 
 export function wsData(socket: Socket): WsSocketData {
@@ -49,7 +102,7 @@ export async function revalidateWsSession(auth: BetterAuthInstance, socket: Sock
   const cookieHeader = socket.handshake.headers['cookie'];
   const bearerToken =
     (socket.handshake.auth['token'] as string | undefined) ||
-    extractBearer(socket.handshake.headers['authorization']);
+    extractBearerToken(socket.handshake.headers['authorization']);
 
   const headers: Record<string, string> = {};
   if (cookieHeader) headers['cookie'] = cookieHeader;
@@ -179,10 +232,4 @@ function resolveClientIp(socket: Socket, trustProxyHops: number): string | undef
   } as unknown as IncomingMessage;
 
   return proxyaddr(reqLike, (_addr, hopIndex) => hopIndex < trustProxyHops);
-}
-
-function extractBearer(header: string | string[] | undefined): string | undefined {
-  const value = Array.isArray(header) ? header[0] : header;
-  if (!value || !value.startsWith('Bearer ')) return undefined;
-  return value.substring('Bearer '.length);
 }

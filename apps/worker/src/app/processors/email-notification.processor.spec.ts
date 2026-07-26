@@ -4,6 +4,14 @@ import type { EmailNotificationPayload } from './email-notification.processor';
 import type { Job } from 'bullmq';
 import type { MailAdapter } from '../mail/mail.adapter';
 import type Redis from 'ioredis';
+import type { ConfigService } from '@nestjs/config';
+import type { WorkerEnvConfig } from '../../config/env.validation';
+
+type WorkerConfig = ConfigService<WorkerEnvConfig, true>;
+
+function makeConfig(values: Partial<WorkerEnvConfig> = {}): WorkerConfig {
+  return { get: (key: keyof WorkerEnvConfig) => values[key] } as unknown as WorkerConfig;
+}
 
 function makeJob(
   data: EmailNotificationPayload,
@@ -40,7 +48,7 @@ describe('EmailNotificationProcessor', () => {
   beforeEach(() => {
     mail = makeMockMailAdapter();
     redis = makeMockRedis();
-    processor = new EmailNotificationProcessor(mail, redis);
+    processor = new EmailNotificationProcessor(mail, redis, makeConfig());
   });
 
   it('calls mail.send with correct params for a valid payload', async () => {
@@ -117,7 +125,7 @@ describe('EmailNotificationProcessor', () => {
 
     it('returns early without calling mail.send when slot is already claimed', async () => {
       redis = makeMockRedis(true);
-      processor = new EmailNotificationProcessor(mail, redis);
+      processor = new EmailNotificationProcessor(mail, redis, makeConfig());
 
       const job = makeJob(
         { to: 'skip@example.com', subject: 'Skip', body: 'Body' },

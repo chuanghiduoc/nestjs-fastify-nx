@@ -4,17 +4,18 @@ import { PrismaService } from '@nestjs-fastify-nx/infra-database';
 import { positiveIntEnv } from '@nestjs-fastify-nx/shared';
 import { SchedulerLeaderService } from '../leadership/scheduler-leader.service';
 
-const BATCH_SIZE = positiveIntEnv('SESSION_PURGE_BATCH_SIZE', 1000);
-const MAX_BATCHES = positiveIntEnv('SESSION_PURGE_MAX_BATCHES', 200);
-// Better Auth never deletes a session row itself, so this table grows unbounded without this
-// purge. Grace period past expiry (not at the boundary) is a small safety margin against clock
-// skew between the app server and Postgres — unlike verification tokens, an expired session
-// fails auth the same way whether the row is still present or already purged.
-const GRACE_DAYS = positiveIntEnv('SESSION_PURGE_GRACE_DAYS', 1);
-
 @Injectable()
 export class SessionCleanupTask {
   private readonly logger = new Logger(SessionCleanupTask.name);
+  // Instance fields, not module-level constants: module scope is evaluated before
+  // ConfigModule.forRoot() loads .env, so those reads always saw the defaults.
+  private readonly batchSize = positiveIntEnv('SESSION_PURGE_BATCH_SIZE', 1_000);
+  private readonly maxBatches = positiveIntEnv('SESSION_PURGE_MAX_BATCHES', 200);
+  // Better Auth never deletes a session row itself, so this table grows unbounded without this
+  // purge. Grace period past expiry (not at the boundary) is a small safety margin against clock
+  // skew between the app server and Postgres — unlike verification tokens, an expired session
+  // fails auth the same way whether the row is still present or already purged.
+  private readonly graceDays = positiveIntEnv('SESSION_PURGE_GRACE_DAYS', 1);
   private running = false;
 
   constructor(
@@ -28,12 +29,12 @@ export class SessionCleanupTask {
   async purgeExpiredSessions(): Promise<void> {
     if (!this.leadership.isLeader() || this.running) return;
     this.running = true;
-    this.logger.log(`Starting session purge: expiresAt < NOW() - ${GRACE_DAYS} days`);
+    this.logger.log(`Starting session purge: expiresAt < NOW() - ${this.graceDays} days`);
 
     let totalPurged = 0;
     try {
       // Batched to keep each DELETE's lock footprint small — the same table serves live auth reads.
-      for (let batch = 0; batch < MAX_BATCHES; batch++) {
+      for (let batch = 0; batch < this.maxBatches; batch++) {
         const deleted = await this.prisma.db.$executeRawUnsafe<number>(
           `DELETE FROM "sessions"
              WHERE id IN (
@@ -41,8 +42,8 @@ export class SessionCleanupTask {
                 WHERE "expiresAt" < NOW() - ($1 || ' days')::interval
                 LIMIT $2
              )`,
-          String(GRACE_DAYS),
-          BATCH_SIZE,
+          String(this.graceDays),
+          this.batchSize,
         );
         const n = Number(deleted ?? 0);
         if (n === 0) break;

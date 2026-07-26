@@ -3,12 +3,10 @@ import { ConfigService } from '@nestjs/config';
 import type { HealthIndicatorResult } from '@nestjs/terminus';
 import { HealthIndicatorService } from '@nestjs/terminus';
 import Redis from 'ioredis';
-import { withTimeout } from '@nestjs-fastify-nx/shared';
+import { redisReconnectStrategy, withTimeout } from '@nestjs-fastify-nx/shared';
 import type { EnvConfig } from '../../config/env.validation';
 
 const PROBE_TIMEOUT_MS = 2_000;
-const PROBE_RECONNECT_STEP_MS = 200;
-const PROBE_RECONNECT_CAP_MS = 2_000;
 
 interface RedisTarget {
   readonly host: string;
@@ -32,8 +30,7 @@ abstract class BaseRedisHealthIndicator implements OnModuleDestroy {
       // Redis blip would leave this probe reporting down forever and every replica NotReady
       // until a human restarts it.
       maxRetriesPerRequest: 1,
-      retryStrategy: (times: number) =>
-        Math.min(times * PROBE_RECONNECT_STEP_MS, PROBE_RECONNECT_CAP_MS),
+      retryStrategy: redisReconnectStrategy,
     });
     this.redis.on('error', () => {
       // swallow connection errors — surfaced via isHealthy()

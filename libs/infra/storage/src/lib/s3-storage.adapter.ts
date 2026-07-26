@@ -3,6 +3,7 @@ import {
   Logger,
   BadRequestException,
   InternalServerErrorException,
+  type OnModuleDestroy,
   type OnModuleInit,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -35,7 +36,7 @@ const UNCOMMITTED_TAGGING =
 
 // forcePathStyle required for MinIO and S3-compatible services (R2, B2); harmless on AWS S3.
 @Injectable()
-export class S3StorageAdapter implements StoragePort, OnModuleInit {
+export class S3StorageAdapter implements StoragePort, OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(S3StorageAdapter.name);
   private readonly client: S3Client;
   private readonly presignClient: S3Client;
@@ -94,12 +95,11 @@ export class S3StorageAdapter implements StoragePort, OnModuleInit {
         ?.httpStatusCode;
       const code = (err as { name?: string })?.name;
       const missing = status === 404 || code === 'NotFound' || code === 'NoSuchBucket';
-      if (!missing && status !== undefined) {
-        this.handleStartupFailure(err, `Bucket head check failed (status=${status})`);
-        return;
-      }
       if (!missing) {
-        this.handleStartupFailure(err, 'Bucket head check failed');
+        // A non-404 (403, connection refused, TLS failure) means the bucket may well exist and we
+        // simply cannot see it — creating it would be wrong, so surface the fault instead.
+        const suffix = status === undefined ? '' : ` (status=${status})`;
+        this.handleStartupFailure(err, `Bucket head check failed${suffix}`);
         return;
       }
     }
@@ -113,6 +113,18 @@ export class S3StorageAdapter implements StoragePort, OnModuleInit {
         return;
       }
       this.handleStartupFailure(err, 'Failed to create storage bucket');
+    }
+  }
+
+  // The SDK keeps a keep-alive HTTP agent with pooled sockets; without an explicit destroy they
+  // survive shutdown and hold the event loop open (visible as a hung container on SIGTERM and as
+  // leaked handles between test suites).
+  onModuleDestroy(): void {
+    this.client.destroy();
+    // presignClient aliases client when no separate public endpoint is configured — destroying the
+    // same client twice is not safe to assume, so only destroy a genuinely distinct instance.
+    if (this.presignClient !== this.client) {
+      this.presignClient.destroy();
     }
   }
 

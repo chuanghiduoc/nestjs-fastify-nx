@@ -8,7 +8,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '@nestjs-fastify-nx/infra-database';
 import type { DomainEvent } from '@nestjs-fastify-nx/core';
-import { intEnv } from '@nestjs-fastify-nx/shared';
+import { positiveIntEnv } from '@nestjs-fastify-nx/shared';
 import { EventBusService } from './event-bus.service';
 import { OUTBOX_SCHEMA_VERSION } from './outbox-schema-version';
 import { OUTBOX_RELAY_LEADERSHIP, type OutboxRelayLeadership } from './outbox-relay-leadership';
@@ -55,10 +55,21 @@ function parsePayload(value: unknown): OutboxPayloadShape | null {
 @Injectable()
 export class OutboxRelayService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(OutboxRelayService.name);
-  private readonly pollIntervalMs = intEnv('OUTBOX_POLL_INTERVAL_MS', 1_000);
-  private readonly batchSize = intEnv('OUTBOX_BATCH_SIZE', 50);
-  private readonly maxAttempts = intEnv('OUTBOX_MAX_ATTEMPTS', 10);
-  private readonly txTimeoutMs = intEnv('OUTBOX_TX_TIMEOUT_MS', 30_000);
+  private readonly pollIntervalMs = positiveIntEnv('OUTBOX_POLL_INTERVAL_MS', 1_000);
+  private readonly batchSize = positiveIntEnv('OUTBOX_BATCH_SIZE', 50);
+  private readonly maxAttempts = positiveIntEnv('OUTBOX_MAX_ATTEMPTS', 10);
+  private readonly txTimeoutMs = positiveIntEnv('OUTBOX_TX_TIMEOUT_MS', 30_000);
+  // Exponential backoff between delivery attempts. Without it the relay re-claims a failing row on
+  // every poll tick, so a downstream outage lasting only maxAttempts × pollInterval (10s at the
+  // defaults) exhausts the whole retry budget of every pending event and parks them as permanently
+  // stuck.
+  //
+  // The delay uses the PRE-increment attempt count: `min(base × 2^attempts, cap)`, so the wait after
+  // the Nth attempt is `base × 2^(N-1)`. At the defaults that is 2, 4, 8, 16, 32, 64, 128, 256, then
+  // capped at 300 — the 1st and 10th attempts are ~13.5 minutes apart. The delay stamped by the 10th
+  // attempt is never consumed: `attempts < maxAttempts` is already false, so the row is parked.
+  private readonly retryBaseMs = positiveIntEnv('OUTBOX_RETRY_BASE_MS', 2_000);
+  private readonly retryMaxMs = positiveIntEnv('OUTBOX_RETRY_MAX_MS', 300_000);
   private timer?: NodeJS.Timeout;
   private inFlight?: Promise<number>;
   private running = false;
@@ -150,6 +161,9 @@ export class OutboxRelayService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  // The claim itself stamps the next visible time, so the backoff survives a relay that dies
+  // mid-dispatch (an error-handler-only stamp would leave such a row claimable on the next tick).
+  // `attempts` is the pre-increment value inside the UPDATE, so the first retry waits retryBaseMs.
   private async claimBatch(): Promise<OutboxRow[]> {
     return this.prisma.transaction(
       async (tx) => {
@@ -157,18 +171,30 @@ export class OutboxRelayService implements OnModuleInit, OnModuleDestroy {
           `WITH locked AS (
              SELECT id
                FROM "outbox_events"
-              WHERE "processedAt" IS NULL AND attempts < $1
+              WHERE "processedAt" IS NULL
+                AND attempts < $1
+                AND ("nextAttemptAt" IS NULL OR "nextAttemptAt" <= NOW())
               ORDER BY "createdAt", id
               LIMIT $2
               FOR UPDATE SKIP LOCKED
            )
            UPDATE "outbox_events" o
-              SET attempts = o.attempts + 1
+              SET attempts = o.attempts + 1,
+                  -- The exponent is clamped so a large OUTBOX_MAX_ATTEMPTS can never push
+                  -- power(2, attempts) past float8 range; LEAST already caps the result anyway.
+                  "nextAttemptAt" = NOW() + make_interval(
+                    secs => LEAST(
+                      $3::double precision * power(2, LEAST(o.attempts, 30)),
+                      $4::double precision
+                    )
+                  )
              FROM locked
             WHERE o.id = locked.id
            RETURNING o.id, o."eventType", o."aggregateId", o.payload, o.attempts`,
           this.maxAttempts,
           this.batchSize,
+          this.retryBaseMs / 1000,
+          this.retryMaxMs / 1000,
         );
       },
       { timeout: this.txTimeoutMs },
@@ -228,7 +254,9 @@ export class OutboxRelayService implements OnModuleInit, OnModuleDestroy {
 
   private async markProcessed(id: string): Promise<void> {
     await this.prisma.db.$executeRawUnsafe(
-      `UPDATE "outbox_events" SET "processedAt" = $1, "lastError" = NULL WHERE id = $2`,
+      `UPDATE "outbox_events"
+          SET "processedAt" = $1, "lastError" = NULL, "nextAttemptAt" = NULL
+        WHERE id = $2`,
       new Date(),
       id,
     );

@@ -1,10 +1,13 @@
 import { Processor, WorkerHost } from '@nestjs/bullmq';
-import { Inject, Logger } from '@nestjs/common';
+import { Inject, Logger, type OnApplicationBootstrap } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import type { Job } from 'bullmq';
 import { QUEUE_NAMES, detectFileType, positiveIntEnv } from '@nestjs-fastify-nx/shared';
 import { STORAGE_PORT, type StoragePort } from '@nestjs-fastify-nx/infra-storage';
 import { PrismaService } from '@nestjs-fastify-nx/infra-database';
 import { STORED_FILE_STATUS } from '@nestjs-fastify-nx/shared';
+import type { WorkerEnvConfig } from '../../config/env.validation';
+import { applyWorkerConcurrency } from './apply-worker-concurrency';
 
 export interface UploadVerificationPayload {
   key: string;
@@ -15,17 +18,27 @@ export interface UploadVerificationPayload {
 }
 
 const MAGIC_BYTES_TO_READ = 16; // covers all signatures in file-signature.ts
+// Seed only — decorator options evaluate before ConfigModule parses .env; see applyWorkerConcurrency.
 const UPLOAD_CONCURRENCY = positiveIntEnv('WORKER_UPLOAD_CONCURRENCY', 5);
 
 @Processor(QUEUE_NAMES.UPLOAD_VERIFICATION, { concurrency: UPLOAD_CONCURRENCY })
-export class UploadVerificationProcessor extends WorkerHost {
+export class UploadVerificationProcessor extends WorkerHost implements OnApplicationBootstrap {
   private readonly logger = new Logger(UploadVerificationProcessor.name);
 
   constructor(
     @Inject(STORAGE_PORT) private readonly storage: StoragePort,
     private readonly prisma: PrismaService,
+    private readonly config: ConfigService<WorkerEnvConfig, true>,
   ) {
     super();
+  }
+
+  onApplicationBootstrap(): void {
+    applyWorkerConcurrency(
+      this,
+      this.config.get('WORKER_UPLOAD_CONCURRENCY', { infer: true }),
+      this.logger,
+    );
   }
 
   async process(job: Job<UploadVerificationPayload>): Promise<void> {

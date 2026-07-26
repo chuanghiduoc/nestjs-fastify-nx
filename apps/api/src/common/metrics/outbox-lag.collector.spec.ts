@@ -4,8 +4,15 @@ import type { MetricsService } from './metrics.service';
 import type { MetricsLeaderService } from './metrics-leader.service';
 import type { PrismaService } from '@nestjs-fastify-nx/infra-database';
 
-function makeLeader(isLeader: boolean): MetricsLeaderService {
-  return { isLeader: () => isLeader } as unknown as MetricsLeaderService;
+type LeaderStub = MetricsLeaderService & { lostHandlers: Array<() => void> };
+
+function makeLeader(isLeader: boolean): LeaderStub {
+  const lostHandlers: Array<() => void> = [];
+  return {
+    isLeader: () => isLeader,
+    onLeadershipLost: (handler: () => void) => lostHandlers.push(handler),
+    lostHandlers,
+  } as unknown as LeaderStub;
 }
 
 function makeMockPrisma(lagSeconds: number | null): PrismaService {
@@ -18,7 +25,7 @@ function makeMockPrisma(lagSeconds: number | null): PrismaService {
 
 function makeMockMetrics(): MetricsService {
   return {
-    outboxLagSeconds: { set: vi.fn() },
+    outboxLagSeconds: { set: vi.fn(), reset: vi.fn() },
   } as unknown as MetricsService;
 }
 
@@ -82,5 +89,19 @@ describe('OutboxLagCollector', () => {
     expect(sql).toContain('"outbox_events"');
     expect(sql).toContain('"processedAt" IS NULL');
     expect(sql).toContain('MIN("createdAt")');
+  });
+
+  // A gauge is last-write-wins per replica: an ex-leader that merely stops writing keeps exporting
+  // its final value, so Prometheus would scrape a frozen series from it alongside the live one.
+  it('clears the gauge when this replica loses the collector lease', () => {
+    const leader = makeLeader(true);
+    collector = new OutboxLagCollector(prisma, metrics, leader);
+
+    collector.onModuleInit();
+    expect(metrics.outboxLagSeconds.reset).not.toHaveBeenCalled();
+
+    for (const handler of leader.lostHandlers) handler();
+
+    expect(metrics.outboxLagSeconds.reset).toHaveBeenCalledOnce();
   });
 });

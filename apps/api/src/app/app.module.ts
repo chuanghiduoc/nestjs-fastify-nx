@@ -26,8 +26,6 @@ import { TimeoutInterceptor } from '../common/interceptors';
 import { validateConfig } from '../config/env.validation';
 import { AppController } from './app.controller';
 
-const conditionalImports = process.env['ENABLE_METRICS'] === 'true' ? [MetricsModule] : [];
-
 @Module({
   imports: [
     SentryModule.forRoot(),
@@ -55,7 +53,10 @@ const conditionalImports = process.env['ENABLE_METRICS'] === 'true' ? [MetricsMo
     UploadModule,
     GraphqlModule,
     WebsocketModule,
-    ...conditionalImports,
+    // Evaluated inline AFTER ConfigModule.forRoot() above, never as a module-scope const: array
+    // elements evaluate in order, and forRoot() is what parses .env into process.env. Hoisting this
+    // read above it made `ENABLE_METRICS=true` in a .env file silently drop the whole module.
+    ...(process.env['ENABLE_METRICS'] === 'true' ? [MetricsModule] : []),
   ],
   controllers: [AppController],
   providers: [

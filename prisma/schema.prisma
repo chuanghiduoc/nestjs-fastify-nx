@@ -118,18 +118,25 @@ model StoredFile {
 // `id` is application-stamped UUIDv7 — producer needs the value inside the
 // same transaction to correlate aggregate writes with the outbox row.
 model OutboxEvent {
-  id          String    @id @db.Uuid
-  eventType   String
-  aggregateId String
-  payload     Json
-  processedAt DateTime?
-  attempts    Int       @default(0)
-  lastError   String?
-  createdAt   DateTime  @default(now())
+  id            String    @id @db.Uuid
+  eventType     String
+  aggregateId   String
+  payload       Json
+  processedAt   DateTime?
+  attempts      Int       @default(0)
+  lastError     String?
+  createdAt     DateTime  @default(now())
+  // Earliest time the relay may claim this row again. Stamped by the CLAIM statement itself (not
+  // by the error handler) so a relay that crashes mid-dispatch still leaves the row invisible for
+  // the backoff window instead of being re-claimed on the very next poll tick.
+  nextAttemptAt DateTime?
 
   // Relay scan path — must come first because (processedAt, createdAt) is the
   // leftmost prefix `WHERE processedAt IS NULL ORDER BY createdAt` uses.
   @@index([processedAt, createdAt])
+  // Backoff-aware claim path: `WHERE processedAt IS NULL AND (nextAttemptAt IS NULL OR
+  // nextAttemptAt <= NOW()) ORDER BY createdAt`.
+  @@index([processedAt, nextAttemptAt, createdAt])
   // Ops debugging path — "show me all undelivered users.registered events".
   // Without this, the only access path is a full scan of outbox_events.
   @@index([eventType, processedAt])

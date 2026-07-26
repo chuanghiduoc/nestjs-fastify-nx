@@ -35,6 +35,8 @@ function buildSocket(opts?: { userId?: string; joinError?: Error }): Socket {
     join: vi.fn().mockImplementation(async () => {
       if (opts?.joinError) throw opts.joinError;
     }),
+    // handleConnection installs the per-frame rate limiter through socket.use().
+    use: vi.fn(),
     disconnect: vi.fn(),
   } as unknown as Socket;
 }
