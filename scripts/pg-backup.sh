@@ -38,10 +38,25 @@ case "$cmd" in
     out_file="${out_dir}/${PG_DB}-${stamp}.dump"
     echo "Backing up ${PG_DB} → ${out_file}"
     # -Fc = custom format (compressed, selective restore). Stream to the host file.
-    compose exec -T "$PG_SERVICE" pg_dump -U "$PG_USER" -d "$PG_DB" -Fc > "$out_file"
-    # Fail loud if the dump is empty/truncated rather than leaving a useless file.
+    # `|| rc=$?` instead of a bare call: under `set -e` a failing pg_dump would abort the
+    # script here, leaving the truncated file the redirect already created — the exact
+    # "useless file" the check below exists to prevent.
+    rc=0
+    compose exec -T "$PG_SERVICE" pg_dump -U "$PG_USER" -d "$PG_DB" -Fc > "$out_file" || rc=$?
+    if [ "$rc" -ne 0 ]; then
+      echo "ERROR: pg_dump exited ${rc} — backup FAILED" >&2
+      rm -f "$out_file"
+      exit 1
+    fi
     if [ ! -s "$out_file" ]; then
       echo "ERROR: dump is empty — backup FAILED" >&2
+      rm -f "$out_file"
+      exit 1
+    fi
+    # A non-empty file can still be a truncated stream. pg_restore -l parses the custom-format
+    # archive's table of contents, so it fails on a partial dump that the size check accepts.
+    if ! compose exec -T "$PG_SERVICE" pg_restore -l < "$out_file" > /dev/null 2>&1; then
+      echo "ERROR: dump is unreadable by pg_restore — truncated or corrupt. Backup FAILED" >&2
       rm -f "$out_file"
       exit 1
     fi

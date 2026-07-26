@@ -13,6 +13,7 @@
   "devDependencies": {
     "@nestjs-fastify-nx/core": "workspace:*",
     "@nestjs-fastify-nx/infra-database": "workspace:*",
-    "@nestjs-fastify-nx/shared": "workspace:*"
+    "@nestjs-fastify-nx/shared": "workspace:*",
+    "@nestjs-fastify-nx/testing": "workspace:*"
   }
 }
