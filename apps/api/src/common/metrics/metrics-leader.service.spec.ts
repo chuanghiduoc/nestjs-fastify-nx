@@ -37,8 +37,11 @@ function makeConfig(): ConfigService<EnvConfig, true> {
   } as unknown as ConfigService<EnvConfig, true>;
 }
 
+// Narrow, typed view onto the composed lease. Election mechanics are covered by RedisLeaderLease's
+// own spec; this file covers what the service adds on top — the key, and the leadership-lost fan-out
+// that gauge owners depend on.
 const tick = (svc: MetricsLeaderService): Promise<void> =>
-  (svc as unknown as { tick(): Promise<void> }).tick();
+  (svc as unknown as { lease: { tick(): Promise<void> } }).lease.tick();
 
 describe('MetricsLeaderService', () => {
   let svc: MetricsLeaderService;
@@ -52,14 +55,14 @@ describe('MetricsLeaderService', () => {
     expect(svc.isLeader()).toBe(false);
   });
 
-  it('becomes leader when the NX lease is acquired', async () => {
+  it('claims the prefixed collector-leader key', async () => {
     redisMock.set.mockResolvedValueOnce('OK');
 
     await tick(svc);
 
     expect(svc.isLeader()).toBe(true);
     expect(redisMock.set).toHaveBeenCalledWith(
-      expect.stringContaining('metrics:collector-leader'),
+      'bull:metrics:collector-leader',
       expect.any(String),
       'PX',
       expect.any(Number),
@@ -67,7 +70,7 @@ describe('MetricsLeaderService', () => {
     );
   });
 
-  it('stays a follower when the lease is already held by another replica', async () => {
+  it('reports follower state while another replica holds the lease', async () => {
     redisMock.set.mockResolvedValueOnce(null);
 
     await tick(svc);
@@ -75,41 +78,7 @@ describe('MetricsLeaderService', () => {
     expect(svc.isLeader()).toBe(false);
   });
 
-  it('renews via compare-and-extend while leader, without re-acquiring', async () => {
-    redisMock.set.mockResolvedValueOnce('OK');
-    await tick(svc);
-
-    redisMock.set.mockClear();
-    redisMock.eval.mockResolvedValueOnce(1);
-    await tick(svc);
-
-    expect(redisMock.eval).toHaveBeenCalled();
-    expect(redisMock.set).not.toHaveBeenCalled();
-    expect(svc.isLeader()).toBe(true);
-  });
-
-  it('relinquishes leadership when the renew shows the lease was lost', async () => {
-    redisMock.set.mockResolvedValueOnce('OK');
-    await tick(svc);
-
-    redisMock.eval.mockResolvedValueOnce(0);
-    redisMock.set.mockResolvedValueOnce(null);
-    await tick(svc);
-
-    expect(svc.isLeader()).toBe(false);
-  });
-
-  it('fails closed (drops leadership) when Redis errors', async () => {
-    redisMock.set.mockResolvedValueOnce('OK');
-    await tick(svc);
-
-    redisMock.eval.mockRejectedValueOnce(new Error('redis down'));
-    await tick(svc);
-
-    expect(svc.isLeader()).toBe(false);
-  });
-
-  it('releases only its own lease and disconnects on destroy', async () => {
+  it('releases its own lease and disconnects on destroy', async () => {
     redisMock.set.mockResolvedValueOnce('OK');
     await tick(svc);
 
@@ -119,10 +88,47 @@ describe('MetricsLeaderService', () => {
     expect(redisMock.eval).toHaveBeenCalledWith(
       expect.stringContaining('del'),
       1,
-      expect.any(String),
+      'bull:metrics:collector-leader',
       expect.any(String),
     );
     expect(redisMock.disconnect).toHaveBeenCalled();
     expect(svc.isLeader()).toBe(false);
+  });
+
+  describe('onLeadershipLost', () => {
+    it('notifies every registered handler when the lease is lost', async () => {
+      const first = vi.fn();
+      const second = vi.fn();
+      svc.onLeadershipLost(first);
+      svc.onLeadershipLost(second);
+
+      redisMock.set.mockResolvedValueOnce('OK');
+      await tick(svc);
+      expect(first).not.toHaveBeenCalled();
+
+      redisMock.eval.mockResolvedValueOnce(0);
+      redisMock.set.mockResolvedValueOnce(null);
+      await tick(svc);
+
+      expect(first).toHaveBeenCalledOnce();
+      expect(second).toHaveBeenCalledOnce();
+    });
+
+    it('still runs the remaining handlers when one throws', async () => {
+      const survivor = vi.fn();
+      svc.onLeadershipLost(() => {
+        throw new Error('reset exploded');
+      });
+      svc.onLeadershipLost(survivor);
+
+      redisMock.set.mockResolvedValueOnce('OK');
+      await tick(svc);
+      redisMock.eval.mockResolvedValueOnce(0);
+      redisMock.set.mockResolvedValueOnce(null);
+      await tick(svc);
+
+      expect(survivor).toHaveBeenCalledOnce();
+      expect(svc.isLeader()).toBe(false);
+    });
   });
 });

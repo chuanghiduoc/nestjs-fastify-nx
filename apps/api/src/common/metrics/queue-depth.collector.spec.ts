@@ -4,8 +4,15 @@ import type { MetricsService } from './metrics.service';
 import type { MetricsLeaderService } from './metrics-leader.service';
 import type { Queue } from 'bullmq';
 
-function makeLeader(isLeader: boolean): MetricsLeaderService {
-  return { isLeader: () => isLeader } as unknown as MetricsLeaderService;
+type LeaderStub = MetricsLeaderService & { lostHandlers: Array<() => void> };
+
+function makeLeader(isLeader: boolean): LeaderStub {
+  const lostHandlers: Array<() => void> = [];
+  return {
+    isLeader: () => isLeader,
+    onLeadershipLost: (handler: () => void) => lostHandlers.push(handler),
+    lostHandlers,
+  } as unknown as LeaderStub;
 }
 
 function makeMockQueue(name: string, counts: Record<string, number>): Queue {
@@ -20,6 +27,7 @@ function makeMockMetrics(): MetricsService {
   return {
     bullmqQueueDepth: {
       labels: vi.fn().mockReturnValue({ set }),
+      reset: vi.fn(),
     },
   } as unknown as MetricsService;
 }
@@ -113,5 +121,19 @@ describe('QueueDepthCollector', () => {
     for (const [state] of Object.entries(UPLOAD_COUNTS)) {
       expect(metrics.bullmqQueueDepth.labels).toHaveBeenCalledWith('upload-verification', state);
     }
+  });
+
+  // A gauge is last-write-wins per replica: an ex-leader that merely stops writing keeps exporting
+  // its final depth, so a `sum()` across replicas double-counts after every lease failover.
+  it('clears every depth series when this replica loses the collector lease', () => {
+    const leader = makeLeader(true);
+    collector = new QueueDepthCollector(emailQ, uploadQ, metrics, leader);
+
+    collector.onModuleInit();
+    expect(metrics.bullmqQueueDepth.reset).not.toHaveBeenCalled();
+
+    for (const handler of leader.lostHandlers) handler();
+
+    expect(metrics.bullmqQueueDepth.reset).toHaveBeenCalledOnce();
   });
 });

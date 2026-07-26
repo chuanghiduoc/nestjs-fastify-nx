@@ -1,11 +1,14 @@
 import { Processor, WorkerHost } from '@nestjs/bullmq';
-import { Inject, Logger } from '@nestjs/common';
+import { Inject, Logger, type OnApplicationBootstrap } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import type { Job } from 'bullmq';
 import type Redis from 'ioredis';
 import { createHash } from 'node:crypto';
 import { QUEUE_NAMES, positiveIntEnv } from '@nestjs-fastify-nx/shared';
 import { REDIS_QUEUE_CLIENT } from '@nestjs-fastify-nx/infra-redis';
+import type { WorkerEnvConfig } from '../../config/env.validation';
 import { MailAdapter } from '../mail/mail.adapter';
+import { applyWorkerConcurrency } from './apply-worker-concurrency';
 
 export interface EmailNotificationPayload {
   to: string;
@@ -18,9 +21,11 @@ export interface EmailNotificationPayload {
   correlationId?: string;
 }
 
+// Decorator options are evaluated while the import graph loads — i.e. BEFORE ConfigModule parses
+// .env — so these are a seed value only. `applyWorkerConcurrency` re-applies the validated
+// WORKER_EMAIL_CONCURRENCY at bootstrap. The limiter has no BullMQ setter (it is baked into the
+// Worker at construction), so it stays load-time-only and must come from the real process env.
 const EMAIL_CONCURRENCY = positiveIntEnv('WORKER_EMAIL_CONCURRENCY', 5);
-// BullMQ rate limiter (deliveries per window) — separate from concurrency so throughput can be
-// tuned to the SMTP provider's rate limit independent of how many jobs run in parallel.
 const EMAIL_LIMITER_MAX = positiveIntEnv('WORKER_EMAIL_LIMITER_MAX', 100);
 const EMAIL_LIMITER_DURATION_MS = positiveIntEnv('WORKER_EMAIL_LIMITER_DURATION_MS', 60_000);
 // Thirty days covers outbox retention and ordinary manual-replay windows while staying bounded.
@@ -39,14 +44,23 @@ function redactEmail(addr: string): string {
   concurrency: EMAIL_CONCURRENCY,
   limiter: { max: EMAIL_LIMITER_MAX, duration: EMAIL_LIMITER_DURATION_MS },
 })
-export class EmailNotificationProcessor extends WorkerHost {
+export class EmailNotificationProcessor extends WorkerHost implements OnApplicationBootstrap {
   private readonly logger = new Logger(EmailNotificationProcessor.name);
 
   constructor(
     private readonly mail: MailAdapter,
     @Inject(REDIS_QUEUE_CLIENT) private readonly redis: Redis,
+    private readonly config: ConfigService<WorkerEnvConfig, true>,
   ) {
     super();
+  }
+
+  onApplicationBootstrap(): void {
+    applyWorkerConcurrency(
+      this,
+      this.config.get('WORKER_EMAIL_CONCURRENCY', { infer: true }),
+      this.logger,
+    );
   }
 
   async process(job: Job<EmailNotificationPayload>): Promise<void> {

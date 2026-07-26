@@ -251,7 +251,7 @@ async function renderPasswordResetEmail(
   return `<!doctype html><html><body style="font-family:system-ui,sans-serif;line-height:1.5">
 <p>${hello}</p>
 <p>${lead}</p>
-<p><a href="${ctx.link}">${ctx.link}</a></p>
+<p><a href="${escapeHtml(ctx.link)}">${escapeHtml(ctx.link)}</a></p>
 <p>${ignore}</p>
 </body></html>`;
 }
@@ -270,7 +270,7 @@ async function renderEmailVerificationEmail(
   return `<!doctype html><html><body style="font-family:system-ui,sans-serif;line-height:1.5">
 <p>${hello}</p>
 <p>${lead}</p>
-<p><a href="${ctx.link}">${ctx.link}</a></p>
+<p><a href="${escapeHtml(ctx.link)}">${escapeHtml(ctx.link)}</a></p>
 <p>${expiry}</p>
 </body></html>`;
 }
@@ -294,7 +294,7 @@ async function renderEmailChangeConfirmation(
 <p>${hello}</p>
 <p>${lead}</p>
 <p>${target}</p>
-<p><a href="${ctx.link}">${ctx.link}</a></p>
+<p><a href="${escapeHtml(ctx.link)}">${escapeHtml(ctx.link)}</a></p>
 <p>${notYou}</p>
 </body></html>`;
 }
@@ -315,11 +315,14 @@ async function renderAccountDeletionEmail(
 <p>${hello}</p>
 <p>${warning}</p>
 <p>${confirm}</p>
-<p><a href="${ctx.link}">${ctx.link}</a></p>
+<p><a href="${escapeHtml(ctx.link)}">${escapeHtml(ctx.link)}</a></p>
 <p>${notYou}</p>
 </body></html>`;
 }
 
+// The link is built from FRONTEND_BASE_URL (operator-controlled) plus an encodeURIComponent'd token,
+// so it cannot currently carry markup — escaping it anyway keeps every interpolation in these
+// templates uniformly escaped, so a future link source can't quietly become an injection point.
 function escapeHtml(s: string): string {
   return s
     .replace(/&/g, '&amp;')

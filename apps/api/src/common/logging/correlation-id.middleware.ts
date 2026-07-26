@@ -3,7 +3,7 @@ import { trace } from '@opentelemetry/api';
 import { ClsService } from 'nestjs-cls';
 import type { IncomingMessage, ServerResponse } from 'http';
 import { REQUEST_CONTEXT_KEYS, type RequestContextStore } from '@nestjs-fastify-nx/core';
-import { activeTraceId, resolveCorrelationId, resolveRequestId } from './request-id';
+import { activeTraceId, ensureRequestIds } from './request-id';
 
 interface RequestWithIds extends IncomingMessage {
   correlationId?: string;
@@ -15,16 +15,16 @@ export class CorrelationIdMiddleware implements NestMiddleware {
   constructor(private readonly cls: ClsService<RequestContextStore>) {}
 
   use(req: RequestWithIds, res: ServerResponse, next: () => void): void {
-    // ClsModule's own middleware (mounted ahead of this one — see LoggingModule) already
-    // resolved these onto the CLS store; the direct-resolve fallback only guards against a
-    // CLS context somehow not being active (defensive, should not happen in production).
-    const requestId = this.cls.get(REQUEST_CONTEXT_KEYS.requestId) ?? resolveRequestId(req.headers);
-    const correlationId =
-      this.cls.get(REQUEST_CONTEXT_KEYS.correlationId) ??
-      resolveCorrelationId(req.headers, requestId);
+    // ClsModule's own middleware (mounted ahead of this one — see LoggingModule) already stamped
+    // these onto the raw request via ensureRequestIds; going through the same accessor here keeps
+    // the CLS store, the raw request and the response headers on one value even if that middleware
+    // somehow did not run.
+    const { requestId, correlationId } = ensureRequestIds(req, req.headers);
+    if (this.cls.isActive()) {
+      this.cls.set(REQUEST_CONTEXT_KEYS.requestId, requestId);
+      this.cls.set(REQUEST_CONTEXT_KEYS.correlationId, correlationId);
+    }
 
-    req.correlationId = correlationId;
-    req.requestId = requestId;
     res.setHeader('x-correlation-id', correlationId);
     res.setHeader('x-request-id', requestId);
 

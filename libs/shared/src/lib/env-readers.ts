@@ -14,8 +14,23 @@ export function positiveIntEnv(name: string, fallback: number): number {
   return parsed > 0 ? parsed : fallback;
 }
 
+// Mirrors intEnv's treatment of a set-but-empty value (`KEY=` in a .env file loads as `""`): fall
+// back rather than silently reading it as `false`, which would make an explicit default of `true`
+// unreachable. Only the literal `true` enables — anything else is off, so a typo fails safe.
 export function boolEnv(name: string, fallback: boolean): boolean {
   const raw = process.env[name];
-  if (raw === undefined) return fallback;
-  return raw.toLowerCase() === 'true';
+  if (raw === undefined || raw.trim() === '') return fallback;
+  return raw.trim().toLowerCase() === 'true';
+}
+
+// `KEY=` in a .env file arrives as `""`, not `undefined`, so a zod `.optional()` would still run
+// `.min(1)` on the empty string and fail — and `.default()` would never apply. Stripping empties
+// first lets optional fields fall back to their defaults and keeps required fields failing loudly.
+// Shared by every per-app env validator so the three schemas cannot drift on this preprocessing.
+export function stripEmptyEnvStrings(config: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(config)) {
+    out[key] = typeof value === 'string' && value.trim() === '' ? undefined : value;
+  }
+  return out;
 }

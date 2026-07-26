@@ -15,39 +15,37 @@ function redisMock() {
   } as unknown as Redis;
 }
 
+// Narrow, typed view onto the composed lease. The election mechanics themselves are covered by
+// RedisLeaderLease's own spec; what matters here is that this service wires the right key and
+// exposes the lease's state through the OutboxRelayLeadership contract.
 const tick = (service: SchedulerLeaderService): Promise<void> =>
-  (service as unknown as { tick(): Promise<void> }).tick();
+  (service as unknown as { lease: { tick(): Promise<void> } }).lease.tick();
 
 describe('SchedulerLeaderService', () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it('acquires and renews an owner-token lease', async () => {
+  it('claims the prefixed scheduler lease key', async () => {
     const redis = redisMock();
     vi.mocked(redis.set).mockResolvedValueOnce('OK');
-    vi.mocked(redis.eval).mockResolvedValueOnce(1 as never);
     const service = new SchedulerLeaderService(config(), redis);
 
     await tick(service);
-    expect(service.isLeader()).toBe(true);
 
-    await tick(service);
-    expect(redis.eval).toHaveBeenCalledWith(
-      expect.stringContaining('pexpire'),
-      1,
+    expect(redis.set).toHaveBeenCalledWith(
       'bull:scheduler:leader',
       expect.any(String),
-      expect.any(String),
+      'PX',
+      expect.any(Number),
+      'NX',
     );
     expect(service.isLeader()).toBe(true);
   });
 
-  it('fails closed and relinquishes leadership on Redis errors', async () => {
+  it('reports follower state while another replica holds the lease', async () => {
     const redis = redisMock();
-    vi.mocked(redis.set).mockResolvedValueOnce('OK');
+    vi.mocked(redis.set).mockResolvedValueOnce(null);
     const service = new SchedulerLeaderService(config(), redis);
-    await tick(service);
 
-    vi.mocked(redis.eval).mockRejectedValueOnce(new Error('redis unavailable'));
     await tick(service);
 
     expect(service.isLeader()).toBe(false);

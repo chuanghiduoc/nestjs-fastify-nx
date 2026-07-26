@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { stripEmptyEnvStrings } from '@nestjs-fastify-nx/shared';
 
 const workerEnvSchema = z
   .object({
@@ -28,6 +29,9 @@ const workerEnvSchema = z
 
     // Storage (S3 / MinIO) — needed by the upload-verification processor.
     STORAGE_ENDPOINT: z.string().default('http://localhost:9000'),
+    // S3StorageAdapter runs in this process too, so the key it reads must be validated here as
+    // well — otherwise it silently falls through to a raw, unvalidated process.env lookup.
+    STORAGE_PUBLIC_ENDPOINT: z.string().optional(),
     STORAGE_BUCKET: z.string().default('uploads'),
     STORAGE_REGION: z.string().default('us-east-1'),
     STORAGE_ACCESS_KEY: z.string().default('minioadmin'),
@@ -59,14 +63,17 @@ const workerEnvSchema = z
     MAIL_DEFAULT_EMAIL: z.email().default('noreply@example.com'),
     MAIL_DEFAULT_NAME: z.string().default('No Reply'),
 
-    // Per-queue worker concurrency. Processor decorators read these at module load,
-    // so Nx serve loads .env through Node runtimeArgs and containers inject them. Increase before
-    // scaling WORKER_REPLICAS — concurrency × replicas is the effective parallelism.
+    // Per-queue worker concurrency. The `@Processor` decorator seeds it at module load — i.e. before
+    // ConfigModule parses .env — so each processor re-applies the validated value onto its BullMQ
+    // Worker at bootstrap (see ApplyWorkerConcurrency). Increase before scaling WORKER_REPLICAS:
+    // concurrency × replicas is the effective parallelism.
     WORKER_EMAIL_CONCURRENCY: z.coerce.number().int().min(1).max(500).default(5),
     WORKER_UPLOAD_CONCURRENCY: z.coerce.number().int().min(1).max(500).default(5),
 
     // BullMQ rate limiter for the email queue — deliveries per duration window, independent of
-    // WORKER_EMAIL_CONCURRENCY. Tune to the SMTP provider's own rate limit.
+    // WORKER_EMAIL_CONCURRENCY. Tune to the SMTP provider's own rate limit. Unlike concurrency this
+    // is fixed at Worker construction (BullMQ exposes no setter), so it is load-time only: it must
+    // come from the real process environment, not from a .env file read after boot.
     WORKER_EMAIL_LIMITER_MAX: z.coerce.number().int().min(1).max(100_000).default(100),
     WORKER_EMAIL_LIMITER_DURATION_MS: z.coerce
       .number()
@@ -113,7 +120,9 @@ const workerEnvSchema = z
     OUTBOX_PURGE_BATCH_SIZE: z.coerce.number().int().min(100).max(10000).default(1000),
     OUTBOX_PURGE_MAX_BATCHES: z.coerce.number().int().min(1).max(10000).default(200),
 
-    // Sentry
+    // Sentry. Default 0.1 here vs 0.01 in the api validator on purpose: a transaction is one BullMQ
+    // job, and job throughput is orders of magnitude below API request rate — 1% would leave the
+    // worker with too few traces to diagnose anything.
     SENTRY_DSN: z.string().optional().default(''),
     SENTRY_TRACES_SAMPLE_RATE: z.coerce.number().min(0).max(1).default(0.1),
     SENTRY_ENVIRONMENT: z.string().default('development'),
@@ -182,20 +191,8 @@ const workerEnvSchema = z
 
 export type WorkerEnvConfig = z.infer<typeof workerEnvSchema>;
 
-// dotenv loads `KEY=` as `""`, which is NOT `undefined` — so `.optional()` on
-// the schema would still run `.min(1)` on the empty string and fail. Strip
-// empty strings so optional fields fall back to their defaults (or stay unset).
-// Mirrors the api validator (apps/api/src/config/env.validation.ts).
-function stripEmptyStrings(config: Record<string, unknown>): Record<string, unknown> {
-  const out: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(config)) {
-    out[key] = typeof value === 'string' && value.trim() === '' ? undefined : value;
-  }
-  return out;
-}
-
 export function validateWorkerConfig(config: Record<string, unknown>): WorkerEnvConfig {
-  const result = workerEnvSchema.safeParse(stripEmptyStrings(config));
+  const result = workerEnvSchema.safeParse(stripEmptyEnvStrings(config));
 
   if (!result.success) {
     const formatted = result.error.issues

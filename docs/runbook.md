@@ -46,13 +46,19 @@ docker compose logs scheduler --tail=200 | grep -i "outbox\|error\|failed"
 ```sql
 -- Reset specific event types for replay
 UPDATE outbox_events
-SET attempts = 0, "lastError" = NULL
+SET attempts = 0, "lastError" = NULL, "nextAttemptAt" = NULL
 WHERE "processedAt" IS NULL
   AND "eventType" = 'users.registered'
   AND attempts >= 10;
 ```
 
-3. The scheduler's outbox relay picks up rows with `attempts < OUTBOX_MAX_ATTEMPTS` on the next poll cycle (`OUTBOX_POLL_INTERVAL_MS`, default 1 s).
+Clearing `nextAttemptAt` matters: the relay only claims rows whose backoff window has elapsed, so
+resetting `attempts` alone still leaves the row invisible until the last-stamped deadline passes.
+
+3. The scheduler's outbox relay picks up rows with `attempts < OUTBOX_MAX_ATTEMPTS` whose
+   `nextAttemptAt` is null or already past, on the next poll cycle (`OUTBOX_POLL_INTERVAL_MS`,
+   default 1 s). A row that is merely backing off is **not** stuck — check
+   `SELECT "nextAttemptAt" FROM outbox_events WHERE id = …` before resetting anything.
 4. Monitor `"processedAt"` population over the next minute.
 
 **Escalation:** If events are still stuck after reset, check `OUTBOX_TX_TIMEOUT_MS` (default 30 s) — a too-short timeout causes P2028 rollback loops. Increase and redeploy.

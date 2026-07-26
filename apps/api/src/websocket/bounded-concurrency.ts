@@ -41,17 +41,21 @@ export class BoundedConcurrencyLimiter {
 // Spreads a burst of tasks across the interval so the downstream call (Better Auth getSession)
 // doesn't spike at a single instant. `signal` aborts the wait immediately so shutdown isn't held
 // for up to a full interval by a socket that drew a near-max jitter.
+//
+// The abort listener is detached when the timer wins. Callers fan this out once per socket against
+// ONE shared signal, so leaving them attached would grow the listener list for the whole cycle —
+// and an EventTarget past its listener cap emits a MaxListenersExceededWarning on every round.
 export function jitterDelay(maxMs: number, signal?: AbortSignal): Promise<void> {
   if (maxMs <= 0 || signal?.aborted) return Promise.resolve();
   return new Promise((resolve) => {
-    const timer = setTimeout(resolve, Math.random() * maxMs);
-    signal?.addEventListener(
-      'abort',
-      () => {
-        clearTimeout(timer);
-        resolve();
-      },
-      { once: true },
-    );
+    const onAbort = (): void => {
+      clearTimeout(timer);
+      resolve();
+    };
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    }, Math.random() * maxMs);
+    signal?.addEventListener('abort', onAbort, { once: true });
   });
 }

@@ -10,6 +10,7 @@ import {
 } from '@nestjs/websockets';
 import { Logger, Inject } from '@nestjs/common';
 import type { OnApplicationShutdown } from '@nestjs/common';
+import { setMaxListeners } from 'node:events';
 import type { Server, Socket } from 'socket.io';
 import { createAdapter } from '@socket.io/redis-adapter';
 import Redis from 'ioredis';
@@ -18,6 +19,7 @@ import { BETTER_AUTH_INSTANCE } from '@nestjs-fastify-nx/infra-auth';
 import type { BetterAuthInstance } from '@nestjs-fastify-nx/infra-auth';
 import { redisReconnectStrategy } from '@nestjs-fastify-nx/shared';
 import {
+  applyWsMessageRateLimit,
   createWsAuthMiddleware,
   releaseWsConnectionLease,
   renewWsConnectionLease,
@@ -33,6 +35,8 @@ interface WsRedisEnv {
   WS_CONNECTION_LIMIT_PER_IP: number;
   WS_SESSION_REVALIDATE_MS: number;
   WS_SESSION_REVALIDATE_CONCURRENCY: number;
+  WS_MESSAGE_RATE_LIMIT_MAX: number;
+  WS_MESSAGE_RATE_LIMIT_WINDOW_MS: number;
   TRUST_PROXY_HOPS: number;
 }
 
@@ -72,6 +76,7 @@ export class NotificationGateway
   private revalidationAbort?: AbortController;
   private revalidateIntervalMs = 0;
   private revalidateConcurrency = 1;
+  private messageRateLimit: { max: number; windowMs: number } = { max: 60, windowMs: 10_000 };
 
   constructor(
     private readonly config: ConfigService<WsRedisEnv, true>,
@@ -111,6 +116,11 @@ export class NotificationGateway
       trustProxyHops: this.config.get('TRUST_PROXY_HOPS', { infer: true }),
     });
     server.use((socket, next) => void wsAuthMiddleware(socket, next));
+
+    this.messageRateLimit = {
+      max: this.config.get('WS_MESSAGE_RATE_LIMIT_MAX', { infer: true }),
+      windowMs: this.config.get('WS_MESSAGE_RATE_LIMIT_WINDOW_MS', { infer: true }),
+    };
 
     const revalidateMs = this.config.get('WS_SESSION_REVALIDATE_MS', { infer: true });
     this.revalidateIntervalMs = revalidateMs;
@@ -162,6 +172,10 @@ export class NotificationGateway
     const limiter = new BoundedConcurrencyLimiter(this.revalidateConcurrency);
     const intervalMs = this.revalidateIntervalMs;
     const abort = new AbortController();
+    // Every socket attaches its own abort listener up front (the jitter wait happens before the
+    // concurrency gate), so the peak listener count is the connection count. Node's default cap of
+    // 10 would otherwise print a MaxListenersExceededWarning on every revalidation round.
+    setMaxListeners(0, abort.signal);
     this.revalidationAbort = abort;
 
     try {
@@ -200,6 +214,9 @@ export class NotificationGateway
       socket.disconnect(true);
       return;
     }
+
+    // Attach before joining any room so the very first frame is already budgeted.
+    applyWsMessageRateLimit(socket, this.messageRateLimit);
 
     try {
       await socket.join(`user:${user.userId}`);

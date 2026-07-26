@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { stripEmptyEnvStrings } from '@nestjs-fastify-nx/shared';
 
 const schedulerEnvSchema = z
   .object({
@@ -26,6 +27,9 @@ const schedulerEnvSchema = z
     REDIS_QUEUE_PREFIX: z.string().default('bull'),
 
     STORAGE_ENDPOINT: z.string().default('http://localhost:9000'),
+    // S3StorageAdapter runs in this process too, so the key it reads must be validated here as
+    // well — otherwise it silently falls through to a raw, unvalidated process.env lookup.
+    STORAGE_PUBLIC_ENDPOINT: z.string().optional(),
     STORAGE_BUCKET: z.string().default('uploads'),
     STORAGE_REGION: z.string().default('us-east-1'),
     STORAGE_ACCESS_KEY: z.string().default('minioadmin'),
@@ -77,6 +81,11 @@ const schedulerEnvSchema = z
     OUTBOX_BATCH_SIZE: z.coerce.number().int().min(1).max(1_000).default(50),
     OUTBOX_MAX_ATTEMPTS: z.coerce.number().int().min(1).max(100).default(10),
     OUTBOX_TX_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(300_000).default(30_000),
+    // Exponential retry backoff between outbox delivery attempts. Without it the relay re-claims a
+    // failing row every poll interval, so a 10-second downstream outage burns all OUTBOX_MAX_ATTEMPTS
+    // and permanently parks every pending event. base=2s/cap=5m spreads 10 attempts over ~18 minutes.
+    OUTBOX_RETRY_BASE_MS: z.coerce.number().int().min(100).max(600_000).default(2_000),
+    OUTBOX_RETRY_MAX_MS: z.coerce.number().int().min(1_000).max(3_600_000).default(300_000),
 
     OUTBOX_RETENTION_DAYS: z.coerce.number().int().min(1).max(365).default(7),
     OUTBOX_PURGE_BATCH_SIZE: z.coerce.number().int().min(100).max(10_000).default(1_000),
@@ -102,6 +111,13 @@ const schedulerEnvSchema = z
         code: 'custom',
         path: ['DATABASE_POOL_MIN'],
         message: 'DATABASE_POOL_MIN must be less than or equal to DATABASE_POOL_MAX',
+      });
+    }
+    if (data.OUTBOX_RETRY_BASE_MS > data.OUTBOX_RETRY_MAX_MS) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['OUTBOX_RETRY_BASE_MS'],
+        message: 'OUTBOX_RETRY_BASE_MS must be less than or equal to OUTBOX_RETRY_MAX_MS',
       });
     }
     if (data.NODE_ENV === 'production' && data.STORAGE_ACCESS_KEY === 'minioadmin') {
@@ -132,17 +148,8 @@ const schedulerEnvSchema = z
 
 export type SchedulerEnvConfig = z.infer<typeof schedulerEnvSchema>;
 
-// dotenv emits `KEY=` as `""` which would fail `.min(1)`; coerce to undefined.
-function stripEmptyStrings(config: Record<string, unknown>): Record<string, unknown> {
-  const out: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(config)) {
-    out[key] = typeof value === 'string' && value.trim() === '' ? undefined : value;
-  }
-  return out;
-}
-
 export function validateSchedulerConfig(config: Record<string, unknown>): SchedulerEnvConfig {
-  const result = schedulerEnvSchema.safeParse(stripEmptyStrings(config));
+  const result = schedulerEnvSchema.safeParse(stripEmptyEnvStrings(config));
 
   if (!result.success) {
     const formatted = result.error.issues

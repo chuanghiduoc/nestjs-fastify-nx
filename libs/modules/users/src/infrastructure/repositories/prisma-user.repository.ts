@@ -103,10 +103,11 @@ export class PrismaUserRepository implements UserRepositoryPort {
     }
   }
 
-  // NOTE: full-entity upsert with no optimistic-concurrency guard. Two handlers that load → mutate →
-  // save the same user concurrently can lose an update (the later save overwrites all columns from its
-  // stale snapshot). No caller exists today; a real fix needs an aggregate `version` column (schema
-  // migration) or field-scoped updates — track before wiring an update-user command to this method.
+  // Last-write-wins by design: this writes the whole aggregate from the caller's snapshot, with no
+  // optimistic-concurrency guard. Two handlers that load → mutate → save the same user concurrently
+  // therefore lose the earlier update. Safe for the single-writer flows this serves (seeding,
+  // reconstitution); a concurrent update-user command would need an aggregate `version` column and a
+  // CAS on it, which is a schema change and must not be retrofitted by widening this method.
   async save(user: User): Promise<void> {
     try {
       await this.writer.user.upsert({

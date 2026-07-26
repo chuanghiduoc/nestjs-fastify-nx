@@ -2,7 +2,7 @@ import { HttpStatus, Logger } from '@nestjs/common';
 import * as Sentry from '@sentry/nestjs';
 import type { FastifyError, FastifyInstance } from 'fastify';
 import { ERROR_CODES } from '@nestjs-fastify-nx/contracts';
-import { resolveCorrelationId, resolveRequestId, sanitizeClientId } from '../logging/request-id';
+import { ensureRequestIds, sanitizeClientId, type RequestIdCarrier } from '../logging/request-id';
 import {
   buildProblemDetails,
   HTTP_STATUS_CODES,
@@ -21,24 +21,14 @@ const FASTIFY_CODE_TO_ERROR_CODE: Record<string, string> = {
 
 const logger = new Logger('FastifyErrorHandler');
 
-interface RawWithIds {
-  requestId?: string;
-  correlationId?: string;
-}
-
 export function applyFastifyProblemDetailsHook(fastify: FastifyInstance): void {
   fastify.addHook('onSend', (request, reply, payload, done) => {
-    const raw = request.raw as RawWithIds;
-    const requestId =
-      raw.requestId ||
-      sanitizeClientId(reply.getHeader('x-request-id')) ||
-      resolveRequestId(request.headers);
-    const correlationId =
-      raw.correlationId ||
-      sanitizeClientId(reply.getHeader('x-correlation-id')) ||
-      resolveCorrelationId(request.headers, requestId);
-    raw.requestId = requestId;
-    raw.correlationId = correlationId;
+    // Prefer what is already on the request, then what an earlier layer buffered onto the reply,
+    // and only mint a fresh pair as a last resort — ensureRequestIds enforces the resolve-once rule.
+    const raw = request.raw as RequestIdCarrier;
+    raw.requestId ??= sanitizeClientId(reply.getHeader('x-request-id'));
+    raw.correlationId ??= sanitizeClientId(reply.getHeader('x-correlation-id'));
+    const { requestId, correlationId } = ensureRequestIds(raw, request.headers);
     if (!reply.getHeader('x-request-id')) reply.header('x-request-id', requestId);
     if (!reply.getHeader('x-correlation-id')) reply.header('x-correlation-id', correlationId);
 

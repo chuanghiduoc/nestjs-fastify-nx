@@ -8,9 +8,9 @@ import { Queue } from 'bullmq';
 import type { Redis } from 'ioredis';
 import { timingSafeEqual } from 'node:crypto';
 import { ERROR_CODES } from '@nestjs-fastify-nx/contracts';
-import { QUEUE_NAMES } from '../../app/constants/queue.constants';
+import { QUEUE_NAMES } from '@nestjs-fastify-nx/shared';
 import { redisFixedWindowIncr } from '../rate-limit/redis-fixed-window';
-import { resolveRequestId } from '../logging/request-id';
+import { ensureRequestIds } from '../logging/request-id';
 import {
   buildProblemDetails,
   HTTP_STATUS_TITLES,
@@ -141,7 +141,7 @@ function sendProblem(
   reply: FastifyReply,
   args: ProblemArgs,
 ): FastifyReply {
-  const requestId = resolveRequestId(request.headers);
+  const { requestId } = ensureRequestIds(request.raw, request.headers);
   reply.header('content-type', PROBLEM_CONTENT_TYPE);
   for (const [name, value] of Object.entries(args.headers ?? {})) {
     reply.header(name, value);

@@ -5,7 +5,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type Redis from 'ioredis';
 import { ERROR_CODES } from '@nestjs-fastify-nx/contracts';
 import { buildProblemDetails, PROBLEM_CONTENT_TYPE } from '../filters/problem-details.helper';
-import { resolveCorrelationId, resolveRequestId } from '../logging/request-id';
+import { ensureRequestIds } from '../logging/request-id';
 import { IdempotencyStore, type AcquireResult } from './idempotency-store';
 
 export interface IdempotencyOptions {
@@ -53,6 +53,8 @@ function canonicalize(value: unknown): unknown {
   );
 }
 
+const BEARER_PREFIX = 'Bearer ';
+
 // Authenticated requests scope by session token, anonymous ones by client IP. Two principals thus
 // never collide on — nor replay — each other's cached response for the same key.
 function extractPrincipal(req: FastifyRequest): string {
@@ -67,6 +69,17 @@ function extractPrincipal(req: FastifyRequest): string {
       parsed['__Secure-better-auth.session_token'] || parsed['better-auth.session_token'];
     if (token) return `s:${token}`;
   }
+
+  // Non-browser clients authenticate with `Authorization: Bearer <session-token>` (Better Auth's
+  // bearer plugin, enabled in better-auth.config.ts). Without this branch every bearer client falls
+  // back to IP scope, so two of them behind one NAT/egress gateway share a keyspace — a colliding
+  // Idempotency-Key would then replay one user's stored response to the other.
+  const authorization = req.headers.authorization;
+  if (typeof authorization === 'string' && authorization.startsWith(BEARER_PREFIX)) {
+    const bearer = authorization.slice(BEARER_PREFIX.length).trim();
+    if (bearer) return `b:${bearer}`;
+  }
+
   return `ip:${req.ip}`;
 }
 
@@ -91,8 +104,9 @@ function sendProblem(
   title: string,
   detail: string,
 ): FastifyReply {
-  const requestId = resolveRequestId(req.headers);
-  (req.raw as { requestId?: string }).requestId = requestId;
+  // Reuse the id the request already carries (stamped by ClsMiddleware) — minting a second one here
+  // would put an X-Request-Id on this 4xx that matches no log line.
+  const { requestId } = ensureRequestIds(req.raw, req.headers);
   // Same builder the global filter uses — this plugin runs before the Nest pipeline, so nothing
   // else would give it the shared shape.
   return reply
@@ -193,9 +207,7 @@ export function registerIdempotency(fastify: FastifyInstance, options: Idempoten
 
     // Replay the stored response verbatim. This short-circuits before Nest, so x-request-id
     // (normally set by CorrelationIdMiddleware) must be stamped here.
-    const requestId = resolveRequestId(req.headers);
-    const correlationId = resolveCorrelationId(req.headers, requestId);
-    Object.assign(req.raw, { requestId, correlationId });
+    const { requestId, correlationId } = ensureRequestIds(req.raw, req.headers);
     return reply
       .status(record.status ?? 200)
       .header('content-type', record.contentType ?? 'application/json')

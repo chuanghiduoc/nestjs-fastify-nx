@@ -1,3 +1,4 @@
+import type { IncomingMessage } from 'node:http';
 import { isValidTraceId, trace } from '@opentelemetry/api';
 import { generateCorrelationId } from '@nestjs-fastify-nx/shared';
 
@@ -32,4 +33,39 @@ export function resolveRequestId(headers: Record<string, unknown>): string {
 
 export function resolveCorrelationId(headers: Record<string, unknown>, requestId: string): string {
   return sanitizeClientId(headers['x-correlation-id']) ?? requestId;
+}
+
+// The per-request id pair, stamped onto the raw Node request so every layer observes the same value.
+export interface RequestIds {
+  requestId: string;
+  correlationId: string;
+}
+
+// The raw Node request is the carrier: it is the one object every layer can reach — Nest middleware
+// receives it directly, Fastify hooks via `request.raw` — and it lives exactly as long as the ids
+// need to. Intersecting with IncomingMessage (rather than a bare `Partial`) also keeps TypeScript's
+// weak-type check meaningful: a caller cannot pass an unrelated object by mistake.
+export type RequestIdCarrier = IncomingMessage & Partial<RequestIds>;
+
+/**
+ * Resolve-once accessor for a request's ids — the ONLY way any layer should obtain them.
+ *
+ * `resolveRequestId()` falls back to a fresh random value whenever tracing is off (the default), so
+ * calling it twice for the same request yields two different ids. Every response producer that ran
+ * its own `resolveRequestId()` — the idempotency plugin, the auth/credential rate limiters, the
+ * load-shedding handler, the Better Auth route, Bull Board — therefore handed the client an
+ * `X-Request-Id` that appears in no log line, precisely on the error paths where the id is the only
+ * way to find the request again.
+ *
+ * First caller wins and stamps the carrier; everyone after reads it back.
+ */
+export function ensureRequestIds(
+  carrier: RequestIdCarrier,
+  headers: Record<string, unknown>,
+): RequestIds {
+  const requestId = carrier.requestId ?? resolveRequestId(headers);
+  const correlationId = carrier.correlationId ?? resolveCorrelationId(headers, requestId);
+  carrier.requestId = requestId;
+  carrier.correlationId = correlationId;
+  return { requestId, correlationId };
 }

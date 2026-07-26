@@ -19,7 +19,7 @@ import { intEnv, positiveIntEnv, redisReconnectStrategy } from '@nestjs-fastify-
 import { ERROR_CODES } from '@nestjs-fastify-nx/contracts';
 import { reportFatalError, startSentry } from '@nestjs-fastify-nx/infra-observability';
 import { AppModule } from './app/app.module';
-import { resolveCorrelationId, resolveRequestId } from './common/logging/request-id';
+import { ensureRequestIds } from './common/logging/request-id';
 import { ProblemDetailsValidationPipe } from './common/pipes';
 import { setupSwagger } from './common/swagger/swagger.config';
 import { createBullBoardPlugin } from './common/bull-board/create-bull-board-plugin';
@@ -193,7 +193,10 @@ async function bootstrap() {
     maxEventLoopDelay: positiveIntEnv('HTTP_MAX_EVENT_LOOP_DELAY_MS', 1000),
     // Same problem+json shape as every other error so clients branch on `code` uniformly.
     pressureHandler: (req, reply) => {
-      const requestId = resolveRequestId(req.headers);
+      // This onRequest hook is registered before Nest's middleware runs, so it is usually the first
+      // to resolve the ids — stamping them here means the (short-circuited) request still logs under
+      // the same id the client receives.
+      const { requestId } = ensureRequestIds(req.raw, req.headers);
       reply
         .code(HttpStatus.SERVICE_UNAVAILABLE)
         .header('content-type', 'application/problem+json')
@@ -255,10 +258,9 @@ async function bootstrap() {
     timeWindow: authRateLimitWindowMs,
     keyGenerator: (req) => req.ip,
     errorResponseBuilder: (req, context) => {
-      // Stamp req.raw so the global exception filter echoes the SAME id on the x-request-id
-      // header (rate-limit throws this body into setErrorHandler).
-      const requestId = resolveRequestId(req.headers);
-      (req.raw as { requestId?: string }).requestId = requestId;
+      // Reuse the id already on req.raw so the global exception filter echoes the SAME id on the
+      // x-request-id header (rate-limit throws this body into setErrorHandler).
+      const { requestId } = ensureRequestIds(req.raw, req.headers);
       return {
         // Shared helper so a rate-limit 429 matches a ThrottlerGuard 429 byte for byte.
         ...buildProblemDetails({
@@ -305,8 +307,7 @@ async function bootstrap() {
       if (count <= authRateLimitMax) return;
 
       const retryAfter = Math.max(1, Math.ceil(ttlMs / 1000));
-      const requestId = resolveRequestId(req.headers);
-      (req.raw as { requestId?: string }).requestId = requestId;
+      const { requestId } = ensureRequestIds(req.raw, req.headers);
       return reply
         .status(HttpStatus.TOO_MANY_REQUESTS)
         .header('content-type', 'application/problem+json')
@@ -329,8 +330,7 @@ async function bootstrap() {
       }
 
       app.get(Logger).error(`Account rate-limit Redis error (fail-closed): ${String(err)}`);
-      const requestId = resolveRequestId(req.headers);
-      (req.raw as { requestId?: string }).requestId = requestId;
+      const { requestId } = ensureRequestIds(req.raw, req.headers);
       return reply
         .status(HttpStatus.SERVICE_UNAVAILABLE)
         .header('content-type', 'application/problem+json')
@@ -382,11 +382,10 @@ async function bootstrap() {
   const authHandlerTimeoutMs = config.get('HTTP_REQUEST_TIMEOUT_MS', { infer: true });
 
   const authRouteHandler = async (req: FastifyRequest, reply: FastifyReply): Promise<void> => {
-    // These routes are registered directly on Fastify, so Nest middleware never seeds their
-    // request context. Establish the same IDs before hijacking the response lifecycle.
-    const requestId = resolveRequestId(req.headers);
-    const correlationId = resolveCorrelationId(req.headers, requestId);
-    Object.assign(req.raw, { requestId, correlationId });
+    // Establish the IDs before hijacking the response lifecycle. ensureRequestIds reuses whatever
+    // Nest's CLS middleware already stamped for this request, so the hijacked response and the log
+    // lines around it never disagree.
+    const { requestId, correlationId } = ensureRequestIds(req.raw, req.headers);
     reply.header('x-request-id', requestId);
     reply.header('x-correlation-id', correlationId);
 

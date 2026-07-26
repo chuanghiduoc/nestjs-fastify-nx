@@ -3,6 +3,7 @@ import type { Socket } from 'socket.io';
 import type { BetterAuthInstance } from '@nestjs-fastify-nx/infra-auth';
 import type Redis from 'ioredis';
 import {
+  applyWsMessageRateLimit,
   createWsAuthMiddleware,
   renewWsConnectionLease,
   revalidateWsSession,
@@ -333,5 +334,92 @@ describe('revalidateWsSession', () => {
     await expect(revalidateWsSession(makeAuth(null), socket as unknown as Socket)).rejects.toThrow(
       'Invalid session',
     );
+  });
+});
+
+// Every global APP_GUARD (throttler included) bypasses the `ws` context, and the per-IP lease only
+// bounds how many sockets exist — so this is the sole limit on how fast one authenticated socket
+// can drive @SubscribeMessage handlers.
+describe('applyWsMessageRateLimit', () => {
+  type PacketMiddleware = (packet: unknown[], next: (err?: Error) => void) => void;
+
+  function makeRateLimitedSocket(): { socket: Socket; send: () => Error | undefined } {
+    let middleware: PacketMiddleware | undefined;
+    const socket = {
+      data: {},
+      use: (fn: PacketMiddleware) => {
+        middleware = fn;
+      },
+    } as unknown as Socket;
+
+    return {
+      socket,
+      send: () => {
+        let captured: Error | undefined;
+        middleware?.(['ping'], (err) => {
+          captured = err;
+        });
+        return captured;
+      },
+    };
+  }
+
+  it('passes frames through while inside the budget', () => {
+    const { socket, send } = makeRateLimitedSocket();
+    applyWsMessageRateLimit(socket, { max: 3, windowMs: 10_000 });
+
+    expect(send()).toBeUndefined();
+    expect(send()).toBeUndefined();
+    expect(send()).toBeUndefined();
+  });
+
+  it('rejects the frame that exceeds the budget', () => {
+    const { socket, send } = makeRateLimitedSocket();
+    applyWsMessageRateLimit(socket, { max: 2, windowMs: 10_000 });
+
+    send();
+    send();
+
+    expect(send()?.message).toMatch(/^TOO_MANY_MESSAGES:/);
+  });
+
+  it('does not disconnect the socket — a burst is usually a client retry loop', () => {
+    const { socket, send } = makeRateLimitedSocket();
+    const disconnect = vi.fn();
+    (socket as unknown as { disconnect: unknown }).disconnect = disconnect;
+    applyWsMessageRateLimit(socket, { max: 1, windowMs: 10_000 });
+
+    send();
+    send();
+
+    expect(disconnect).not.toHaveBeenCalled();
+  });
+
+  it('starts a fresh window once the previous one elapses', () => {
+    vi.useFakeTimers();
+    try {
+      const { socket, send } = makeRateLimitedSocket();
+      applyWsMessageRateLimit(socket, { max: 1, windowMs: 1_000 });
+
+      expect(send()).toBeUndefined();
+      expect(send()).toBeDefined();
+
+      vi.advanceTimersByTime(1_000);
+
+      expect(send()).toBeUndefined();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('budgets each socket independently', () => {
+    const a = makeRateLimitedSocket();
+    const b = makeRateLimitedSocket();
+    applyWsMessageRateLimit(a.socket, { max: 1, windowMs: 10_000 });
+    applyWsMessageRateLimit(b.socket, { max: 1, windowMs: 10_000 });
+
+    a.send();
+    expect(a.send()).toBeDefined();
+    expect(b.send()).toBeUndefined();
   });
 });

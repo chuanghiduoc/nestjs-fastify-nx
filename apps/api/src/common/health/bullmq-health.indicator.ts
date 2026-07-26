@@ -5,7 +5,7 @@ import { ConfigService } from '@nestjs/config';
 import { Queue } from 'bullmq';
 import { redisReconnectStrategy, withTimeout } from '@nestjs-fastify-nx/shared';
 import type { EnvConfig } from '../../config/env.validation';
-import { QUEUE_NAMES } from '../../app/constants/queue.constants';
+import { QUEUE_NAMES } from '@nestjs-fastify-nx/shared';
 
 const PROBE_TIMEOUT_MS = 2_000;
 // Sanitized marker — Redis/BullMQ internals (host, prefix, key names) must not leak into the

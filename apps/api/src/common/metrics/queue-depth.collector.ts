@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, type OnModuleInit } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
 import { InjectQueue } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
@@ -7,7 +7,7 @@ import { MetricsService } from './metrics.service';
 import { MetricsLeaderService } from './metrics-leader.service';
 
 @Injectable()
-export class QueueDepthCollector {
+export class QueueDepthCollector implements OnModuleInit {
   private readonly logger = new Logger(QueueDepthCollector.name);
 
   constructor(
@@ -16,6 +16,13 @@ export class QueueDepthCollector {
     private readonly metrics: MetricsService,
     private readonly leader: MetricsLeaderService,
   ) {}
+
+  onModuleInit(): void {
+    // Drop every series on losing the lease. A gauge left at its last written value keeps being
+    // scraped from this replica while the new leader publishes the real one, so a dashboard summing
+    // across replicas would double-count queue depth after every failover.
+    this.leader.onLeadershipLost(() => this.metrics.bullmqQueueDepth.reset());
+  }
 
   @Interval(30_000)
   async collect(): Promise<void> {

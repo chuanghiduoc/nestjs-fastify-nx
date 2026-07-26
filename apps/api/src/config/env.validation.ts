@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { stripEmptyEnvStrings } from '@nestjs-fastify-nx/shared';
 // The package version is the single source of truth for APP_VERSION's default; nx release bumps it
 // (and root) in lockstep. Operators can still override APP_VERSION/APP_NAME via env.
 import pkg from '../../package.json';
@@ -128,6 +129,16 @@ const envSchema = z
     // Caps concurrent Better Auth getSession() calls when the revalidation timer fires; combined
     // with per-socket jitter (spread across WS_SESSION_REVALIDATE_MS) to avoid a thundering herd.
     WS_SESSION_REVALIDATE_CONCURRENCY: z.coerce.number().int().min(1).max(1_000).default(20),
+    // Per-socket inbound message budget. The global APP_GUARDs (throttler included) all bypass the
+    // `ws` context, so without this an authenticated socket could flood @SubscribeMessage handlers
+    // unbounded — the per-IP connection cap only limits how many sockets exist, not their traffic.
+    WS_MESSAGE_RATE_LIMIT_MAX: z.coerce.number().int().min(1).max(100_000).default(60),
+    WS_MESSAGE_RATE_LIMIT_WINDOW_MS: z.coerce
+      .number()
+      .int()
+      .min(1_000)
+      .max(600_000)
+      .default(10_000),
     // Allow requests through when Redis is unreachable (brief unbounded rate) instead of cascading 500s.
     THROTTLER_FAIL_OPEN: z
       .string()
@@ -180,6 +191,10 @@ const envSchema = z
     OUTBOX_POLL_INTERVAL_MS: z.coerce.number().int().min(50).default(1_000),
     OUTBOX_BATCH_SIZE: z.coerce.number().int().min(1).max(1_000).default(50),
     OUTBOX_MAX_ATTEMPTS: z.coerce.number().int().min(1).max(1_000).default(10),
+    // Retry backoff between delivery attempts (validated here for .env.example parity; the
+    // scheduler's relay is the runtime consumer). See the scheduler validator for the rationale.
+    OUTBOX_RETRY_BASE_MS: z.coerce.number().int().min(100).max(600_000).default(2_000),
+    OUTBOX_RETRY_MAX_MS: z.coerce.number().int().min(1_000).max(3_600_000).default(300_000),
 
     // Monthly partitions kept; min=1 prevents zero-retention misconfiguration from purging the active partition.
     AUDIT_LOG_RETENTION_MONTHS: z.coerce.number().int().min(1).max(120).default(12),
@@ -375,18 +390,8 @@ const envSchema = z
 
 export type EnvConfig = z.infer<typeof envSchema>;
 
-// dotenv loads `KEY=` as `""` not `undefined`, so optional().min(32) would silently pass.
-// Stripping empty strings lets optional fields fall back to defaults and required fields fail loudly.
-function stripEmptyStrings(config: Record<string, unknown>): Record<string, unknown> {
-  const out: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(config)) {
-    out[key] = typeof value === 'string' && value.trim() === '' ? undefined : value;
-  }
-  return out;
-}
-
 export function validateConfig(config: Record<string, unknown>): EnvConfig {
-  const result = envSchema.safeParse(stripEmptyStrings(config));
+  const result = envSchema.safeParse(stripEmptyEnvStrings(config));
 
   if (!result.success) {
     const formatted = result.error.issues

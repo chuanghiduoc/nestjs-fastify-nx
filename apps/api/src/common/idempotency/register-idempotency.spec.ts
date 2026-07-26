@@ -286,6 +286,72 @@ describe('registerIdempotency', () => {
     expect(callCount()).toBe(2);
   });
 
+  // Better Auth's bearer plugin lets non-browser clients authenticate without a cookie. Scoping
+  // them by IP would collapse every bearer client behind one NAT into a shared keyspace, where a
+  // colliding key replays one user's stored response to another.
+  it('scopes bearer-authenticated clients independently for users behind the same IP', async () => {
+    const { app, callCount } = await buildApp(redis);
+
+    const first = await app.inject({
+      method: 'POST',
+      url: '/api/v1/echo',
+      headers: { ...KEY_HEADER, authorization: 'Bearer token-a' },
+      payload: { a: 1 },
+    });
+    const second = await app.inject({
+      method: 'POST',
+      url: '/api/v1/echo',
+      headers: { ...KEY_HEADER, authorization: 'Bearer token-b' },
+      payload: { a: 1 },
+    });
+
+    expect(first.json().calls).toBe(1);
+    expect(second.json().calls).toBe(2);
+    expect(second.headers['idempotent-replayed']).toBeUndefined();
+    expect(callCount()).toBe(2);
+  });
+
+  it('replays for the same bearer token', async () => {
+    const { app, callCount } = await buildApp(redis);
+    const headers = { ...KEY_HEADER, authorization: 'Bearer token-a' };
+
+    await app.inject({ method: 'POST', url: '/api/v1/echo', headers, payload: { a: 1 } });
+    const replay = await app.inject({
+      method: 'POST',
+      url: '/api/v1/echo',
+      headers,
+      payload: { a: 1 },
+    });
+
+    expect(replay.headers['idempotent-replayed']).toBe('true');
+    expect(callCount()).toBe(1);
+  });
+
+  it('prefers the session cookie over a bearer header when both are present', async () => {
+    const { app, callCount } = await buildApp(redis);
+
+    await app.inject({
+      method: 'POST',
+      url: '/api/v1/echo',
+      headers: { ...KEY_HEADER, cookie: 'better-auth.session_token=user-a' },
+      payload: { a: 1 },
+    });
+    // Same cookie principal, different bearer — must still resolve to the cookie's scope and replay.
+    const replay = await app.inject({
+      method: 'POST',
+      url: '/api/v1/echo',
+      headers: {
+        ...KEY_HEADER,
+        cookie: 'better-auth.session_token=user-a',
+        authorization: 'Bearer unrelated',
+      },
+      payload: { a: 1 },
+    });
+
+    expect(replay.headers['idempotent-replayed']).toBe('true');
+    expect(callCount()).toBe(1);
+  });
+
   it('falls back to IP scope for a malformed cookie header instead of throwing', async () => {
     const { app } = await buildApp(redis);
 
