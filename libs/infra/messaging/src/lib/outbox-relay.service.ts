@@ -62,7 +62,12 @@ export class OutboxRelayService implements OnModuleInit, OnModuleDestroy {
   // Exponential backoff between delivery attempts. Without it the relay re-claims a failing row on
   // every poll tick, so a downstream outage lasting only maxAttempts × pollInterval (10s at the
   // defaults) exhausts the whole retry budget of every pending event and parks them as permanently
-  // stuck. base=2s / cap=5m spreads 10 attempts over ~18 minutes instead.
+  // stuck.
+  //
+  // The delay uses the PRE-increment attempt count: `min(base × 2^attempts, cap)`, so the wait after
+  // the Nth attempt is `base × 2^(N-1)`. At the defaults that is 2, 4, 8, 16, 32, 64, 128, 256, then
+  // capped at 300 — the 1st and 10th attempts are ~13.5 minutes apart. The delay stamped by the 10th
+  // attempt is never consumed: `attempts < maxAttempts` is already false, so the row is parked.
   private readonly retryBaseMs = positiveIntEnv('OUTBOX_RETRY_BASE_MS', 2_000);
   private readonly retryMaxMs = positiveIntEnv('OUTBOX_RETRY_MAX_MS', 300_000);
   private timer?: NodeJS.Timeout;

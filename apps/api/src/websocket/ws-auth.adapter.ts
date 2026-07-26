@@ -4,6 +4,7 @@ import { fromNodeHeaders } from 'better-auth/node';
 import proxyaddr from 'proxy-addr';
 import type { BetterAuthInstance } from '@nestjs-fastify-nx/infra-auth';
 import type Redis from 'ioredis';
+import { extractBearerToken } from '../common/http/bearer-token';
 
 const WS_CONN_KEY_PREFIX = 'ws:conn:';
 const WS_CONN_TTL_MS = 600_000;
@@ -101,7 +102,7 @@ export async function revalidateWsSession(auth: BetterAuthInstance, socket: Sock
   const cookieHeader = socket.handshake.headers['cookie'];
   const bearerToken =
     (socket.handshake.auth['token'] as string | undefined) ||
-    extractBearer(socket.handshake.headers['authorization']);
+    extractBearerToken(socket.handshake.headers['authorization']);
 
   const headers: Record<string, string> = {};
   if (cookieHeader) headers['cookie'] = cookieHeader;
@@ -231,10 +232,4 @@ function resolveClientIp(socket: Socket, trustProxyHops: number): string | undef
   } as unknown as IncomingMessage;
 
   return proxyaddr(reqLike, (_addr, hopIndex) => hopIndex < trustProxyHops);
-}
-
-function extractBearer(header: string | string[] | undefined): string | undefined {
-  const value = Array.isArray(header) ? header[0] : header;
-  if (!value || !value.startsWith('Bearer ')) return undefined;
-  return value.substring('Bearer '.length);
 }

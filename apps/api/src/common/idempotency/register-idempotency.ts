@@ -5,6 +5,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type Redis from 'ioredis';
 import { ERROR_CODES } from '@nestjs-fastify-nx/contracts';
 import { buildProblemDetails, PROBLEM_CONTENT_TYPE } from '../filters/problem-details.helper';
+import { extractBearerToken } from '../http/bearer-token';
 import { ensureRequestIds } from '../logging/request-id';
 import { IdempotencyStore, type AcquireResult } from './idempotency-store';
 
@@ -53,8 +54,6 @@ function canonicalize(value: unknown): unknown {
   );
 }
 
-const BEARER_PREFIX = 'Bearer ';
-
 // Authenticated requests scope by session token, anonymous ones by client IP. Two principals thus
 // never collide on — nor replay — each other's cached response for the same key.
 function extractPrincipal(req: FastifyRequest): string {
@@ -73,12 +72,10 @@ function extractPrincipal(req: FastifyRequest): string {
   // Non-browser clients authenticate with `Authorization: Bearer <session-token>` (Better Auth's
   // bearer plugin, enabled in better-auth.config.ts). Without this branch every bearer client falls
   // back to IP scope, so two of them behind one NAT/egress gateway share a keyspace — a colliding
-  // Idempotency-Key would then replay one user's stored response to the other.
-  const authorization = req.headers.authorization;
-  if (typeof authorization === 'string' && authorization.startsWith(BEARER_PREFIX)) {
-    const bearer = authorization.slice(BEARER_PREFIX.length).trim();
-    if (bearer) return `b:${bearer}`;
-  }
+  // Idempotency-Key would then replay one user's stored response to the other. Parsing goes through
+  // the shared helper so this agrees with the plugin on the case-insensitive scheme.
+  const bearer = extractBearerToken(req.headers.authorization);
+  if (bearer) return `b:${bearer}`;
 
   return `ip:${req.ip}`;
 }

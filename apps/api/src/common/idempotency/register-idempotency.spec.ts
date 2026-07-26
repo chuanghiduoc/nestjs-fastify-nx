@@ -327,6 +327,28 @@ describe('registerIdempotency', () => {
     expect(callCount()).toBe(1);
   });
 
+  // Better Auth matches the scheme case-insensitively, so a lowercase-scheme client authenticates
+  // as itself and must land in its own idempotency scope rather than falling back to IP.
+  it('scopes a lowercase bearer scheme the same as a capitalised one', async () => {
+    const { app, callCount } = await buildApp(redis);
+
+    await app.inject({
+      method: 'POST',
+      url: '/api/v1/echo',
+      headers: { ...KEY_HEADER, authorization: 'Bearer token-a' },
+      payload: { a: 1 },
+    });
+    const replay = await app.inject({
+      method: 'POST',
+      url: '/api/v1/echo',
+      headers: { ...KEY_HEADER, authorization: 'bearer token-a' },
+      payload: { a: 1 },
+    });
+
+    expect(replay.headers['idempotent-replayed']).toBe('true');
+    expect(callCount()).toBe(1);
+  });
+
   it('prefers the session cookie over a bearer header when both are present', async () => {
     const { app, callCount } = await buildApp(redis);
 

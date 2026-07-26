@@ -252,6 +252,17 @@ const envSchema = z
     SENTRY_ENVIRONMENT: z.string().default('development'),
   })
   .superRefine((data, ctx) => {
+    // Mirrors the scheduler validator. The relay only runs there, but api and scheduler share one
+    // .env in production — so without this check the same file boots green here and is rejected
+    // there, which reads as an api/scheduler discrepancy rather than the config error it is.
+    if (data.OUTBOX_RETRY_BASE_MS > data.OUTBOX_RETRY_MAX_MS) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['OUTBOX_RETRY_BASE_MS'],
+        message: 'OUTBOX_RETRY_BASE_MS must be less than or equal to OUTBOX_RETRY_MAX_MS',
+      });
+    }
+
     if (data.DATABASE_POOL_MIN > data.DATABASE_POOL_MAX) {
       ctx.addIssue({
         code: 'custom',

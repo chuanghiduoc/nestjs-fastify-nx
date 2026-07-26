@@ -83,7 +83,8 @@ const schedulerEnvSchema = z
     OUTBOX_TX_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(300_000).default(30_000),
     // Exponential retry backoff between outbox delivery attempts. Without it the relay re-claims a
     // failing row every poll interval, so a 10-second downstream outage burns all OUTBOX_MAX_ATTEMPTS
-    // and permanently parks every pending event. base=2s/cap=5m spreads 10 attempts over ~18 minutes.
+    // and permanently parks every pending event. The delay uses the pre-increment attempt count, so
+    // at base=2s/cap=5m the 1st and 10th attempts are ~13.5 minutes apart instead of ~10 seconds.
     OUTBOX_RETRY_BASE_MS: z.coerce.number().int().min(100).max(600_000).default(2_000),
     OUTBOX_RETRY_MAX_MS: z.coerce.number().int().min(1_000).max(3_600_000).default(300_000),
 

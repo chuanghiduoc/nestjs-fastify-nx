@@ -1,4 +1,4 @@
--- Exponential retry backoff for the outbox relay.
+-- Exponential retry backoff for the outbox relay — column only.
 --
 -- Before this column the relay re-claimed every failing row on each poll tick
 -- (OUTBOX_POLL_INTERVAL_MS, default 1s). A downstream outage lasting only
@@ -9,9 +9,9 @@
 -- `nextAttemptAt` is stamped by the CLAIM statement itself rather than by the error
 -- handler, so a relay that dies mid-dispatch still leaves the row invisible for the
 -- backoff window instead of being re-claimed immediately.
+--
+-- Adding a NULLable column with no default is a catalog-only change in PostgreSQL 11+:
+-- it takes ACCESS EXCLUSIVE but does not rewrite the table, so the lock is held for
+-- microseconds. The supporting index is deliberately NOT created here — see the
+-- companion migration 20260726000100_outbox_retry_backoff_index.
 ALTER TABLE "outbox_events" ADD COLUMN "nextAttemptAt" TIMESTAMP(3);
-
--- Backoff-aware claim path. The existing (processedAt, createdAt) index cannot serve
--- the added `nextAttemptAt <= NOW()` predicate.
-CREATE INDEX "outbox_events_processedAt_nextAttemptAt_createdAt_idx"
-    ON "outbox_events"("processedAt", "nextAttemptAt", "createdAt");
