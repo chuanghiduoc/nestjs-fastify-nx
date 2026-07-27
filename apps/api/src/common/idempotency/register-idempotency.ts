@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { HttpStatus } from '@nestjs/common';
-import { parse as parseCookie } from 'cookie';
+import { parseCookie } from 'cookie';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type Redis from 'ioredis';
 import { ERROR_CODES } from '@nestjs-fastify-nx/contracts';
