@@ -11,6 +11,7 @@ import { UploadVerificationProcessor } from './processors/upload-verification.pr
 import { WorkerHealthService } from './health/worker-health.service';
 import { MailModule } from './mail/mail.module';
 import { validateWorkerConfig } from '../config/env.validation';
+import { MalwareScannerService } from './security/malware-scanner.service';
 
 @Module({
   imports: [
@@ -26,6 +27,11 @@ import { validateWorkerConfig } from '../config/env.validation';
     DeadLetterModule.forFeature(QUEUE_NAMES.UPLOAD_VERIFICATION),
     MailModule,
   ],
-  providers: [EmailNotificationProcessor, UploadVerificationProcessor, WorkerHealthService],
+  providers: [
+    EmailNotificationProcessor,
+    UploadVerificationProcessor,
+    MalwareScannerService,
+    WorkerHealthService,
+  ],
 })
 export class AppModule {}

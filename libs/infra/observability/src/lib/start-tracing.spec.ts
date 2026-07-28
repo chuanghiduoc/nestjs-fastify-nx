@@ -39,4 +39,14 @@ describe('startTracing', () => {
     expect(events).toContain('SIGTERM');
     expect(events).toContain('SIGINT');
   });
+
+  it('clamps malformed sampler input and parses exporter headers safely', () => {
+    process.env['OTEL_ENABLED'] = 'true';
+    process.env['OTEL_EXPORTER_OTLP_ENDPOINT'] = 'http://collector.local:4318/';
+    process.env['OTEL_EXPORTER_OTLP_HEADERS'] =
+      'Authorization=Bearer secret, invalid, x-tenant=prod';
+    process.env['OTEL_TRACES_SAMPLER_RATIO'] = 'not-a-number';
+
+    expect(startTracing({ serviceName: 'unit-test' })).not.toBeNull();
+  });
 });

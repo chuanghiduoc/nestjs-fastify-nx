@@ -85,7 +85,8 @@ export class S3StorageAdapter implements StoragePort, OnModuleInit, OnModuleDest
           });
   }
 
-  // Auto-create bucket on startup — MinIO ships empty and first upload would 500 otherwise.
+  // Development MinIO is bootstrapped automatically. Production storage is infrastructure-owned,
+  // so the runtime identity needs no CreateBucket permission.
   async onModuleInit(): Promise<void> {
     try {
       await this.client.send(new HeadBucketCommand({ Bucket: this.bucket }));
@@ -102,6 +103,12 @@ export class S3StorageAdapter implements StoragePort, OnModuleInit, OnModuleDest
         this.handleStartupFailure(err, `Bucket head check failed${suffix}`);
         return;
       }
+    }
+
+    if (process.env['NODE_ENV'] === 'production') {
+      throw new Error(
+        `Storage bucket "${this.bucket}" does not exist; provision it outside the application`,
+      );
     }
 
     try {
@@ -250,6 +257,8 @@ export class S3StorageAdapter implements StoragePort, OnModuleInit, OnModuleDest
       const command = new GetObjectCommand({
         Bucket: targetBucket,
         Key: key,
+        // User-controlled files are served as downloads, never inline in the application origin.
+        ResponseContentDisposition: 'attachment',
       });
       return await getSignedUrl(this.presignClient, command, { expiresIn });
     } catch (err) {
@@ -334,6 +343,25 @@ export class S3StorageAdapter implements StoragePort, OnModuleInit, OnModuleDest
       throw new InternalServerErrorException({
         messageKey: I18N_KEYS.errors.storage.read_range_failed,
         message: 'Storage readRange failed',
+      });
+    }
+  }
+
+  async read(key: string, bucket?: string): Promise<Buffer> {
+    try {
+      const res = await this.client.send(
+        new GetObjectCommand({ Bucket: bucket ?? this.bucket, Key: key }),
+      );
+      const body = res.Body as { transformToByteArray?: () => Promise<Uint8Array> } | undefined;
+      if (!body?.transformToByteArray) {
+        throw new Error('S3 GetObject returned no readable body');
+      }
+      return Buffer.from(await body.transformToByteArray());
+    } catch (err) {
+      this.logger.error({ err, key }, 'S3 full-object read failed');
+      throw new InternalServerErrorException({
+        messageKey: I18N_KEYS.errors.storage.read_range_failed,
+        message: 'Storage read failed',
       });
     }
   }

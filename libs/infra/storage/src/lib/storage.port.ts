@@ -6,7 +6,8 @@ export interface UploadOptions {
 
 export interface StoredFile {
   key: string;
-  url: string;
+  // Present only after asynchronous malware verification reaches READY.
+  url?: string;
   bucket: string;
   size: number;
 }
@@ -54,4 +55,6 @@ export interface StoragePort {
   // Read the first `byteCount` bytes of the object — used by the async
   // magic-byte verifier so the worker doesn't have to download whole files.
   readRange(key: string, byteCount: number, bucket?: string): Promise<Buffer>;
+  // Complete quarantined object for malware scanning; it remains unavailable until scan success.
+  read(key: string, bucket?: string): Promise<Buffer>;
 }

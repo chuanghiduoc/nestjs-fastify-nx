@@ -93,10 +93,10 @@ describe('OutboxCleanupTask', () => {
       await expect(task.purgeOldOutboxEvents()).resolves.toBeUndefined();
 
       expect(errorSpy).toHaveBeenCalledOnce();
-      const [msg] = errorSpy.mock.calls[0] as [string];
-      // Must report the rows deleted before the failure
-      expect(msg).toContain('1500');
-      expect(msg).toMatch(/DB connection lost/);
+      expect(errorSpy.mock.calls[0]).toEqual([
+        { err: expect.any(Error), totalPurged: 1500 },
+        'Outbox purge failed',
+      ]);
     });
 
     it('does not throw when $executeRawUnsafe fails on the very first batch', async () => {

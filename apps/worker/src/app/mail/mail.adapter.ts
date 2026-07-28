@@ -47,11 +47,10 @@ export class MailAdapter implements OnModuleInit {
       await this.transport.verify();
       this.logger.log('Mail transport verified');
     } catch (err) {
-      const message = `SMTP transport verification failed — ${String(err)}`;
       if (this.config.get('NODE_ENV', { infer: true }) === 'production') {
-        throw new Error(message, { cause: err });
+        throw new Error('SMTP transport verification failed', { cause: err });
       }
-      this.logger.warn(message);
+      this.logger.warn({ err }, 'SMTP transport verification failed');
     }
   }
 

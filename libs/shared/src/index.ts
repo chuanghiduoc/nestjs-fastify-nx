@@ -7,7 +7,15 @@ export {
   type PaginationOptions,
 } from './lib/pagination.types';
 export { QUEUE_NAMES, type QueueName } from './lib/queue-names';
-export { SENSITIVE_REDACT_PATHS, SENSITIVE_REDACT_CENSOR } from './lib/logger-redact';
+export {
+  SENSITIVE_REDACT_PATHS,
+  SENSITIVE_REDACT_CENSOR,
+  safeErrorSummary,
+  sanitizeSensitiveText,
+  sanitizeUrlForLogging,
+  serializeErrorSafely,
+  type SafeSerializedError,
+} from './lib/logger-redact';
 export {
   ALLOWED_MIME_TYPES,
   MIME_EXTENSIONS,

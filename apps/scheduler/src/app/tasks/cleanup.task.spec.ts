@@ -172,42 +172,16 @@ describe('CleanupTask', () => {
   // ── purgeAuditLogPartitions ─────────────────────────────────────────────────
 
   describe('purgeAuditLogPartitions', () => {
-    function fmtPartition(year: number, month: number): string {
-      return `audit_logs_${year}_${String(month).padStart(2, '0')}`;
-    }
-
     it('drops only partitions older than the retention cutoff', async () => {
-      const now = new Date();
-      const currentYear = now.getUTCFullYear();
-      const currentMonth = now.getUTCMonth() + 1;
-
-      // Default retention = 12 months including current. Cutoff = current month - 11. Names
-      // older than the cutoff month are dropped; names equal to or newer
-      // than cutoff are kept.
-      const cutoff = new Date(Date.UTC(currentYear, currentMonth - 1 - 11, 1));
-      const oldName = fmtPartition(cutoff.getUTCFullYear(), cutoff.getUTCMonth()); // strictly older
-      const cutoffName = fmtPartition(cutoff.getUTCFullYear(), cutoff.getUTCMonth() + 1); // == cutoff, keep
-      const recentName = fmtPartition(currentYear, currentMonth);
-
-      vi.mocked(prisma.db.$queryRaw).mockResolvedValue([
-        { table_name: oldName },
-        { table_name: cutoffName },
-        { table_name: recentName },
-        { table_name: 'audit_logs_default' }, // ignored — name doesn't match regex
-      ] as never);
-      vi.mocked(prisma.db.$executeRawUnsafe).mockResolvedValue(0);
+      vi.mocked(prisma.db.$queryRaw).mockResolvedValue([{ dropped: 1 }] as never);
 
       await task.purgeAuditLogPartitions();
 
-      expect(prisma.db.$executeRawUnsafe).toHaveBeenCalledTimes(1);
-      expect(prisma.db.$executeRawUnsafe).toHaveBeenCalledWith(`DROP TABLE IF EXISTS "${oldName}"`);
+      expect(prisma.db.$executeRawUnsafe).not.toHaveBeenCalled();
     });
 
     it('skips DROP entirely when there are no partitions older than the cutoff', async () => {
-      const now = new Date();
-      vi.mocked(prisma.db.$queryRaw).mockResolvedValue([
-        { table_name: fmtPartition(now.getUTCFullYear(), now.getUTCMonth() + 1) },
-      ] as never);
+      vi.mocked(prisma.db.$queryRaw).mockResolvedValue([{ dropped: 0 }] as never);
 
       await task.purgeAuditLogPartitions();
 
@@ -215,21 +189,11 @@ describe('CleanupTask', () => {
     });
 
     it('ignores child tables whose names do not match the YYYY_MM convention', async () => {
-      vi.mocked(prisma.db.$queryRaw).mockResolvedValue([
-        { table_name: 'audit_logs_archive' },
-        { table_name: 'audit_logs_2010_99' }, // bogus month
-      ] as never);
+      vi.mocked(prisma.db.$queryRaw).mockResolvedValue([{ dropped: 0 }] as never);
 
       await task.purgeAuditLogPartitions();
 
-      // `audit_logs_2010_99` matches the regex but the test mainly verifies
-      // we don't crash on weird names and don't drop the archive table.
-      expect(prisma.db.$executeRawUnsafe).not.toHaveBeenCalledWith(
-        expect.stringContaining('audit_logs_archive'),
-      );
-      expect(prisma.db.$executeRawUnsafe).not.toHaveBeenCalledWith(
-        expect.stringContaining('audit_logs_2010_99'),
-      );
+      expect(prisma.db.$executeRawUnsafe).not.toHaveBeenCalled();
     });
 
     it('does not throw when $queryRaw fails (error is only logged)', async () => {

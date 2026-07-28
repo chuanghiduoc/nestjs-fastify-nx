@@ -1,6 +1,7 @@
 import { Test } from '@nestjs/testing';
 import { HttpStatus, VersioningType } from '@nestjs/common';
 import { ERROR_CODES } from '@nestjs-fastify-nx/contracts';
+import { sanitizeUrlForLogging } from '@nestjs-fastify-nx/shared';
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { FastifyAdapter } from '@nestjs/platform-fastify';
 import type { FastifyReply, FastifyRequest, RouteShorthandOptions } from 'fastify';
@@ -69,6 +70,7 @@ const e2eStorageStub: StoragePort = {
   },
   readRange: async (key, byteCount) =>
     e2eObjects.get(key)?.body.subarray(0, byteCount) ?? Buffer.alloc(0),
+  read: async (key) => e2eObjects.get(key)?.body ?? Buffer.alloc(0),
 };
 
 // Allowed cross-origin used to assert CORS headers survive the Better Auth hijack path.
@@ -176,7 +178,7 @@ export async function createTestApp(): Promise<TestAppContext> {
         title: 'Too Many Requests',
         detail: `Rate limit exceeded. Try again in ${Math.ceil(context.ttl / 1000)} seconds.`,
         code: ERROR_CODES.RATE_LIMITED,
-        instance: req.url,
+        instance: sanitizeUrlForLogging(req.url),
       }),
       retryAfter: Math.ceil(context.ttl / 1000),
     }),

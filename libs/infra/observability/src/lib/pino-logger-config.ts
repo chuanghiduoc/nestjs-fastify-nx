@@ -1,11 +1,15 @@
 import { hostname } from 'node:os';
 import { RequestMethod } from '@nestjs/common';
-import { stdSerializers } from 'pino';
 import type { Params } from 'nestjs-pino';
 import type { Options as PinoHttpOptions } from 'pino-http';
 import { ClsServiceManager } from 'nestjs-cls';
 import type { RequestContextStore } from '@nestjs-fastify-nx/core';
-import { SENSITIVE_REDACT_CENSOR, SENSITIVE_REDACT_PATHS } from '@nestjs-fastify-nx/shared';
+import {
+  SENSITIVE_REDACT_CENSOR,
+  SENSITIVE_REDACT_PATHS,
+  sanitizeUrlForLogging,
+  serializeErrorSafely,
+} from '@nestjs-fastify-nx/shared';
 
 // Runs on every log line regardless of call site (handlers, repositories, listeners — not
 // just the per-request HTTP access log), since pino invokes `mixin` at write time for the
@@ -57,12 +61,13 @@ export function buildPinoLoggerConfig(overrides: Partial<PinoHttpOptions> = {}):
       autoLogging: { ignore: (req) => isNoisyProbe(req.url) },
       // Request essentials only, not the full header/body dump — smaller lines, smaller PII surface.
       // `remoteAddress` is the raw TCP peer (pod IP behind a proxy); pair with X-Forwarded-For
-      // upstream if you need the client IP. err keeps stack/message/cause in prod JSON.
+      // upstream if you need the client IP. Error messages/stacks are excluded because drivers
+      // and HTTP clients routinely embed credentials or response bodies in them.
       serializers: {
-        err: stdSerializers.err,
+        err: serializeErrorSafely,
         req: (req: { method?: string; url?: string; remoteAddress?: string }) => ({
           method: req.method,
-          url: req.url,
+          url: sanitizeUrlForLogging(req.url),
           remoteAddress: req.remoteAddress,
         }),
         res: (res: { statusCode?: number }) => ({ statusCode: res.statusCode }),

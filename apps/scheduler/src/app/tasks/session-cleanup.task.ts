@@ -51,7 +51,7 @@ export class SessionCleanupTask {
       }
       this.logger.log(`Session purge complete: ${totalPurged} row(s) deleted`);
     } catch (err) {
-      this.logger.error(`Session purge failed after ${totalPurged} deletion(s): ${String(err)}`);
+      this.logger.error({ err, totalPurged }, 'Session purge failed');
     } finally {
       this.running = false;
     }

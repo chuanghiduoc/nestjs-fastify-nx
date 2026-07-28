@@ -22,6 +22,7 @@ import {
   ATTR_SERVICE_VERSION,
 } from '@opentelemetry/semantic-conventions';
 import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
+import { safeErrorSummary, sanitizeUrlForLogging } from '@nestjs-fastify-nx/shared';
 
 // Incubating OTel attr — inlined to avoid pulling in a package that requires moduleResolution: nodenext.
 const ATTR_DEPLOYMENT_ENVIRONMENT_NAME = 'deployment.environment.name';
@@ -129,6 +130,22 @@ export function startTracing(options: StartTracingOptions = {}): NodeSDK | null 
     instrumentations: [
       getNodeAutoInstrumentations({
         '@opentelemetry/instrumentation-fs': { enabled: false },
+        '@opentelemetry/instrumentation-http': {
+          requestHook: (span, request) => {
+            const rawUrl =
+              'url' in request && typeof request.url === 'string'
+                ? request.url
+                : 'path' in request && typeof request.path === 'string'
+                  ? request.path
+                  : undefined;
+            const safeUrl = sanitizeUrlForLogging(rawUrl);
+            if (safeUrl) {
+              span.setAttribute('url.full', safeUrl);
+              span.setAttribute('http.url', safeUrl);
+            }
+            span.setAttribute('url.query', '');
+          },
+        },
         // Pino instrumentation injects trace_id/span_id into every log line so
         // logs can be pivoted to their trace in the backend.
         '@opentelemetry/instrumentation-pino': { enabled: true },
@@ -140,9 +157,7 @@ export function startTracing(options: StartTracingOptions = {}): NodeSDK | null 
 
   const shutdown = (): void => {
     sdk.shutdown().catch((err) => {
-      process.stderr.write(
-        `[otel] shutdown failed: ${err instanceof Error ? err.stack : String(err)}\n`,
-      );
+      process.stderr.write(`[otel] shutdown failed: ${safeErrorSummary(err)}\n`);
     });
   };
 

@@ -58,7 +58,7 @@ export class DlqMonitorTask implements OnApplicationShutdown {
             );
           }
         } catch (err) {
-          this.logger.error(`Failed to count DLQ "${dlq.name}": ${String(err)}`);
+          this.logger.error({ err, queue: dlq.name }, 'Failed to count DLQ');
         }
       }
     } finally {
@@ -81,7 +81,7 @@ export class DlqMonitorTask implements OnApplicationShutdown {
         try {
           failed = await source.getFailed(0, RECONCILE_SCAN_LIMIT - 1);
         } catch (err) {
-          this.logger.error(`DLQ reconcile scan failed for "${source.name}": ${String(err)}`);
+          this.logger.error({ err, queue: source.name }, 'DLQ reconcile scan failed');
           continue;
         }
         // No silent cap: if the failed set fills the scan window, older/newer entries beyond it are

@@ -14,6 +14,7 @@ describe('validateWorkerConfig', () => {
       DATABASE_URL: 'postgresql://user:pass@db:5432/app',
       STORAGE_ACCESS_KEY: 'production-key',
       STORAGE_SECRET_KEY: 'production-secret',
+      MALWARE_SCANNER_ENABLED: 'true',
       MAIL_HOST: 'smtp.company.example',
       MAIL_DEFAULT_EMAIL: 'noreply@company.example',
     });
@@ -29,6 +30,7 @@ describe('validateWorkerConfig', () => {
         DATABASE_URL: 'postgresql://user:pass@db:5432/app',
         STORAGE_ACCESS_KEY: 'production-key',
         STORAGE_SECRET_KEY: 'production-secret',
+        MALWARE_SCANNER_ENABLED: 'true',
         MAIL_DEFAULT_EMAIL: 'noreply@company.example',
         // MAIL_HOST omitted → defaults to 'localhost'
       }),

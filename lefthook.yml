@@ -29,6 +29,14 @@ pre-commit:
       skip:
         - merge
         - rebase
+    # Scan exactly what will be committed. This catches a secret earlier than
+    # pre-push; the full-history scan remains on pre-push and CI.
+    secrets-staged:
+      priority: 3
+      run: bash scripts/security/scan-secrets.sh --staged
+      skip:
+        - merge
+        - rebase
 
 commit-msg:
   commands:

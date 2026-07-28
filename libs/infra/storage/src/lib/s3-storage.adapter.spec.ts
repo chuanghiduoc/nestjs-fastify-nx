@@ -4,6 +4,7 @@ import type { ConfigService } from '@nestjs/config';
 import {
   DeleteObjectCommand,
   CopyObjectCommand,
+  CreateBucketCommand,
   GetObjectCommand,
   HeadObjectCommand,
   PutObjectCommand,
@@ -65,6 +66,37 @@ describe('S3StorageAdapter', () => {
       );
 
       await expect(adapter.onModuleInit()).rejects.toThrow('Bucket head check failed');
+    });
+
+    it('does not create a missing bucket in production', async () => {
+      process.env['NODE_ENV'] = 'production';
+      const send = mockSend(adapter);
+      send.mockRejectedValueOnce(
+        Object.assign(new Error('NotFound'), {
+          name: 'NotFound',
+          $metadata: { httpStatusCode: 404 },
+        }),
+      );
+
+      await expect(adapter.onModuleInit()).rejects.toThrow('provision it outside');
+      expect(send).toHaveBeenCalledOnce();
+    });
+
+    it('creates a missing bucket only in development', async () => {
+      process.env['NODE_ENV'] = 'development';
+      const send = mockSend(adapter);
+      send
+        .mockRejectedValueOnce(
+          Object.assign(new Error('NotFound'), {
+            name: 'NotFound',
+            $metadata: { httpStatusCode: 404 },
+          }),
+        )
+        .mockResolvedValueOnce({});
+
+      await expect(adapter.onModuleInit()).resolves.toBeUndefined();
+      expect(send).toHaveBeenCalledTimes(2);
+      expect(send.mock.calls[1][0]).toBeInstanceOf(CreateBucketCommand);
     });
 
     it('continues in development when storage is temporarily unavailable', async () => {

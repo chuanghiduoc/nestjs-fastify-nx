@@ -51,6 +51,19 @@ The three distinctions that actually get chosen wrong:
 `5xx` responses carry the generic code for their status. Never attach a specific one: the internal
 failure taxonomy is not the client's business.
 
+All `5xx` details are always masked on REST, direct Fastify routes, Better Auth, GraphQL, WebSocket
+handshakes, and admin surfaces, regardless of `NODE_ENV`. A `messageKey` does not bypass this rule:
+its interpolation arguments are runtime data and therefore are not a security boundary. Local
+development is not an exception: database/driver messages
+can contain credentials, topology, SQL, table names, or personal data copied from bound values.
+Debug through structured logs and Sentry using `requestId`; never make a client response more
+verbose to improve developer diagnostics.
+
+Expected database conditions must be translated at the repository/application boundary (for
+example, Prisma `P2002` to a domain conflict). The global exception filter is only the final
+defense-in-depth layer: it maps a small set of known Prisma codes and turns every other
+`PrismaClient*` error into a generic internal failure.
+
 ### Error codes
 
 `code` is what clients branch on programmatically. Set it explicitly whenever the caller could
@@ -90,7 +103,9 @@ strings, so a literal silently ships English to every locale.
 
 ### Input Validation
 
-Use `class-validator` decorators on DTOs. The global `ProblemDetailsValidationPipe` automatically converts validation failures to RFC 9457 Problem Details with flat `errors[]` array.
+Use `class-validator` decorators on DTOs. The global `ProblemDetailsValidationPipe` automatically
+converts validation failures to RFC 9457 Problem Details with a flat `errors[]` array. It never
+echoes the rejected value; `path`, `rule`, and safe constraint metadata are sufficient for clients.
 
 ```typescript
 export class CreateUserDto {

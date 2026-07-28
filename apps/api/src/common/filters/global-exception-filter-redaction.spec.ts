@@ -3,7 +3,7 @@ import { HttpException, HttpStatus, InternalServerErrorException } from '@nestjs
 import { BusinessRuleException } from '@nestjs-fastify-nx/core';
 import { normalizeException } from './global-exception.filter';
 
-describe('normalizeException — production redaction guard-rail (BE-4)', () => {
+describe('normalizeException — transport redaction guard-rail (BE-4)', () => {
   afterEach(() => {
     vi.unstubAllEnvs();
   });
@@ -32,16 +32,16 @@ describe('normalizeException — production redaction guard-rail (BE-4)', () => 
     expect(result.detail).toBe('Internal Server Error');
   });
 
-  it('does not redact the same 5xx exception outside production', () => {
+  it('redacts the same 5xx exception outside production too', () => {
     vi.stubEnv('NODE_ENV', 'development');
     const exception = new HttpException('pg pool exhausted', 500);
 
     const result = normalizeException(exception);
 
-    expect(result.detail).toBe('pg pool exhausted');
+    expect(result.detail).toBe('Internal Server Error');
   });
 
-  it('preserves a messageKey-carrying 5xx response even in production', () => {
+  it('redacts a messageKey-carrying 5xx response too', () => {
     vi.stubEnv('NODE_ENV', 'production');
     const exception = new HttpException(
       { messageKey: 'errors.storage.upload_failed', code: 'storage_upload_failed' },
@@ -50,8 +50,8 @@ describe('normalizeException — production redaction guard-rail (BE-4)', () => 
 
     const result = normalizeException(exception);
 
-    expect(result.detail).toBe('errors.storage.upload_failed');
-    expect(result.code).toBe('storage_upload_failed');
+    expect(result.detail).toBe('Internal Server Error');
+    expect(result.code).toBe('internal_server_error');
   });
 
   it('does not redact 4xx HttpExceptions in production', () => {
@@ -63,7 +63,7 @@ describe('normalizeException — production redaction guard-rail (BE-4)', () => 
     expect(result.detail).toBe('email already registered');
   });
 
-  it('leaves BusinessRuleException behavior untouched in production', () => {
+  it('redacts a BusinessRuleException misclassified as a 5xx', () => {
     vi.stubEnv('NODE_ENV', 'production');
     const exception = new BusinessRuleException({
       status: HttpStatus.INTERNAL_SERVER_ERROR,
@@ -74,8 +74,8 @@ describe('normalizeException — production redaction guard-rail (BE-4)', () => 
 
     const result = normalizeException(exception);
 
-    expect(result.detail).toBe('errors.business.internal_failure');
-    expect(result.code).toBe('internal_business_failure');
+    expect(result.detail).toBe('Internal Server Error');
+    expect(result.code).toBe('internal_server_error');
   });
 });
 
@@ -121,11 +121,20 @@ describe('normalizeException — Prisma error safety-net', () => {
     expect(JSON.stringify(result)).not.toMatch(/users\.email|constraint failed/i);
   });
 
-  it('falls through to a redacted 500 for an unmapped Prisma code in production', () => {
-    vi.stubEnv('NODE_ENV', 'production');
+  it('falls through to a redacted 500 for an unmapped Prisma code in every environment', () => {
     const result = normalizeException(prismaError('P2099', 'some internal prisma detail'));
     expect(result.status).toBe(HttpStatus.INTERNAL_SERVER_ERROR);
     expect(JSON.stringify(result)).not.toMatch(/internal prisma detail/);
+  });
+
+  it('redacts Prisma errors without a Pxxxx code in development too', () => {
+    vi.stubEnv('NODE_ENV', 'development');
+    const result = normalizeException({
+      name: 'PrismaClientUnknownRequestError',
+      message: 'FATAL: database "private_prod" does not exist at db.internal:5432',
+    });
+    expect(result.status).toBe(HttpStatus.INTERNAL_SERVER_ERROR);
+    expect(JSON.stringify(result)).not.toMatch(/private_prod|db\.internal|5432/);
   });
 
   it('does not misclassify a non-Prisma object that merely has a code', () => {

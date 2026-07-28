@@ -53,6 +53,7 @@ describe('buildPinoLoggerConfig', () => {
     const serializers = pinoHttp().serializers as {
       req: (r: object) => object;
       res: (r: object) => object;
+      err: (e: unknown) => object;
     };
     expect(
       serializers.req({
@@ -62,7 +63,22 @@ describe('buildPinoLoggerConfig', () => {
         headers: { authorization: 'secret' },
       }),
     ).toEqual({ method: 'GET', url: '/api/v1/users/me', remoteAddress: '1.2.3.4' });
+    expect(
+      serializers.req({
+        method: 'GET',
+        url: '/api/auth/verify-email?token=top-secret&email=person@example.com',
+      }),
+    ).toEqual({
+      method: 'GET',
+      url: '/api/auth/verify-email',
+      remoteAddress: undefined,
+    });
     expect(serializers.res({ statusCode: 200, headers: {} })).toEqual({ statusCode: 200 });
+    expect(
+      serializers.err(
+        Object.assign(new Error('postgresql://admin:secret@db/app'), { code: 'P2024' }),
+      ),
+    ).toEqual({ type: 'Error', code: 'P2024' });
   });
 
   it('applies the sensitive redaction list and lets callers override', () => {

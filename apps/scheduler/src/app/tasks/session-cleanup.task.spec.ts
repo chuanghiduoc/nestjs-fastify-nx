@@ -90,9 +90,10 @@ describe('SessionCleanupTask', () => {
       await expect(task.purgeExpiredSessions()).resolves.toBeUndefined();
 
       expect(errorSpy).toHaveBeenCalledOnce();
-      const [msg] = errorSpy.mock.calls[0] as [string];
-      expect(msg).toContain('1500');
-      expect(msg).toMatch(/DB connection lost/);
+      expect(errorSpy.mock.calls[0]).toEqual([
+        { err: expect.any(Error), totalPurged: 1500 },
+        'Session purge failed',
+      ]);
     });
 
     it('does not throw when the very first batch fails', async () => {

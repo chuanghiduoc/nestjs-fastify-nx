@@ -1,5 +1,10 @@
 import * as Sentry from '@sentry/nestjs';
 import { nodeProfilingIntegration } from '@sentry/profiling-node';
+import {
+  safeErrorSummary,
+  sanitizeSensitiveText,
+  sanitizeUrlForLogging,
+} from '@nestjs-fastify-nx/shared';
 
 export interface StartSentryOptions {
   readonly serviceName: string;
@@ -20,6 +25,10 @@ function scrub(value: unknown, depth = 0, seen = new WeakSet<object>()): void {
   for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
     if (SENSITIVE_KEY.test(key)) {
       (value as Record<string, unknown>)[key] = '[Filtered]';
+    } else if (typeof child === 'string') {
+      (value as Record<string, unknown>)[key] = /(^|\.)(url|uri|request_url)$/i.test(key)
+        ? sanitizeUrlForLogging(child)
+        : sanitizeSensitiveText(child);
     } else {
       scrub(child, depth + 1, seen);
     }
@@ -53,7 +62,7 @@ export function startSentry(options: StartSentryOptions): boolean {
 }
 
 export async function reportFatalError(error: unknown, serviceName: string): Promise<void> {
-  const rendered = error instanceof Error ? (error.stack ?? error.message) : String(error);
+  const rendered = safeErrorSummary(error);
   process.stderr.write(`[${serviceName}] fatal bootstrap error: ${rendered}\n`);
   Sentry.captureException(error, { tags: { service: serviceName, phase: 'bootstrap' } });
   await Sentry.flush(2_000).catch(() => false);

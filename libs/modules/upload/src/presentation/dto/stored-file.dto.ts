@@ -1,4 +1,4 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import type { StoredFile } from '@nestjs-fastify-nx/infra-storage';
 
 export class StoredFileDto implements StoredFile {
@@ -8,13 +8,13 @@ export class StoredFileDto implements StoredFile {
   })
   key!: string;
 
-  @ApiProperty({
-    description: 'Public URL of the stored file (presigned or CDN — depends on storage adapter).',
+  @ApiPropertyOptional({
+    description: 'Download URL, present only after asynchronous malware verification succeeds.',
     example:
       'https://cdn.example.com/files/019dd1a5-9235-70db-8d57-54ef901d8185/019dd1a6-102a-7b25-a5a3-54b298b81864.png',
     format: 'uri',
   })
-  url!: string;
+  url?: string;
 
   @ApiProperty({ description: 'Storage bucket the file landed in.', example: 'app-uploads' })
   bucket!: string;

@@ -7,9 +7,6 @@ import {
   VALIDATION_CONSTRAINT_KEYS,
 } from '@nestjs-fastify-nx/infra-i18n';
 
-const SENSITIVE_FIELD_PATTERN = /(password|secret|token|authorization|cookie|credit[_-]?card|ssn)/i;
-const REDACTED = '[REDACTED]';
-
 export class ProblemDetailsValidationPipe extends ValidationPipe {
   constructor(options: ValidationPipeOptions = {}) {
     super({
@@ -52,7 +49,6 @@ function flattenValidationErrors(
           messageKey: mapConstraintToI18nKey(rule),
           rule,
           constraint: extractConstraintArgs(err, rule),
-          received: redactIfSensitive(path, rule, err.value),
         });
       }
     }
@@ -80,20 +76,6 @@ function extractConstraintArgs(
     return ctx as Record<string, unknown>;
   }
   return undefined;
-}
-
-function redactIfSensitive(path: string, rule: string, value: unknown): unknown {
-  if (value === undefined || value === null) return value;
-  // A whitelist-rejected field is one the client sent that the DTO never declared — echoing its
-  // value back has no diagnostic use and can leak a secret nested under an unrecognised key.
-  if (rule === 'whitelistValidation') return undefined;
-  if (SENSITIVE_FIELD_PATTERN.test(path)) return REDACTED;
-  // Never echo a raw object/array: field-name redaction can't see secrets nested inside it.
-  if (typeof value === 'object') return undefined;
-  if (typeof value === 'string' && value.length > 200) {
-    return `${value.slice(0, 200)}…`;
-  }
-  return value;
 }
 
 // class-validator decorator name → stable error code used by frontend for branching.

@@ -16,6 +16,9 @@ concurrency:
   group: full-check-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
   full-check:
     runs-on: ubuntu-latest
@@ -48,4 +51,7 @@ jobs:
         run: pnpm nx format:check --all
 
       - name: Lint + typecheck ALL projects
-        run: pnpm nx run-many -t lint typecheck --all
+        run: pnpm nx run-many -t lint typecheck --all --parallel=3
+
+      - name: Unit tests + coverage thresholds (all)
+        run: pnpm nx run-many -t test --all -- --coverage

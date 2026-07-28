@@ -62,7 +62,7 @@ export class PgBouncerHealthIndicator {
       await client.query('SELECT 1');
       return indicator.up();
     } catch (err) {
-      this.logger.warn(`pgbouncer readiness probe failed: ${String(err)}`);
+      this.logger.warn({ err }, 'pgbouncer readiness probe failed');
       return indicator.down({ error: SANITIZED_ERROR, message: 'PgBouncer unreachable' });
     } finally {
       await client.end().catch(() => undefined);

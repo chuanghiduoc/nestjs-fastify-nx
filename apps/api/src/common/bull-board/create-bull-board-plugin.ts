@@ -8,7 +8,7 @@ import { Queue } from 'bullmq';
 import type { Redis } from 'ioredis';
 import { timingSafeEqual } from 'node:crypto';
 import { ERROR_CODES } from '@nestjs-fastify-nx/contracts';
-import { QUEUE_NAMES } from '@nestjs-fastify-nx/shared';
+import { QUEUE_NAMES, sanitizeUrlForLogging } from '@nestjs-fastify-nx/shared';
 import { redisFixedWindowIncr } from '../rate-limit/redis-fixed-window';
 import { ensureRequestIds } from '../logging/request-id';
 import {
@@ -75,9 +75,11 @@ export function createProblemDetailsErrorHandler(): (error: unknown) => {
         ? candidate.title
         : (HTTP_STATUS_TITLES[status] ?? 'Error');
     const rawDetail =
-      (typeof candidate.detail === 'string' && candidate.detail) ||
-      (typeof candidate.message === 'string' && candidate.message) ||
-      title;
+      typeof candidate.detail === 'string'
+        ? candidate.detail
+        : typeof candidate.message === 'string'
+          ? candidate.message
+          : title;
 
     if (isServerError) {
       // The root onSend normalizer passes a well-formed Problem Details body straight through, so
@@ -92,7 +94,7 @@ export function createProblemDetailsErrorHandler(): (error: unknown) => {
         status,
         title,
         // A 5xx message can carry driver/library internals — mask it the same way the global filter does.
-        detail: isServerError && process.env['NODE_ENV'] === 'production' ? title : rawDetail,
+        detail: isServerError ? title : rawDetail,
         code:
           status < HttpStatus.INTERNAL_SERVER_ERROR &&
           typeof candidate.code === 'string' &&
@@ -152,7 +154,7 @@ function sendProblem(
       title: args.title,
       detail: args.detail,
       code: args.code,
-      instance: request.url,
+      instance: sanitizeUrlForLogging(request.url),
       requestId,
     }),
   );
@@ -212,7 +214,10 @@ export function createBullBoardPlugin(opts: BullBoardOptions) {
         // Fail closed: without a counter there is no ceiling on credential guessing, and on an admin
         // surface that ceiling outweighs availability — unlike the public auth routes, where failing
         // closed would deny every legitimate sign-in too.
-        logger.error({ err, url: request.url }, 'Bull Board auth throttle store unavailable');
+        logger.error(
+          { err, url: sanitizeUrlForLogging(request.url) },
+          'Bull Board auth throttle store unavailable',
+        );
         return sendProblem(request, reply, {
           status: HttpStatus.SERVICE_UNAVAILABLE,
           title: 'Service Unavailable',

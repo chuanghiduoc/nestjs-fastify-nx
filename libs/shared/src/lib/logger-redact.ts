@@ -41,3 +41,64 @@ const WILDCARD_PATHS = SENSITIVE_KEYS.flatMap((key) => [key, `*.${key}`, `*.*.${
 export const SENSITIVE_REDACT_PATHS = [...REQUEST_RESPONSE_PATHS, ...WILDCARD_PATHS];
 
 export const SENSITIVE_REDACT_CENSOR = '[REDACTED]';
+
+/** Keep only the request path so query tokens, emails and search terms never enter telemetry. */
+export function sanitizeUrlForLogging(value: string | undefined): string | undefined {
+  if (value === undefined) return undefined;
+  const query = value.indexOf('?');
+  const fragment = value.indexOf('#');
+  const cutAt = query === -1 ? fragment : fragment === -1 ? query : Math.min(query, fragment);
+  return cutAt === -1 ? value : value.slice(0, cutAt);
+}
+
+export interface SafeSerializedError {
+  type: string;
+  code?: string;
+}
+
+function safeErrorCode(error: unknown): string | undefined {
+  if (!error || typeof error !== 'object') return undefined;
+  const code = (error as { code?: unknown }).code;
+  if (typeof code !== 'string' && typeof code !== 'number') return undefined;
+  const rendered = String(code);
+  return /^[A-Za-z0-9_.:-]{1,80}$/.test(rendered) ? rendered : undefined;
+}
+
+/**
+ * Messages and stacks can contain DSNs, SQL values, tokens and response bodies. Record only the
+ * class and a constrained machine code; call sites add safe operational context separately.
+ */
+export function serializeErrorSafely(error: unknown): SafeSerializedError {
+  const candidateName =
+    error && typeof error === 'object' ? (error as { name?: unknown }).name : undefined;
+  const type =
+    error instanceof Error
+      ? error.name || 'Error'
+      : typeof candidateName === 'string' && /^[A-Za-z0-9_.:-]{1,80}$/.test(candidateName)
+        ? candidateName
+        : 'Error';
+  const code = safeErrorCode(error);
+  return code ? { type, code } : { type };
+}
+
+export function safeErrorSummary(error: unknown): string {
+  const safe = serializeErrorSafely(error);
+  return safe.code ? `${safe.type} (${safe.code})` : safe.type;
+}
+
+/** Defense in depth for third-party telemetry SDKs that accept only rendered strings. */
+export function sanitizeSensitiveText(value: string): string {
+  return value
+    .replace(/:\/\/([^:/\s]+):([^@\s]+)@/g, '://$1:[REDACTED]@')
+    .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+/gi, 'Bearer [REDACTED]')
+    .replace(
+      /([?&](?:access_token|refresh_token|session_token|token|code|secret|password|api[-_]?key|email)=)[^&#\s]*/gi,
+      '$1[REDACTED]',
+    )
+    .replace(
+      /\b(?:access_token|refresh_token|session_token|token|secret|password|api[-_]?key)\s*[:=]\s*[^\s,;]+/gi,
+      (match) =>
+        `${match.slice(0, Math.max(match.indexOf('='), match.indexOf(':')) + 1)}[REDACTED]`,
+    )
+    .replace(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g, '[REDACTED_EMAIL]');
+}

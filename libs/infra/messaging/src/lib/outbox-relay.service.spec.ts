@@ -135,7 +135,8 @@ describe('OutboxRelayService', () => {
 
     expect(dbExecuteCalls).toHaveLength(1);
     expect(dbExecuteCalls[0].sql).toMatch(/lastError/);
-    expect(dbExecuteCalls[0].args[0]).toContain('listener failed');
+    expect(dbExecuteCalls[0].args[0]).toBe('Error');
+    expect(dbExecuteCalls[0].args[0]).not.toContain('listener failed');
     expect(dbExecuteCalls[0].sql).not.toMatch(/processedAt/);
   });
 
@@ -206,7 +207,7 @@ describe('OutboxRelayService', () => {
     expect(dbExecuteCalls[1].sql).toMatch(/processedAt/);
   });
 
-  it('dispatches the whole batch sequentially and records mixed at-least-once results', async () => {
+  it('dispatches aggregates concurrently while retaining per-aggregate order', async () => {
     const rows: OutboxRow[] = [
       buildRow({
         id: 'a1',
@@ -241,8 +242,8 @@ describe('OutboxRelayService', () => {
     const publishedIds = bus.publish.mock.calls.map(
       (call) => (call[0] as { eventId: string }).eventId,
     );
-    // Claim order is preserved by sequential dispatch.
-    expect(publishedIds).toEqual(['a1', 'a2', 'b1']);
+    expect(publishedIds).toContain('b1');
+    expect(publishedIds.indexOf('a1')).toBeLessThan(publishedIds.indexOf('a2'));
 
     // All three rows got a per-row outcome recorded (2 processedAt, 1 lastError-only).
     // markProcessed's UPDATE also clears lastError, so distinguish recordError by the
@@ -395,7 +396,7 @@ describe('OutboxRelayService', () => {
       await vi.advanceTimersByTimeAsync(60_000);
       await relay.onModuleDestroy();
 
-      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('database unavailable'));
+      expect(errorSpy).toHaveBeenCalledWith({ err: expect.any(Error) }, 'Outbox relay tick failed');
     } finally {
       vi.useRealTimers();
     }

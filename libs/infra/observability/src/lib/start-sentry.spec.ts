@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as Sentry from '@sentry/nestjs';
-import { startSentry } from './start-sentry';
+import { reportFatalError, startSentry } from './start-sentry';
 
 vi.mock('@sentry/nestjs', () => ({
   init: vi.fn(),
@@ -33,13 +33,34 @@ describe('startSentry', () => {
     expect(options?.tracesSampleRate).toBe(0.1);
     const event = {
       type: undefined,
-      extra: { nested: { password: 'secret', safe: 'value' } },
+      extra: {
+        nested: {
+          password: 'secret',
+          safe: 'token=top-secret email=person@example.com',
+          url: 'https://example.test/reset?token=top-secret',
+        },
+      },
       request: { headers: { authorization: 'Bearer secret' } },
     };
     expect(options?.beforeSend?.(event, {})).toEqual({
       type: undefined,
-      extra: { nested: { password: '[Filtered]', safe: 'value' } },
+      extra: {
+        nested: {
+          password: '[Filtered]',
+          safe: 'token=[REDACTED] email=[REDACTED_EMAIL]',
+          url: 'https://example.test/reset',
+        },
+      },
       request: { headers: { authorization: '[Filtered]' } },
     });
+  });
+
+  it('reports fatal errors without writing their message or stack to stderr', async () => {
+    const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    const exit = vi.spyOn(process, 'exit').mockImplementation((() => undefined) as never);
+    await reportFatalError(new Error('postgresql://admin:secret@db/app'), 'worker');
+    expect(stderr).toHaveBeenCalledWith('[worker] fatal bootstrap error: Error\n');
+    expect(Sentry.captureException).toHaveBeenCalled();
+    expect(exit).toHaveBeenCalledWith(1);
   });
 });

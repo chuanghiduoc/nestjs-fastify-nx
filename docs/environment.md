@@ -50,6 +50,10 @@ Copy `.env.example` to `.env` and fill in the values.
 | `STORAGE_REGION`                       | `us-east-1`             | No                   | S3 region                                                                                                                                                               |
 | `UPLOAD_PRESIGN_EXPIRES_SECONDS`       | `300`                   | No                   | Presigned POST policy lifetime (60–3600 seconds)                                                                                                                        |
 | `STORAGE_DOWNLOAD_URL_EXPIRES_SECONDS` | `3600`                  | No                   | Signed download URL lifetime (60–86400 seconds)                                                                                                                         |
+| `MALWARE_SCANNER_ENABLED`              | `false`                 | Prod                 | Enable ClamAV scanning before an upload can become `READY`                                                                                                              |
+| `MALWARE_SCANNER_HOST`                 | `localhost`             | No                   | ClamAV daemon host (production worker uses the internal `malware-scanner` service)                                                                                      |
+| `MALWARE_SCANNER_PORT`                 | `3310`                  | No                   | ClamAV TCP port                                                                                                                                                         |
+| `MALWARE_SCANNER_TIMEOUT_MS`           | `30000`                 | No                   | Maximum scan duration before the file remains quarantined                                                                                                               |
 
 **Upload pattern** — clients call `POST /api/v1/upload/presign` to receive a
 short-lived (5 min) S3 presigned-POST policy, upload the bytes browser→S3
@@ -260,13 +264,14 @@ few seconds. If that Redis is unreachable the surface fails closed with `503`.
 
 ## Docker images
 
-| Variable             | Default   | Required | Description                                  |
-| -------------------- | --------- | -------- | -------------------------------------------- |
-| `IMAGE_REGISTRY`     | `ghcr.io` | No       | Container registry used by the compose files |
-| `IMAGE_NAMESPACE`    | —         | No       | Owner/org segment of the image reference     |
-| `IMAGE_TAG`          | `latest`  | No       | Image tag pulled in production               |
-| `API_PORT`           | `3000`    | No       | Host port mapped to the API container        |
-| `API_DEBUG_PORT`     | `9229`    | No       | Host port mapped to the Node inspector (dev) |
-| `API_REPLICAS`       | `1`       | No       | API replicas used by Swarm                   |
-| `WORKER_REPLICAS`    | `1`       | No       | Worker replicas used by Swarm                |
-| `SCHEDULER_REPLICAS` | `1`       | No       | Leader-elected scheduler replicas            |
+| Variable             | Default | Required | Description                                  |
+| -------------------- | ------- | -------- | -------------------------------------------- |
+| `API_IMAGE`          | —       | Prod     | Immutable API reference ending in `@sha256:` |
+| `WORKER_IMAGE`       | —       | Prod     | Immutable worker image reference             |
+| `SCHEDULER_IMAGE`    | —       | Prod     | Immutable scheduler image reference          |
+| `MIGRATION_IMAGE`    | —       | Prod     | Immutable migration image reference          |
+| `API_PORT`           | `3000`  | No       | Host port mapped to the API container        |
+| `API_DEBUG_PORT`     | `9229`  | No       | Host port mapped to the Node inspector (dev) |
+| `API_REPLICAS`       | `1`     | No       | API replicas used by Swarm                   |
+| `WORKER_REPLICAS`    | `1`     | No       | Worker replicas used by Swarm                |
+| `SCHEDULER_REPLICAS` | `1`     | No       | Leader-elected scheduler replicas            |

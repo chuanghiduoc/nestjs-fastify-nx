@@ -30,7 +30,7 @@ export class ThrottlerRedisStorage implements OnModuleDestroy {
       enableOfflineQueue: false,
     });
     this.redis.on('error', (err: Error) => {
-      this.logger.error(`ioredis error: ${err.message}`);
+      this.logger.error({ err }, 'ioredis error');
     });
     this.inner = new ThrottlerStorageRedisService(this.redis);
 

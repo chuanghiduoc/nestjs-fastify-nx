@@ -35,7 +35,7 @@ export class PrismaReplicationLagHealthIndicator {
            pg_is_in_recovery() AS is_replica`,
       );
     } catch (err) {
-      this.logger.warn(`replica readiness probe failed: ${String(err)}`);
+      this.logger.warn({ err }, 'replica readiness probe failed');
       return indicator.down({ error: SANITIZED_ERROR, message: 'Replica unreachable' });
     }
 

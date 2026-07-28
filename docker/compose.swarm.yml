@@ -154,6 +154,29 @@ services:
         # Co-locate with postgres to skip a network hop during apply.
         constraints: [node.labels.role.db == true]
 
+  db-grants:
+    networks: [app-net]
+    depends_on: !override
+      - postgres
+      - migration
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 20
+        window: 120s
+      placement:
+        constraints: [node.labels.role.db == true]
+
+  malware-scanner:
+    networks: [app-net]
+    deploy:
+      <<: *deploy-restart
+      replicas: 1
+      placement:
+        constraints: [node.labels.role.worker == true]
+
   # ── Stateless app tier ────────────────────────────────────────────────────
 
   api:
@@ -171,6 +194,7 @@ services:
     depends_on: !override
       - postgres
       - migration
+      - db-grants
       - redis-cache
       - redis-queue
     deploy:
@@ -184,7 +208,9 @@ services:
     depends_on: !override
       - postgres
       - migration
+      - db-grants
       - redis-queue
+      - malware-scanner
     deploy:
       <<: [*deploy-restart, *deploy-update]
       replicas: ${WORKER_REPLICAS:-2}
@@ -196,6 +222,7 @@ services:
     depends_on: !override
       - postgres
       - migration
+      - db-grants
       - redis-cache
       - redis-queue
     # Redis leader election makes multiple replicas safe; spread them across

@@ -68,9 +68,14 @@ docker run --rm \
 ## Docker Compose (Production)
 
 ```bash
-# Copy and configure
+# Compose interpolation/deploy-only values (DB role passwords + immutable image digests)
 cp .env.example .env
-# Edit .env with production values, including IMAGE_NAMESPACE and IMAGE_TAG
+# Create four mode-0600 runtime files containing only variables used by that process:
+# .env.api, .env.worker, .env.scheduler, .env.migration
+# .env.migration must contain DATABASE_URL for the admin/migration role.
+# .env.api uses API_DB_USER/API_DB_PASSWORD in its DATABASE_URL; .env.worker and
+# .env.scheduler use their corresponding role. Keep STORAGE_* only in api/worker,
+# MAIL_* only in worker, and scheduler-only cron settings in scheduler.
 
 # Start infrastructure + apps
 docker compose --env-file .env -f docker/compose.yml -f docker/compose.prod.yml up -d
@@ -78,9 +83,10 @@ docker compose --env-file .env -f docker/compose.yml -f docker/compose.prod.yml 
 
 The base `compose.yml` defines the infrastructure services (PostgreSQL, Redis,
 MinIO) and healthcheck specs for worker/scheduler. The
-`compose.prod.yml` overlay pins each app to a published image
-(`${IMAGE_REGISTRY}/${IMAGE_NAMESPACE}/<app>:${IMAGE_TAG}`), enforces a single
-scheduler replica, and excludes mailpit via the `dev-only` profile.
+`compose.prod.yml` requires digest-pinned `API_IMAGE`, `WORKER_IMAGE`,
+`SCHEDULER_IMAGE`, and `MIGRATION_IMAGE`. It provisions separate database roles
+after migrations and gives each process its own env file, preventing the API,
+worker, scheduler, and migration containers from inheriting one shared secret set.
 
 ## Network Exposure & Port Binding
 
@@ -113,6 +119,11 @@ the box. This image is deploy-agnostic — pick whichever fits, nothing else cha
 > **Swarm note**: `compose.swarm.yml` publishes the api through the routing mesh
 > (`ports: !override` with `mode: ingress`) and strips the data-tier ports the
 > same way, so the swarm path is unaffected by `API_BIND_HOST`.
+>
+> The Swarm overlay also places `db-grants` and `malware-scanner` on the
+> encrypted application network. `db-grants` retries because Swarm ignores
+> `depends_on` conditions; do not remove that one-shot service or start workers
+> before it has completed successfully.
 
 See also `TRUST_PROXY_HOPS` under [Scaling](#scaling) — set it to the number of
 proxy hops so Fastify resolves `req.ip` from `X-Forwarded-For` correctly.

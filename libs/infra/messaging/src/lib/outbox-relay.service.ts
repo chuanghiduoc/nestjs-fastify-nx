@@ -8,7 +8,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '@nestjs-fastify-nx/infra-database';
 import type { DomainEvent } from '@nestjs-fastify-nx/core';
-import { positiveIntEnv } from '@nestjs-fastify-nx/shared';
+import { positiveIntEnv, safeErrorSummary } from '@nestjs-fastify-nx/shared';
 import { EventBusService } from './event-bus.service';
 import { OUTBOX_SCHEMA_VERSION } from './outbox-schema-version';
 import { OUTBOX_RELAY_LEADERSHIP, type OutboxRelayLeadership } from './outbox-relay-leadership';
@@ -57,6 +57,7 @@ export class OutboxRelayService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(OutboxRelayService.name);
   private readonly pollIntervalMs = positiveIntEnv('OUTBOX_POLL_INTERVAL_MS', 1_000);
   private readonly batchSize = positiveIntEnv('OUTBOX_BATCH_SIZE', 50);
+  private readonly dispatchConcurrency = positiveIntEnv('OUTBOX_DISPATCH_CONCURRENCY', 8);
   private readonly maxAttempts = positiveIntEnv('OUTBOX_MAX_ATTEMPTS', 10);
   private readonly txTimeoutMs = positiveIntEnv('OUTBOX_TX_TIMEOUT_MS', 30_000);
   // Exponential backoff between delivery attempts. Without it the relay re-claims a failing row on
@@ -88,10 +89,10 @@ export class OutboxRelayService implements OnModuleInit, OnModuleDestroy {
     this.timer = setInterval(() => {
       if (this.inFlight) return;
       this.inFlight = this.tick()
-        .catch((err) => {
+        .catch((err: unknown) => {
           // A transient claim/query failure must not become an unhandled rejection that kills the
           // scheduler process. The next interval retries and the outbox rows remain durable.
-          this.logger.error(`Outbox relay tick failed: ${String(err)}`);
+          this.logger.error({ err }, 'Outbox relay tick failed');
           return 0;
         })
         .finally(() => {
@@ -123,16 +124,44 @@ export class OutboxRelayService implements OnModuleInit, OnModuleDestroy {
 
       // claimBatch() already incremented attempts for every claimed row, so each must be attempted
       // this tick or it silently burns a retry — a failed row is retried later, it doesn't block.
-      let dispatched = 0;
-      for (const row of claimed) {
-        if (await this.dispatchOne(row)) dispatched++;
-      }
+      const dispatched = await this.dispatchClaimed(claimed);
 
       await this.checkStuckRows();
       return dispatched;
     } finally {
       this.running = false;
     }
+  }
+
+  /**
+   * Different aggregates may publish concurrently, while events for one aggregate retain claim
+   * order. This removes batch-size × broker-latency polling stalls without reordering a stream.
+   */
+  private async dispatchClaimed(rows: OutboxRow[]): Promise<number> {
+    const byAggregate = new Map<string, OutboxRow[]>();
+    for (const row of rows) {
+      const group = byAggregate.get(row.aggregateId);
+      if (group) group.push(row);
+      else byAggregate.set(row.aggregateId, [row]);
+    }
+
+    const groups = [...byAggregate.values()];
+    let next = 0;
+    const workers = Array.from(
+      { length: Math.min(this.dispatchConcurrency, groups.length) },
+      async () => {
+        let succeeded = 0;
+        while (next < groups.length) {
+          const group = groups[next++];
+          if (!group) continue;
+          for (const row of group) {
+            if (await this.dispatchOne(row)) succeeded++;
+          }
+        }
+        return succeeded;
+      },
+    );
+    return (await Promise.all(workers)).reduce((total, count) => total + count, 0);
   }
 
   private async checkStuckRows(): Promise<void> {
@@ -157,7 +186,7 @@ export class OutboxRelayService implements OnModuleInit, OnModuleDestroy {
         );
       }
     } catch (err) {
-      this.logger.error(`Outbox stuck-row check failed: ${String(err)}`);
+      this.logger.error({ err }, 'Outbox stuck-row check failed');
     }
   }
 
@@ -232,9 +261,10 @@ export class OutboxRelayService implements OnModuleInit, OnModuleDestroy {
     try {
       await this.bus.publish(event);
     } catch (err) {
-      const message = String(err);
+      const message = safeErrorSummary(err);
       this.logger.error(
-        `Outbox dispatch failed for ${row.eventType} (id=${row.id}, attempt=${row.attempts}) — ${message}`,
+        { err, eventType: row.eventType, outboxId: row.id, attempt: row.attempts },
+        'Outbox dispatch failed',
       );
       await this.recordError(row.id, message.slice(0, 2_000));
       return false;
@@ -246,7 +276,8 @@ export class OutboxRelayService implements OnModuleInit, OnModuleDestroy {
     } catch (err) {
       // Published but mark-processed failed — event WILL redeliver; listeners must be idempotent.
       this.logger.error(
-        `Outbox row ${row.id} (${row.eventType}) was published but mark-processed failed — event WILL be redelivered. ${String(err)}`,
+        { err, eventType: row.eventType, outboxId: row.id },
+        'Outbox row was published but mark-processed failed; event will be redelivered',
       );
       return false;
     }
@@ -270,7 +301,7 @@ export class OutboxRelayService implements OnModuleInit, OnModuleDestroy {
         id,
       );
     } catch (err) {
-      this.logger.error(`Failed to record outbox lastError for ${id}: ${String(err)}`);
+      this.logger.error({ err, outboxId: id }, 'Failed to record outbox lastError');
     }
   }
 }

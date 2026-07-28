@@ -15,7 +15,12 @@ import { Redis } from 'ioredis';
 import { createHash } from 'node:crypto';
 import { toNodeHandler } from 'better-auth/node';
 import { BETTER_AUTH_INSTANCE, type BetterAuthInstance } from '@nestjs-fastify-nx/infra-auth';
-import { intEnv, positiveIntEnv, redisReconnectStrategy } from '@nestjs-fastify-nx/shared';
+import {
+  intEnv,
+  positiveIntEnv,
+  redisReconnectStrategy,
+  sanitizeUrlForLogging,
+} from '@nestjs-fastify-nx/shared';
 import { ERROR_CODES } from '@nestjs-fastify-nx/contracts';
 import { reportFatalError, startSentry } from '@nestjs-fastify-nx/infra-observability';
 import { AppModule } from './app/app.module';
@@ -28,6 +33,7 @@ import { redisFixedWindowIncr } from './common/rate-limit/redis-fixed-window';
 import { flushBufferedReplyHeaders } from './common/http/flush-reply-headers';
 import { applyFastifyProblemDetailsHook } from './common/filters/fastify-error-handler';
 import { buildProblemDetails } from './common/filters/problem-details.helper';
+import { maskBetterAuthServerResponse } from './common/filters/better-auth-response';
 import type { EnvConfig } from './config/env.validation';
 
 const STRICT_AUTH_PATHS = new Set([
@@ -166,7 +172,7 @@ async function bootstrap() {
       enableOfflineQueue: false,
     });
     idempotencyRedis.on('error', (err: Error) => {
-      app.get(Logger).warn(`Idempotency Redis error: ${err.message}`);
+      app.get(Logger).warn({ err }, 'Idempotency Redis error');
     });
     fastify.addHook('onClose', async () => {
       await idempotencyRedis.quit().catch(() => idempotencyRedis.disconnect());
@@ -208,7 +214,7 @@ async function bootstrap() {
             title: 'Service Unavailable',
             detail: 'Server is under heavy load; please retry shortly.',
             code: ERROR_CODES.SERVICE_UNAVAILABLE,
-            instance: req.url,
+            instance: sanitizeUrlForLogging(req.url),
             requestId,
           }),
         );
@@ -239,7 +245,7 @@ async function bootstrap() {
     enableOfflineQueue: false,
   });
   rateLimitRedis.on('error', (err: Error) => {
-    app.get(Logger).warn(`Rate-limit Redis error: ${err.message}`);
+    app.get(Logger).warn({ err }, 'Rate-limit Redis error');
   });
   fastify.addHook('onClose', async () => {
     await rateLimitRedis.quit().catch(() => rateLimitRedis.disconnect());
@@ -268,7 +274,7 @@ async function bootstrap() {
           title: 'Too Many Requests',
           detail: `Rate limit exceeded. Try again in ${Math.ceil(context.ttl / 1000)} seconds.`,
           code: ERROR_CODES.RATE_LIMITED,
-          instance: req.url,
+          instance: sanitizeUrlForLogging(req.url),
           requestId,
         }),
         retryAfter: Math.ceil(context.ttl / 1000),
@@ -318,18 +324,18 @@ async function bootstrap() {
             title: 'Too Many Requests',
             detail: `Rate limit exceeded. Try again in ${retryAfter} seconds.`,
             code: ERROR_CODES.RATE_LIMITED,
-            instance: req.url,
+            instance: sanitizeUrlForLogging(req.url),
             requestId,
           }),
           retryAfter,
         });
     } catch (err) {
       if (authRateLimitFailOpen) {
-        app.get(Logger).warn(`Account rate-limit Redis error (fail-open): ${String(err)}`);
+        app.get(Logger).warn({ err }, 'Account rate-limit Redis error (fail-open)');
         return;
       }
 
-      app.get(Logger).error(`Account rate-limit Redis error (fail-closed): ${String(err)}`);
+      app.get(Logger).error({ err }, 'Account rate-limit Redis error (fail-closed)');
       const { requestId } = ensureRequestIds(req.raw, req.headers);
       return reply
         .status(HttpStatus.SERVICE_UNAVAILABLE)
@@ -341,7 +347,7 @@ async function bootstrap() {
             title: 'Service Unavailable',
             detail: 'Authentication is temporarily unavailable. Retry shortly.',
             code: ERROR_CODES.SERVICE_UNAVAILABLE,
-            instance: req.url,
+            instance: sanitizeUrlForLogging(req.url),
             requestId,
           }),
         );
@@ -349,7 +355,6 @@ async function bootstrap() {
   });
 
   const auth = app.get<BetterAuthInstance>(BETTER_AUTH_INSTANCE);
-  const betterAuthHandler = toNodeHandler(auth.handler);
 
   // STRICT bucket: credential paths; LOOSE bucket: session ops.
   const authSessionRateLimitMax = config.get('AUTH_SESSION_RATE_LIMIT_MAX', { infer: true });
@@ -402,6 +407,15 @@ async function bootstrap() {
 
     let timedOut = false;
     let timer: NodeJS.Timeout | undefined;
+    // Better Auth can resolve an APIError as a 5xx Response instead of throwing. Wrap its Fetch
+    // handler before the Node adapter writes anything so that path is masked too.
+    const betterAuthHandler = toNodeHandler(async (request) =>
+      maskBetterAuthServerResponse(await auth.handler(request), {
+        instance: sanitizeUrlForLogging(req.url),
+        requestId,
+        correlationId,
+      }),
+    );
     const handlerPromise = betterAuthHandler(req.raw, reply.raw);
     // Node can't cancel the handler; if it settles AFTER the watchdog already responded, swallow the
     // result/error here so it never surfaces as an unhandled rejection.
@@ -413,7 +427,7 @@ async function bootstrap() {
         app
           .get(Logger)
           .warn(
-            { err: late, requestId, correlationId, url: req.url },
+            { err: late, requestId, correlationId, url: sanitizeUrlForLogging(req.url) },
             `Better Auth handler rejected after the ${authHandlerTimeoutMs}ms watchdog fired`,
           );
       }
@@ -440,7 +454,7 @@ async function bootstrap() {
       app
         .get(Logger)
         .error(
-          { err, requestId, correlationId, url: req.url },
+          { err, requestId, correlationId, url: sanitizeUrlForLogging(req.url) },
           timedOut ? 'Better Auth handler timed out' : 'Better Auth handler threw unexpectedly',
         );
       if (!reply.raw.headersSent) {
@@ -450,7 +464,7 @@ async function bootstrap() {
             status,
             title: timedOut ? 'Service Unavailable' : 'Internal Server Error',
             code: timedOut ? ERROR_CODES.SERVICE_UNAVAILABLE : ERROR_CODES.INTERNAL_SERVER_ERROR,
-            instance: req.url,
+            instance: sanitizeUrlForLogging(req.url),
             requestId,
           }),
         );

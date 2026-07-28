@@ -32,7 +32,9 @@ export function instrumentBusExecution<TResult>(
       finish('success');
       return result;
     } catch (err) {
-      const error = err instanceof Error ? err : new Error(String(err));
+      const error = new Error(
+        err instanceof Error && /^[A-Za-z0-9_.:-]{1,80}$/.test(err.name) ? err.name : 'Error',
+      );
       span.recordException(error);
       span.setStatus({ code: SpanStatusCode.ERROR, message: error.message });
       finish('error');

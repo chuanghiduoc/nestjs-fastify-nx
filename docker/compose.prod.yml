@@ -3,10 +3,9 @@
 #
 #   docker compose -f docker/compose.yml -f docker/compose.prod.yml up -d
 #
-# Image references resolve against `${IMAGE_REGISTRY}/${IMAGE_NAMESPACE}/<app>:${IMAGE_TAG}`,
-# matching what `release.yml` publishes to GHCR. Operators set those vars in
-# `.env` (or the deploy environment) — `IMAGE_TAG=latest` works for rolling
-# deploys, `IMAGE_TAG=1.2.3` pins a specific release.
+# API_IMAGE / WORKER_IMAGE / SCHEDULER_IMAGE / MIGRATION_IMAGE are mandatory immutable
+# registry digests. Runtime variables come from separate service-specific env files so API,
+# worker, scheduler and migration do not receive one another's credentials.
 #
 # This file deliberately omits `build:` so a thin host (no source checkout)
 # can pull and run from the registry alone.
@@ -56,6 +55,12 @@ services:
     # Strip the host-port mapping inherited from compose.yml — the data tier
     # talks to apps over the internal compose network only.
     ports: !override []
+    environment:
+      POSTGRES_USER: ${POSTGRES_ADMIN_USER:?POSTGRES_ADMIN_USER is required}
+      POSTGRES_PASSWORD: ${POSTGRES_ADMIN_PASSWORD:?POSTGRES_ADMIN_PASSWORD is required}
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB is required}
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
     deploy:
       resources:
         limits:
@@ -87,15 +92,32 @@ services:
     <<: *app-logging
     ports: !override []
 
+  malware-scanner:
+    <<: *app-logging
+    image: clamav/clamav:1.4.3@sha256:75fb5fd95fcbe1d7e6d240c369c1572b686ee2c95949d1042b5148de8eddebb4
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    volumes:
+      - clamav_signatures:/var/lib/clamav
+    healthcheck:
+      test: ['CMD', 'clamdscan', '--ping', '1']
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 90s
+
   # Migration intentionally skips read_only because pnpm + prisma migrate write
   # transient files outside /tmp during migration apply. Other hardening still applies.
   migration:
     <<: *app-logging
-    image: ${IMAGE_REGISTRY:-ghcr.io}/${IMAGE_NAMESPACE}/migration:${IMAGE_TAG:-latest}
-    env_file: ../.env
+    image: ${MIGRATION_IMAGE:?Set MIGRATION_IMAGE to an immutable image digest}
+    env_file:
+      - path: ../.env.migration
+        required: true
     environment:
       NODE_ENV: production
-      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-nestjs_db}
     security_opt:
       - no-new-privileges:true
     cap_drop:
@@ -112,14 +134,40 @@ services:
           memory: 512M
           cpus: '0.5'
 
+  db-grants:
+    <<: *app-logging
+    image: postgres:18-alpine@sha256:9a8afca54e7861fd90fab5fdf4c42477a6b1cb7d293595148e674e0a3181de15
+    environment:
+      POSTGRES_ADMIN_USER: ${POSTGRES_ADMIN_USER:?POSTGRES_ADMIN_USER is required}
+      POSTGRES_ADMIN_PASSWORD: ${POSTGRES_ADMIN_PASSWORD:?POSTGRES_ADMIN_PASSWORD is required}
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB is required}
+      API_DB_USER: ${API_DB_USER:?API_DB_USER is required}
+      API_DB_PASSWORD: ${API_DB_PASSWORD:?API_DB_PASSWORD is required}
+      WORKER_DB_USER: ${WORKER_DB_USER:?WORKER_DB_USER is required}
+      WORKER_DB_PASSWORD: ${WORKER_DB_PASSWORD:?WORKER_DB_PASSWORD is required}
+      SCHEDULER_DB_USER: ${SCHEDULER_DB_USER:?SCHEDULER_DB_USER is required}
+      SCHEDULER_DB_PASSWORD: ${SCHEDULER_DB_PASSWORD:?SCHEDULER_DB_PASSWORD is required}
+    volumes:
+      - ./postgres/provision-runtime-roles.sh:/provision-runtime-roles.sh:ro
+    entrypoint: ['/bin/sh', '/provision-runtime-roles.sh']
+    depends_on:
+      migration:
+        condition: service_completed_successfully
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    restart: 'no'
+
   api:
     <<: [*app-security, *app-logging]
-    image: ${IMAGE_REGISTRY:-ghcr.io}/${IMAGE_NAMESPACE}/api:${IMAGE_TAG:-latest}
-    env_file: ../.env
+    image: ${API_IMAGE:?Set API_IMAGE to an immutable image digest}
+    env_file:
+      - path: ../.env.api
+        required: true
     environment:
       NODE_ENV: production
       TZ: ${TZ:-UTC}
-      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-nestjs_db}
       REDIS_CACHE_HOST: redis-cache
       REDIS_QUEUE_HOST: redis-queue
       REDIS_QUEUE_PORT: '6380'
@@ -138,6 +186,8 @@ services:
       postgres:
         condition: service_healthy
       migration:
+        condition: service_completed_successfully
+      db-grants:
         condition: service_completed_successfully
       redis-cache:
         condition: service_healthy
@@ -182,20 +232,28 @@ services:
 
   worker:
     <<: [*app-security, *app-logging]
-    image: ${IMAGE_REGISTRY:-ghcr.io}/${IMAGE_NAMESPACE}/worker:${IMAGE_TAG:-latest}
-    env_file: ../.env
+    image: ${WORKER_IMAGE:?Set WORKER_IMAGE to an immutable image digest}
+    env_file:
+      - path: ../.env.worker
+        required: true
     environment:
       NODE_ENV: production
-      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-nestjs_db}
       REDIS_CACHE_HOST: redis-cache
       REDIS_QUEUE_HOST: redis-queue
       REDIS_QUEUE_PORT: '6380'
+      MALWARE_SCANNER_ENABLED: 'true'
+      MALWARE_SCANNER_HOST: malware-scanner
+      MALWARE_SCANNER_PORT: '3310'
     depends_on:
       postgres:
         condition: service_healthy
       migration:
         condition: service_completed_successfully
+      db-grants:
+        condition: service_completed_successfully
       redis-queue:
+        condition: service_healthy
+      malware-scanner:
         condition: service_healthy
     restart: unless-stopped
     # stop_grace_period must exceed worst-case BullMQ job timeout + lock duration
@@ -224,11 +282,12 @@ services:
 
   scheduler:
     <<: [*app-security, *app-logging]
-    image: ${IMAGE_REGISTRY:-ghcr.io}/${IMAGE_NAMESPACE}/scheduler:${IMAGE_TAG:-latest}
-    env_file: ../.env
+    image: ${SCHEDULER_IMAGE:?Set SCHEDULER_IMAGE to an immutable image digest}
+    env_file:
+      - path: ../.env.scheduler
+        required: true
     environment:
       NODE_ENV: production
-      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-nestjs_db}
       REDIS_CACHE_HOST: redis-cache
       REDIS_QUEUE_HOST: redis-queue
       REDIS_QUEUE_PORT: '6380'
@@ -258,6 +317,11 @@ services:
         condition: service_healthy
       migration:
         condition: service_completed_successfully
+      db-grants:
+        condition: service_completed_successfully
       redis-queue:
         condition: service_healthy
     restart: unless-stopped
+
+volumes:
+  clamav_signatures:

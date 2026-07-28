@@ -24,7 +24,7 @@ export class PrismaHealthIndicator {
       await withTimeout(this.prisma.db.$queryRaw`SELECT 1`, PROBE_TIMEOUT_MS, 'Health probe');
       return indicator.up();
     } catch (error) {
-      this.logger.warn(`database readiness probe failed: ${String(error)}`);
+      this.logger.warn({ err: error }, 'database readiness probe failed');
       return indicator.down({ error: SANITIZED_ERROR });
     }
   }
