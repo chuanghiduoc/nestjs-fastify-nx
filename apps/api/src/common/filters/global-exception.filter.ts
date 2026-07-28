@@ -230,6 +230,15 @@ interface HttpExceptionResponseObject {
 
 export function normalizeException(exception: unknown): NormalizedError {
   if (exception instanceof BusinessRuleException) {
+    if (exception.getStatus() >= HttpStatus.INTERNAL_SERVER_ERROR) {
+      const status = exception.getStatus();
+      return {
+        status,
+        title: HTTP_STATUS_TITLES[status] ?? 'Internal Server Error',
+        detail: HTTP_STATUS_TITLES[status] ?? 'Internal Server Error',
+        code: HTTP_STATUS_CODES[status] ?? ERROR_CODES.INTERNAL_SERVER_ERROR,
+      };
+    }
     const body = exception.getResponse() as HttpExceptionResponseObject;
     return {
       status: exception.getStatus(),
@@ -326,37 +335,40 @@ export function normalizeException(exception: unknown): NormalizedError {
     };
   }
 
+  // A messageKey is still developer-controlled and its args can interpolate runtime data. Treating
+  // it as proof that an arbitrary 5xx body is public-safe turns redaction into a convention rather
+  // than an enforceable boundary. Health probes above are the sole structured 5xx exception.
+  if (shouldRedactServerError) {
+    return {
+      status,
+      title: defaultTitle,
+      detail: defaultTitle,
+      code: defaultCode,
+    };
+  }
+
   const body = res as HttpExceptionResponseObject;
   const title = typeof body.title === 'string' ? body.title : defaultTitle;
   const code = typeof body.code === 'string' ? body.code : defaultCode;
   // body.messageKey wins over message — domain code that throws with a key gets translated; raw NestJS exceptions fall back to their message string.
   const detailSource = body.messageKey ?? body.message;
-  // A messageKey is an intentional, translatable detail — never redact it. Its absence on a 5xx
-  // means the message is whatever the throw site happened to pass, which is the leak this guards.
-  const redactDetail = shouldRedactServerError && typeof body.messageKey !== 'string';
 
   if (Array.isArray(body.errors) && body.errors.length > 0) {
     return {
       status,
       title,
-      detail: redactDetail
-        ? title
-        : typeof detailSource === 'string'
-          ? detailSource
-          : I18N_KEYS.validation.failed_detail,
+      detail: typeof detailSource === 'string' ? detailSource : I18N_KEYS.validation.failed_detail,
       code: code === defaultCode ? ERROR_CODES.VALIDATION_FAILED : code,
       args: body.args,
       errors: body.errors,
     };
   }
 
-  const detail = redactDetail
-    ? title
-    : Array.isArray(detailSource)
-      ? detailSource.join('; ')
-      : typeof detailSource === 'string'
-        ? detailSource
-        : exception.message;
+  const detail = Array.isArray(detailSource)
+    ? detailSource.join('; ')
+    : typeof detailSource === 'string'
+      ? detailSource
+      : exception.message;
 
   return { status, title, detail, code, args: body.args };
 }

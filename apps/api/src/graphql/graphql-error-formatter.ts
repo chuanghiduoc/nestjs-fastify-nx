@@ -27,7 +27,9 @@ function mask(error: GraphQLError): GraphQLError {
     source: error.source,
     positions: error.positions,
     path: error.path,
-    extensions: error.extensions,
+    // Extensions are serialized too and may contain exception.response, cause, stacktrace, or
+    // adapter metadata. Rebuild them instead of preserving the source.
+    extensions: { code: 'INTERNAL_SERVER_ERROR' },
   });
 }
 

@@ -41,7 +41,7 @@ describe('normalizeException — transport redaction guard-rail (BE-4)', () => {
     expect(result.detail).toBe('Internal Server Error');
   });
 
-  it('preserves a messageKey-carrying 5xx response even in production', () => {
+  it('redacts a messageKey-carrying 5xx response too', () => {
     vi.stubEnv('NODE_ENV', 'production');
     const exception = new HttpException(
       { messageKey: 'errors.storage.upload_failed', code: 'storage_upload_failed' },
@@ -50,8 +50,8 @@ describe('normalizeException — transport redaction guard-rail (BE-4)', () => {
 
     const result = normalizeException(exception);
 
-    expect(result.detail).toBe('errors.storage.upload_failed');
-    expect(result.code).toBe('storage_upload_failed');
+    expect(result.detail).toBe('Internal Server Error');
+    expect(result.code).toBe('internal_server_error');
   });
 
   it('does not redact 4xx HttpExceptions in production', () => {
@@ -63,7 +63,7 @@ describe('normalizeException — transport redaction guard-rail (BE-4)', () => {
     expect(result.detail).toBe('email already registered');
   });
 
-  it('leaves BusinessRuleException behavior untouched in production', () => {
+  it('redacts a BusinessRuleException misclassified as a 5xx', () => {
     vi.stubEnv('NODE_ENV', 'production');
     const exception = new BusinessRuleException({
       status: HttpStatus.INTERNAL_SERVER_ERROR,
@@ -74,8 +74,8 @@ describe('normalizeException — transport redaction guard-rail (BE-4)', () => {
 
     const result = normalizeException(exception);
 
-    expect(result.detail).toBe('errors.business.internal_failure');
-    expect(result.code).toBe('internal_business_failure');
+    expect(result.detail).toBe('Internal Server Error');
+    expect(result.code).toBe('internal_server_error');
   });
 });
 

@@ -114,6 +114,8 @@ export class NotificationGateway
       redis: this.rateLimitClient,
       maxConcurrentPerIp: this.config.get('WS_CONNECTION_LIMIT_PER_IP', { infer: true }),
       trustProxyHops: this.config.get('TRUST_PROXY_HOPS', { infer: true }),
+      onSessionError: (err) =>
+        this.logger.error({ err }, 'WebSocket handshake session validation failed'),
     });
     server.use((socket, next) => void wsAuthMiddleware(socket, next));
 

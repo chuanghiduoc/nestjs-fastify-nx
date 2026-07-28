@@ -44,19 +44,32 @@ export function applyFastifyProblemDetailsHook(fastify: FastifyInstance): void {
     reply.header('content-type', PROBLEM_CONTENT_TYPE);
 
     if (isProblemDetailsShape(source) && source.status === status) {
-      const detail = status >= 500 ? source.title : source.detail;
-      done(
-        null,
-        JSON.stringify({
-          ...source,
-          detail,
-          instance: sanitizeUrlForLogging(
-            typeof source['instance'] === 'string' ? source['instance'] : request.url,
-          ),
-          requestId,
-          timestamp: source['timestamp'] ?? new Date().toISOString(),
-        }),
-      );
+      const title =
+        status >= 500 ? (HTTP_STATUS_TITLES[status] ?? 'Internal Server Error') : source.title;
+      const detail = status >= 500 ? title : source.detail;
+      const normalized = buildProblemDetails({
+        status,
+        title,
+        detail,
+        code:
+          status < 500 && typeof source.code === 'string'
+            ? source.code
+            : (HTTP_STATUS_CODES[status] ?? ERROR_CODES.INTERNAL_SERVER_ERROR),
+        instance: sanitizeUrlForLogging(
+          typeof source.instance === 'string' ? source.instance : request.url,
+        ),
+        requestId,
+        errors: status < 500 && Array.isArray(source.errors) ? source.errors : undefined,
+        checks:
+          status >= 500 && source.checks && typeof source.checks === 'object'
+            ? source.checks
+            : undefined,
+      });
+      const response =
+        status < 500 && typeof source.retryAfter === 'number'
+          ? { ...normalized, retryAfter: source.retryAfter }
+          : normalized;
+      done(null, JSON.stringify(response));
       return;
     }
 
@@ -74,7 +87,14 @@ export function applyFastifyProblemDetailsHook(fastify: FastifyInstance): void {
       (typeof source?.['detail'] === 'string' && source['detail']) ||
       (typeof source?.['message'] === 'string' && source['message']) ||
       title;
-    const detail = status >= 500 ? title : rawDetail;
+    // Unshaped Fastify 4xx errors are library/parser output, not an allowlisted application
+    // Problem Details body. Do not reflect their free-form message either.
+    const detail =
+      status >= 500
+        ? title
+        : source?.['type'] && typeof source['type'] === 'string'
+          ? rawDetail
+          : title;
 
     if (status >= 500) {
       const error = Object.assign(new Error(rawDetail), { response: source });
@@ -119,6 +139,10 @@ interface ProblemDetailsLike {
   title: string;
   type: string;
   detail?: string;
+  code?: string;
+  instance?: string;
+  errors?: Parameters<typeof buildProblemDetails>[0]['errors'];
+  checks?: Parameters<typeof buildProblemDetails>[0]['checks'];
   retryAfter?: number;
 }
 

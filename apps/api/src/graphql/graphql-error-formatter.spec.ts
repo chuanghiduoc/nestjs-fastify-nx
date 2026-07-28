@@ -64,6 +64,25 @@ describe('createGraphqlErrorFormatter', () => {
     expect(messagesOf(format(internal))).toEqual(['Internal server error']);
   });
 
+  it('drops internal GraphQL extensions together with the message', () => {
+    const internal = new GraphQLError('database failed', {
+      originalError: new Error('database failed'),
+      extensions: {
+        code: 'PRISMA_P1001',
+        stacktrace: ['at prisma.user.findUnique (/app/repository.ts:42)'],
+        cause: { host: 'database.internal', port: 5432 },
+      },
+    });
+
+    const result = format(internal);
+    const serialized = JSON.stringify(result);
+
+    expect(result.response.errors?.[0]?.extensions).toEqual({
+      code: 'INTERNAL_SERVER_ERROR',
+    });
+    expect(serialized).not.toMatch(/PRISMA|stacktrace|database\.internal|repository/);
+  });
+
   it('leaves a graphql-level error alone — it describes the query the client sent', () => {
     // No originalError: syntax/validation errors say nothing about our internals.
     const validation = new GraphQLError('Cannot query field "nope" on type "UserType".');

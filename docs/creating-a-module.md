@@ -153,7 +153,6 @@ export class Product {
             code: 'out_of_range',
             message: 'price must be >= 0',
             constraint: { min: 0 },
-            received: price,
           },
         ],
       });

@@ -80,10 +80,35 @@ export function buildProblemDetails(args: ProblemDetailsArgs): ProblemDetailsBod
     timestamp: new Date().toISOString(),
   };
   if (args.errors && args.errors.length > 0) {
-    body.errors = args.errors;
+    const errors = args.errors
+      .filter(
+        (item) =>
+          typeof item?.path === 'string' &&
+          typeof item?.code === 'string' &&
+          typeof item?.message === 'string',
+      )
+      .map((item) => ({
+        path: item.path,
+        code: item.code,
+        message: item.message,
+        ...(typeof item.messageKey === 'string' ? { messageKey: item.messageKey } : {}),
+        ...(typeof item.rule === 'string' ? { rule: item.rule } : {}),
+        ...(item.constraint &&
+        typeof item.constraint === 'object' &&
+        !Array.isArray(item.constraint)
+          ? { constraint: item.constraint }
+          : {}),
+      }));
+    if (errors.length > 0) body.errors = errors;
   }
   if (args.checks && Object.keys(args.checks).length > 0) {
-    body.checks = args.checks;
+    body.checks = Object.fromEntries(
+      Object.entries(args.checks)
+        .filter(([, check]) => typeof check?.status === 'string')
+        // Dependency names and states are enough for health automation. A provider/driver message
+        // is not, and accepting it here would create a second 5xx detail channel.
+        .map(([name, check]) => [name, { status: check.status }]),
+    );
   }
   return body;
 }

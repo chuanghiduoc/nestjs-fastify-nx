@@ -58,12 +58,6 @@ export interface ProblemDetailsDto {
  */
 export type ValidationErrorItemDtoConstraint = { [key: string]: unknown };
 
-/**
- * Value received from the client that failed validation. Free-form: mirrors the offending input, which may be any JSON type (string, number, boolean, object or array). Sensitive fields are redacted.
- */
-export type ValidationErrorItemDtoReceived =
-  string | number | boolean | { [key: string]: unknown } | null | unknown[];
-
 export interface ValidationErrorItemDto {
   /** Path to the offending field. Dotted notation for objects, bracket for arrays. */
   path: string;
@@ -77,8 +71,6 @@ export interface ValidationErrorItemDto {
   rule?: string;
   /** Validator constraint parameters (e.g. `{ min: 1 }`, `{ max: 100 }`). */
   constraint?: ValidationErrorItemDtoConstraint;
-  /** Value received from the client that failed validation. Free-form: mirrors the offending input, which may be any JSON type (string, number, boolean, object or array). Sensitive fields are redacted. */
-  received?: ValidationErrorItemDtoReceived;
 }
 
 /**

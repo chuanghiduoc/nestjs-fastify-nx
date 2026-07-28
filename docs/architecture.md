@@ -485,13 +485,10 @@ All error responses (400/401/403/404/409/413/415/422/429/5xx) use
   correlation. The `CorrelationIdMiddleware` accepts an inbound `X-Request-Id`
   or generates a UUID v7.
 
-> **Better Auth exception:** `/api/auth/*` is mounted as a raw Fastify route
-> that calls `reply.hijack()` and delegates the response stream to Better Auth's
-> own handler (see `apps/api/src/main.ts`). It therefore returns Better Auth's
-> native JSON shape (`{ message, code }`) — **not** Problem Details — and is
-> exempt from the global exception filter and the `application/problem+json`
-> contract. Treat that surface as an upstream library boundary; downstream
-> clients should branch on the path prefix when consuming errors.
+> **Better Auth boundary:** `/api/auth/*` is mounted as a raw Fastify route that calls
+> `reply.hijack()`. Intentional 4xx responses retain Better Auth's native JSON shape
+> (`{ message, code }`). Resolved or thrown 5xx failures are intercepted before the Node response is
+> written and replaced with generic Problem Details; adapter/DB messages are never returned.
 
 ### Naming conventions
 

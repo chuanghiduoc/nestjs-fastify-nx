@@ -42,6 +42,14 @@ function makeAuth(session: unknown) {
   } as unknown as BetterAuthInstance;
 }
 
+function makeRejectingAuth(error: unknown) {
+  return {
+    api: {
+      getSession: vi.fn().mockRejectedValue(error),
+    },
+  } as unknown as BetterAuthInstance;
+}
+
 function makeRedis(incrResult = 1): Redis {
   return {
     eval: vi.fn().mockResolvedValue(incrResult),
@@ -103,6 +111,24 @@ describe('createWsAuthMiddleware', () => {
     expect(next).toHaveBeenCalledWith(
       expect.objectContaining({ message: expect.stringContaining('not active') }),
     );
+  });
+
+  it('does not expose session-store errors to the handshake client', async () => {
+    const internal = new Error(
+      'Invalid `prisma.session.findUnique()` invocation: password authentication failed',
+    );
+    const onSessionError = vi.fn();
+    const middleware = createWsAuthMiddleware(makeRejectingAuth(internal), { onSessionError });
+    const socket = makeSocket({ auth: { token: 'some-token' } });
+    const next = vi.fn();
+
+    await middleware(socket as unknown as Socket, next);
+
+    expect(onSessionError).toHaveBeenCalledWith(internal);
+    const publicError = next.mock.calls[0]?.[0] as Error;
+    expect(publicError.message).toBe('UNAUTHORIZED: Session validation failed');
+    expect(publicError.message).not.toContain('prisma');
+    expect(publicError.message).not.toContain('password');
   });
 
   it('attaches user data and calls next() without error for valid session', async () => {

@@ -75,9 +75,11 @@ export function createProblemDetailsErrorHandler(): (error: unknown) => {
         ? candidate.title
         : (HTTP_STATUS_TITLES[status] ?? 'Error');
     const rawDetail =
-      (typeof candidate.detail === 'string' && candidate.detail) ||
-      (typeof candidate.message === 'string' && candidate.message) ||
-      title;
+      typeof candidate.detail === 'string'
+        ? candidate.detail
+        : typeof candidate.message === 'string'
+          ? candidate.message
+          : title;
 
     if (isServerError) {
       // The root onSend normalizer passes a well-formed Problem Details body straight through, so

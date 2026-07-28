@@ -74,6 +74,42 @@ describe('applyFastifyProblemDetailsHook', () => {
     }
   });
 
+  it('allowlists fields in pre-shaped validation errors', async () => {
+    const app = Fastify();
+    applyFastifyProblemDetailsHook(app);
+    app.post('/validate', async (_request, reply) =>
+      reply.status(422).send({
+        type: 'about:blank',
+        title: 'Validation Failed',
+        status: 422,
+        code: 'validation_failed',
+        internal: 'must-not-pass-through',
+        errors: [
+          {
+            path: 'apiKey',
+            code: 'wrong_type',
+            message: 'apiKey must be a string',
+            received: 'sk-secret',
+            stack: 'internal validator stack',
+          },
+        ],
+      }),
+    );
+
+    try {
+      const res = await app.inject({ method: 'POST', url: '/validate' });
+      const body = res.json();
+      expect(body.errors).toEqual([
+        { path: 'apiKey', code: 'wrong_type', message: 'apiKey must be a string' },
+      ]);
+      expect(body).not.toHaveProperty('internal');
+      expect(JSON.stringify(body)).not.toContain('sk-secret');
+      expect(JSON.stringify(body)).not.toContain('validator stack');
+    } finally {
+      await app.close();
+    }
+  });
+
   it('masks 5xx detail in every environment', async () => {
     const app = Fastify();
     applyFastifyProblemDetailsHook(app);
@@ -102,9 +138,12 @@ describe('applyFastifyProblemDetailsHook', () => {
     app.get('/preshaped-5xx', async (_request, reply) =>
       reply.status(503).send({
         type: 'about:blank',
-        title: 'Service Unavailable',
+        title: 'Prisma P1001 at postgres.internal',
         status: 503,
+        code: 'prisma_p1001',
         detail: 'upstream postgres at 10.0.0.5 refused connection',
+        stack: 'at prisma.user.findMany (/app/repository.ts:42)',
+        cause: { host: 'postgres.internal' },
       }),
     );
 
@@ -114,6 +153,13 @@ describe('applyFastifyProblemDetailsHook', () => {
       const res = await app.inject('/preshaped-5xx');
       expect(res.statusCode).toBe(503);
       expect(res.json().detail).not.toContain('10.0.0.5');
+      expect(res.json()).toMatchObject({
+        title: 'Service Unavailable',
+        code: 'service_unavailable',
+      });
+      expect(res.json()).not.toHaveProperty('stack');
+      expect(res.json()).not.toHaveProperty('cause');
+      expect(JSON.stringify(res.json())).not.toContain('postgres.internal');
     } finally {
       process.env['NODE_ENV'] = prev;
       await app.close();

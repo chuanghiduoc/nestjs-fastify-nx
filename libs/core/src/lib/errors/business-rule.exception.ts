@@ -9,7 +9,6 @@ export interface BusinessRuleViolation {
   readonly messageKey?: string;
   readonly rule?: string;
   readonly constraint?: Record<string, unknown>;
-  readonly received?: unknown;
 }
 
 export interface BusinessRuleExceptionOptions {

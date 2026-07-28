@@ -33,6 +33,7 @@ import { redisFixedWindowIncr } from './common/rate-limit/redis-fixed-window';
 import { flushBufferedReplyHeaders } from './common/http/flush-reply-headers';
 import { applyFastifyProblemDetailsHook } from './common/filters/fastify-error-handler';
 import { buildProblemDetails } from './common/filters/problem-details.helper';
+import { maskBetterAuthServerResponse } from './common/filters/better-auth-response';
 import type { EnvConfig } from './config/env.validation';
 
 const STRICT_AUTH_PATHS = new Set([
@@ -354,7 +355,6 @@ async function bootstrap() {
   });
 
   const auth = app.get<BetterAuthInstance>(BETTER_AUTH_INSTANCE);
-  const betterAuthHandler = toNodeHandler(auth.handler);
 
   // STRICT bucket: credential paths; LOOSE bucket: session ops.
   const authSessionRateLimitMax = config.get('AUTH_SESSION_RATE_LIMIT_MAX', { infer: true });
@@ -407,6 +407,15 @@ async function bootstrap() {
 
     let timedOut = false;
     let timer: NodeJS.Timeout | undefined;
+    // Better Auth can resolve an APIError as a 5xx Response instead of throwing. Wrap its Fetch
+    // handler before the Node adapter writes anything so that path is masked too.
+    const betterAuthHandler = toNodeHandler(async (request) =>
+      maskBetterAuthServerResponse(await auth.handler(request), {
+        instance: sanitizeUrlForLogging(req.url),
+        requestId,
+        correlationId,
+      }),
+    );
     const handlerPromise = betterAuthHandler(req.raw, reply.raw);
     // Node can't cancel the handler; if it settles AFTER the watchdog already responded, swallow the
     // result/error here so it never surfaces as an unhandled rejection.

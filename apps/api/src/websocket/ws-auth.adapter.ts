@@ -96,6 +96,13 @@ export interface WsAuthOptions {
   redis?: Redis;
   maxConcurrentPerIp?: number;
   trustProxyHops?: number;
+  onSessionError?: (error: unknown) => void;
+}
+
+class WsPublicError extends Error {}
+
+function wsPublicError(message: string): WsPublicError {
+  return new WsPublicError(message);
 }
 
 export async function revalidateWsSession(auth: BetterAuthInstance, socket: Socket): Promise<void> {
@@ -112,7 +119,7 @@ export async function revalidateWsSession(auth: BetterAuthInstance, socket: Sock
   if (bearerToken) headers['authorization'] = `Bearer ${bearerToken}`;
 
   if (Object.keys(headers).length === 0) {
-    throw new Error('UNAUTHORIZED: No session credentials provided');
+    throw wsPublicError('UNAUTHORIZED: No session credentials provided');
   }
 
   const session = await auth.api.getSession({
@@ -121,12 +128,12 @@ export async function revalidateWsSession(auth: BetterAuthInstance, socket: Sock
   });
 
   if (!session?.user || !session.session) {
-    throw new Error('UNAUTHORIZED: Invalid session');
+    throw wsPublicError('UNAUTHORIZED: Invalid session');
   }
 
   const expiresAt = session.session.expiresAt;
   if (expiresAt && new Date(expiresAt).getTime() < Date.now()) {
-    throw new Error('UNAUTHORIZED: Session expired');
+    throw wsPublicError('UNAUTHORIZED: Session expired');
   }
 
   const user = session.user as {
@@ -136,7 +143,7 @@ export async function revalidateWsSession(auth: BetterAuthInstance, socket: Sock
     status: string;
   };
   if (user.status !== 'ACTIVE') {
-    throw new Error('UNAUTHORIZED: Account not active');
+    throw wsPublicError('UNAUTHORIZED: Account not active');
   }
 
   wsData(socket).user = {
@@ -169,7 +176,7 @@ export async function releaseWsConnectionLease(redis: Redis, socket: Socket): Pr
 }
 
 export function createWsAuthMiddleware(auth: BetterAuthInstance, options: WsAuthOptions = {}) {
-  const { redis, maxConcurrentPerIp = 50, trustProxyHops = 0 } = options;
+  const { redis, maxConcurrentPerIp = 50, trustProxyHops = 0, onSessionError } = options;
 
   return async (socket: Socket, next: (err?: Error) => void): Promise<void> => {
     try {
@@ -204,7 +211,14 @@ export function createWsAuthMiddleware(auth: BetterAuthInstance, options: WsAuth
 
       next();
     } catch (err) {
-      next(err instanceof Error ? err : new Error('UNAUTHORIZED: Session validation failed'));
+      if (err instanceof WsPublicError) {
+        next(err);
+        return;
+      }
+      // Adapter/DB errors are not authentication facts. Keep the real cause server-side and expose
+      // only a fixed denial; the Socket.IO handshake bypasses every HTTP/GraphQL exception filter.
+      onSessionError?.(err);
+      next(wsPublicError('UNAUTHORIZED: Session validation failed'));
     }
   };
 }
