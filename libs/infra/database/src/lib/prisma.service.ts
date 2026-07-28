@@ -184,7 +184,7 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
         ? [this._writeClient, this._readClient]
         : [this._writeClient];
       await Promise.allSettled(clients.map((client) => client.$disconnect()));
-      throw new Error(`DatabaseModule: failed to connect — ${String(err)}`, { cause: err });
+      throw new Error('DatabaseModule: failed to connect', { cause: err });
     }
   }
 

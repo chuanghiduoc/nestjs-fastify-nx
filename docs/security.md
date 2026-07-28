@@ -118,8 +118,10 @@ back to a specific commit, workflow run, and signing identity.
 ./scripts/security/scan-images.sh
 ```
 
-Lefthook wires Gitleaks into `pre-push` (full history). `pre-commit` runs
-`lint-staged` + `typecheck`; `commit-msg` runs commitlint. To run hooks manually:
+Lefthook runs Gitleaks against staged files during `pre-commit` and scans the
+full history during `pre-push`. `pre-commit` also runs `lint-staged` +
+`typecheck`; `commit-msg` runs commitlint. Full tests and builds remain CI gates
+so normal commits stay fast. To run hooks manually:
 
 ```bash
 pnpm exec lefthook run pre-commit

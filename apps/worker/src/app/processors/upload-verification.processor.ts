@@ -8,6 +8,7 @@ import { PrismaService } from '@nestjs-fastify-nx/infra-database';
 import { STORED_FILE_STATUS } from '@nestjs-fastify-nx/shared';
 import type { WorkerEnvConfig } from '../../config/env.validation';
 import { applyWorkerConcurrency } from './apply-worker-concurrency';
+import { MalwareScannerService } from '../security/malware-scanner.service';
 
 export interface UploadVerificationPayload {
   key: string;
@@ -29,6 +30,7 @@ export class UploadVerificationProcessor extends WorkerHost implements OnApplica
     @Inject(STORAGE_PORT) private readonly storage: StoragePort,
     private readonly prisma: PrismaService,
     private readonly config: ConfigService<WorkerEnvConfig, true>,
+    private readonly malwareScanner: MalwareScannerService,
   ) {
     super();
   }
@@ -69,6 +71,16 @@ export class UploadVerificationProcessor extends WorkerHost implements OnApplica
       return;
     }
 
+    const content = await this.storage.read(key, bucket);
+    if ((await this.malwareScanner.scan(content)) === 'infected') {
+      this.logger.warn(
+        { key, declaredContentType, correlationId },
+        'malware-scan: infected object rejected and deleted',
+      );
+      await this.reject(key, bucket, 'Malware scan rejected the object');
+      return;
+    }
+
     const result = await this.prisma.db.storedFile.updateMany({
       where: { key, status: STORED_FILE_STATUS.VERIFYING },
       data: { status: STORED_FILE_STATUS.READY, verifiedAt: new Date(), failureReason: null },
@@ -85,7 +97,7 @@ export class UploadVerificationProcessor extends WorkerHost implements OnApplica
 
     this.logger.log(
       { key, declaredContentType, correlationId },
-      `verify-magic-bytes: ${key} matches declared ${declaredContentType}`,
+      `upload-verification: ${key} passed signature and malware scans`,
     );
   }
 

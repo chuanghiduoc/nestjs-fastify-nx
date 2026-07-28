@@ -38,7 +38,7 @@ export class QueueDepthCollector implements OnModuleInit {
         }
       } catch (err) {
         // Non-fatal — gauge is stale until next tick.
-        this.logger.warn(`Queue depth collector failed for "${q.name}": ${String(err)}`);
+        this.logger.warn({ err, queue: q.name }, 'Queue depth collector failed');
       }
     }
   }

@@ -194,15 +194,14 @@ export class NotificationGateway
   private async revalidateSocket(socket: Socket): Promise<void> {
     try {
       await revalidateWsSession(this.auth, socket);
-      await renewWsConnectionLease(this.rateLimitClient, socket).catch((err) => {
-        this.logger.warn(
-          `WebSocket connection lease renewal failed: socketId=${socket.id} error=${String(err)}`,
-        );
+      await renewWsConnectionLease(this.rateLimitClient, socket).catch((err: unknown) => {
+        this.logger.warn({ err, socketId: socket.id }, 'WebSocket connection lease renewal failed');
       });
     } catch (err) {
       const user = wsData(socket).user;
       this.logger.warn(
-        `Disconnecting revoked WebSocket: userId=${user?.userId ?? 'unknown'} socketId=${socket.id} reason=${String(err)}`,
+        { err, userId: user?.userId, socketId: socket.id },
+        'Disconnecting revoked WebSocket',
       );
       socket.disconnect(true);
     }
@@ -222,7 +221,8 @@ export class NotificationGateway
       await socket.join(`user:${user.userId}`);
     } catch (err) {
       this.logger.error(
-        `Failed to join user room: userId=${user.userId} socketId=${socket.id} error=${String(err)}`,
+        { err, userId: user.userId, socketId: socket.id },
+        'Failed to join user room',
       );
       socket.disconnect(true);
       return;

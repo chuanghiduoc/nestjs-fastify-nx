@@ -20,7 +20,7 @@ export class HeartbeatTask {
       await this.prisma.db.$queryRaw`SELECT 1`;
       this.logger.debug('DB heartbeat OK');
     } catch (error) {
-      this.logger.error(`DB heartbeat FAILED: ${String(error)}`);
+      this.logger.error({ err: error }, 'DB heartbeat failed');
     } finally {
       this.running = false;
     }

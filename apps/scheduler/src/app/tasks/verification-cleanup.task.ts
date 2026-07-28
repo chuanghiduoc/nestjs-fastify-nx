@@ -48,9 +48,7 @@ export class VerificationCleanupTask {
       }
       this.logger.log(`Verification purge complete: ${totalPurged} row(s) deleted`);
     } catch (err) {
-      this.logger.error(
-        `Verification purge failed after ${totalPurged} deletion(s): ${String(err)}`,
-      );
+      this.logger.error({ err, totalPurged }, 'Verification purge failed');
     } finally {
       this.running = false;
     }

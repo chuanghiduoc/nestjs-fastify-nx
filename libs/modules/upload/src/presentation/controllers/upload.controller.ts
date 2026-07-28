@@ -199,9 +199,6 @@ export class UploadController {
     const extension = dotIndex >= 0 ? dto.key.slice(dotIndex) : '';
     const fileId = generateId();
     const finalKey = `files/${user.userId}/${fileId}${extension}`;
-    // Signing is offline and does not require the destination to exist. Do it before the
-    // destructive finalize step so a signing/configuration failure leaves staging retryable.
-    const url = await this.storage.getSignedUrl(finalKey, undefined, meta.bucket);
     try {
       await this.prisma.db.storedFile.create({
         data: {
@@ -257,8 +254,8 @@ export class UploadController {
       });
     }
 
-    // Asynchronous defense-in-depth recheck on the immutable final object. Future scanners can
-    // extend this queue, but the current worker intentionally verifies magic bytes only.
+    // The immutable object remains quarantined: no signed URL is returned until the worker has
+    // checked both its signature and complete contents with the malware scanner.
     await this.verifyQueue
       .add(
         'verify-magic-bytes',
@@ -281,7 +278,7 @@ export class UploadController {
         throw err;
       });
 
-    return { key: finalKey, url, bucket: meta.bucket, size: meta.size };
+    return { key: finalKey, bucket: meta.bucket, size: meta.size };
   }
 
   private async recoverExisting(record: StoredFileRecord): Promise<StoredFile> {
@@ -327,7 +324,10 @@ export class UploadController {
         });
     }
 
-    const url = await this.storage.getSignedUrl(record.key, undefined, record.bucket);
+    const url =
+      record.status === STORED_FILE_STATUS.READY
+        ? await this.storage.getSignedUrl(record.key, undefined, record.bucket)
+        : undefined;
     return { key: record.key, url, bucket: record.bucket, size: record.size };
   }
 

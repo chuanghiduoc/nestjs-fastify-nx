@@ -97,7 +97,7 @@ describe('PrismaService lifecycle cleanup', () => {
     const disconnectWrite = vi.spyOn(svc.db, '$disconnect').mockResolvedValue();
     const disconnectRead = vi.spyOn(svc.dbRead, '$disconnect').mockResolvedValue();
 
-    await expect(svc.onModuleInit()).rejects.toThrow('replica unavailable');
+    await expect(svc.onModuleInit()).rejects.toThrow('DatabaseModule: failed to connect');
     expect(disconnectWrite).toHaveBeenCalledOnce();
     expect(disconnectRead).toHaveBeenCalledOnce();
   });

@@ -25,7 +25,7 @@ export class WorkerHealthService implements OnApplicationBootstrap, OnApplicatio
     try {
       writeFileSync(PROBE_FILE, new Date().toISOString(), 'utf8');
     } catch (err) {
-      this.logger.warn(`failed to refresh ${PROBE_FILE}: ${String(err)}`);
+      this.logger.warn({ err, probeFile: PROBE_FILE }, 'failed to refresh worker health probe');
     }
   }
 }

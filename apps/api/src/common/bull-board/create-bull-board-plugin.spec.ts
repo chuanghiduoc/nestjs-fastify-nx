@@ -150,7 +150,7 @@ describe('createProblemDetailsErrorHandler', () => {
     expect(result.body).toMatchObject({
       status: 503,
       title: 'Service Unavailable',
-      detail: 'nope',
+      detail: 'Service Unavailable',
       code: 'service_unavailable',
     });
   });
@@ -177,7 +177,7 @@ describe('createProblemDetailsErrorHandler', () => {
     expect(result.body).toMatchObject({
       status: 500,
       title: 'Internal Server Error',
-      detail: 'boom',
+      detail: 'Internal Server Error',
       code: 'internal_server_error',
     });
   });
@@ -200,7 +200,7 @@ describe('createProblemDetailsErrorHandler', () => {
     expect(result.body.code).toBe('internal_server_error');
   });
 
-  it('masks 5xx detail in production but keeps 4xx detail intact', () => {
+  it('masks 5xx detail while keeping 4xx detail intact', () => {
     vi.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
     process.env['NODE_ENV'] = 'production';
     const handler = createProblemDetailsErrorHandler();

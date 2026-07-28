@@ -418,19 +418,20 @@ readiness probe before routing real traffic.
 
 ## Production deployment
 
-### `compose.prod.yml` references resolve to `ghcr.io//api:latest`
+### `compose.prod.yml` refuses to start because an image digest is missing
 
-Symptom: image pulls fail with `manifest not found` and the resolved image
-name has a doubled slash.
+Symptom: Compose reports that `API_IMAGE`, `WORKER_IMAGE`, `SCHEDULER_IMAGE`, or
+`MIGRATION_IMAGE` is unset or is not immutable.
 
-Cause: `IMAGE_NAMESPACE` is unset. Set it in `.env` before running compose:
+Cause: production runs only explicitly selected, digest-pinned images. Set all
+four values in `.env`:
 
 ```bash
-IMAGE_NAMESPACE=your-org/your-repo
-IMAGE_TAG=1.2.3
+API_IMAGE=ghcr.io/your-org/api@sha256:<digest>
+WORKER_IMAGE=ghcr.io/your-org/worker@sha256:<digest>
+SCHEDULER_IMAGE=ghcr.io/your-org/scheduler@sha256:<digest>
+MIGRATION_IMAGE=ghcr.io/your-org/migration@sha256:<digest>
 ```
-
-The full reference is `${IMAGE_REGISTRY}/${IMAGE_NAMESPACE}/<app>:${IMAGE_TAG}`.
 
 ### Mailpit appears in production
 

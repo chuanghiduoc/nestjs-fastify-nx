@@ -124,7 +124,7 @@ export class StoredFileCleanupTask {
     try {
       candidates = await fetchCandidates();
     } catch (err) {
-      this.logger.error(`Stored-file cleanup scan failed (${label}): ${String(err)}`);
+      this.logger.error({ err, scan: label }, 'Stored-file cleanup scan failed');
       return;
     }
 
@@ -145,7 +145,8 @@ export class StoredFileCleanupTask {
           meta = await this.storage.head(candidate.key, candidate.bucket);
         } catch (err) {
           this.logger.warn(
-            `Skipping ${candidate.status} cleanup id=${candidate.id} key=${candidate.key} — HEAD failed: ${String(err)}`,
+            { err, status: candidate.status, fileId: candidate.id, key: candidate.key },
+            'Skipping stored-file cleanup because HEAD failed',
           );
           continue;
         }
@@ -177,7 +178,8 @@ export class StoredFileCleanupTask {
             }
           } catch (err) {
             this.logger.error(
-              `Stored-file recovery failed: id=${candidate.id} key=${candidate.key} error=${String(err)}`,
+              { err, fileId: candidate.id, key: candidate.key },
+              'Stored-file recovery failed',
             );
           }
           continue;
@@ -203,7 +205,8 @@ export class StoredFileCleanupTask {
         deleted++;
       } catch (err) {
         this.logger.error(
-          `Stored-file cleanup failed: id=${candidate.id} key=${candidate.key} error=${String(err)}`,
+          { err, fileId: candidate.id, key: candidate.key },
+          'Stored-file cleanup failed',
         );
       }
     }

@@ -32,18 +32,16 @@ function mask(error: GraphQLError): GraphQLError {
 }
 
 /**
- * Mercurius' default formatter serializes every error's `message` verbatim and has no production
- * masking, so without this an unexpected resolver failure answers a GraphQL client with the raw
+ * Mercurius' default formatter serializes every error's `message` verbatim, so without this an
+ * unexpected resolver failure answers a GraphQL client with the raw
  * message while REST answers "Internal Server Error".
  *
  * Masking runs before delegating because the default formatter serializes eagerly and flattens
  * nested validation errors — afterwards there is no `originalError` left to judge by. Logs are
  * unaffected: GlobalExceptionFilter already logged and reported the error before re-throwing here.
  */
-export function createGraphqlErrorFormatter(isProduction: boolean) {
+export function createGraphqlErrorFormatter() {
   return (execution: Execution, context: MercuriusContext) => {
-    if (!isProduction) return defaultErrorFormatter(execution, context);
-
     const errors = execution.errors.map((error) =>
       isInternalFailure(error) ? mask(error) : error,
     );

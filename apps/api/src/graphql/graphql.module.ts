@@ -29,10 +29,9 @@ export const GRAPHQL_MAX_QUERY_DEPTH = 10;
           context: (req: FastifyRequest, reply: FastifyReply) => ({ req, reply }),
           validationRules: isProduction ? [NoSchemaIntrospectionCustomRule] : [],
           queryDepth: GRAPHQL_MAX_QUERY_DEPTH,
-          // Mercurius' default formatter has no production masking, so an unexpected resolver
-          // failure would answer with its raw message here while REST answers "Internal Server
-          // Error" for the same failure.
-          errorFormatter: createGraphqlErrorFormatter(isProduction),
+          // Unexpected resolver failures are always masked. Local debugging uses structured logs,
+          // never a client-visible stack/driver message.
+          errorFormatter: createGraphqlErrorFormatter(),
         };
       },
     }),

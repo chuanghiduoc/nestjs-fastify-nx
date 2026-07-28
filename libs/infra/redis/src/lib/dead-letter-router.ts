@@ -1,6 +1,7 @@
 import { Logger, Type } from '@nestjs/common';
 import { OnQueueEvent, QueueEventsHost, QueueEventsListener } from '@nestjs/bullmq';
 import type { Queue, JobsOptions } from 'bullmq';
+import { sanitizeSensitiveText } from '@nestjs-fastify-nx/shared';
 
 interface FailedEvent {
   jobId: string;
@@ -53,7 +54,7 @@ export async function routeFailedJobToDlq(
       originalJobId: String(job.id ?? args.jobId),
       originalJobName: job.name,
       payload: job.data,
-      failedReason: args.failedReason,
+      failedReason: sanitizeSensitiveText(args.failedReason),
       attemptsMade: job.attemptsMade,
       failedAt: new Date().toISOString(),
     };
@@ -64,13 +65,11 @@ export async function routeFailedJobToDlq(
     });
 
     logger.warn(
-      `Dead-lettered job "${job.name}" (id=${envelope.originalJobId}, attempts=${envelope.attemptsMade}) — ${args.failedReason}`,
+      { jobName: job.name, jobId: envelope.originalJobId, attempts: envelope.attemptsMade },
+      'Dead-lettered job',
     );
   } catch (err) {
-    logger.error(
-      `Failed to route job ${args.jobId} to DLQ — ${String(err)}`,
-      err instanceof Error ? err.stack : undefined,
-    );
+    logger.error({ err, jobId: args.jobId }, 'Failed to route job to DLQ');
   }
 }
 

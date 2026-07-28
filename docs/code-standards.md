@@ -51,6 +51,17 @@ The three distinctions that actually get chosen wrong:
 `5xx` responses carry the generic code for their status. Never attach a specific one: the internal
 failure taxonomy is not the client's business.
 
+Unexpected `5xx` details are always masked on REST, direct Fastify routes, GraphQL, and admin
+surfaces, regardless of `NODE_ENV`. Local development is not an exception: database/driver messages
+can contain credentials, topology, SQL, table names, or personal data copied from bound values.
+Debug through structured logs and Sentry using `requestId`; never make a client response more
+verbose to improve developer diagnostics.
+
+Expected database conditions must be translated at the repository/application boundary (for
+example, Prisma `P2002` to a domain conflict). The global exception filter is only the final
+defense-in-depth layer: it maps a small set of known Prisma codes and turns every other
+`PrismaClient*` error into a generic internal failure.
+
 ### Error codes
 
 `code` is what clients branch on programmatically. Set it explicitly whenever the caller could

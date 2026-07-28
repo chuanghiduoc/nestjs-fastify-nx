@@ -10,7 +10,10 @@ const log = (msg: string): void => {
 };
 
 const fail = (msg: string, err: unknown): never => {
-  const detail = err instanceof Error ? (err.stack ?? err.message) : String(err);
+  const detail =
+    err && typeof err === 'object' && typeof (err as { name?: unknown }).name === 'string'
+      ? (err as { name: string }).name
+      : 'Error';
   console.error(`[migration] ${new Date().toISOString()} ${msg}\n${detail}`);
   process.exit(1);
 };
@@ -41,8 +44,7 @@ async function runWithRetry(
       return;
     } catch (err) {
       if (attempt === attempts) throw err;
-      const msg = err instanceof Error ? err.message : String(err);
-      log(`${label} attempt ${attempt} failed — retrying in ${delayMs}ms: ${msg}`);
+      log(`${label} attempt ${attempt} failed — retrying in ${delayMs}ms`);
       await new Promise((resolve) => setTimeout(resolve, delayMs));
     }
   }

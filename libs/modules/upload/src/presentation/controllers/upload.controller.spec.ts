@@ -302,7 +302,7 @@ describe('UploadController', () => {
 
       expect(result).toEqual({
         key: concurrentRecord.key,
-        url: `http://signed/${concurrentRecord.key}`,
+        url: undefined,
         bucket: concurrentRecord.bucket,
         size: concurrentRecord.size,
       });
@@ -398,7 +398,6 @@ describe('UploadController', () => {
 
       expect(result.key).toMatch(new RegExp(`^files/${USER_ID}/[0-9a-f-]{36}\\.png$`));
       expect(result).toMatchObject({
-        url: 'http://signed/final',
         bucket: 'uploads',
         size: PNG_HEADER.length,
       });

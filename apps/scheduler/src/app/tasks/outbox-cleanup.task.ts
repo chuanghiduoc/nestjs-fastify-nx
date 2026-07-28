@@ -55,7 +55,7 @@ export class OutboxCleanupTask {
       }
       this.logger.log(`Outbox purge complete: ${totalPurged} row(s) deleted`);
     } catch (err) {
-      this.logger.error(`Outbox purge failed after ${totalPurged} deletion(s): ${String(err)}`);
+      this.logger.error({ err, totalPurged }, 'Outbox purge failed');
     } finally {
       this.running = false;
     }

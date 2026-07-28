@@ -2,6 +2,7 @@ import { HttpStatus, Logger } from '@nestjs/common';
 import * as Sentry from '@sentry/nestjs';
 import type { FastifyError, FastifyInstance } from 'fastify';
 import { ERROR_CODES } from '@nestjs-fastify-nx/contracts';
+import { sanitizeUrlForLogging } from '@nestjs-fastify-nx/shared';
 import { ensureRequestIds, sanitizeClientId, type RequestIdCarrier } from '../logging/request-id';
 import {
   buildProblemDetails,
@@ -23,6 +24,7 @@ const logger = new Logger('FastifyErrorHandler');
 
 export function applyFastifyProblemDetailsHook(fastify: FastifyInstance): void {
   fastify.addHook('onSend', (request, reply, payload, done) => {
+    const safeUrl = sanitizeUrlForLogging(request.url);
     // Prefer what is already on the request, then what an earlier layer buffered onto the reply,
     // and only mint a fresh pair as a last resort — ensureRequestIds enforces the resolve-once rule.
     const raw = request.raw as RequestIdCarrier;
@@ -42,14 +44,15 @@ export function applyFastifyProblemDetailsHook(fastify: FastifyInstance): void {
     reply.header('content-type', PROBLEM_CONTENT_TYPE);
 
     if (isProblemDetailsShape(source) && source.status === status) {
-      const detail =
-        status >= 500 && process.env['NODE_ENV'] === 'production' ? source.title : source.detail;
+      const detail = status >= 500 ? source.title : source.detail;
       done(
         null,
         JSON.stringify({
           ...source,
           detail,
-          instance: source['instance'] ?? request.url,
+          instance: sanitizeUrlForLogging(
+            typeof source['instance'] === 'string' ? source['instance'] : request.url,
+          ),
           requestId,
           timestamp: source['timestamp'] ?? new Date().toISOString(),
         }),
@@ -71,11 +74,11 @@ export function applyFastifyProblemDetailsHook(fastify: FastifyInstance): void {
       (typeof source?.['detail'] === 'string' && source['detail']) ||
       (typeof source?.['message'] === 'string' && source['message']) ||
       title;
-    const detail = status >= 500 && process.env['NODE_ENV'] === 'production' ? title : rawDetail;
+    const detail = status >= 500 ? title : rawDetail;
 
     if (status >= 500) {
       const error = Object.assign(new Error(rawDetail), { response: source });
-      logger.error({ err: error, url: request.url }, 'Unnormalized Fastify 5xx response');
+      logger.error({ err: error, url: safeUrl }, 'Unnormalized Fastify 5xx response');
       Sentry.captureException(error, { tags: { requestId, correlationId } });
     }
 
@@ -87,7 +90,7 @@ export function applyFastifyProblemDetailsHook(fastify: FastifyInstance): void {
           title,
           detail,
           code,
-          instance: request.url,
+          instance: safeUrl,
           requestId,
         }),
       ),

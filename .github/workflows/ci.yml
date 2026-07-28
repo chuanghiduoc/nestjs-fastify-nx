@@ -10,6 +10,9 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+permissions:
+  contents: read
+
 jobs:
   secret-scan:
     runs-on: ubuntu-latest
@@ -81,35 +84,32 @@ jobs:
       - name: Set NX base and head
         uses: nrwl/nx-set-shas@afb73a62d26e41464e9254689e1fd6122ee683c1 # v5
 
+      # Fail early before spending time on lint, typecheck, tests, and builds.
+      # The generated client is committed so a stale OpenAPI surface is a source
+      # error, not a late packaging failure.
+      - name: Verify generated API client is up to date
+        run: |
+          pnpm codegen:full
+          if [ -n "$(git status --porcelain -- libs/api-client/src/generated)" ]; then
+            echo "::error::api-client generated code is stale — run 'pnpm codegen:full' and commit libs/api-client/src/generated."
+            git status --porcelain -- libs/api-client/src/generated
+            exit 1
+          fi
+
       - name: Format check
         run: pnpm nx format:check --base=$NX_BASE --head=$NX_HEAD
 
       - name: Lint affected
-        run: pnpm nx affected --target=lint --base=$NX_BASE --head=$NX_HEAD
+        run: pnpm nx affected --target=lint --base=$NX_BASE --head=$NX_HEAD --parallel=3
 
       - name: Typecheck affected
-        run: pnpm nx affected --target=typecheck --base=$NX_BASE --head=$NX_HEAD
+        run: pnpm nx affected --target=typecheck --base=$NX_BASE --head=$NX_HEAD --parallel=3
 
       - name: Unit test affected
-        run: pnpm nx affected --target=test --base=$NX_BASE --head=$NX_HEAD --exclude="*-e2e"
+        run: pnpm nx affected --target=test --base=$NX_BASE --head=$NX_HEAD --exclude="*-e2e" --parallel=3 -- --coverage
 
       - name: Build affected
-        run: pnpm nx affected --target=build --base=$NX_BASE --head=$NX_HEAD
-
-      # The generated API client is committed so IDEs and fresh clones resolve
-      # `@nestjs-fastify-nx/api-client` without a codegen step. Regenerate it and
-      # fail on drift, so a changed OpenAPI surface can't land without the client
-      # being regenerated and committed.
-      - name: Verify generated API client is up to date
-        run: |
-          pnpm codegen:full
-          # `git status --porcelain` (not `git diff`) so a NEW tag file — which is
-          # untracked, and thus invisible to `git diff` — also trips the check.
-          if [ -n "$(git status --porcelain -- libs/api-client/src/generated)" ]; then
-            echo "::error::api-client generated code is stale — run 'pnpm codegen:full' and commit libs/api-client/src/generated.";
-            git status --porcelain -- libs/api-client/src/generated;
-            exit 1;
-          fi
+        run: pnpm nx affected --target=build --base=$NX_BASE --head=$NX_HEAD --parallel=3
 
   # `nx build` emits dist but never boots it, so runtime-only regressions slip
   # through every job above — an swc transpile target that breaks `class extends`,
@@ -124,6 +124,7 @@ jobs:
     env:
       COMPOSE_FILE: docker/compose.yml:docker/compose.dev.yml
       BUILDX_NO_DEFAULT_ATTESTATIONS: 1
+      COMPOSE_PARALLEL_LIMIT: 4
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 

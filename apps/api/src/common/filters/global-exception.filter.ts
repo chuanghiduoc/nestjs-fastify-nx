@@ -23,6 +23,7 @@ import {
   resolveRequestLocale,
   translateOrFallback,
 } from '@nestjs-fastify-nx/infra-i18n';
+import { sanitizeUrlForLogging } from '@nestjs-fastify-nx/shared';
 import {
   buildProblemDetails,
   HTTP_STATUS_CODES,
@@ -88,6 +89,19 @@ export function isPrismaKnownError(
   );
 }
 
+// Prisma has several error classes without a Pxxxx code (validation, initialization,
+// unknown-request, and Rust-engine errors). Their messages can still contain SQL,
+// table/column names, hostnames, and connection details, so they must be treated as
+// internal failures in every environment, including local development.
+export function isPrismaError(exception: unknown): exception is { name: string } {
+  return (
+    typeof exception === 'object' &&
+    exception !== null &&
+    typeof (exception as { name?: unknown }).name === 'string' &&
+    (exception as { name: string }).name.startsWith('PrismaClient')
+  );
+}
+
 @Catch()
 export class GlobalExceptionFilter implements ExceptionFilter {
   private readonly logger = new Logger(GlobalExceptionFilter.name);
@@ -118,12 +132,13 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     const request = ctx.getRequest<FastifyRequest>();
     const raw = request.raw as RawWithIds;
     const lang = resolveRequestLocale(request);
+    const safeUrl = sanitizeUrlForLogging(request.url);
 
     const normalized = normalizeException(exception);
     await this.translateNormalized(normalized, lang);
 
     if (normalized.status >= 500) {
-      this.logger.error({ err: exception, url: request.url }, 'Unhandled exception');
+      this.logger.error({ err: exception, url: safeUrl }, 'Unhandled exception');
       Sentry.captureException(exception, {
         tags: { requestId: raw.requestId, correlationId: raw.correlationId },
       });
@@ -132,7 +147,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       normalized.status === HttpStatus.FORBIDDEN
     ) {
       this.logger.warn(
-        { statusCode: normalized.status, url: request.url, code: normalized.code },
+        { statusCode: normalized.status, url: safeUrl, code: normalized.code },
         'Auth rejected request',
       );
     } else if (isPrismaKnownError(exception)) {
@@ -142,7 +157,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
         {
           prismaCode: exception.code,
           statusCode: normalized.status,
-          url: request.url,
+          url: safeUrl,
           code: normalized.code,
         },
         'Prisma error mapped to client response by global filter',
@@ -158,7 +173,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
           title: normalized.title,
           detail: normalized.detail,
           code: normalized.code,
-          instance: request.url,
+          instance: safeUrl,
           requestId: raw.requestId,
           errors: normalized.errors,
           checks: normalized.checks,
@@ -239,10 +254,7 @@ export function normalizeException(exception: unknown): NormalizedError {
     return {
       status,
       title,
-      detail:
-        status >= 500 && process.env['NODE_ENV'] === 'production'
-          ? title
-          : (problem.detail ?? problem.message ?? title),
+      detail: status >= 500 ? title : (problem.detail ?? problem.message ?? title),
       code:
         problem.code && !problem.code.startsWith('FST_')
           ? problem.code
@@ -265,16 +277,22 @@ export function normalizeException(exception: unknown): NormalizedError {
     }
   }
 
+  // Never expose an unmapped Prisma message, even when NODE_ENV is development.
+  // Developers still receive the full error through the structured server log/Sentry.
+  if (isPrismaError(exception)) {
+    return {
+      status: HttpStatus.INTERNAL_SERVER_ERROR,
+      title: HTTP_STATUS_TITLES[HttpStatus.INTERNAL_SERVER_ERROR],
+      detail: I18N_KEYS.common.internal_server_error,
+      code: ERROR_CODES.INTERNAL_SERVER_ERROR,
+    };
+  }
+
   if (!(exception instanceof HttpException)) {
     return {
       status: HttpStatus.INTERNAL_SERVER_ERROR,
       title: I18N_KEYS.common.internal_server_error,
-      detail:
-        process.env['NODE_ENV'] === 'production'
-          ? I18N_KEYS.common.internal_server_error
-          : exception instanceof Error
-            ? exception.message
-            : 'Unknown error',
+      detail: I18N_KEYS.common.internal_server_error,
       code: ERROR_CODES.INTERNAL_SERVER_ERROR,
     };
   }
@@ -286,7 +304,7 @@ export function normalizeException(exception: unknown): NormalizedError {
   // Any 5xx HttpException is an unclassified server fault, not a deliberate client-facing 4xx —
   // its `message`/`res` may carry internals (stack fragments, driver errors, file paths). Mirrors
   // the redaction already applied to non-HttpException and Fastify-level errors below.
-  const shouldRedactServerError = status >= 500 && process.env['NODE_ENV'] === 'production';
+  const shouldRedactServerError = status >= 500;
 
   if (typeof res === 'string') {
     return {

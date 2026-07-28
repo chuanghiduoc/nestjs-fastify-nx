@@ -32,6 +32,10 @@ updates:
       # Mercurius/@nestjs GraphQL packages ship graphql 17 support.
       - dependency-name: graphql
         update-types: [version-update:semver-major]
+      # cookie v2 breaks light-my-request's cookie.serialize() call and triggers an Nx 23 lockfile
+      # pruning defect for worker/scheduler images; see CLAUDE.md's dependency hold-back record.
+      - dependency-name: cookie
+        update-types: [version-update:semver-major]
       # TypeScript 7 (the native/Go `@typescript/native` compiler) is not yet
       # supported by the tools that bind to the TS 6 Compiler API — verified by
       # replacing the @typescript/typescript6 6.0.2 API package with 7.0.2,

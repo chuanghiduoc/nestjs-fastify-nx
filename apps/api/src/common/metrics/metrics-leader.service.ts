@@ -70,7 +70,7 @@ export class MetricsLeaderService implements OnModuleInit, OnModuleDestroy {
       try {
         handler();
       } catch (err) {
-        this.logger.warn(`collector leadership-lost handler failed: ${String(err)}`);
+        this.logger.warn({ err }, 'collector leadership-lost handler failed');
       }
     }
   }

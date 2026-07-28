@@ -42,6 +42,13 @@ const workerEnvSchema = z
       .min(60)
       .max(86_400)
       .default(3_600),
+    MALWARE_SCANNER_ENABLED: z
+      .string()
+      .default('false')
+      .transform((v) => v === 'true'),
+    MALWARE_SCANNER_HOST: z.string().default('localhost'),
+    MALWARE_SCANNER_PORT: z.coerce.number().int().min(1).max(65_535).default(3310),
+    MALWARE_SCANNER_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(120_000).default(30_000),
 
     // Mail (Nodemailer SMTP)
     MAIL_HOST: z.string().default('localhost'),
@@ -149,6 +156,13 @@ const workerEnvSchema = z
         code: 'custom',
         path: ['STORAGE_SECRET_KEY'],
         message: 'Must not use default value in production',
+      });
+    }
+    if (!data.MALWARE_SCANNER_ENABLED) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['MALWARE_SCANNER_ENABLED'],
+        message: 'Malware scanning must be enabled in production',
       });
     }
     // The worker is the process that actually sends mail, so it must fail loudly at boot on a default

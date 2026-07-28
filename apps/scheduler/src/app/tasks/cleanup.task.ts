@@ -6,9 +6,6 @@ import { injectDatabasePassword, positiveIntEnv } from '@nestjs-fastify-nx/share
 import { UserStatus } from '@nestjs-fastify-nx/modules-users';
 import { SchedulerLeaderService } from '../leadership/scheduler-leader.service';
 
-// Validated before DROP so a rogue table sharing the audit_logs_* prefix is never dropped accidentally.
-const AUDIT_PARTITION_NAME = /^audit_logs_(\d{4})_(\d{2})$/;
-
 @Injectable()
 export class CleanupTask {
   private readonly logger = new Logger(CleanupTask.name);
@@ -69,9 +66,7 @@ export class CleanupTask {
         `Purged ${totalPurged} inactive user(s) updated before ${cutoff.toISOString()}`,
       );
     } catch (error) {
-      this.logger.error(
-        `Inactive-user purge failed after ${totalPurged} deletion(s): ${String(error)}`,
-      );
+      this.logger.error({ err: error, totalPurged }, 'Inactive-user purge failed');
     } finally {
       this.purgeUsersRunning = false;
     }
@@ -103,13 +98,13 @@ export class CleanupTask {
       await client.query('VACUUM ANALYZE');
       this.logger.log('VACUUM ANALYZE complete');
     } catch (error) {
-      this.logger.error(`VACUUM ANALYZE failed: ${String(error)}`);
+      this.logger.error({ err: error }, 'VACUUM ANALYZE failed');
     } finally {
       if (client) {
         try {
           await client.end();
         } catch (closeError) {
-          this.logger.error(`Failed to close VACUUM connection: ${String(closeError)}`);
+          this.logger.error({ err: closeError }, 'Failed to close VACUUM connection');
         }
       }
       this.vacuumRunning = false;
@@ -127,7 +122,7 @@ export class CleanupTask {
       }
       this.logger.log('Ensured audit_logs partitions for current + next 2 months');
     } catch (error) {
-      this.logger.error(`Audit partition ensure failed: ${String(error)}`);
+      this.logger.error({ err: error }, 'Audit partition ensure failed');
     } finally {
       this.ensurePartitionsRunning = false;
     }
@@ -145,36 +140,19 @@ export class CleanupTask {
 
     const cutoffYear = cutoff.getUTCFullYear();
     const cutoffMonth = cutoff.getUTCMonth() + 1;
+    const cutoffDate = `${cutoffYear}-${String(cutoffMonth).padStart(2, '0')}-01`;
 
     let dropped = 0;
     try {
-      const partitions = await this.prisma.db.$queryRaw<{ table_name: string }[]>`
-        SELECT child.relname AS "table_name"
-          FROM pg_inherits i
-          JOIN pg_class parent ON parent.oid = i.inhparent
-          JOIN pg_class child  ON child.oid = i.inhrelid
-         WHERE parent.relname = 'audit_logs'`;
-
-      for (const { table_name } of partitions) {
-        const match = AUDIT_PARTITION_NAME.exec(table_name);
-        if (!match) continue;
-
-        const year = Number(match[1]);
-        const month = Number(match[2]);
-        if (month < 1 || month > 12) continue;
-        const isOlder = year < cutoffYear || (year === cutoffYear && month < cutoffMonth);
-        if (!isOlder) continue;
-
-        // Matched strict YYYY_MM regex — safe for identifier interpolation; $executeRawUnsafe doesn't support identifier params.
-        await this.prisma.db.$executeRawUnsafe(`DROP TABLE IF EXISTS "${table_name}"`);
-        dropped++;
-      }
+      const result = await this.prisma.db.$queryRaw<{ dropped: number }[]>`
+        SELECT drop_expired_audit_log_partitions(${cutoffDate}::date) AS dropped`;
+      dropped = Number(result[0]?.dropped ?? 0);
 
       this.logger.log(
         `Purged ${dropped} audit_logs partition(s) older than ${cutoffYear}-${String(cutoffMonth).padStart(2, '0')}`,
       );
     } catch (error) {
-      this.logger.error(`Audit partition purge failed after dropping ${dropped}: ${String(error)}`);
+      this.logger.error({ err: error, dropped }, 'Audit partition purge failed');
     } finally {
       this.purgePartitionsRunning = false;
     }

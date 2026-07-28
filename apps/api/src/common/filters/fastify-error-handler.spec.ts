@@ -74,7 +74,7 @@ describe('applyFastifyProblemDetailsHook', () => {
     }
   });
 
-  it('masks 5xx detail in production but keeps it outside production', async () => {
+  it('masks 5xx detail in every environment', async () => {
     const app = Fastify();
     applyFastifyProblemDetailsHook(app);
     app.get('/leak', async (_request, reply) =>
@@ -84,7 +84,7 @@ describe('applyFastifyProblemDetailsHook', () => {
     const prev = process.env['NODE_ENV'];
     try {
       const devRes = await app.inject('/leak');
-      expect(devRes.json().detail).toBe('db at 10.0.0.5 refused');
+      expect(devRes.json().detail).not.toContain('10.0.0.5');
 
       process.env['NODE_ENV'] = 'production';
       const prodRes = await app.inject('/leak');

@@ -29,14 +29,16 @@ const isRedisConnectionError = (err: unknown): boolean => {
     parts.push(...nested.map((e) => `${e?.message ?? ''} ${e?.code ?? ''}`));
   return /ECONNREFUSED|ioredis/i.test(parts.join(' '));
 };
+const safeErrorName = (err: unknown): string =>
+  err instanceof Error && /^[A-Za-z0-9_.:-]{1,80}$/.test(err.name) ? err.name : 'Error';
 process.on('uncaughtException', (err) => {
   if (isRedisConnectionError(err)) return;
-  origStderrWrite(`Uncaught exception during spec export: ${err?.stack ?? String(err)}\n`);
+  origStderrWrite(`Uncaught exception during spec export: ${safeErrorName(err)}\n`);
   process.exit(1);
 });
 process.on('unhandledRejection', (reason) => {
   if (isRedisConnectionError(reason)) return;
-  origStderrWrite(`Unhandled rejection during spec export: ${String(reason)}\n`);
+  origStderrWrite(`Unhandled rejection during spec export: ${safeErrorName(reason)}\n`);
   process.exit(1);
 });
 
@@ -79,6 +81,6 @@ async function exportSpec(): Promise<void> {
 }
 
 exportSpec().catch((err) => {
-  process.stderr.write(`Failed to export spec: ${(err as Error)?.stack ?? String(err)}\n`);
+  process.stderr.write(`Failed to export spec: ${safeErrorName(err)}\n`);
   process.exit(1);
 });

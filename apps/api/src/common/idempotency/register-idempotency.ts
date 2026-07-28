@@ -4,6 +4,7 @@ import { parse as parseCookie } from 'cookie';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type Redis from 'ioredis';
 import { ERROR_CODES } from '@nestjs-fastify-nx/contracts';
+import { sanitizeUrlForLogging } from '@nestjs-fastify-nx/shared';
 import { buildProblemDetails, PROBLEM_CONTENT_TYPE } from '../filters/problem-details.helper';
 import { extractBearerToken } from '../http/bearer-token';
 import { ensureRequestIds } from '../logging/request-id';
@@ -110,7 +111,16 @@ function sendProblem(
     .status(status)
     .header('content-type', PROBLEM_CONTENT_TYPE)
     .header('x-request-id', requestId)
-    .send(buildProblemDetails({ status, title, detail, code, instance: req.url, requestId }));
+    .send(
+      buildProblemDetails({
+        status,
+        title,
+        detail,
+        code,
+        instance: sanitizeUrlForLogging(req.url),
+        requestId,
+      }),
+    );
 }
 
 // Adds the idempotency hooks directly to the root Fastify instance (NOT via register(), whose

@@ -39,6 +39,7 @@
   <a href="#why-this-boilerplate">Why this boilerplate?</a> ·
   <a href="#architecture">Architecture</a> ·
   <a href="docs/getting-started.md">Documentation</a> ·
+  <a href="docs/fork-guide.md">Fork guide</a> ·
   <a href="#contributing">Contributing</a>
 </p>
 
@@ -337,6 +338,7 @@ Full flow: [docs/deployment.md](docs/deployment.md).
 
 ## Documentation
 
+- [Fork guide](docs/fork-guide.md) — env separation, endpoint examples, and code map
 - [Getting Started](docs/getting-started.md) — local setup, tooling, common gotchas
 - [Architecture](docs/architecture.md) — module map, boundaries, dataflow
 - [Domain Module Anatomy](docs/domain-module-anatomy.md) — every file in a module explained file-by-file (beginner-friendly)
@@ -355,7 +357,7 @@ Contributions are very welcome — bug reports, feature requests, and pull reque
 
 1. Fork → feature branch from `main`.
 2. Use [Conventional Commits](https://www.conventionalcommits.org/) — enforced by commitlint (`feat:`, `fix:`, `refactor:`, `docs:`, …).
-3. Lefthook runs lint-staged + typecheck on commit, commitlint on the message, and a full Gitleaks history scan on push.
+3. Lefthook runs lint-staged + typecheck + staged Gitleaks on commit, commitlint on the message, and a full Gitleaks history scan on push. Full tests/builds remain CI gates so normal commits stay fast.
 4. CI must be green: lint, typecheck, unit tests, build, secret + dep scans.
 5. Open a PR — describe the _why_, link the issue, include a test plan.
 

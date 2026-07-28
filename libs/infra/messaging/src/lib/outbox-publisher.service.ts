@@ -53,7 +53,7 @@ export class OutboxPublisher implements EventPublisherPort {
       const client = transaction ?? this.prisma.db;
       await client.outboxEvent.createMany({ data: rows });
     } catch (err) {
-      this.logger.error(`Outbox persist failed for ${events.length} event(s) — ${String(err)}`);
+      this.logger.error({ err, eventCount: events.length }, 'Outbox persist failed');
       throw err;
     }
   }

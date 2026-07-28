@@ -24,7 +24,7 @@ export class SchedulerHealthService implements OnApplicationBootstrap, OnApplica
     } catch (err) {
       // The stale file makes the container unhealthy; avoid an uncaught timer exception so the
       // orchestrator gets a stable failure signal and can restart according to its policy.
-      this.logger.warn(`failed to refresh ${PROBE_FILE}: ${String(err)}`);
+      this.logger.warn({ err, probeFile: PROBE_FILE }, 'failed to refresh scheduler health probe');
     }
   }
 }

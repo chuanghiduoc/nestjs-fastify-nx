@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type Redis from 'ioredis';
+import { safeErrorSummary } from '@nestjs-fastify-nx/shared';
 
 export const LEASE_TTL_MS = 30_000;
 export const LEASE_RENEW_INTERVAL_MS = 10_000;
@@ -68,7 +69,7 @@ export class RedisLeaderLease {
     } catch (err) {
       // The lease self-expires via TTL — a failed release costs at most LEASE_TTL_MS of downtime
       // before a successor can take over.
-      this.options.onError?.(`leader lease release failed: ${String(err)}`);
+      this.options.onError?.(`leader lease release failed: ${safeErrorSummary(err)}`);
     } finally {
       this.setLeader(false);
     }
@@ -100,7 +101,7 @@ export class RedisLeaderLease {
       // Fail closed: drop leadership so a healthy replica takes over and we never double-write
       // while Redis is flaky. A gap during an outage beats an N× overcount.
       this.setLeader(false);
-      this.options.onError?.(`leader election tick failed: ${String(err)}`);
+      this.options.onError?.(`leader election tick failed: ${safeErrorSummary(err)}`);
     }
   }
 
@@ -112,7 +113,7 @@ export class RedisLeaderLease {
       this.options.onLeadershipLost?.();
     } catch (err) {
       // A misbehaving cleanup callback must not abort the election loop.
-      this.options.onError?.(`leadership-lost handler threw: ${String(err)}`);
+      this.options.onError?.(`leadership-lost handler threw: ${safeErrorSummary(err)}`);
     }
   }
 }

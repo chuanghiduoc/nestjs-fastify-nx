@@ -35,7 +35,7 @@ export class OutboxLagCollector implements OnModuleInit {
       this.metrics.outboxLagSeconds.set(rows[0]?.lag_seconds ?? 0);
     } catch (err) {
       // Non-fatal — metric is stale until next tick.
-      this.logger.warn(`Outbox lag collector failed: ${String(err)}`);
+      this.logger.warn({ err }, 'Outbox lag collector failed');
     }
   }
 }

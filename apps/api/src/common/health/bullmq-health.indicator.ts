@@ -51,7 +51,7 @@ export class BullMqHealthIndicator implements OnModuleDestroy {
       await withTimeout(this.queue.getJobCounts('waiting'), PROBE_TIMEOUT_MS, 'Health probe');
       return indicator.up();
     } catch (err) {
-      this.logger.warn(`bullmq readiness probe failed: ${String(err)}`);
+      this.logger.warn({ err }, 'bullmq readiness probe failed');
       return indicator.down({ error: SANITIZED_ERROR });
     }
   }

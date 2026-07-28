@@ -15,7 +15,12 @@ import { Redis } from 'ioredis';
 import { createHash } from 'node:crypto';
 import { toNodeHandler } from 'better-auth/node';
 import { BETTER_AUTH_INSTANCE, type BetterAuthInstance } from '@nestjs-fastify-nx/infra-auth';
-import { intEnv, positiveIntEnv, redisReconnectStrategy } from '@nestjs-fastify-nx/shared';
+import {
+  intEnv,
+  positiveIntEnv,
+  redisReconnectStrategy,
+  sanitizeUrlForLogging,
+} from '@nestjs-fastify-nx/shared';
 import { ERROR_CODES } from '@nestjs-fastify-nx/contracts';
 import { reportFatalError, startSentry } from '@nestjs-fastify-nx/infra-observability';
 import { AppModule } from './app/app.module';
@@ -166,7 +171,7 @@ async function bootstrap() {
       enableOfflineQueue: false,
     });
     idempotencyRedis.on('error', (err: Error) => {
-      app.get(Logger).warn(`Idempotency Redis error: ${err.message}`);
+      app.get(Logger).warn({ err }, 'Idempotency Redis error');
     });
     fastify.addHook('onClose', async () => {
       await idempotencyRedis.quit().catch(() => idempotencyRedis.disconnect());
@@ -208,7 +213,7 @@ async function bootstrap() {
             title: 'Service Unavailable',
             detail: 'Server is under heavy load; please retry shortly.',
             code: ERROR_CODES.SERVICE_UNAVAILABLE,
-            instance: req.url,
+            instance: sanitizeUrlForLogging(req.url),
             requestId,
           }),
         );
@@ -239,7 +244,7 @@ async function bootstrap() {
     enableOfflineQueue: false,
   });
   rateLimitRedis.on('error', (err: Error) => {
-    app.get(Logger).warn(`Rate-limit Redis error: ${err.message}`);
+    app.get(Logger).warn({ err }, 'Rate-limit Redis error');
   });
   fastify.addHook('onClose', async () => {
     await rateLimitRedis.quit().catch(() => rateLimitRedis.disconnect());
@@ -268,7 +273,7 @@ async function bootstrap() {
           title: 'Too Many Requests',
           detail: `Rate limit exceeded. Try again in ${Math.ceil(context.ttl / 1000)} seconds.`,
           code: ERROR_CODES.RATE_LIMITED,
-          instance: req.url,
+          instance: sanitizeUrlForLogging(req.url),
           requestId,
         }),
         retryAfter: Math.ceil(context.ttl / 1000),
@@ -318,18 +323,18 @@ async function bootstrap() {
             title: 'Too Many Requests',
             detail: `Rate limit exceeded. Try again in ${retryAfter} seconds.`,
             code: ERROR_CODES.RATE_LIMITED,
-            instance: req.url,
+            instance: sanitizeUrlForLogging(req.url),
             requestId,
           }),
           retryAfter,
         });
     } catch (err) {
       if (authRateLimitFailOpen) {
-        app.get(Logger).warn(`Account rate-limit Redis error (fail-open): ${String(err)}`);
+        app.get(Logger).warn({ err }, 'Account rate-limit Redis error (fail-open)');
         return;
       }
 
-      app.get(Logger).error(`Account rate-limit Redis error (fail-closed): ${String(err)}`);
+      app.get(Logger).error({ err }, 'Account rate-limit Redis error (fail-closed)');
       const { requestId } = ensureRequestIds(req.raw, req.headers);
       return reply
         .status(HttpStatus.SERVICE_UNAVAILABLE)
@@ -341,7 +346,7 @@ async function bootstrap() {
             title: 'Service Unavailable',
             detail: 'Authentication is temporarily unavailable. Retry shortly.',
             code: ERROR_CODES.SERVICE_UNAVAILABLE,
-            instance: req.url,
+            instance: sanitizeUrlForLogging(req.url),
             requestId,
           }),
         );
@@ -413,7 +418,7 @@ async function bootstrap() {
         app
           .get(Logger)
           .warn(
-            { err: late, requestId, correlationId, url: req.url },
+            { err: late, requestId, correlationId, url: sanitizeUrlForLogging(req.url) },
             `Better Auth handler rejected after the ${authHandlerTimeoutMs}ms watchdog fired`,
           );
       }
@@ -440,7 +445,7 @@ async function bootstrap() {
       app
         .get(Logger)
         .error(
-          { err, requestId, correlationId, url: req.url },
+          { err, requestId, correlationId, url: sanitizeUrlForLogging(req.url) },
           timedOut ? 'Better Auth handler timed out' : 'Better Auth handler threw unexpectedly',
         );
       if (!reply.raw.headersSent) {
@@ -450,7 +455,7 @@ async function bootstrap() {
             status,
             title: timedOut ? 'Service Unavailable' : 'Internal Server Error',
             code: timedOut ? ERROR_CODES.SERVICE_UNAVAILABLE : ERROR_CODES.INTERNAL_SERVER_ERROR,
-            instance: req.url,
+            instance: sanitizeUrlForLogging(req.url),
             requestId,
           }),
         );
