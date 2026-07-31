@@ -127,13 +127,13 @@ storage…), not DDD bounded contexts, so the DDD module generator doesn't apply
 
 ## Example: Domain Entity with Business Rules
 
-Throw `BusinessRuleException` (from `@nestjs-fastify-nx/core`) for domain violations — the global
+Throw `DomainException` (from `@nestjs-fastify-nx/core`) for domain violations — the global
 filter renders them as RFC 9457 Problem Details so the frontend handles schema and business failures
 through one rendering path.
 
 ```typescript
 import { generateId } from '@nestjs-fastify-nx/shared';
-import { BusinessRuleException } from '@nestjs-fastify-nx/core';
+import { DomainException } from '@nestjs-fastify-nx/core';
 
 export class Product {
   private constructor(
@@ -146,7 +146,8 @@ export class Product {
 
   static create(name: string, price: number): Product {
     if (price < 0) {
-      throw new BusinessRuleException({
+      throw new DomainException({
+        // kind defaults to 'validation' → 422; permanent defaults to true.
         violations: [
           {
             path: 'price',

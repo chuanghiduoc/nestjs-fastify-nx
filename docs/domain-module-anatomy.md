@@ -275,13 +275,13 @@ export class GetUserProfileHandler implements IQueryHandler<GetUserProfileQuery,
   async execute(query: GetUserProfileQuery): Promise<UserProfileResult> {
     const user = await this.users.findById(query.userId);
     if (!user) {
-      // `title` is required for any non-422 status: the class titles itself with a business-rule
-      // literal that only reads right on its 422 default — and a literal is never translated,
+      // `title` is required for any kind other than 'validation': the default titles itself with a
+      // business-rule literal that only reads right there — and a literal is never translated,
       // because the filter only translates dotted i18n keys.
-      throw new BusinessRuleException({
-        status: HttpStatus.NOT_FOUND,
+      throw new DomainException({
+        kind: 'not_found',
         title: I18N_KEYS.common.not_found,
-        code: 'user_not_found',
+        code: ERROR_CODES.USER_NOT_FOUND,
         messageKey: I18N_KEYS.errors.users.not_found,
         violations: [...],
       });
@@ -318,9 +318,9 @@ The handler calls `users.findAllCursor(...)`, maps entities to
 `encodeCursor(lastItem.createdAt, lastItem.id)` — see
 [`architecture.md`](./architecture.md) for the cursor contract.
 
-**Rules**: domain-not-found is a `BusinessRuleException`, never a raw NestJS
-`NotFoundException` — that's what the global exception filter maps to RFC
-9457 Problem Details.
+**Rules**: domain-not-found is a `DomainException({ kind: 'not_found' })`, never a
+raw NestJS `NotFoundException` — the global exception filter maps `kind` to the
+status and renders RFC 9457 Problem Details. See [error-handling.md](./error-handling.md).
 
 ### `application/dtos/` — application-layer transport types
 
