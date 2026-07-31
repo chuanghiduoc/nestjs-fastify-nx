@@ -26,7 +26,7 @@ source "${SCRIPT_DIR}/security/_lib.sh"
 
 # Always run from project root regardless of where the script is called from.
 cd "$(sec::repo_root)"
-sec::source_env COMPOSE_PROJECT_NAME API_PORT API_REPLICAS WORKER_REPLICAS
+sec::source_env COMPOSE_PROJECT_NAME API_PORT API_REPLICAS WORKER_REPLICAS GRAFANA_ADMIN_PASSWORD
 
 if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
   echo "Usage: ./scripts/build-dev.sh [SERVICE...] [--with-obs] [--help]"
@@ -206,11 +206,13 @@ for svc in "${SERVICES[@]}"; do
 done
 
 echo ""
-sec::ok "API docs:   http://localhost:3000/docs        (Scalar UI, dev only)"
-sec::ok "OpenAPI:    http://localhost:3000/docs-json   (raw spec for Orval / Postman)"
-sec::ok "Auth docs:  http://localhost:3000/api/auth/reference"
+API_BASE="http://localhost:${API_PORT:-3000}"
+sec::ok "API docs:   ${API_BASE}/docs        (Scalar UI, dev only)"
+sec::ok "OpenAPI:    ${API_BASE}/docs-json   (raw spec for Orval / Postman)"
+sec::ok "Auth docs:  ${API_BASE}/api/auth/reference"
 if [[ $WITH_OBS -eq 1 ]]; then
-  sec::ok "Grafana:    http://localhost:3001  (admin / admin)"
+  # Ports are fixed in compose.observability.yml (bound to 127.0.0.1); only the password is tunable.
+  sec::ok "Grafana:    http://localhost:3001  (admin / ${GRAFANA_ADMIN_PASSWORD:-admin})"
   sec::ok "Jaeger:     http://localhost:16686"
   sec::ok "Prometheus: http://localhost:9090"
 fi

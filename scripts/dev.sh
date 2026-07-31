@@ -104,6 +104,11 @@ case "$APP" in
   *)         INSPECT_PORT=0 ;;
 esac
 
+# Every app on the host reads the same .env, which holds the api's name.
+if [[ "$APP" != "api" ]]; then
+  export OTEL_SERVICE_NAME="nestjs-fastify-${APP}"
+fi
+
 sec::ok "Infra ready. Booting hot-reload loop for '${APP}'."
 sec::log "  runner: nx serve ${APP} (Webpack watch, inspector ${INSPECT_PORT})"
 echo ""

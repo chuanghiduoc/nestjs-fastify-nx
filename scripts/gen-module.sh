@@ -20,4 +20,10 @@ fi
 sec::log "Scaffolding '${NAME}' under libs/${DIRECTORY}/"
 pnpm exec nx g @nestjs-fastify-nx/tools-generators:module --name="$NAME" --directory="$DIRECTORY"
 pnpm exec nx sync
+
+# The scaffold declares sibling libs as `workspace:*`; without an install their node_modules
+# symlinks are missing and the new module fails typecheck/test on unresolved imports.
+sec::log "Linking workspace dependencies (pnpm install)"
+pnpm install
+
 sec::ok "Done. If the Nx daemon doesn't see it yet, run: pnpm nx reset"

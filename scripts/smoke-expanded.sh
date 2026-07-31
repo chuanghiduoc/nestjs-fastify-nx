@@ -181,6 +181,8 @@ if [[ -n "$DELETE_TOKEN" ]]; then
     -H "Cookie: $COOKIE" \
     "$BASE/api/auth/delete-user/callback?token=$DELETE_TOKEN&callbackURL=%2F")
 else
+  # The email is dispatched by the worker process, not the api.
+  sec::warn "No 'Confirm account deletion' mail in Mailpit — is the worker running? (./scripts/dev.sh worker)"
   DELETE_CALLBACK="missing-token"
 fi
 check_in "GET /api/auth/delete-user/callback" "200,302,303" "$DELETE_CALLBACK"

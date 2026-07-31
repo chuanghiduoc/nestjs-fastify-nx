@@ -13,21 +13,29 @@
 #   ./scripts/pg-backup.sh backup [OUT_DIR]      # default OUT_DIR=./backups
 #   ./scripts/pg-backup.sh restore <DUMP_FILE>   # DESTRUCTIVE — overwrites the DB
 #
-# Env (mirrors compose.yml defaults):
+# Env (read from .env, then the process environment, then these defaults):
 #   POSTGRES_USER (postgres)  POSTGRES_DB (nestjs_db)  PG_SERVICE (postgres)
-#   COMPOSE_FILES (docker/compose.yml) — override to target a prod overlay.
+#   COMPOSE_FILES (docker/compose.yml -f docker/compose.dev.yml) — override for a prod stack.
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "$ROOT"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
+source "${SCRIPT_DIR}/security/_lib.sh"
+cd "$(sec::repo_root)"
+
+# Otherwise the defaults below win over .env and restore (--clean --if-exists) hits the wrong DB.
+sec::source_env POSTGRES_USER POSTGRES_DB PG_SERVICE COMPOSE_FILES
 
 PG_SERVICE="${PG_SERVICE:-postgres}"
 PG_USER="${POSTGRES_USER:-postgres}"
 PG_DB="${POSTGRES_DB:-nestjs_db}"
-COMPOSE_FILES="${COMPOSE_FILES:-docker/compose.yml}"
+# The base file alone is not a valid project: migration/worker/scheduler get their image from an
+# overlay, so compose fails validation before reaching postgres.
+COMPOSE_FILES="${COMPOSE_FILES:-docker/compose.yml -f docker/compose.dev.yml}"
 
+# --env-file: the compose files live under docker/, so interpolation would miss the root .env.
 # shellcheck disable=SC2086
-compose() { docker compose -f $COMPOSE_FILES "$@"; }
+compose() { docker compose --env-file .env -f $COMPOSE_FILES "$@"; }
 
 cmd="${1:-}"
 case "$cmd" in
