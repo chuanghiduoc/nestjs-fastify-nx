@@ -1,4 +1,4 @@
-import { I18N_KEYS } from './i18n-keys';
+import { I18N_KEYS } from '@nestjs-fastify-nx/contracts';
 
 // class-validator decorator name → stable i18n key.
 // Keep in sync with VALIDATOR_TO_CODE in `validation.pipe.ts` — both maps document the same translation contract.

@@ -179,7 +179,21 @@ fi
 # 7. Required ports free
 # ---------------------------------------------------------------------------
 sec::source_env API_PORT POSTGRES_PORT REDIS_CACHE_PORT REDIS_QUEUE_PORT \
-  MINIO_PORT MINIO_CONSOLE_PORT MAIL_PORT MAILPIT_UI_PORT
+  MINIO_PORT MINIO_CONSOLE_PORT MAIL_PORT MAILPIT_UI_PORT COMPOSE_PROJECT_NAME
+
+# A port published by this project's own containers is the stack already running, not a conflict.
+COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-$(basename "$(pwd)")}"
+# Not `docker ps --format {{.Ports}}`: it collapses consecutive ports into a "9000-9001->" range.
+own_ports() {
+  local ids
+  ids="$(docker ps -q --filter "label=com.docker.compose.project=${COMPOSE_PROJECT_NAME}" 2>/dev/null)"
+  [[ -n "$ids" ]] || return 0
+  # shellcheck disable=SC2086
+  docker inspect --format \
+    '{{range $conf := .NetworkSettings.Ports}}{{range $conf}}{{.HostPort}} {{end}}{{end}}' \
+    $ids 2>/dev/null | tr ' ' '\n' | grep -E '^[0-9]+$' | sort -u | tr '\n' ' '
+}
+OWN_PORTS=" $(own_ports)"
 
 PORTS_TO_CHECK=(
   "${API_PORT:-3000}:API"
@@ -196,7 +210,9 @@ step "Checking host port availability..."
 for entry in "${PORTS_TO_CHECK[@]}"; do
   port="${entry%%:*}"
   label="${entry##*:}"
-  if port_in_use "$port"; then
+  if [[ "$OWN_PORTS" == *" ${port} "* ]]; then
+    pass "Port ${port} (${label}) is published by this project's stack (already running)"
+  elif port_in_use "$port"; then
     fail "Port ${port} (${label}) is already in use — stop the conflicting process or change \${...}_PORT in .env"
   else
     pass "Port ${port} (${label}) is free"

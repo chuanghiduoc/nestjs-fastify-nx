@@ -1,4 +1,5 @@
 import { HttpException, HttpStatus } from '@nestjs/common';
+import { isDomainException } from '@nestjs-fastify-nx/core';
 import { GraphQLError } from 'graphql';
 import { defaultErrorFormatter } from 'mercurius';
 import type { MercuriusContext } from 'mercurius';
@@ -13,6 +14,9 @@ type Execution = ExecutionResult & Required<Pick<ExecutionResult, 'errors'>>;
 function isInternalFailure(error: GraphQLError): boolean {
   const original = error.originalError;
   if (!original) return false;
+  // A domain failure is raised for the client to act on and never denotes an internal fault, so it
+  // is readable here without being an HttpException — the transport, not the domain, owns status.
+  if (isDomainException(original)) return false;
   if (original instanceof HttpException) {
     return original.getStatus() >= HttpStatus.INTERNAL_SERVER_ERROR;
   }

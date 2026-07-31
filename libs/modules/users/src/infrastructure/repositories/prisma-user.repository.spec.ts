@@ -1,4 +1,4 @@
-import { ConflictException, InternalServerErrorException } from '@nestjs/common';
+import { isDomainException } from '@nestjs-fastify-nx/core';
 import { Prisma } from '@nestjs-fastify-nx/infra-database';
 import type { PrismaService } from '@nestjs-fastify-nx/infra-database';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -58,9 +58,12 @@ describe('PrismaUserRepository', () => {
     expect(await repository.findByEmail('missing@example.com')).toBeNull();
   });
 
-  it('treats a P2025 id lookup as missing', async () => {
-    db.user.findUnique.mockRejectedValueOnce(knownError('P2025'));
-    expect(await repository.findById('u1')).toBeNull();
+  // The filter maps Prisma codes far more precisely than this layer can (P2024/P2028 → 503 with a
+  // retry, P2003 → 409). Collapsing them here told a client not to retry a pool timeout.
+  it('rethrows a prisma failure untouched so the transport can classify it', async () => {
+    const failure = knownError('P2024');
+    db.user.findUnique.mockRejectedValueOnce(failure);
+    await expect(repository.findById('u1')).rejects.toBe(failure);
   });
 
   it('saves an aggregate with an upsert', async () => {
@@ -112,10 +115,10 @@ describe('PrismaUserRepository', () => {
     expect(await repository.exists('missing@example.com')).toBe(false);
   });
 
-  it('maps unique conflicts and hides other database failures', async () => {
+  it('translates a unique conflict and leaves every other failure alone', async () => {
     db.user.upsert.mockRejectedValueOnce(knownError('P2002'));
-    await expect(
-      repository.save(
+    const conflict = await repository
+      .save(
         User.reconstitute({
           id: row.id,
           name: row.name,
@@ -125,12 +128,17 @@ describe('PrismaUserRepository', () => {
           createdAt: now,
           updatedAt: now,
         }),
-      ),
-    ).rejects.toBeInstanceOf(ConflictException);
+      )
+      .catch((err: unknown) => err);
 
-    db.user.findUnique.mockRejectedValueOnce(new Error('postgresql://user:secret@db/app'));
-    await expect(repository.findByEmail(row.email)).rejects.toBeInstanceOf(
-      InternalServerErrorException,
-    );
+    expect(isDomainException(conflict) && conflict.kind).toBe('conflict');
+    expect(isDomainException(conflict) && conflict.code).toBe('user_already_exists');
+    // A duplicate can be gone by the next attempt, so a retrying consumer must not park it.
+    expect(isDomainException(conflict) && conflict.permanent).toBe(false);
+
+    // The DSN in this message must never reach a client — the filter redacts every 5xx it emits.
+    const leaky = new Error('postgresql://user:secret@db/app');
+    db.user.findUnique.mockRejectedValueOnce(leaky);
+    await expect(repository.findByEmail(row.email)).rejects.toBe(leaky);
   });
 });

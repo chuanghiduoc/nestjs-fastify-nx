@@ -50,7 +50,19 @@ export default defineConfig(
         // Pointing every Nx lint task at tsconfig.base.json created a separate
         // workspace-wide Program per process and also pulled cache/build output
         // into typed linting.
-        projectService: true,
+        // Root tooling configs are covered by tsconfig.tools.json, which nothing referenced: the
+        // root tsconfig declares `files: []`, so linting one failed with "was not found by the
+        // project service" — and since lint-staged runs on staged files, that made any commit
+        // touching prisma.config.ts or vitest.setup.ts impossible.
+        projectService: {
+          allowDefaultProject: [
+            'prisma.config.ts',
+            'orval.config.ts',
+            'vitest.setup.ts',
+            'vitest.workspace.ts',
+          ],
+          defaultProject: 'tsconfig.tools.json',
+        },
         tsconfigRootDir: import.meta.dirname,
       },
     },

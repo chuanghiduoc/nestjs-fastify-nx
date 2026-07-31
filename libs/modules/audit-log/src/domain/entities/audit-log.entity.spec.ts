@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BusinessRuleException } from '@nestjs-fastify-nx/core';
+import { DomainException } from '@nestjs-fastify-nx/core';
 import { AuditLog } from './audit-log.entity';
 
 // audit_logs.id is a Postgres UUID column. Use a deterministic v4 UUID for
@@ -81,26 +81,26 @@ describe('AuditLog entity', () => {
       expect(entry.id).toMatch(/^[0-9a-f-]{36}$/i);
     });
 
-    it('throws a BusinessRuleException on empty-string id', () => {
+    it('throws a DomainException on empty-string id', () => {
       // `'' ?? x` is '' not x — an empty string id would silently reach
       // Postgres and fail as a UUID parse error rather than a domain assertion.
       expect(() => AuditLog.create({ id: '', action: 'users.registered' })).toThrow(
-        BusinessRuleException,
+        DomainException,
       );
     });
 
-    it('throws a BusinessRuleException on whitespace-only id', () => {
+    it('throws a DomainException on whitespace-only id', () => {
       expect(() => AuditLog.create({ id: '   ', action: 'users.registered' })).toThrow(
-        BusinessRuleException,
+        DomainException,
       );
     });
 
-    it('throws a BusinessRuleException when id is not a UUID', () => {
+    it('throws a DomainException when id is not a UUID', () => {
       // audit_logs.id is a Postgres UUID column; a non-UUID caller id would
       // otherwise blow up at write time as an opaque libpq parse error.
       expect(() =>
         AuditLog.create({ id: 'evt-deterministic-x', action: 'users.registered' }),
-      ).toThrow(BusinessRuleException);
+      ).toThrow(DomainException);
     });
   });
 });

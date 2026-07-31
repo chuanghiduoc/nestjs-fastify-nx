@@ -16,7 +16,7 @@ export class Create<%= className %>Handler
     private readonly repository: <%= className %>RepositoryPort,
   ) {}
 
-  async execute(command: Create<%= className %>Command): Promise<<%= className %>> {
+  async execute(_command: Create<%= className %>Command): Promise<<%= className %>> {
     const entity = <%= className %>.create();
     await this.repository.save(entity);
     return entity;

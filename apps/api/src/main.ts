@@ -515,7 +515,7 @@ async function bootstrap() {
   }
 
   const port = config.get('PORT', { infer: true });
-  await app.listen(port, '0.0.0.0');
+  await app.listen(port, config.get('HOST', { infer: true }));
   app.get(Logger).log(`API listening at: ${await app.getUrl()}`);
 }
 

@@ -2,25 +2,18 @@ import { Injectable } from '@nestjs/common';
 import { CommandBus } from '@nestjs/cqrs';
 import { OnEvent } from '@nestjs/event-emitter';
 import type { DomainEvent } from '@nestjs-fastify-nx/core';
+import { DOMAIN_EVENT_STREAMS } from '@nestjs-fastify-nx/shared';
 import { RecordAuditLogCommand } from '../commands/record-audit-log/record-audit-log.command';
-
-interface AuditPayload extends Record<string, unknown> {
-  ip?: string;
-  userAgent?: string;
-}
-
-function isAuditPayload(value: unknown): value is AuditPayload {
-  return typeof value === 'object' && value !== null;
-}
 
 @Injectable()
 export class AuditLogListener {
   constructor(private readonly commandBus: CommandBus) {}
 
-  @OnEvent('users.*', { async: true, promisify: true, suppressErrors: false })
+  // Audit records every users.* event, including ones whose payload this context does not model —
+  // unknown keys pass through into metadata rather than being validated away.
+  @OnEvent(DOMAIN_EVENT_STREAMS.USERS, { async: true, promisify: true, suppressErrors: false })
   async handleUserEvent(event: DomainEvent): Promise<void> {
-    const payload = isAuditPayload(event.payload) ? event.payload : {};
-    const { ip, userAgent, ...metadata } = payload;
+    const { ip, userAgent, ...metadata } = event.payload;
 
     // Errors propagate to EventBusService.publish; outbox relay marks lastError, in-process aborts the handler.
     await this.commandBus.execute(

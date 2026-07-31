@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { HttpException, HttpStatus, InternalServerErrorException } from '@nestjs/common';
-import { BusinessRuleException } from '@nestjs-fastify-nx/core';
+import { DomainException } from '@nestjs-fastify-nx/core';
 import { normalizeException } from './global-exception.filter';
 
 describe('normalizeException — transport redaction guard-rail (BE-4)', () => {
@@ -63,19 +63,21 @@ describe('normalizeException — transport redaction guard-rail (BE-4)', () => {
     expect(result.detail).toBe('email already registered');
   });
 
-  it('redacts a BusinessRuleException misclassified as a 5xx', () => {
+  // A domain failure can no longer be misclassified as a 5xx: it carries no status at all, and the
+  // filter derives one from `kind`, which only maps to client-correctable codes.
+  it.each([
+    ['malformed', HttpStatus.BAD_REQUEST],
+    ['validation', HttpStatus.UNPROCESSABLE_ENTITY],
+    ['conflict', HttpStatus.CONFLICT],
+    ['not_found', HttpStatus.NOT_FOUND],
+    ['forbidden', HttpStatus.FORBIDDEN],
+  ] as const)('maps domain kind %s to %i and never to a 5xx', (kind, status) => {
     vi.stubEnv('NODE_ENV', 'production');
-    const exception = new BusinessRuleException({
-      status: HttpStatus.INTERNAL_SERVER_ERROR,
-      code: 'internal_business_failure',
-      messageKey: 'errors.business.internal_failure',
-      violations: [],
-    });
 
-    const result = normalizeException(exception);
+    const result = normalizeException(new DomainException({ kind, violations: [] }));
 
-    expect(result.detail).toBe('Internal Server Error');
-    expect(result.code).toBe('internal_server_error');
+    expect(result.status).toBe(status);
+    expect(result.status).toBeLessThan(HttpStatus.INTERNAL_SERVER_ERROR);
   });
 });
 
@@ -140,5 +142,35 @@ describe('normalizeException — Prisma error safety-net', () => {
   it('does not misclassify a non-Prisma object that merely has a code', () => {
     const result = normalizeException({ code: 'P2002', message: 'not really prisma' });
     expect(result.status).toBe(HttpStatus.INTERNAL_SERVER_ERROR);
+  });
+});
+
+describe('normalizeException — domain failures are not server faults', () => {
+  // The GraphQL branch of the filter classifies with normalizeException too. Reading
+  // `instanceof HttpException` there instead would score every DomainException as a 500 and page on
+  // ordinary 4xx domain failures.
+  it('never scores a domain failure as a 5xx', () => {
+    for (const kind of ['malformed', 'validation', 'conflict', 'not_found', 'forbidden'] as const) {
+      const result = normalizeException(new DomainException({ kind, violations: [] }));
+      expect(result.status).toBeLessThan(HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  });
+
+  // Without a messageKey the filter must fall back to its status-based localized default; using the
+  // Error message would ship untranslated English as `detail` for every locale.
+  it('leaves detail unset when the failure carries no message key', () => {
+    const result = normalizeException(
+      new DomainException({
+        violations: [{ path: 'id', code: 'bad', message: 'id must be a valid UUID' }],
+      }),
+    );
+    expect(result.detail).toBeUndefined();
+  });
+
+  it('uses the message key when one is provided', () => {
+    const result = normalizeException(
+      new DomainException({ messageKey: 'errors.users.not_found', violations: [] }),
+    );
+    expect(result.detail).toBe('errors.users.not_found');
   });
 });

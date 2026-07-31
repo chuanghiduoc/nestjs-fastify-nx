@@ -1,7 +1,7 @@
-import { HttpStatus, Inject } from '@nestjs/common';
+import { Inject } from '@nestjs/common';
 import { QueryHandler, type IQueryHandler } from '@nestjs/cqrs';
-import { BusinessRuleException } from '@nestjs-fastify-nx/core';
-import { I18N_KEYS } from '@nestjs-fastify-nx/infra-i18n';
+import { DomainException } from '@nestjs-fastify-nx/core';
+import { I18N_KEYS, ERROR_CODES } from '@nestjs-fastify-nx/contracts';
 import { GetUserProfileQuery, type UserProfileResult } from './get-user-profile.query';
 import { USER_REPOSITORY_PORT } from '../../../domain/ports/user-repository.port';
 import type { UserRepositoryPort } from '../../../domain/ports/user-repository.port';
@@ -16,12 +16,12 @@ export class GetUserProfileHandler implements IQueryHandler<
   async execute(query: GetUserProfileQuery): Promise<UserProfileResult> {
     const user = await this.users.findById(query.userId);
     if (!user) {
-      throw new BusinessRuleException({
-        status: HttpStatus.NOT_FOUND,
+      throw new DomainException({
+        kind: 'not_found',
         // Without this the response titles a 404 "Business rule violation" — the class default only
-        // fits its default 422 — and the literal skips i18n because it isn't a dotted key.
+        // fits a rule violation — and the literal skips i18n because it isn't a dotted key.
         title: I18N_KEYS.common.not_found,
-        code: 'user_not_found',
+        code: ERROR_CODES.USER_NOT_FOUND,
         messageKey: I18N_KEYS.errors.users.not_found,
         violations: [
           {

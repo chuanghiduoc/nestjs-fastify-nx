@@ -4,6 +4,11 @@ import { ClsServiceManager } from 'nestjs-cls';
 import type { RequestContextStore } from '@nestjs-fastify-nx/core';
 import { buildPinoLoggerConfig } from './pino-logger-config';
 
+interface ProbeRequest {
+  url?: string;
+  originalUrl?: string;
+}
+
 function pinoHttp(overrides = {}): PinoHttpOptions {
   return buildPinoLoggerConfig(overrides).pinoHttp as PinoHttpOptions;
 }
@@ -25,13 +30,16 @@ describe('buildPinoLoggerConfig', () => {
     expect(typeof base['hostname']).toBe('string');
   });
 
+  // Asserting only the full-URL shape passes a filter that matches nothing at runtime.
   it('ignores health and metrics probes but logs real traffic', () => {
-    const ignore = (pinoHttp().autoLogging as { ignore: (req: { url?: string }) => boolean })
-      .ignore;
+    const ignore = (pinoHttp().autoLogging as { ignore: (req: ProbeRequest) => boolean }).ignore;
+    expect(ignore({ url: '/', originalUrl: '/metrics' })).toBe(true);
+    expect(ignore({ url: '/', originalUrl: '/api/v1/health' })).toBe(true);
+    expect(ignore({ url: '/', originalUrl: '/api/v1/health/live' })).toBe(true);
+    expect(ignore({ url: '/', originalUrl: '/api/v1/health/ready?probe=1' })).toBe(true);
+    expect(ignore({ url: '/', originalUrl: '/api/v1/users/me' })).toBe(false);
+    expect(ignore({ url: '/' })).toBe(false);
     expect(ignore({ url: '/metrics' })).toBe(true);
-    expect(ignore({ url: '/api/v1/health/live' })).toBe(true);
-    expect(ignore({ url: '/api/v1/health/ready?probe=1' })).toBe(true);
-    expect(ignore({ url: '/api/v1/users/me' })).toBe(false);
     expect(ignore({ url: undefined })).toBe(false);
   });
 

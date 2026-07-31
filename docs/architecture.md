@@ -479,7 +479,7 @@ All error responses (400/401/403/404/409/413/415/422/429/5xx) use
   keys and switch-case discriminators. Override the docs URL via
   `ERROR_DOCS_BASE_URL`.
 - `errors[]` is a **flat** list shared by validation (422) and
-  `BusinessRuleException` (422/409 — throw from domain/application code).
+  `DomainException` (kind → 422/409/404/403/400 — throw from domain/application code; see [error-handling.md](./error-handling.md)).
 - `requestId` mirrors the `X-Request-Id` response header — the same id appears
   in pino logs, OpenTelemetry traces, and Sentry events for cross-system
   correlation. The `CorrelationIdMiddleware` accepts an inbound `X-Request-Id`

@@ -107,6 +107,10 @@ const envSchema = z
     // App
     NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
     PORT: z.coerce.number().int().min(1).max(65535).default(3000),
+    // Defaults to every interface because a container must bind that way to be reachable through a
+    // published port. Running on the host (./scripts/dev.sh) that also exposes the api to the local
+    // network — set 127.0.0.1 to keep a laptop's dev stack off untrusted WiFi.
+    HOST: z.string().default('0.0.0.0'),
     LOG_LEVEL: z.string().default('info'),
     ERROR_DOCS_BASE_URL: z.url().optional(),
     HTTP_MAX_EVENT_LOOP_DELAY_MS: z.coerce.number().int().min(10).max(60_000).default(1_000),

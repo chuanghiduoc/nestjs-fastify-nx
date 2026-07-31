@@ -2,7 +2,7 @@ import { Injectable, CanActivate, ExecutionContext, ForbiddenException } from '@
 import { Reflector } from '@nestjs/core';
 import { GqlContextType, GqlExecutionContext } from '@nestjs/graphql';
 import type { FastifyRequest } from 'fastify';
-import { I18N_KEYS } from '@nestjs-fastify-nx/infra-i18n';
+import { I18N_KEYS } from '@nestjs-fastify-nx/contracts';
 import { ROLES_KEY } from './roles.decorator';
 import { IS_PUBLIC_KEY } from './public.decorator';
 import type { AuthenticatedSession } from './better-auth.types';

@@ -1,6 +1,8 @@
+import { validate as isUuid, version as uuidVersion } from 'uuid';
+
 // Cursor format: base64url("${createdAt.toISOString()}:${id}"). UUIDv7 id prevents duplicates on same timestamp.
 const BASE64URL = /^[A-Za-z0-9_-]+$/;
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const UUID_VERSION = 7;
 
 // A cursor that has already passed validation. Repository ports take this rather than the raw
 // string so a malformed cursor is unrepresentable below the boundary that decodes it.
@@ -31,7 +33,8 @@ export function decodeCursor(cursor: string): DecodedCursor | null {
     if (
       Number.isNaN(createdAt.getTime()) ||
       createdAt.toISOString() !== encodedDate ||
-      !UUID.test(id)
+      !isUuid(id) ||
+      uuidVersion(id) !== UUID_VERSION
     ) {
       return null;
     }

@@ -1,5 +1,5 @@
 import type { DomainEvent } from '@nestjs-fastify-nx/core';
-import { generateId } from '@nestjs-fastify-nx/shared';
+import { DOMAIN_EVENTS, generateId } from '@nestjs-fastify-nx/shared';
 
 export interface UserLoggedInPayload extends Record<string, unknown> {
   sessionId: string;
@@ -9,7 +9,7 @@ export interface UserLoggedInPayload extends Record<string, unknown> {
 
 export class UserLoggedIn implements DomainEvent {
   readonly eventId = generateId();
-  readonly eventType = 'users.logged_in';
+  readonly eventType = DOMAIN_EVENTS.USERS_LOGGED_IN;
   readonly occurredAt = new Date();
 
   constructor(

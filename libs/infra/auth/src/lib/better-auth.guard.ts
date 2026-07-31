@@ -12,7 +12,7 @@ import { fromNodeHeaders } from 'better-auth/node';
 import type { FastifyRequest } from 'fastify';
 import * as Sentry from '@sentry/nestjs';
 import { ClsService } from 'nestjs-cls';
-import { I18N_KEYS } from '@nestjs-fastify-nx/infra-i18n';
+import { I18N_KEYS } from '@nestjs-fastify-nx/contracts';
 import { REQUEST_CONTEXT_KEYS, type RequestContextStore } from '@nestjs-fastify-nx/core';
 import { BETTER_AUTH_INSTANCE } from './better-auth-instance.token';
 import type { BetterAuthInstance } from './better-auth.config';

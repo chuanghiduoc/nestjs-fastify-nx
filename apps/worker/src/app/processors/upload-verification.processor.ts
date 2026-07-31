@@ -1,14 +1,12 @@
 import { Processor, WorkerHost } from '@nestjs/bullmq';
-import { Inject, Logger, type OnApplicationBootstrap } from '@nestjs/common';
+import { Logger, type OnApplicationBootstrap } from '@nestjs/common';
+import { CommandBus } from '@nestjs/cqrs';
 import { ConfigService } from '@nestjs/config';
 import type { Job } from 'bullmq';
-import { QUEUE_NAMES, detectFileType, positiveIntEnv } from '@nestjs-fastify-nx/shared';
-import { STORAGE_PORT, type StoragePort } from '@nestjs-fastify-nx/infra-storage';
-import { PrismaService } from '@nestjs-fastify-nx/infra-database';
-import { STORED_FILE_STATUS } from '@nestjs-fastify-nx/shared';
+import { QUEUE_NAMES, positiveIntEnv } from '@nestjs-fastify-nx/shared';
+import { VerifyUploadCommand } from '@nestjs-fastify-nx/modules-upload';
 import type { WorkerEnvConfig } from '../../config/env.validation';
 import { applyWorkerConcurrency } from './apply-worker-concurrency';
-import { MalwareScannerService } from '../security/malware-scanner.service';
 
 export interface UploadVerificationPayload {
   key: string;
@@ -18,19 +16,18 @@ export interface UploadVerificationPayload {
   correlationId?: string;
 }
 
-const MAGIC_BYTES_TO_READ = 16; // covers all signatures in file-signature.ts
 // Seed only — decorator options evaluate before ConfigModule parses .env; see applyWorkerConcurrency.
 const UPLOAD_CONCURRENCY = positiveIntEnv('WORKER_UPLOAD_CONCURRENCY', 5);
 
+// Transport adapter only: the stored-file state machine, the signature check and the scan sequence
+// live in VerifyUploadCommand, which the api's confirm flow shares.
 @Processor(QUEUE_NAMES.UPLOAD_VERIFICATION, { concurrency: UPLOAD_CONCURRENCY })
 export class UploadVerificationProcessor extends WorkerHost implements OnApplicationBootstrap {
   private readonly logger = new Logger(UploadVerificationProcessor.name);
 
   constructor(
-    @Inject(STORAGE_PORT) private readonly storage: StoragePort,
-    private readonly prisma: PrismaService,
+    private readonly commandBus: CommandBus,
     private readonly config: ConfigService<WorkerEnvConfig, true>,
-    private readonly malwareScanner: MalwareScannerService,
   ) {
     super();
   }
@@ -46,76 +43,8 @@ export class UploadVerificationProcessor extends WorkerHost implements OnApplica
   async process(job: Job<UploadVerificationPayload>): Promise<void> {
     const { key, declaredContentType, bucket, correlationId } = job.data;
 
-    const head = Buffer.from(await this.storage.readRange(key, MAGIC_BYTES_TO_READ, bucket));
-    const detected = detectFileType(head);
-
-    if (!detected) {
-      this.logger.warn(
-        { key, declaredContentType, correlationId },
-        `verify-magic-bytes: no signature match — deleting object as unrecognized binary`,
-      );
-      await this.reject(key, bucket, 'Unrecognized binary signature');
-      return;
-    }
-
-    if (detected.mimeType !== declaredContentType) {
-      this.logger.warn(
-        { key, declaredContentType, detected: detected.mimeType, correlationId },
-        `verify-magic-bytes: MIME mismatch — deleting tampered upload`,
-      );
-      await this.reject(
-        key,
-        bucket,
-        `MIME mismatch: declared=${declaredContentType} detected=${detected.mimeType}`,
-      );
-      return;
-    }
-
-    const content = await this.storage.read(key, bucket);
-    if ((await this.malwareScanner.scan(content)) === 'infected') {
-      this.logger.warn(
-        { key, declaredContentType, correlationId },
-        'malware-scan: infected object rejected and deleted',
-      );
-      await this.reject(key, bucket, 'Malware scan rejected the object');
-      return;
-    }
-
-    const result = await this.prisma.db.storedFile.updateMany({
-      where: { key, status: STORED_FILE_STATUS.VERIFYING },
-      data: { status: STORED_FILE_STATUS.READY, verifiedAt: new Date(), failureReason: null },
-    });
-    if (result.count === 0) {
-      // Mirror reject()'s CAS guard: a duplicate/retried job — or a row already flipped or purged —
-      // is a safe no-op. Log it as skipped rather than reporting a READY flip that never happened.
-      this.logger.warn(
-        { key, declaredContentType, correlationId },
-        'verify-magic-bytes: ready-flip skipped — record not in VERIFYING state (already processed)',
-      );
-      return;
-    }
-
-    this.logger.log(
-      { key, declaredContentType, correlationId },
-      `upload-verification: ${key} passed signature and malware scans`,
+    await this.commandBus.execute(
+      new VerifyUploadCommand(key, declaredContentType, bucket, correlationId),
     );
-  }
-
-  private async reject(key: string, bucket: string, failureReason: string): Promise<void> {
-    // Mirror the success-path status guard: only flip VERIFYING → REJECTED. Without it, a
-    // duplicate/retried job could re-reject and delete an object another execution already
-    // marked READY (or already rejected+deleted), destroying a live file or double-deleting.
-    const result = await this.prisma.db.storedFile.updateMany({
-      where: { key, status: STORED_FILE_STATUS.VERIFYING },
-      data: { status: STORED_FILE_STATUS.REJECTED, failureReason },
-    });
-    if (result.count === 0) {
-      this.logger.warn(
-        { key },
-        'verify-magic-bytes: reject skipped — record not in VERIFYING state (already processed)',
-      );
-      return;
-    }
-    await this.storage.delete(key, bucket);
   }
 }

@@ -83,9 +83,11 @@ describe('ListUsersCursorHandler', () => {
   it('rejects an invalid startingAfter cursor instead of returning the first page', async () => {
     await repo.save(UserFactory.create({ email: 'x@test.com' }));
 
+    // Asserted on the domain kind, not an HTTP status: this layer runs under REST, GraphQL and the
+    // scheduler, and only the transport knows that `malformed` means 400.
     await expect(
       handler.execute(new ListUsersCursorQuery(10, '!!!invalid!!!')),
-    ).rejects.toMatchObject({ status: 400 });
+    ).rejects.toMatchObject({ kind: 'malformed', code: 'invalid_cursor', permanent: true });
   });
 
   it('maps domain User fields to UserListItemDto correctly', async () => {

@@ -6,8 +6,8 @@ import { sanitizeUrlForLogging } from '@nestjs-fastify-nx/shared';
 import { ensureRequestIds, sanitizeClientId, type RequestIdCarrier } from '../logging/request-id';
 import {
   buildProblemDetails,
-  HTTP_STATUS_CODES,
-  HTTP_STATUS_TITLES,
+  statusCode,
+  statusTitle,
   PROBLEM_CONTENT_TYPE,
 } from './problem-details.helper';
 
@@ -44,17 +44,13 @@ export function applyFastifyProblemDetailsHook(fastify: FastifyInstance): void {
     reply.header('content-type', PROBLEM_CONTENT_TYPE);
 
     if (isProblemDetailsShape(source) && source.status === status) {
-      const title =
-        status >= 500 ? (HTTP_STATUS_TITLES[status] ?? 'Internal Server Error') : source.title;
+      const title = status >= 500 ? statusTitle(status) : source.title;
       const detail = status >= 500 ? title : source.detail;
       const normalized = buildProblemDetails({
         status,
         title,
         detail,
-        code:
-          status < 500 && typeof source.code === 'string'
-            ? source.code
-            : (HTTP_STATUS_CODES[status] ?? ERROR_CODES.INTERNAL_SERVER_ERROR),
+        code: status < 500 && typeof source.code === 'string' ? source.code : statusCode(status),
         instance: sanitizeUrlForLogging(
           typeof source.instance === 'string' ? source.instance : request.url,
         ),
@@ -81,7 +77,7 @@ export function applyFastifyProblemDetailsHook(fastify: FastifyInstance): void {
     const title =
       (typeof source?.['title'] === 'string' && source['title']) ||
       (typeof source?.['error'] === 'string' && source['error']) ||
-      HTTP_STATUS_TITLES[status] ||
+      statusTitle(status) ||
       'Error';
     const rawDetail =
       (typeof source?.['detail'] === 'string' && source['detail']) ||
@@ -177,5 +173,5 @@ export function resolveFastifyCode(error: FastifyError, status: number): string 
   if (error.code && FASTIFY_CODE_TO_ERROR_CODE[error.code]) {
     return FASTIFY_CODE_TO_ERROR_CODE[error.code];
   }
-  return HTTP_STATUS_CODES[status] ?? ERROR_CODES.INTERNAL_SERVER_ERROR;
+  return statusCode(status);
 }

@@ -9,15 +9,15 @@ import type { <%= className %>RepositoryPort } from '../../domain';
 export class Prisma<%= className %>Repository implements <%= className %>RepositoryPort {
   constructor(private readonly prisma: PrismaService) {}
 
-  async findById(_id: string): Promise<<%= className %> | null> {
+  findById(_id: string): Promise<<%= className %> | null> {
     throw new NotImplementedException('Prisma<%= className %>Repository.findById');
   }
 
-  async save(_entity: <%= className %>): Promise<void> {
+  save(_entity: <%= className %>): Promise<void> {
     throw new NotImplementedException('Prisma<%= className %>Repository.save');
   }
 
-  async delete(_id: string): Promise<void> {
+  delete(_id: string): Promise<void> {
     throw new NotImplementedException('Prisma<%= className %>Repository.delete');
   }
 }

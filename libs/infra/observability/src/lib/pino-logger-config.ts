@@ -28,9 +28,11 @@ function requestContextMixin(): Record<string, string> {
   return fields;
 }
 
-// Kubernetes liveness/readiness + Prometheus scrapes hit on a fixed interval; logging every
-// probe would bury real traffic. The OTel trace still records them for latency analysis.
-function isNoisyProbe(url: string | undefined): boolean {
+// Probes hit on a fixed interval and would bury real traffic; the OTel trace still records them.
+// `url` alone is not enough: as Nest middleware the logger sees it with the mount point stripped
+// ('/'), so resolve the path like `FastifyAdapter.getRequestOriginalUrl` does.
+function isNoisyProbe(req: { url?: string; originalUrl?: string }): boolean {
+  const url = req.originalUrl || req.url;
   if (!url) return false;
   const path = url.split('?', 1)[0];
   return path === '/metrics' || path.startsWith('/api/v1/health');
@@ -58,7 +60,7 @@ export function buildPinoLoggerConfig(overrides: Partial<PinoHttpOptions> = {}):
       mixin: requestContextMixin,
       // Structured logs use a string level label; pino-pretty expects the numeric level.
       formatters: !prettyLogs ? { level: (label) => ({ level: label }) } : undefined,
-      autoLogging: { ignore: (req) => isNoisyProbe(req.url) },
+      autoLogging: { ignore: isNoisyProbe },
       // Request essentials only, not the full header/body dump — smaller lines, smaller PII surface.
       // `remoteAddress` is the raw TCP peer (pod IP behind a proxy); pair with X-Forwarded-For
       // upstream if you need the client IP. Error messages/stacks are excluded because drivers

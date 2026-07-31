@@ -1,10 +1,6 @@
-import {
-  Injectable,
-  Logger,
-  ConflictException,
-  InternalServerErrorException,
-} from '@nestjs/common';
-import { I18N_KEYS } from '@nestjs-fastify-nx/infra-i18n';
+import { Injectable, Logger } from '@nestjs/common';
+import { DomainException } from '@nestjs-fastify-nx/core';
+import { ERROR_CODES, I18N_KEYS } from '@nestjs-fastify-nx/contracts';
 import { PrismaService } from '@nestjs-fastify-nx/infra-database';
 import { Prisma } from '@nestjs-fastify-nx/infra-database';
 import { User, UserRole, UserStatus } from '../../domain/entities/user.entity';
@@ -65,20 +61,31 @@ export class PrismaUserRepository implements UserRepositoryPort {
     });
   }
 
+  // Only the one condition this context can describe better than the transport is translated here.
+  // Everything else is rethrown untouched: GlobalExceptionFilter already classifies Prisma codes
+  // (P2003 → 409, P2024/P2028 → 503, unmapped → redacted 500), and collapsing them all into a 500
+  // here turned a retryable pool timeout into a fault the client is told not to retry.
   private handleError(err: unknown, context: string): never {
-    if (err instanceof Prisma.PrismaClientKnownRequestError) {
-      if (err.code === 'P2002') {
-        throw new ConflictException({
-          messageKey: I18N_KEYS.errors.users.already_exists,
-          message: 'A record with this value already exists',
-        });
-      }
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+      throw new DomainException({
+        kind: 'conflict',
+        // A duplicate can disappear before the next attempt.
+        permanent: false,
+        code: ERROR_CODES.USER_ALREADY_EXISTS,
+        title: I18N_KEYS.common.conflict,
+        messageKey: I18N_KEYS.errors.users.already_exists,
+        violations: [
+          {
+            path: 'email',
+            code: 'already_exists',
+            message: 'A record with this value already exists',
+            messageKey: I18N_KEYS.errors.users.already_exists,
+          },
+        ],
+      });
     }
     this.logger.error({ err, context }, 'Database operation failed');
-    throw new InternalServerErrorException({
-      messageKey: I18N_KEYS.errors.users.database_error,
-      message: 'Database error',
-    });
+    throw err;
   }
 
   // Primary (not dbRead) — /users/me reads immediately after sign-up; replica lag would return null.
@@ -87,9 +94,6 @@ export class PrismaUserRepository implements UserRepositoryPort {
       const raw = await this.writer.user.findUnique({ where: { id } });
       return raw ? this.mapToEntity(raw) : null;
     } catch (err) {
-      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2025') {
-        return null;
-      }
       return this.handleError(err, 'findById');
     }
   }

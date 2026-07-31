@@ -473,6 +473,9 @@ importers:
       '@nestjs-fastify-nx/infra-storage':
         specifier: workspace:*
         version: link:../../libs/infra/storage
+      '@nestjs-fastify-nx/modules-upload':
+        specifier: workspace:*
+        version: link:../../libs/modules/upload
       '@nestjs-fastify-nx/shared':
         specifier: workspace:*
         version: link:../../libs/shared
@@ -501,6 +504,9 @@ importers:
 
   libs/infra/auth:
     devDependencies:
+      '@nestjs-fastify-nx/contracts':
+        specifier: workspace:*
+        version: link:../../contracts
       '@nestjs-fastify-nx/core':
         specifier: workspace:*
         version: link:../../core
@@ -520,7 +526,11 @@ importers:
         specifier: workspace:*
         version: link:../../shared
 
-  libs/infra/i18n: {}
+  libs/infra/i18n:
+    devDependencies:
+      '@nestjs-fastify-nx/contracts':
+        specifier: workspace:*
+        version: link:../../contracts
 
   libs/infra/messaging:
     devDependencies:
@@ -554,12 +564,18 @@ importers:
 
   libs/infra/storage:
     devDependencies:
+      '@nestjs-fastify-nx/contracts':
+        specifier: workspace:*
+        version: link:../../contracts
       '@nestjs-fastify-nx/infra-i18n':
         specifier: workspace:*
         version: link:../i18n
 
   libs/modules/audit-log:
     devDependencies:
+      '@nestjs-fastify-nx/contracts':
+        specifier: workspace:*
+        version: link:../../contracts
       '@nestjs-fastify-nx/core':
         specifier: workspace:*
         version: link:../../core

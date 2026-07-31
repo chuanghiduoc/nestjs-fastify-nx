@@ -7,7 +7,7 @@ import {
   Optional,
 } from '@nestjs/common';
 import { PrismaService } from '@nestjs-fastify-nx/infra-database';
-import type { DomainEvent } from '@nestjs-fastify-nx/core';
+import { isDomainException, type DomainEvent } from '@nestjs-fastify-nx/core';
 import { positiveIntEnv, safeErrorSummary } from '@nestjs-fastify-nx/shared';
 import { EventBusService } from './event-bus.service';
 import { OUTBOX_SCHEMA_VERSION } from './outbox-schema-version';
@@ -235,18 +235,17 @@ export class OutboxRelayService implements OnModuleInit, OnModuleDestroy {
     if (!payload) {
       const message = 'Invalid outbox payload envelope';
       this.logger.error(`Outbox dispatch skipped for ${row.eventType} (id=${row.id}) - ${message}`);
-      await this.recordError(row.id, message);
+      await this.parkPermanently(row.id, message);
       return false;
     }
 
-    // Reject envelopes newer than this relay understands rather than silently
-    // deserialising a shape we cannot interpret. The row exhausts its attempts and
-    // surfaces via the stuck-row warning with an explanatory lastError.
+    // Reject envelopes newer than this relay understands rather than silently deserialising a shape
+    // we cannot interpret. Retrying cannot help — only a relay deploy can — so park it.
     const version = payload.schemaVersion ?? 1;
     if (version > OUTBOX_SCHEMA_VERSION) {
       const message = `Unsupported outbox schemaVersion=${version} (relay supports up to ${OUTBOX_SCHEMA_VERSION}) — producer/consumer deploy skew`;
       this.logger.error(`Outbox dispatch skipped for ${row.eventType} (id=${row.id}) — ${message}`);
-      await this.recordError(row.id, message.slice(0, 2_000));
+      await this.parkPermanently(row.id, message.slice(0, 2_000));
       return false;
     }
 
@@ -266,7 +265,12 @@ export class OutboxRelayService implements OnModuleInit, OnModuleDestroy {
         { err, eventType: row.eventType, outboxId: row.id, attempt: row.attempts },
         'Outbox dispatch failed',
       );
-      await this.recordError(row.id, message.slice(0, 2_000));
+      // A listener that rejected the event on a business rule will reject it identically forever.
+      if (isDomainException(err) && err.permanent) {
+        await this.parkPermanently(row.id, message.slice(0, 2_000));
+      } else {
+        await this.recordError(row.id, message.slice(0, 2_000));
+      }
       return false;
     }
 
@@ -291,6 +295,22 @@ export class OutboxRelayService implements OnModuleInit, OnModuleDestroy {
       new Date(),
       id,
     );
+  }
+
+  // A failure that waiting cannot fix must not consume the retry budget: parking the row at once
+  // keeps the backoff window free for genuinely transient faults, and the stuck-row warning
+  // surfaces it with an explanatory lastError.
+  private async parkPermanently(id: string, message: string): Promise<void> {
+    try {
+      await this.prisma.db.$executeRawUnsafe(
+        `UPDATE "outbox_events" SET "lastError" = $1, attempts = $2 WHERE id = $3`,
+        message,
+        this.maxAttempts,
+        id,
+      );
+    } catch (err) {
+      this.logger.error({ err, outboxId: id }, 'Failed to park outbox row');
+    }
   }
 
   private async recordError(id: string, message: string): Promise<void> {

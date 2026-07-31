@@ -5,11 +5,9 @@ import { prismaAdapter } from 'better-auth/adapters/prisma';
 import { bearer, openAPI } from 'better-auth/plugins';
 import type { PrismaClient } from '@nestjs-fastify-nx/infra-database';
 import type { I18nService } from 'nestjs-i18n';
-import {
-  I18N_KEYS,
-  resolveRequestLocale,
-  translateOrFallback,
-} from '@nestjs-fastify-nx/infra-i18n';
+import { resolveRequestLocale, translateOrFallback } from '@nestjs-fastify-nx/infra-i18n';
+import { usesSecureCookies } from './session-cookie';
+import { I18N_KEYS } from '@nestjs-fastify-nx/contracts';
 export interface AuthMailDispatcher {
   send(opts: { to: string; subject: string; body: string; templateId?: string }): Promise<void>;
 }
@@ -188,8 +186,7 @@ export function createBetterAuth(
       // alone, so an HTTPS staging/preview deploy (NODE_ENV != production) still gets Secure +
       // __Secure-. httpOnly + SameSite=Lax are Better Auth defaults; SameSite=None (cross-site) is a
       // deployment-topology call left to the operator.
-      useSecureCookies:
-        process.env['NODE_ENV'] === 'production' || (baseURL?.startsWith('https://') ?? false),
+      useSecureCookies: usesSecureCookies(baseURL),
     },
     // bearer() lets non-browser clients (WebSocket, mobile, service-to-service) authenticate with
     // `Authorization: Bearer <session-token>`. Better Auth verifies the token signature and maps it
@@ -222,6 +219,21 @@ function resolveFrontendBase(): string {
   return apiOrigin;
 }
 
+// One layout for every transactional email: the four templates differed only in their paragraphs,
+// so the markup, the inline style and the escaping rule were maintained in four places.
+function emailLayout(paragraphs: readonly string[]): string {
+  const body = paragraphs.map((paragraph) => `<p>${paragraph}</p>`).join('\n');
+  return `<!doctype html><html><body style="font-family:system-ui,sans-serif;line-height:1.5">
+${body}
+</body></html>`;
+}
+
+// Links are the only interpolation that is a URL rather than translated copy.
+function linkParagraph(link: string): string {
+  const escaped = escapeHtml(link);
+  return `<a href="${escaped}">${escaped}</a>`;
+}
+
 async function greeting(
   i18n: I18nService,
   lang: string,
@@ -248,12 +260,7 @@ async function renderPasswordResetEmail(
     translateOrFallback(i18n, keys.lead, { lang }),
     translateOrFallback(i18n, keys.ignore, { lang }),
   ]);
-  return `<!doctype html><html><body style="font-family:system-ui,sans-serif;line-height:1.5">
-<p>${hello}</p>
-<p>${lead}</p>
-<p><a href="${escapeHtml(ctx.link)}">${escapeHtml(ctx.link)}</a></p>
-<p>${ignore}</p>
-</body></html>`;
+  return emailLayout([hello, lead, linkParagraph(ctx.link), ignore]);
 }
 
 async function renderEmailVerificationEmail(
@@ -267,12 +274,7 @@ async function renderEmailVerificationEmail(
     translateOrFallback(i18n, keys.lead, { lang }),
     translateOrFallback(i18n, keys.expiry, { lang }),
   ]);
-  return `<!doctype html><html><body style="font-family:system-ui,sans-serif;line-height:1.5">
-<p>${hello}</p>
-<p>${lead}</p>
-<p><a href="${escapeHtml(ctx.link)}">${escapeHtml(ctx.link)}</a></p>
-<p>${expiry}</p>
-</body></html>`;
+  return emailLayout([hello, lead, linkParagraph(ctx.link), expiry]);
 }
 
 async function renderEmailChangeConfirmation(
@@ -290,13 +292,7 @@ async function renderEmailChangeConfirmation(
     }),
     translateOrFallback(i18n, keys.not_you, { lang }),
   ]);
-  return `<!doctype html><html><body style="font-family:system-ui,sans-serif;line-height:1.5">
-<p>${hello}</p>
-<p>${lead}</p>
-<p>${target}</p>
-<p><a href="${escapeHtml(ctx.link)}">${escapeHtml(ctx.link)}</a></p>
-<p>${notYou}</p>
-</body></html>`;
+  return emailLayout([hello, lead, target, linkParagraph(ctx.link), notYou]);
 }
 
 async function renderAccountDeletionEmail(
@@ -311,13 +307,7 @@ async function renderAccountDeletionEmail(
     translateOrFallback(i18n, keys.confirm, { lang }),
     translateOrFallback(i18n, keys.not_you, { lang }),
   ]);
-  return `<!doctype html><html><body style="font-family:system-ui,sans-serif;line-height:1.5">
-<p>${hello}</p>
-<p>${warning}</p>
-<p>${confirm}</p>
-<p><a href="${escapeHtml(ctx.link)}">${escapeHtml(ctx.link)}</a></p>
-<p>${notYou}</p>
-</body></html>`;
+  return emailLayout([hello, warning, confirm, linkParagraph(ctx.link), notYou]);
 }
 
 // The link is built from FRONTEND_BASE_URL (operator-controlled) plus an encodeURIComponent'd token,

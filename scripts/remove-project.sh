@@ -10,6 +10,10 @@ source "${SCRIPT_DIR}/security/_lib.sh"
 cd "$(sec::repo_root)"
 
 NAME="${1:-}"
+if [[ "$NAME" == "--help" || "$NAME" == "-h" ]]; then
+  echo "Usage: pnpm rm:project <project-name>   (list: pnpm nx show projects)"
+  exit 0
+fi
 if [[ -z "$NAME" ]]; then
   sec::err "Usage: pnpm rm:project <project-name>   (list: pnpm nx show projects)"
   exit 1

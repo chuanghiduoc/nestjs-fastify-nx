@@ -30,7 +30,7 @@
     "clean": "node tools/scripts/clean-workspace.js",
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
-    "db:seed": "node prisma/seed.mjs",
+    "db:seed": "prisma db seed",
     "db:studio": "prisma studio",
     "db:generate": "prisma generate"
   },
@@ -158,7 +158,6 @@
   "packageManager": "pnpm@11.14.0",
   "prisma": {
     "schema": "prisma/schema.prisma",
-    "config": "prisma.config.ts",
-    "seed": "node prisma/seed.mjs"
+    "config": "prisma.config.ts"
   }
 }

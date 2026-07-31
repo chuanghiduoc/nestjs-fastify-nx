@@ -1,11 +1,8 @@
 import { HttpStatus, UnprocessableEntityException, ValidationPipe } from '@nestjs/common';
 import type { ValidationError, ValidationPipeOptions } from '@nestjs/common';
 import { ERROR_CODES, type ValidationErrorItemDto } from '@nestjs-fastify-nx/contracts';
-import {
-  I18N_KEYS,
-  mapConstraintToI18nKey,
-  VALIDATION_CONSTRAINT_KEYS,
-} from '@nestjs-fastify-nx/infra-i18n';
+import { mapConstraintToI18nKey, VALIDATION_CONSTRAINT_KEYS } from '@nestjs-fastify-nx/infra-i18n';
+import { I18N_KEYS } from '@nestjs-fastify-nx/contracts';
 
 export class ProblemDetailsValidationPipe extends ValidationPipe {
   constructor(options: ValidationPipeOptions = {}) {

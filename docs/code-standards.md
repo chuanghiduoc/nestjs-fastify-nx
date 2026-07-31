@@ -24,18 +24,18 @@ Pino logs are structured JSON, correlated with `X-Request-Id`, and automatically
 The status is part of the API contract — clients branch on it. Pick by what the caller can _do_
 about the answer, not by what is nearest to hand. `400` and `500` are not defaults.
 
-| Situation                                                                                           | Status | How                                                              |
-| --------------------------------------------------------------------------------------------------- | ------ | ---------------------------------------------------------------- |
-| Request is malformed — bad JSON, an opaque cursor/token that will not decode, an unparseable header | `400`  | `BusinessRuleException` with `status: 400`                       |
-| Body or query failed `class-validator`                                                              | `422`  | Nothing — `ProblemDetailsValidationPipe` owns it                 |
-| Request understood, but a domain rule says no, or the state it references violates policy           | `422`  | `BusinessRuleException` (its default)                            |
-| No session, or the session expired — re-authenticating would fix it                                 | `401`  | `UnauthorizedException`                                          |
-| Session is valid, but this principal may not do this — wrong role, deactivated/banned account       | `403`  | `ForbiddenException`                                             |
-| Resource does not exist — or exists, but the caller must not learn that it does                     | `404`  | `BusinessRuleException` with `status: 404` / `NotFoundException` |
-| State conflict a retry could resolve — duplicate key, concurrent update, work still in flight       | `409`  | `BusinessRuleException` with `status: 409` / `ConflictException` |
-| The **request body itself** is over the size limit                                                  | `413`  | Fastify body limit — never hand-rolled                           |
-| Rate limit hit                                                                                      | `429`  | `@fastify/rate-limit` / `ThrottlerGuard`                         |
-| The server broke — DB down, S3 unreachable, a bug                                                   | `500`  | `InternalServerErrorException`, with no specific `code`          |
+| Situation                                                                                           | Status | How                                                            |
+| --------------------------------------------------------------------------------------------------- | ------ | -------------------------------------------------------------- |
+| Request is malformed — bad JSON, an opaque cursor/token that will not decode, an unparseable header | `400`  | `DomainException({ kind: 'malformed' })`                       |
+| Body or query failed `class-validator`                                                              | `422`  | Nothing — `ProblemDetailsValidationPipe` owns it               |
+| Request understood, but a domain rule says no, or the state it references violates policy           | `422`  | `DomainException({ kind: 'validation' })` (its default)        |
+| No session, or the session expired — re-authenticating would fix it                                 | `401`  | `UnauthorizedException`                                        |
+| Session is valid, but this principal may not do this — wrong role, deactivated/banned account       | `403`  | `ForbiddenException`                                           |
+| Resource does not exist — or exists, but the caller must not learn that it does                     | `404`  | `DomainException({ kind: 'not_found' })` / `NotFoundException` |
+| State conflict a retry could resolve — duplicate key, concurrent update, work still in flight       | `409`  | `DomainException({ kind: 'conflict', permanent: false })`      |
+| The **request body itself** is over the size limit                                                  | `413`  | Fastify body limit — never hand-rolled                         |
+| Rate limit hit                                                                                      | `429`  | `@fastify/rate-limit` / `ThrottlerGuard`                       |
+| The server broke — DB down, S3 unreachable, a bug                                                   | `500`  | `InternalServerErrorException`, with no specific `code`        |
 
 The three distinctions that actually get chosen wrong:
 
@@ -73,18 +73,21 @@ that status (`unauthorized`, `conflict`, …). Codes are `snake_case`; see `ERRO
 
 ### Domain & application violations
 
-Throw `BusinessRuleException` from `@nestjs-fastify-nx/core` for domain violations. It takes an
-options object, and its `errors[]` shape matches validation failures so the frontend renders both
-through one path.
+Throw `DomainException` from `@nestjs-fastify-nx/core` for domain violations. It is a plain `Error`
+carrying **no HTTP status** — the same handlers run under REST, GraphQL and the scheduler, so the
+transport derives the status from `kind`. Its `errors[]` shape matches validation failures so the
+frontend renders both through one path. Full guide: [error-handling.md](./error-handling.md).
 
 ```typescript
 if (await this.users.exists(email)) {
-  throw new BusinessRuleException({
-    // Omit `status` for the 422 default. Pass one for any other status — and pass `title` with it,
-    // because the class titles itself "Business rule violation", which only reads right on a 422.
-    status: HttpStatus.CONFLICT,
+  throw new DomainException({
+    // `kind` is the only decision this layer makes; the filter maps conflict → 409. Pass `title`
+    // whenever the kind is not 'validation', because the default title only reads right there.
+    kind: 'conflict',
+    // A duplicate can disappear before the next attempt, so this one is worth retrying.
+    permanent: false,
     title: I18N_KEYS.common.conflict,
-    code: 'user_already_exists',
+    code: ERROR_CODES.USER_ALREADY_EXISTS,
     messageKey: I18N_KEYS.errors.users.already_exists,
     violations: [
       {

@@ -13,21 +13,18 @@ import type { FastifyError, FastifyReply, FastifyRequest } from 'fastify';
 import { I18nService } from 'nestjs-i18n';
 import { ClsService } from 'nestjs-cls';
 import {
-  BusinessRuleException,
+  DomainException,
   REQUEST_CONTEXT_KEYS,
+  type DomainErrorKind,
   type RequestContextStore,
 } from '@nestjs-fastify-nx/core';
-import { ERROR_CODES, type ValidationErrorItemDto } from '@nestjs-fastify-nx/contracts';
-import {
-  I18N_KEYS,
-  resolveRequestLocale,
-  translateOrFallback,
-} from '@nestjs-fastify-nx/infra-i18n';
+import { ERROR_CODES, I18N_KEYS, type ValidationErrorItemDto } from '@nestjs-fastify-nx/contracts';
+import { resolveRequestLocale, translateOrFallback } from '@nestjs-fastify-nx/infra-i18n';
 import { sanitizeUrlForLogging } from '@nestjs-fastify-nx/shared';
 import {
   buildProblemDetails,
-  HTTP_STATUS_CODES,
-  HTTP_STATUS_TITLES,
+  statusCode,
+  statusTitle,
   PROBLEM_CONTENT_TYPE,
   type HealthChecks,
 } from './problem-details.helper';
@@ -64,7 +61,7 @@ const HTTP_STATUS_TO_I18N_KEY: Record<number, string> = {
 // Safety-net for Prisma errors that reach the global filter unhandled — maps the well-known codes to a
 // correct client status instead of a blanket 500. The raw Prisma message (which can name tables,
 // columns, and constraints) is NEVER sent to the client: only the mapped status/code/title go out, and
-// the full error is logged server-side. Explicit domain handling (BusinessRuleException, per-handler
+// the full error is logged server-side. Explicit domain handling (DomainException, per-handler
 // try/catch) still takes precedence — this only fires when nothing else classified the error.
 const PRISMA_ERROR_MAP: Record<string, { status: number; code: string }> = {
   P2002: { status: HttpStatus.CONFLICT, code: ERROR_CODES.CONFLICT }, // unique constraint violation
@@ -114,10 +111,10 @@ export class GlobalExceptionFilter implements ExceptionFilter {
   async catch(exception: unknown, host: ArgumentsHost): Promise<void> {
     // Mercurius owns GraphQL error formatting — re-throw into the GraphQL envelope.
     if (host.getType<GqlContextType>() === 'graphql') {
-      const status =
-        exception instanceof HttpException
-          ? exception.getStatus()
-          : HttpStatus.INTERNAL_SERVER_ERROR;
+      // Classified the same way as the REST path. Testing `instanceof HttpException` here instead
+      // would treat every DomainException as a 500 — it deliberately is not one — and page on
+      // ordinary 4xx domain failures such as a malformed cursor.
+      const { status } = normalizeException(exception);
       if (status >= 500) {
         this.logger.error({ err: exception }, 'Unhandled GraphQL exception');
         const requestId = this.cls.get(REQUEST_CONTEXT_KEYS.requestId);
@@ -228,27 +225,27 @@ interface HttpExceptionResponseObject {
   errors?: ValidationErrorItemDto[];
 }
 
+// A domain failure carries no HTTP status — the transport assigns one. 400 is for input that could
+// not be parsed, 422 for input that parsed but broke a rule (RFC 9110 §15.5.21).
+const DOMAIN_KIND_STATUS: Record<DomainErrorKind, HttpStatus> = {
+  malformed: HttpStatus.BAD_REQUEST,
+  validation: HttpStatus.UNPROCESSABLE_ENTITY,
+  conflict: HttpStatus.CONFLICT,
+  not_found: HttpStatus.NOT_FOUND,
+  forbidden: HttpStatus.FORBIDDEN,
+};
+
 export function normalizeException(exception: unknown): NormalizedError {
-  if (exception instanceof BusinessRuleException) {
-    if (exception.getStatus() >= HttpStatus.INTERNAL_SERVER_ERROR) {
-      const status = exception.getStatus();
-      return {
-        status,
-        title: HTTP_STATUS_TITLES[status] ?? 'Internal Server Error',
-        detail: HTTP_STATUS_TITLES[status] ?? 'Internal Server Error',
-        code: HTTP_STATUS_CODES[status] ?? ERROR_CODES.INTERNAL_SERVER_ERROR,
-      };
-    }
-    const body = exception.getResponse() as HttpExceptionResponseObject;
+  if (exception instanceof DomainException) {
     return {
-      status: exception.getStatus(),
-      // No fallback: the constructor always sets a title, so one here would be unreachable and
-      // would imply a default that does not exist.
-      title: body.title as string,
-      detail: body.messageKey ?? (typeof body.message === 'string' ? body.message : undefined),
+      status: DOMAIN_KIND_STATUS[exception.kind],
+      title: exception.title,
+      // messageKey only: the Error message is the untranslated English copy of the first violation,
+      // and using it as a fallback would skip translateNormalized's status-based localized default.
+      detail: exception.messageKey,
       code: exception.code,
-      args: body.args,
-      errors: body.errors,
+      args: exception.args,
+      errors: exception.violations,
     };
   }
 
@@ -259,7 +256,7 @@ export function normalizeException(exception: unknown): NormalizedError {
       detail?: string;
       code?: string;
     };
-    const title = problem.title ?? HTTP_STATUS_TITLES[status] ?? 'Error';
+    const title = problem.title ?? statusTitle(status);
     return {
       status,
       title,
@@ -280,7 +277,7 @@ export function normalizeException(exception: unknown): NormalizedError {
     if (mapped) {
       return {
         status: mapped.status,
-        title: HTTP_STATUS_TITLES[mapped.status] ?? 'Error',
+        title: statusTitle(mapped.status),
         code: mapped.code,
       };
     }
@@ -291,7 +288,7 @@ export function normalizeException(exception: unknown): NormalizedError {
   if (isPrismaError(exception)) {
     return {
       status: HttpStatus.INTERNAL_SERVER_ERROR,
-      title: HTTP_STATUS_TITLES[HttpStatus.INTERNAL_SERVER_ERROR],
+      title: statusTitle(HttpStatus.INTERNAL_SERVER_ERROR),
       detail: I18N_KEYS.common.internal_server_error,
       code: ERROR_CODES.INTERNAL_SERVER_ERROR,
     };
@@ -308,8 +305,8 @@ export function normalizeException(exception: unknown): NormalizedError {
 
   const status = exception.getStatus();
   const res = exception.getResponse();
-  const defaultTitle = HTTP_STATUS_TITLES[status] ?? 'Error';
-  const defaultCode = HTTP_STATUS_CODES[status] ?? ERROR_CODES.INTERNAL_SERVER_ERROR;
+  const defaultTitle = statusTitle(status);
+  const defaultCode = statusCode(status);
   // Any 5xx HttpException is an unclassified server fault, not a deliberate client-facing 4xx —
   // its `message`/`res` may carry internals (stack fragments, driver errors, file paths). Mirrors
   // the redaction already applied to non-HttpException and Fastify-level errors below.

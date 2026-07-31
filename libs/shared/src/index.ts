@@ -8,6 +8,13 @@ export {
 } from './lib/pagination.types';
 export { QUEUE_NAMES, type QueueName } from './lib/queue-names';
 export {
+  DOMAIN_EVENTS,
+  DOMAIN_EVENT_STREAMS,
+  userEventPayloadSchema,
+  type DomainEventType,
+  type UserEventPayload,
+} from './lib/domain-events';
+export {
   SENSITIVE_REDACT_PATHS,
   SENSITIVE_REDACT_CENSOR,
   safeErrorSummary,

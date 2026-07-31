@@ -133,7 +133,7 @@ export class HealthController {
       'Returns 200 with the per-indicator breakdown when everything is up; 503 problem+json (with a `checks` map of the failing dependencies) when at least one critical dependency is down.',
   })
   @ApiOkResponse({ type: HealthCheckResultDto, description: 'All systems healthy.' })
-  @ApiCommonErrors({ auth: false, forbidden: false, validation: false })
+  @ApiCommonErrors({ auth: false, forbidden: false, validation: false, serviceUnavailable: false })
   check() {
     return this.health.check([
       () => this.prismaIndicator.isHealthy('database'),
@@ -160,7 +160,7 @@ export class HealthController {
     type: HealthCheckResultDto,
     description: 'Core dependencies reachable — pod can serve traffic.',
   })
-  @ApiCommonErrors({ auth: false, forbidden: false, validation: false })
+  @ApiCommonErrors({ auth: false, forbidden: false, validation: false, serviceUnavailable: false })
   readiness() {
     return this.health.check([
       () => this.prismaIndicator.isHealthy('database'),
@@ -185,7 +185,7 @@ export class HealthController {
       'Restricted to IPs in METRICS_ALLOW_CIDRS (same allowlist as /metrics).',
   })
   @ApiOkResponse({ type: HealthCheckResultDto, description: 'All deep dependencies healthy.' })
-  @ApiCommonErrors({ auth: false, forbidden: true, validation: false })
+  @ApiCommonErrors({ auth: false, forbidden: true, validation: false, serviceUnavailable: false })
   dependencies() {
     return this.health.check([
       () => this.bullmq.isHealthy('bullmq'),
@@ -202,6 +202,8 @@ export class HealthController {
     description: 'Use as the Kubernetes liveness probe. Does not check dependencies.',
   })
   @ApiOkResponse({ type: LivenessResponseDto, description: 'Process is alive.' })
+  // Keeps the generic 503: this route documents no `checks` breakdown of its own, but
+  // @fastify/under-pressure can still shed it before the handler runs.
   @ApiCommonErrors({ auth: false, forbidden: false, validation: false })
   liveness(): LivenessResponseDto {
     return { status: 'ok', timestamp: new Date().toISOString() };

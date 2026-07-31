@@ -96,12 +96,18 @@ export class DlqMonitorTask implements OnApplicationShutdown {
           const jobId = String(job.id);
           const alreadyRouted = await dlq.getJob(`dlq__${jobId}`).catch(() => undefined);
           if (alreadyRouted) continue;
-          await routeFailedJobToDlq(
-            source,
-            dlq,
-            { jobId, failedReason: job.failedReason ?? 'reconciled: missed failed event' },
-            this.logger,
-          );
+          try {
+            await routeFailedJobToDlq(
+              source,
+              dlq,
+              { jobId, failedReason: job.failedReason ?? 'reconciled: missed failed event' },
+              this.logger,
+            );
+          } catch (err) {
+            // Guarded per job, like the scan above: one unroutable job must not abandon the rest of
+            // this queue — nor every queue still queued behind it — until the next tick.
+            this.logger.error({ err, queue: source.name, jobId }, 'DLQ reconcile route failed');
+          }
         }
       }
     } finally {

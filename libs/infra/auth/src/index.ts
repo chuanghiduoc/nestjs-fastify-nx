@@ -8,3 +8,4 @@ export { RolesGuard } from './lib/roles.guard';
 export { Roles, ROLES_KEY } from './lib/roles.decorator';
 export { Public, IS_PUBLIC_KEY } from './lib/public.decorator';
 export { CurrentUser } from './lib/current-user.decorator';
+export { SESSION_COOKIE_BASE, sessionCookieName, usesSecureCookies } from './lib/session-cookie';

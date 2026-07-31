@@ -9,13 +9,16 @@ import {
   ValidationErrorItemDto,
   ValidationProblemDetailsDto,
 } from '@nestjs-fastify-nx/contracts';
-import { BETTER_AUTH_INSTANCE, type BetterAuthInstance } from '@nestjs-fastify-nx/infra-auth';
+import {
+  BETTER_AUTH_INSTANCE,
+  sessionCookieName,
+  type BetterAuthInstance,
+} from '@nestjs-fastify-nx/infra-auth';
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import ScalarApiReference from '@scalar/fastify-api-reference';
 
 const API_TITLE = 'NestJS Fastify Nx Boilerplate';
 const PROBLEM_JSON = 'application/problem+json';
-const SESSION_COOKIE_BASE = 'better-auth.session_token';
 const DOCS_ROUTE_PREFIX = '/docs';
 const REQUEST_ID_HEADER = 'X-Request-Id';
 const AUTH_PATH_PREFIX = '/api/auth';
@@ -33,14 +36,11 @@ const PUBLIC_AUTH_PATHS = new Set([
 
 const logger = new Logger('Swagger');
 
-// Better Auth adds `__Secure-` to the cookie name when it issues secure cookies (production, or any
-// https baseURL). setupSwagger runs off-production, so resolve the real name for the https-staging
-// case rather than hardcoding — the Authorize field must match the cookie actually sent.
+// Resolved through the auth library rather than recomputed: the Authorize field must name the
+// cookie Better Auth actually issues, and a second copy of that condition drifts silently — the
+// docs would prompt for a cookie that does not exist while real auth kept working.
 function resolveSessionCookieName(): string {
-  const secure =
-    process.env['NODE_ENV'] === 'production' ||
-    (process.env['BETTER_AUTH_URL'] ?? '').startsWith('https://');
-  return secure ? `__Secure-${SESSION_COOKIE_BASE}` : SESSION_COOKIE_BASE;
+  return sessionCookieName(process.env['BETTER_AUTH_URL']);
 }
 
 function buildDescription(sessionCookie: string): string {

@@ -1,5 +1,5 @@
 import type { DomainEvent } from '@nestjs-fastify-nx/core';
-import { generateId } from '@nestjs-fastify-nx/shared';
+import { DOMAIN_EVENTS, generateId } from '@nestjs-fastify-nx/shared';
 
 export interface UserLoggedOutPayload extends Record<string, unknown> {
   tokenId: string;
@@ -10,7 +10,7 @@ export interface UserLoggedOutPayload extends Record<string, unknown> {
 
 export class UserLoggedOut implements DomainEvent {
   readonly eventId = generateId();
-  readonly eventType = 'users.logged_out';
+  readonly eventType = DOMAIN_EVENTS.USERS_LOGGED_OUT;
   readonly occurredAt = new Date();
 
   constructor(

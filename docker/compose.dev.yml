@@ -30,6 +30,12 @@ services:
       dockerfile: Dockerfile
       target: migration-dev
     env_file: ../.env
+    # The base file can only carry the short form (docker stack deploy rejects `condition:`), so the
+    # actual wait is layered here. Without it migration races a cold Postgres and burns its retry
+    # budget before the first healthcheck passes.
+    depends_on:
+      postgres:
+        condition: service_healthy
     environment:
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/nestjs_db
 
@@ -102,6 +108,8 @@ services:
     environment:
       NODE_ENV: development
       LOG_PRETTY: 'false'
+      # .env carries the api's name, which would otherwise label this process as the api.
+      OTEL_SERVICE_NAME: nestjs-fastify-worker
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/nestjs_db
       REDIS_CACHE_HOST: redis-cache
       # In-network port. Unpinned it falls through to env_file, where the value is the HOST
@@ -147,6 +155,7 @@ services:
     environment:
       NODE_ENV: development
       LOG_PRETTY: 'false'
+      OTEL_SERVICE_NAME: nestjs-fastify-scheduler
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/nestjs_db
       REDIS_CACHE_HOST: redis-cache
       # In-network port. Unpinned it falls through to env_file, where the value is the HOST
