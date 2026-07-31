@@ -11,6 +11,7 @@ export const ERROR_CODES = {
   INTERNAL_SERVER_ERROR: 'internal_server_error',
   SERVICE_UNAVAILABLE: 'service_unavailable',
   REQUEST_TIMEOUT: 'request_timeout',
+  NOT_IMPLEMENTED: 'not_implemented',
 
   ROUTE_NOT_FOUND: 'route_not_found',
   VALIDATION_FAILED: 'validation_failed',
@@ -21,6 +22,13 @@ export const ERROR_CODES = {
   IDEMPOTENCY_KEY_INVALID: 'idempotency_key_invalid',
   IDEMPOTENCY_KEY_CONFLICT: 'idempotency_key_conflict',
   IDEMPOTENCY_KEY_MISMATCH: 'idempotency_key_mismatch',
+
+  // Domain rule violations. A DomainException must carry one of these, never an ad-hoc string —
+  // the client keys its i18n off this value.
+  USER_NOT_FOUND: 'user_not_found',
+  USER_ALREADY_EXISTS: 'user_already_exists',
+  INVALID_AUDIT_LOG_ID: 'invalid_audit_log_id',
+  INVALID_CURSOR: 'invalid_cursor',
 } as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES];

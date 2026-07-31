@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { HttpStatus } from '@nestjs/common';
-import { BusinessRuleException } from '@nestjs-fastify-nx/core';
+import { DomainException } from '@nestjs-fastify-nx/core';
 import type { QueryBus } from '@nestjs/cqrs';
 import { UserResolver } from './user.resolver';
 import { GetUserProfileQuery, ListUsersCursorQuery } from '@nestjs-fastify-nx/modules-users';
@@ -68,10 +67,10 @@ describe('UserResolver', () => {
       expect(execute).toHaveBeenCalledWith(expect.objectContaining({ userId: 'u1' }));
     });
 
-    it('returns null when the account was deleted (404 BusinessRuleException)', async () => {
+    it('returns null when the account was deleted (not_found DomainException)', async () => {
       execute.mockRejectedValueOnce(
-        new BusinessRuleException({
-          status: HttpStatus.NOT_FOUND,
+        new DomainException({
+          kind: 'not_found',
           code: 'user_not_found',
           violations: [],
         }),

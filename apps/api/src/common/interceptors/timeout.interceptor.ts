@@ -13,7 +13,7 @@ import { Observable, throwError, TimeoutError } from 'rxjs';
 import { catchError, timeout } from 'rxjs/operators';
 import type { FastifyRequest } from 'fastify';
 import { ERROR_CODES } from '@nestjs-fastify-nx/contracts';
-import { I18N_KEYS } from '@nestjs-fastify-nx/infra-i18n';
+import { I18N_KEYS } from '@nestjs-fastify-nx/contracts';
 import type { EnvConfig } from '../../config/env.validation';
 import type { IdempotencyContext } from '../idempotency/register-idempotency';
 

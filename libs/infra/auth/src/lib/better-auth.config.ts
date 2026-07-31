@@ -5,11 +5,8 @@ import { prismaAdapter } from 'better-auth/adapters/prisma';
 import { bearer, openAPI } from 'better-auth/plugins';
 import type { PrismaClient } from '@nestjs-fastify-nx/infra-database';
 import type { I18nService } from 'nestjs-i18n';
-import {
-  I18N_KEYS,
-  resolveRequestLocale,
-  translateOrFallback,
-} from '@nestjs-fastify-nx/infra-i18n';
+import { resolveRequestLocale, translateOrFallback } from '@nestjs-fastify-nx/infra-i18n';
+import { I18N_KEYS } from '@nestjs-fastify-nx/contracts';
 export interface AuthMailDispatcher {
   send(opts: { to: string; subject: string; body: string; templateId?: string }): Promise<void>;
 }

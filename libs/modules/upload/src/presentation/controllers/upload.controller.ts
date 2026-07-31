@@ -28,7 +28,7 @@ import {
 import { ClsService } from 'nestjs-cls';
 import { REQUEST_CONTEXT_KEYS, type RequestContextStore } from '@nestjs-fastify-nx/core';
 import { ApiCommonErrors } from '@nestjs-fastify-nx/contracts';
-import { I18N_KEYS } from '@nestjs-fastify-nx/infra-i18n';
+import { I18N_KEYS } from '@nestjs-fastify-nx/contracts';
 import { PrismaService } from '@nestjs-fastify-nx/infra-database';
 import { STORAGE_PORT } from '@nestjs-fastify-nx/infra-storage';
 import type { PresignedUpload, StoragePort, StoredFile } from '@nestjs-fastify-nx/infra-storage';

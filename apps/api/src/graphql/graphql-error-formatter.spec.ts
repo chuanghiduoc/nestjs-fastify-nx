@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { BusinessRuleException } from '@nestjs-fastify-nx/core';
-import { ForbiddenException, HttpException, HttpStatus } from '@nestjs/common';
+import { DomainException } from '@nestjs-fastify-nx/core';
+import { ForbiddenException, HttpException } from '@nestjs/common';
 import { GraphQLError } from 'graphql';
 import type { MercuriusContext } from 'mercurius';
 import { createGraphqlErrorFormatter } from './graphql-error-formatter';
@@ -43,8 +43,8 @@ describe('createGraphqlErrorFormatter', () => {
       originalError: new ForbiddenException('Insufficient permissions'),
     });
     const domain = new GraphQLError('User not found', {
-      originalError: new BusinessRuleException({
-        status: HttpStatus.NOT_FOUND,
+      originalError: new DomainException({
+        kind: 'not_found',
         code: 'user_not_found',
         violations: [{ path: 'userId', code: 'not_found', message: 'User not found' }],
       }),

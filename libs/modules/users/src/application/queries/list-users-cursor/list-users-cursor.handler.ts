@@ -1,7 +1,7 @@
-import { HttpStatus, Inject } from '@nestjs/common';
+import { Inject } from '@nestjs/common';
 import { QueryHandler, type IQueryHandler } from '@nestjs/cqrs';
-import { BusinessRuleException } from '@nestjs-fastify-nx/core';
-import { I18N_KEYS } from '@nestjs-fastify-nx/infra-i18n';
+import { DomainException } from '@nestjs-fastify-nx/core';
+import { I18N_KEYS, ERROR_CODES } from '@nestjs-fastify-nx/contracts';
 import { decodeCursor, encodeCursor, type DecodedCursor } from '@nestjs-fastify-nx/shared';
 import { USER_REPOSITORY_PORT } from '../../../domain/ports/user-repository.port';
 import type { UserRepositoryPort } from '../../../domain/ports/user-repository.port';
@@ -48,17 +48,17 @@ export class ListUsersCursorHandler implements IQueryHandler<
 
     const decoded = decodeCursor(raw);
     if (!decoded) {
-      throw new BusinessRuleException({
-        status: HttpStatus.BAD_REQUEST,
-        // BusinessRuleException titles itself "Business rule violation" by default, which only reads
-        // correctly for its default 422. Non-422 callers must pass the status-appropriate key.
+      throw new DomainException({
+        kind: 'malformed',
+        // The default title only reads correctly for a rule violation; a malformed cursor needs the
+        // status-appropriate key.
         title: I18N_KEYS.common.bad_request,
-        code: 'invalid_cursor',
+        code: ERROR_CODES.INVALID_CURSOR,
         messageKey: I18N_KEYS.errors.pagination.invalid_cursor,
         violations: [
           {
             path: 'startingAfter',
-            code: 'invalid_cursor',
+            code: ERROR_CODES.INVALID_CURSOR,
             message: 'startingAfter is not a valid cursor',
             messageKey: I18N_KEYS.errors.pagination.invalid_cursor,
           },

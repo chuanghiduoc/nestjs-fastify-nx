@@ -1,10 +1,11 @@
-import { BusinessRuleException } from '@nestjs-fastify-nx/core';
-import { I18N_KEYS } from '@nestjs-fastify-nx/infra-i18n';
+import { DomainException } from '@nestjs-fastify-nx/core';
+import { I18N_KEYS, ERROR_CODES } from '@nestjs-fastify-nx/contracts';
 import { generateId } from '@nestjs-fastify-nx/shared';
 
-// Mirrors what Postgres @db.Uuid accepts (8-4-4-4-12 hex, any version/variant).
-// Goal: turn caller bugs (empty string, slug) into a legible domain error instead of an opaque libpq parse error.
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+// Deliberately NOT `uuid`'s `validate()`: that enforces an RFC version/variant, while this must
+// mirror what the `audit_logs.id` Postgres UUID column accepts — any 8-4-4-4-12 hex. The goal is to
+// turn caller bugs into a legible domain error, not to reject ids the database would have stored.
+const POSTGRES_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export interface AuditLogProps {
   id: string;
@@ -35,8 +36,9 @@ export class AuditLog {
   static create(input: CreateAuditLogInput): AuditLog {
     if (input.id !== undefined) {
       if (input.id.trim() === '') {
-        throw new BusinessRuleException({
-          code: 'invalid_audit_log_id',
+        throw new DomainException({
+          kind: 'validation',
+          code: ERROR_CODES.INVALID_AUDIT_LOG_ID,
           title: I18N_KEYS.errors.audit_log.title_invalid_id,
           violations: [
             {
@@ -48,9 +50,10 @@ export class AuditLog {
           ],
         });
       }
-      if (!UUID_PATTERN.test(input.id)) {
-        throw new BusinessRuleException({
-          code: 'invalid_audit_log_id',
+      if (!POSTGRES_UUID.test(input.id)) {
+        throw new DomainException({
+          kind: 'validation',
+          code: ERROR_CODES.INVALID_AUDIT_LOG_ID,
           title: I18N_KEYS.errors.audit_log.title_invalid_id,
           violations: [
             {

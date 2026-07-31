@@ -1,7 +1,6 @@
 import { Resolver, Query, Context, Args } from '@nestjs/graphql';
-import { HttpStatus } from '@nestjs/common';
 import { QueryBus } from '@nestjs/cqrs';
-import { BusinessRuleException } from '@nestjs-fastify-nx/core';
+import { isDomainException } from '@nestjs-fastify-nx/core';
 import { Roles, type AuthenticatedSession } from '@nestjs-fastify-nx/infra-auth';
 import { ListUsersCursorQuery, GetUserProfileQuery } from '@nestjs-fastify-nx/modules-users';
 import { UserType } from '../types/user.type';
@@ -25,9 +24,9 @@ export class UserResolver {
     try {
       return await this.queryBus.execute(new GetUserProfileQuery(userId));
     } catch (err) {
-      // Session valid but the account was deleted — the handler raises a 404 BusinessRuleException;
-      // `me` is nullable, so surface null instead of an error.
-      if (err instanceof BusinessRuleException && err.getStatus() === HttpStatus.NOT_FOUND) {
+      // Session valid but the account was deleted. `me` is nullable, so surface null instead of an
+      // error — matched on the domain kind, not an HTTP status this transport does not own.
+      if (isDomainException(err) && err.kind === 'not_found') {
         return null;
       }
       throw err;

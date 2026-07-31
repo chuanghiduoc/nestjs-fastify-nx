@@ -13,7 +13,7 @@ import { redisFixedWindowIncr } from '../rate-limit/redis-fixed-window';
 import { ensureRequestIds } from '../logging/request-id';
 import {
   buildProblemDetails,
-  HTTP_STATUS_TITLES,
+  statusTitle,
   PROBLEM_CONTENT_TYPE,
   type ProblemDetailsBody,
 } from '../filters/problem-details.helper';
@@ -73,7 +73,7 @@ export function createProblemDetailsErrorHandler(): (error: unknown) => {
     const title =
       typeof candidate.title === 'string' && candidate.title
         ? candidate.title
-        : (HTTP_STATUS_TITLES[status] ?? 'Error');
+        : statusTitle(status);
     const rawDetail =
       typeof candidate.detail === 'string'
         ? candidate.detail

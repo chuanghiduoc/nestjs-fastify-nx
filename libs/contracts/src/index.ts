@@ -14,6 +14,7 @@ export {
   ValidationErrorItemDto,
 } from './lib/errors/problem-details.dto';
 export { ERROR_CODES, errorTypeUrl, type ErrorCode } from './lib/errors/error-codes';
+export { I18N_KEYS, type I18nKey } from './lib/i18n-keys';
 export {
   ApiCommonErrors,
   buildProblemExample,

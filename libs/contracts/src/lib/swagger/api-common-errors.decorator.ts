@@ -96,6 +96,11 @@ export interface CommonErrorsOptions {
   unsupportedMediaType?: boolean;
   /** Endpoint can return 413 (payload too large), e.g. upload routes. Default: false. */
   payloadTooLarge?: boolean;
+  /**
+   * Include the generic 503. Set false only when the endpoint documents its own richer 503 (the
+   * health probes attach a `checks` breakdown); the generic entry would overwrite it. Default: true.
+   */
+  serviceUnavailable?: boolean;
 }
 
 // Documents Problem Details error responses (always 400, 429, 500 plus selected optional codes).
@@ -109,6 +114,7 @@ export const ApiCommonErrors = (options: CommonErrorsOptions = {}) => {
   const conflict = options.conflict ?? false;
   const unsupportedMediaType = options.unsupportedMediaType ?? false;
   const payloadTooLarge = options.payloadTooLarge ?? false;
+  const serviceUnavailable = options.serviceUnavailable ?? true;
 
   const decorators: MethodDecorator[] = [
     ApiExtraModels(ProblemDetailsDto, ValidationProblemDetailsDto),
@@ -231,7 +237,34 @@ export const ApiCommonErrors = (options: CommonErrorsOptions = {}) => {
           'Unexpected server error. Quote the `requestId` field when contacting support.',
       }),
     ),
+    // Both are raised by process-wide mechanisms rather than by any handler, so every route can
+    // answer with them: @fastify/under-pressure sheds load with 503, and the global
+    // TimeoutInterceptor aborts a handler past HTTP_REQUEST_TIMEOUT_MS with 504. Omitting them
+    // documents a contract narrower than the one the server actually honours.
+    ApiResponse(
+      problemResponse({
+        status: HttpStatus.GATEWAY_TIMEOUT,
+        code: 'request_timeout',
+        title: 'Gateway Timeout',
+        detail: 'The request exceeded the server time budget and was aborted.',
+        description: 'The request exceeded the server time budget and was aborted.',
+      }),
+    ),
   );
+
+  if (serviceUnavailable) {
+    decorators.push(
+      ApiResponse(
+        problemResponse({
+          status: HttpStatus.SERVICE_UNAVAILABLE,
+          code: 'service_unavailable',
+          title: 'Service Unavailable',
+          detail: 'The service is shedding load or a required dependency is unavailable.',
+          description: 'The service is shedding load or a required dependency is unavailable.',
+        }),
+      ),
+    );
+  }
 
   return applyDecorators(...decorators);
 };
