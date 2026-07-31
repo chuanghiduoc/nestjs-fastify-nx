@@ -194,7 +194,12 @@ export class StoredFileCleanupTask {
         },
         data: {
           status: STORED_FILE_STATUS.REJECTED,
-          failureReason: 'Lifecycle cleanup',
+          // Only stamp a reason where there is none: a row rejected by the malware scanner already
+          // carries why, and overwriting it destroys the only record of that if the delete below
+          // fails and leaves the row behind.
+          ...(candidate.status === STORED_FILE_STATUS.REJECTED
+            ? {}
+            : { failureReason: 'Lifecycle cleanup' }),
         },
       });
       if (claimed.count === 0) continue;
