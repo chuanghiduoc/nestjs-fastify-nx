@@ -102,6 +102,8 @@ services:
     environment:
       NODE_ENV: development
       LOG_PRETTY: 'false'
+      # .env carries the api's name, which would otherwise label this process as the api.
+      OTEL_SERVICE_NAME: nestjs-fastify-worker
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/nestjs_db
       REDIS_CACHE_HOST: redis-cache
       # In-network port. Unpinned it falls through to env_file, where the value is the HOST
@@ -147,6 +149,7 @@ services:
     environment:
       NODE_ENV: development
       LOG_PRETTY: 'false'
+      OTEL_SERVICE_NAME: nestjs-fastify-scheduler
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/nestjs_db
       REDIS_CACHE_HOST: redis-cache
       # In-network port. Unpinned it falls through to env_file, where the value is the HOST

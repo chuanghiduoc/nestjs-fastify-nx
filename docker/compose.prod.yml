@@ -238,6 +238,8 @@ services:
         required: true
     environment:
       NODE_ENV: production
+      # Pinned: .env.worker seeded from .env.example would carry the api's name.
+      OTEL_SERVICE_NAME: nestjs-fastify-worker
       REDIS_CACHE_HOST: redis-cache
       REDIS_QUEUE_HOST: redis-queue
       REDIS_QUEUE_PORT: '6380'
@@ -288,6 +290,7 @@ services:
         required: true
     environment:
       NODE_ENV: production
+      OTEL_SERVICE_NAME: nestjs-fastify-scheduler
       REDIS_CACHE_HOST: redis-cache
       REDIS_QUEUE_HOST: redis-queue
       REDIS_QUEUE_PORT: '6380'
