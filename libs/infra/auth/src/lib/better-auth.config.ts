@@ -6,6 +6,7 @@ import { bearer, openAPI } from 'better-auth/plugins';
 import type { PrismaClient } from '@nestjs-fastify-nx/infra-database';
 import type { I18nService } from 'nestjs-i18n';
 import { resolveRequestLocale, translateOrFallback } from '@nestjs-fastify-nx/infra-i18n';
+import { usesSecureCookies } from './session-cookie';
 import { I18N_KEYS } from '@nestjs-fastify-nx/contracts';
 export interface AuthMailDispatcher {
   send(opts: { to: string; subject: string; body: string; templateId?: string }): Promise<void>;
@@ -185,8 +186,7 @@ export function createBetterAuth(
       // alone, so an HTTPS staging/preview deploy (NODE_ENV != production) still gets Secure +
       // __Secure-. httpOnly + SameSite=Lax are Better Auth defaults; SameSite=None (cross-site) is a
       // deployment-topology call left to the operator.
-      useSecureCookies:
-        process.env['NODE_ENV'] === 'production' || (baseURL?.startsWith('https://') ?? false),
+      useSecureCookies: usesSecureCookies(baseURL),
     },
     // bearer() lets non-browser clients (WebSocket, mobile, service-to-service) authenticate with
     // `Authorization: Bearer <session-token>`. Better Auth verifies the token signature and maps it

@@ -1,7 +1,6 @@
 import { Module } from '@nestjs/common';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { EVENT_PUBLISHER_PORT } from '@nestjs-fastify-nx/core';
-import { PrismaService } from '@nestjs-fastify-nx/infra-database';
 import { EventBusService } from './event-bus.service';
 import { OutboxPublisher } from './outbox-publisher.service';
 
@@ -20,11 +19,15 @@ import { OutboxPublisher } from './outbox-publisher.service';
     {
       // inprocess (default): synchronous EventEmitter2; outbox: persists to Postgres for at-least-once delivery.
       provide: EVENT_PUBLISHER_PORT,
-      useFactory: (inProcess: EventBusService, prisma: PrismaService) => {
+      // Both come from the container. Constructing OutboxPublisher here instead would make the
+      // instance production actually publishes through (outbox is mandatory there) a different one
+      // from the DI-managed singleton — so a lifecycle hook or a new dependency added to it later
+      // would silently never apply.
+      useFactory: (inProcess: EventBusService, outbox: OutboxPublisher) => {
         const driver = (process.env['EVENT_PUBLISHER_DRIVER'] ?? 'inprocess').toLowerCase();
-        return driver === 'outbox' ? new OutboxPublisher(prisma) : inProcess;
+        return driver === 'outbox' ? outbox : inProcess;
       },
-      inject: [EventBusService, PrismaService],
+      inject: [EventBusService, OutboxPublisher],
     },
   ],
   exports: [EventBusService, OutboxPublisher, EVENT_PUBLISHER_PORT],
