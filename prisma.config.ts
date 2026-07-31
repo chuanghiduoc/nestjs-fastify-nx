@@ -14,6 +14,8 @@ export default defineConfig({
   schema: 'prisma/schema.prisma',
   migrations: {
     path: 'prisma/migrations',
+    // Prisma 7 reads the seed command here, not from package.json#prisma.seed.
+    seed: 'node prisma/seed.mjs',
   },
   datasource: {
     // Prefer DATABASE_DIRECT_URL when set to a non-empty value — migrations
