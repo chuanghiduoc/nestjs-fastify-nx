@@ -203,7 +203,7 @@ For deeper setup steps see [docs/getting-started.md](docs/getting-started.md).
 ```bash
 # Workspace
 pnpm nx graph                       # interactive dependency graph
-pnpm nx affected -t lint test build # run only affected projects (CI parity)
+pnpm nx affected -t lint test build typecheck --base=origin/main   # CI parity
 pnpm nx run-many -t test            # all projects
 
 # Single project
