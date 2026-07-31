@@ -85,7 +85,9 @@ RUN --mount=type=cache,id=nx-cache-v23-linux-v2,target=/app/.nx/cache,sharing=lo
     pnpm nx build migration --configuration=production --output-style=static
 
 # ===========================================================================
-# Dev images — single stage off build-dev. Drop privileges, keep devDeps.
+# Dev images — single stage off build-dev. Drop privileges. Dependencies come from the
+# webpack-generated manifest and are installed --prod, exactly like the release images, so a
+# devDependency imported from a runtime path fails the docker-smoke job rather than production.
 # ===========================================================================
 
 FROM base AS api-dev-deps
