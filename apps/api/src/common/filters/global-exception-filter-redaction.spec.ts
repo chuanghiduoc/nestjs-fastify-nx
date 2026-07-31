@@ -144,3 +144,33 @@ describe('normalizeException — Prisma error safety-net', () => {
     expect(result.status).toBe(HttpStatus.INTERNAL_SERVER_ERROR);
   });
 });
+
+describe('normalizeException — domain failures are not server faults', () => {
+  // The GraphQL branch of the filter classifies with normalizeException too. Reading
+  // `instanceof HttpException` there instead would score every DomainException as a 500 and page on
+  // ordinary 4xx domain failures.
+  it('never scores a domain failure as a 5xx', () => {
+    for (const kind of ['malformed', 'validation', 'conflict', 'not_found', 'forbidden'] as const) {
+      const result = normalizeException(new DomainException({ kind, violations: [] }));
+      expect(result.status).toBeLessThan(HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  });
+
+  // Without a messageKey the filter must fall back to its status-based localized default; using the
+  // Error message would ship untranslated English as `detail` for every locale.
+  it('leaves detail unset when the failure carries no message key', () => {
+    const result = normalizeException(
+      new DomainException({
+        violations: [{ path: 'id', code: 'bad', message: 'id must be a valid UUID' }],
+      }),
+    );
+    expect(result.detail).toBeUndefined();
+  });
+
+  it('uses the message key when one is provided', () => {
+    const result = normalizeException(
+      new DomainException({ messageKey: 'errors.users.not_found', violations: [] }),
+    );
+    expect(result.detail).toBe('errors.users.not_found');
+  });
+});

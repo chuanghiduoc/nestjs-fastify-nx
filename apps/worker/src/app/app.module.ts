@@ -7,13 +7,13 @@ import { StorageModule } from '@nestjs-fastify-nx/infra-storage';
 import { DatabaseModule } from '@nestjs-fastify-nx/infra-database';
 import { QUEUE_NAMES } from '@nestjs-fastify-nx/shared';
 import { buildPinoLoggerConfig } from '@nestjs-fastify-nx/infra-observability';
-import { MALWARE_SCANNER_PORT, UploadVerificationModule } from '@nestjs-fastify-nx/modules-upload';
+import { UploadVerificationModule } from '@nestjs-fastify-nx/modules-upload';
 import { EmailNotificationProcessor } from './processors/email-notification.processor';
 import { UploadVerificationProcessor } from './processors/upload-verification.processor';
 import { WorkerHealthService } from './health/worker-health.service';
 import { MailModule } from './mail/mail.module';
 import { validateWorkerConfig } from '../config/env.validation';
-import { MalwareScannerService } from './security/malware-scanner.service';
+import { MalwareScannerModule } from './security/malware-scanner.module';
 
 @Module({
   imports: [
@@ -25,7 +25,7 @@ import { MalwareScannerService } from './security/malware-scanner.service';
     DatabaseModule,
     RedisQueueModule,
     StorageModule,
-    UploadVerificationModule,
+    UploadVerificationModule.forRoot({ imports: [MalwareScannerModule] }),
     // Worker is the single owner of the DLQ router for these queues.
     // forFeature() also registers the source queue with BullMQ, so no
     // separate BullModule.registerQueue is needed.
@@ -33,14 +33,6 @@ import { MalwareScannerService } from './security/malware-scanner.service';
     DeadLetterModule.forFeature(QUEUE_NAMES.UPLOAD_VERIFICATION),
     MailModule,
   ],
-  providers: [
-    EmailNotificationProcessor,
-    UploadVerificationProcessor,
-    MalwareScannerService,
-    // The scanner is process-specific (it talks to a local clamd), so it enters the shared
-    // verification command through a port.
-    { provide: MALWARE_SCANNER_PORT, useExisting: MalwareScannerService },
-    WorkerHealthService,
-  ],
+  providers: [EmailNotificationProcessor, UploadVerificationProcessor, WorkerHealthService],
 })
 export class AppModule {}

@@ -111,10 +111,10 @@ export class GlobalExceptionFilter implements ExceptionFilter {
   async catch(exception: unknown, host: ArgumentsHost): Promise<void> {
     // Mercurius owns GraphQL error formatting — re-throw into the GraphQL envelope.
     if (host.getType<GqlContextType>() === 'graphql') {
-      const status =
-        exception instanceof HttpException
-          ? exception.getStatus()
-          : HttpStatus.INTERNAL_SERVER_ERROR;
+      // Classified the same way as the REST path. Testing `instanceof HttpException` here instead
+      // would treat every DomainException as a 500 — it deliberately is not one — and page on
+      // ordinary 4xx domain failures such as a malformed cursor.
+      const { status } = normalizeException(exception);
       if (status >= 500) {
         this.logger.error({ err: exception }, 'Unhandled GraphQL exception');
         const requestId = this.cls.get(REQUEST_CONTEXT_KEYS.requestId);
@@ -240,7 +240,9 @@ export function normalizeException(exception: unknown): NormalizedError {
     return {
       status: DOMAIN_KIND_STATUS[exception.kind],
       title: exception.title,
-      detail: exception.messageKey ?? exception.message,
+      // messageKey only: the Error message is the untranslated English copy of the first violation,
+      // and using it as a fallback would skip translateNormalized's status-based localized default.
+      detail: exception.messageKey,
       code: exception.code,
       args: exception.args,
       errors: exception.violations,
