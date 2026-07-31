@@ -1,4 +1,4 @@
-import { <%= className %> } from '../entities/<%= fileName %>.entity';
+import type { <%= className %> } from '../entities/<%= fileName %>.entity';
 
 export const <%= constantName %>_REPOSITORY = Symbol('<%= constantName %>_REPOSITORY');
 

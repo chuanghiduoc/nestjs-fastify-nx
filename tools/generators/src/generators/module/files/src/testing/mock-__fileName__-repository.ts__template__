@@ -5,16 +5,18 @@ import type { <%= className %> } from '../domain/entities/<%= fileName %>.entity
 export class Mock<%= className %>Repository implements <%= className %>RepositoryPort {
   private store = new Map<string, <%= className %>>();
 
-  async findById(id: string): Promise<<%= className %> | null> {
-    return this.store.get(id) ?? null;
+  findById(id: string): Promise<<%= className %> | null> {
+    return Promise.resolve(this.store.get(id) ?? null);
   }
 
-  async save(entity: <%= className %>): Promise<void> {
+  save(entity: <%= className %>): Promise<void> {
     this.store.set(entity.id, entity);
+    return Promise.resolve();
   }
 
-  async delete(id: string): Promise<void> {
+  delete(id: string): Promise<void> {
     this.store.delete(id);
+    return Promise.resolve();
   }
 
   clear(): void {
