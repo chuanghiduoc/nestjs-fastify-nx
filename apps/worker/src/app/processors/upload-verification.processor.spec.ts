@@ -1,171 +1,51 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Job } from 'bullmq';
-import type { StoragePort } from '@nestjs-fastify-nx/infra-storage';
-import type { PrismaService } from '@nestjs-fastify-nx/infra-database';
+import { describe, expect, it, vi } from 'vitest';
+import type { CommandBus } from '@nestjs/cqrs';
 import type { ConfigService } from '@nestjs/config';
-import { UploadVerificationProcessor } from './upload-verification.processor';
-import type { UploadVerificationPayload } from './upload-verification.processor';
-import type { WorkerEnvConfig } from '../../config/env.validation';
-import type { MalwareScannerService } from '../security/malware-scanner.service';
+import type { Job } from 'bullmq';
+import { VerifyUploadCommand } from '@nestjs-fastify-nx/modules-upload';
+import {
+  UploadVerificationProcessor,
+  type UploadVerificationPayload,
+} from './upload-verification.processor';
 
-type WorkerConfig = ConfigService<WorkerEnvConfig, true>;
-
-function makeConfig(values: Partial<WorkerEnvConfig> = {}): WorkerConfig {
-  return { get: (key: keyof WorkerEnvConfig) => values[key] } as unknown as WorkerConfig;
+function build() {
+  const commandBus = { execute: vi.fn().mockResolvedValue('verified') };
+  const config = { get: vi.fn().mockReturnValue(5) };
+  const processor = new UploadVerificationProcessor(
+    commandBus as unknown as CommandBus,
+    config as unknown as ConfigService<never, true>,
+  );
+  return { processor, commandBus };
 }
 
-// Magic-byte prefixes from libs/shared/src/lib/file-signature.ts. Padding the
-// rest to 16 bytes mimics what `storage.readRange(key, 16, bucket)` returns
-// from S3 — no signature lookups read beyond byte 16.
-const PNG_HEADER = Buffer.from([
-  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0, 0, 0, 0, 0,
-]);
-const JPEG_HEADER = Buffer.from([0xff, 0xd8, 0xff, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
-const UNKNOWN_BLOB = Buffer.from('plain text not a binary file----'.slice(0, 16));
-
-function makeJob(data: UploadVerificationPayload): Job<UploadVerificationPayload> {
-  return { id: '1', data } as unknown as Job<UploadVerificationPayload>;
-}
-
-function makeStorage(readResult: Buffer | Uint8Array | Error): StoragePort {
-  const readRange =
-    readResult instanceof Error
-      ? vi.fn().mockRejectedValue(readResult)
-      : vi.fn().mockResolvedValue(readResult);
-  return {
-    readRange,
-    read: vi.fn().mockResolvedValue(Buffer.from('complete quarantined object')),
-    delete: vi.fn().mockResolvedValue(undefined),
-    presignPut: vi.fn(),
-    head: vi.fn(),
-    commit: vi.fn(),
-  } as unknown as StoragePort;
-}
-
-function makeScanner(result: 'clean' | 'infected' = 'clean'): MalwareScannerService {
-  return { scan: vi.fn().mockResolvedValue(result) } as unknown as MalwareScannerService;
-}
-
-function makePrisma(): PrismaService {
-  return {
-    db: {
-      storedFile: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
+const job = (data: Partial<UploadVerificationPayload> = {}) =>
+  ({
+    data: {
+      key: 'files/u/f.png',
+      declaredContentType: 'image/png',
+      bucket: 'uploads',
+      correlationId: 'corr-1',
+      ...data,
     },
-  } as unknown as PrismaService;
-}
+  }) as Job<UploadVerificationPayload>;
 
+// The lifecycle itself is covered by VerifyUploadHandler's spec; this only pins the transport
+// contract, so the api and the worker cannot drift apart on the payload shape.
 describe('UploadVerificationProcessor', () => {
-  let processor: UploadVerificationProcessor;
-  let prisma: PrismaService;
+  it('dispatches the shared verification command with the job payload', async () => {
+    const { processor, commandBus } = build();
 
-  beforeEach(() => {
-    vi.restoreAllMocks();
-    prisma = makePrisma();
-  });
+    await processor.process(job());
 
-  it('does not delete when magic bytes match declared MIME', async () => {
-    const storage = makeStorage(PNG_HEADER);
-    processor = new UploadVerificationProcessor(storage, prisma, makeConfig(), makeScanner());
-    await processor.process(
-      makeJob({ key: 'uploads/img.png', declaredContentType: 'image/png', bucket: 'b' }),
-    );
-    expect(storage.delete).not.toHaveBeenCalled();
-    expect(storage.readRange).toHaveBeenCalledWith('uploads/img.png', 16, 'b');
-    expect(prisma.db.storedFile.updateMany).toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ status: 'READY' }) }),
+    expect(commandBus.execute).toHaveBeenCalledWith(
+      new VerifyUploadCommand('files/u/f.png', 'image/png', 'uploads', 'corr-1'),
     );
   });
 
-  it('deletes a signature-valid object when the malware scanner rejects it', async () => {
-    const storage = makeStorage(PNG_HEADER);
-    processor = new UploadVerificationProcessor(
-      storage,
-      prisma,
-      makeConfig(),
-      makeScanner('infected'),
-    );
+  it('propagates a command failure so BullMQ retries and can dead-letter the job', async () => {
+    const { processor, commandBus } = build();
+    commandBus.execute.mockRejectedValue(new Error('verification failed'));
 
-    await processor.process(
-      makeJob({ key: 'uploads/infected.png', declaredContentType: 'image/png', bucket: 'b' }),
-    );
-
-    expect(storage.read).toHaveBeenCalledWith('uploads/infected.png', 'b');
-    expect(storage.delete).toHaveBeenCalledWith('uploads/infected.png', 'b');
-    expect(prisma.db.storedFile.updateMany).toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ status: 'REJECTED' }) }),
-    );
-  });
-
-  it('deletes the object when declared MIME mismatches detected MIME', async () => {
-    const storage = makeStorage(JPEG_HEADER);
-    processor = new UploadVerificationProcessor(storage, prisma, makeConfig(), makeScanner());
-    await processor.process(
-      makeJob({ key: 'uploads/tampered.png', declaredContentType: 'image/png', bucket: 'b' }),
-    );
-    expect(storage.delete).toHaveBeenCalledWith('uploads/tampered.png', 'b');
-    expect(prisma.db.storedFile.updateMany).toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ status: 'REJECTED' }) }),
-    );
-  });
-
-  it('deletes the object when magic bytes match no known signature', async () => {
-    const storage = makeStorage(UNKNOWN_BLOB);
-    processor = new UploadVerificationProcessor(storage, prisma, makeConfig(), makeScanner());
-    await processor.process(
-      makeJob({ key: 'uploads/exec.bin', declaredContentType: 'image/png', bucket: 'b' }),
-    );
-    expect(storage.delete).toHaveBeenCalledWith('uploads/exec.bin', 'b');
-  });
-
-  it('propagates storage.delete errors so BullMQ retries cleanup', async () => {
-    const storage = makeStorage(JPEG_HEADER);
-    (storage.delete as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('s3 down'));
-    processor = new UploadVerificationProcessor(storage, prisma, makeConfig(), makeScanner());
-    await expect(
-      processor.process(
-        makeJob({ key: 'uploads/x.png', declaredContentType: 'image/png', bucket: 'b' }),
-      ),
-    ).rejects.toThrow('s3 down');
-  });
-
-  it('lets readRange errors propagate so BullMQ retries the job', async () => {
-    const storage = makeStorage(new Error('S3 GetObject returned no readable body'));
-    processor = new UploadVerificationProcessor(storage, prisma, makeConfig(), makeScanner());
-    await expect(
-      processor.process(
-        makeJob({ key: 'uploads/x.png', declaredContentType: 'image/png', bucket: 'b' }),
-      ),
-    ).rejects.toThrow(/S3 GetObject/);
-    expect(storage.delete).not.toHaveBeenCalled();
-  });
-
-  it('accepts a Uint8Array (not just Buffer) from storage.readRange', async () => {
-    const storage = makeStorage(new Uint8Array(PNG_HEADER));
-    processor = new UploadVerificationProcessor(storage, prisma, makeConfig(), makeScanner());
-    await processor.process(
-      makeJob({ key: 'uploads/img.png', declaredContentType: 'image/png', bucket: 'b' }),
-    );
-    expect(storage.delete).not.toHaveBeenCalled();
-  });
-
-  it('does not delete when the record is no longer VERIFYING (already processed by another execution)', async () => {
-    const storage = makeStorage(JPEG_HEADER);
-    prisma = {
-      db: {
-        storedFile: { updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
-      },
-    } as unknown as PrismaService;
-    processor = new UploadVerificationProcessor(storage, prisma, makeConfig(), makeScanner());
-
-    await processor.process(
-      makeJob({ key: 'uploads/tampered.png', declaredContentType: 'image/png', bucket: 'b' }),
-    );
-
-    expect(prisma.db.storedFile.updateMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { key: 'uploads/tampered.png', status: 'VERIFYING' },
-      }),
-    );
-    expect(storage.delete).not.toHaveBeenCalled();
+    await expect(processor.process(job())).rejects.toThrow('verification failed');
   });
 });

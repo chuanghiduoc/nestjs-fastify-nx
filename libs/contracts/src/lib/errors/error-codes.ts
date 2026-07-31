@@ -29,6 +29,12 @@ export const ERROR_CODES = {
   USER_ALREADY_EXISTS: 'user_already_exists',
   INVALID_AUDIT_LOG_ID: 'invalid_audit_log_id',
   INVALID_CURSOR: 'invalid_cursor',
+  UPLOAD_MIME_NOT_ALLOWED: 'upload_mime_not_allowed',
+  UPLOAD_SIZE_OUT_OF_RANGE: 'upload_size_out_of_range',
+  UPLOAD_MAGIC_BYTES_UNKNOWN: 'upload_magic_bytes_unknown',
+  UPLOAD_MAGIC_BYTES_MISMATCH: 'upload_magic_bytes_mismatch',
+  UPLOAD_COMMIT_FAILED: 'upload_commit_failed',
+  UPLOAD_IN_PROGRESS: 'upload_in_progress',
 } as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES];
