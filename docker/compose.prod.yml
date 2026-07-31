@@ -90,7 +90,48 @@ services:
 
   minio:
     <<: *app-logging
+    # Forced explicit like every other production secret: the base file defaults these to
+    # minioadmin/minioadmin, and nothing else would make an operator notice they stayed on the
+    # well-known default while every other credential was filled in.
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?MINIO_ROOT_USER is required}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD is required}
     ports: !override []
+
+  # Self-hosted MinIO is a supported production backend (hardened above), but nothing in the app
+  # creates the bucket — every presign/confirm would fail until an operator made it by hand. This is
+  # the same one-shot the dev stack runs, so the orphan-expiry rule is applied identically.
+  minio-init:
+    <<: *app-logging
+    image: minio/mc:RELEASE.2025-05-21T01-59-54Z
+    restart: 'no'
+    depends_on:
+      minio:
+        condition: service_healthy
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?MINIO_ROOT_USER is required}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD is required}
+      STORAGE_BUCKET: ${STORAGE_BUCKET:?STORAGE_BUCKET is required}
+      MINIO_ORPHAN_EXPIRY_DAYS: ${MINIO_ORPHAN_EXPIRY_DAYS:-1}
+    entrypoint: >
+      /bin/sh -c "
+        set -eu;
+        case "$$MINIO_ORPHAN_EXPIRY_DAYS" in ''|*[!0-9]*|0) echo 'minio-init: MINIO_ORPHAN_EXPIRY_DAYS must be a positive integer'; exit 1;; esac;
+        connected=0;
+        for i in $$(seq 1 15); do
+          if mc alias set local http://minio:9000 \"$$MINIO_ROOT_USER\" \"$$MINIO_ROOT_PASSWORD\"; then connected=1; break; fi;
+          echo 'waiting for minio... attempt '$$i; sleep 2;
+        done;
+        [ "$$connected" = 1 ] || { echo 'minio-init: cannot reach minio after 30s'; exit 1; };
+        mc mb --ignore-existing \"local/$$STORAGE_BUCKET\";
+        mc ilm rule remove --all --force \"local/$$STORAGE_BUCKET\" 2>/dev/null || true;
+        mc ilm rule add --expire-days "$$MINIO_ORPHAN_EXPIRY_DAYS" --tags 'committed=false' \"local/$$STORAGE_BUCKET\";
+        echo 'bucket ready: '$$STORAGE_BUCKET
+      "
 
   malware-scanner:
     <<: *app-logging
@@ -116,6 +157,13 @@ services:
     env_file:
       - path: ../.env.migration
         required: true
+    # The base file can only carry the short form (docker stack deploy rejects `condition:`), so the
+    # real wait is layered here. Without it migration races a cold Postgres and can exhaust its
+    # retry budget before the first healthcheck passes, leaving api/worker/scheduler gated behind a
+    # failed one-shot.
+    depends_on:
+      postgres:
+        condition: service_healthy
     environment:
       NODE_ENV: production
     security_opt:

@@ -382,7 +382,7 @@ when set — no code changes required.
 ### Managed Postgres providers
 
 Providers like AWS RDS, Cloud SQL, AlloyDB, Supabase, and Neon typically pre-enable
-`pg_stat_statements`. The migration at `prisma/migrations/20260601100000_pg_stat_statements/`
+`pg_stat_statements`. The `CREATE EXTENSION` for it lives in `prisma/migrations/20260501000000_init/migration.sql`, which
 runs `CREATE EXTENSION IF NOT EXISTS` and handles registration automatically — no extra
 ops step is required.
 

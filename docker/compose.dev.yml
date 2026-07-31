@@ -30,6 +30,12 @@ services:
       dockerfile: Dockerfile
       target: migration-dev
     env_file: ../.env
+    # The base file can only carry the short form (docker stack deploy rejects `condition:`), so the
+    # actual wait is layered here. Without it migration races a cold Postgres and burns its retry
+    # budget before the first healthcheck passes.
+    depends_on:
+      postgres:
+        condition: service_healthy
     environment:
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/nestjs_db
 

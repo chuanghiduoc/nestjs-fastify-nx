@@ -45,7 +45,9 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE stored_files TO :"worker_user";
 
 GRANT SELECT, INSERT, UPDATE, DELETE, MAINTAIN ON ALL TABLES IN SCHEMA public TO :"scheduler_user";
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO :"scheduler_user";
-GRANT CREATE ON SCHEMA public TO :"scheduler_user";
+-- No CREATE on the schema: partition DDL runs through the two SECURITY DEFINER functions below,
+-- which execute as their migration-role owner. Granting CREATE would hand a compromised scheduler
+-- the ability to create arbitrary objects in public — the capability those functions exist to avoid.
 GRANT EXECUTE ON FUNCTION public.ensure_audit_log_partition(timestamptz) TO :"scheduler_user";
 GRANT EXECUTE ON FUNCTION public.drop_expired_audit_log_partitions(date) TO :"scheduler_user";
 
