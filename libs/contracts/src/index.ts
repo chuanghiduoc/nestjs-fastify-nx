@@ -13,7 +13,13 @@ export {
   ValidationProblemDetailsDto,
   ValidationErrorItemDto,
 } from './lib/errors/problem-details.dto';
-export { ERROR_CODES, errorTypeUrl, type ErrorCode } from './lib/errors/error-codes';
+export { ERROR_CODES, errorTypeSlug, errorTypeUrl, type ErrorCode } from './lib/errors/error-codes';
+export {
+  ERROR_CATALOG,
+  ERROR_CATALOG_ENTRIES,
+  findErrorTypeDoc,
+  type ErrorTypeDoc,
+} from './lib/errors/error-catalog';
 export { I18N_KEYS, type I18nKey } from './lib/i18n-keys';
 export {
   ApiCommonErrors,

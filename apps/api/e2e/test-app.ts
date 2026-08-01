@@ -18,6 +18,7 @@ import { registerIdempotency } from '../src/common/idempotency/register-idempote
 import { ProblemDetailsValidationPipe } from '../src/common/pipes';
 import { applyFastifyProblemDetailsHook } from '../src/common/filters/fastify-error-handler';
 import { flushBufferedReplyHeaders } from '../src/common/http/flush-reply-headers';
+import { GLOBAL_PREFIX, GLOBAL_PREFIX_EXCLUDES } from '../src/common/http/global-prefix';
 import { buildProblemDetails } from '../src/common/filters/problem-details.helper';
 
 // In-process stub — e2e covers controller logic, not the S3 wire format.
@@ -131,7 +132,7 @@ export async function createTestApp(): Promise<TestAppContext> {
   const app = moduleRef.createNestApplication<NestFastifyApplication>(
     new FastifyAdapter({ bodyLimit: 64 * 1024 }),
   );
-  app.setGlobalPrefix('api', { exclude: ['metrics'] });
+  app.setGlobalPrefix(GLOBAL_PREFIX, { exclude: [...GLOBAL_PREFIX_EXCLUDES] });
   app.enableVersioning({ type: VersioningType.URI, defaultVersion: '1' });
   // Mirror main.ts CORS so the hijacked-auth-response header-preservation invariant is covered e2e.
   app.enableCors({

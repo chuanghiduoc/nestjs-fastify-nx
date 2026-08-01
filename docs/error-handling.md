@@ -75,6 +75,11 @@ Add the constant first, then use it.
 RFC 9457 `application/problem+json`, emitted by `GlobalExceptionFilter`. Nothing else builds an
 error body.
 
+The `type` URI resolves: `GET /errors/<slug>` returns a page explaining what the code means and what
+the client should do, and `GET /errors` lists every type. The pages are generated from
+`ERROR_CATALOG` in `libs/contracts`, and a unit test fails if a value in `ERROR_CODES` has no entry —
+so a new code cannot ship undocumented.
+
 ```json
 {
   "type": "/errors/invalid-cursor",
