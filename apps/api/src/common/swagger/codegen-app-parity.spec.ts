@@ -11,11 +11,13 @@ import { CodegenAppModule } from './codegen-app.module';
 //   - GraphqlModule       — Mercurius opens its own HTTP listener
 //   - WebsocketModule     — Socket.io adapter would start emitting
 //   - MetricsModule       — only loaded when ENABLE_METRICS=true
+//   - ErrorDocsModule     — serves HTML documentation for problem `type` URIs, not a JSON API surface
 const KNOWN_EXCLUSIONS_FROM_CODEGEN = new Set<string>([
   'SentryModule',
   'GraphqlModule',
   'WebsocketModule',
   'MetricsModule',
+  'ErrorDocsModule',
 ]);
 
 type ModuleRef = { module?: { name: string }; name?: string } | { name: string };

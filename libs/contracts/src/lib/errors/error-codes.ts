@@ -39,8 +39,13 @@ export const ERROR_CODES = {
 
 export type ErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES];
 
+// The path segment a `type` URI ends with, and the key the api serves its documentation under.
+export function errorTypeSlug(code: string): string {
+  return code.replace(/_/g, '-');
+}
+
 // RFC 9457 §3.1 type URI. Set ERROR_DOCS_BASE_URL for absolute URIs.
 export function errorTypeUrl(code: string): string {
   const base = process.env['ERROR_DOCS_BASE_URL']?.trim() || '/errors';
-  return `${base.replace(/\/+$/, '')}/${code.replace(/_/g, '-')}`;
+  return `${base.replace(/\/+$/, '')}/${errorTypeSlug(code)}`;
 }

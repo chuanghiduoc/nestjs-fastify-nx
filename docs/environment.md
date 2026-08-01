@@ -154,9 +154,9 @@ safe because command handlers roll back their transaction on error.
 
 ## Error documentation
 
-| Variable              | Default              | Required | Description                                                                                                                                                                                                                                                                                   |
-| --------------------- | -------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ERROR_DOCS_BASE_URL` | `/errors` (relative) | No       | Base URL used to build the `type` field of RFC 9457 Problem Details responses (`<base>/<code-with-dashes>`). RFC 9457 §3.1 allows relative URIs — leave unset in dev. Set to an absolute URL (e.g. `https://docs.example.com/errors`) in production if you publish error documentation pages. |
+| Variable              | Default              | Required | Description                                                                                                                                                                                                                                                                                                                                                                           |
+| --------------------- | -------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ERROR_DOCS_BASE_URL` | `/errors` (relative) | No       | Base URL used to build the `type` field of RFC 9457 Problem Details responses (`<base>/<code-with-dashes>`). Left unset, the api serves the documentation itself at `/errors` and `/errors/<slug>`, which is what RFC 9457 §3.1.1 expects the URI to resolve to. Point it at an absolute URL only if you publish those pages elsewhere — the built-in ones stay reachable either way. |
 
 ## Mail (SMTP)
 

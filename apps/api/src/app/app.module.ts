@@ -16,6 +16,7 @@ import { AdminModule } from '@nestjs-fastify-nx/composition-admin';
 import { AuditLogModule } from '@nestjs-fastify-nx/modules-audit-log';
 import { LoggingModule } from '../common/logging/logging.module';
 import { HealthModule } from '../common/health/health.module';
+import { ErrorDocsModule } from '../common/errors/error-docs.module';
 import { MetricsModule } from '../common/metrics/metrics.module';
 import { ThrottlerModule } from '../common/throttler/throttler.module';
 import { UploadModule } from '@nestjs-fastify-nx/modules-upload';
@@ -37,6 +38,7 @@ import { AppController } from './app.controller';
     ThrottlerModule,
     LoggingModule,
     HealthModule,
+    ErrorDocsModule,
     DatabaseModule,
     RedisQueueModule,
     MessagingModule,

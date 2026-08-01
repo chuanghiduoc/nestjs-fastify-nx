@@ -31,6 +31,7 @@ import { createBullBoardPlugin } from './common/bull-board/create-bull-board-plu
 import { registerIdempotency } from './common/idempotency/register-idempotency';
 import { redisFixedWindowIncr } from './common/rate-limit/redis-fixed-window';
 import { flushBufferedReplyHeaders } from './common/http/flush-reply-headers';
+import { GLOBAL_PREFIX, GLOBAL_PREFIX_EXCLUDES } from './common/http/global-prefix';
 import { applyFastifyProblemDetailsHook } from './common/filters/fastify-error-handler';
 import { buildProblemDetails } from './common/filters/problem-details.helper';
 import { maskBetterAuthServerResponse } from './common/filters/better-auth-response';
@@ -79,7 +80,7 @@ async function bootstrap() {
   app.useLogger(app.get(Logger));
   app.enableShutdownHooks();
   // URI versioning keeps /api/v1/... compatible with existing clients while opening a clean path for v2 alongside v1.
-  app.setGlobalPrefix('api', { exclude: ['metrics'] });
+  app.setGlobalPrefix(GLOBAL_PREFIX, { exclude: [...GLOBAL_PREFIX_EXCLUDES] });
   app.enableVersioning({ type: VersioningType.URI, defaultVersion: '1' });
 
   const fastify = app.getHttpAdapter().getInstance();
