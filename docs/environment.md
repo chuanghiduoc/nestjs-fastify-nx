@@ -74,16 +74,39 @@ and objects rejected by verification.
 
 **Which backend to run.** The bundled MinIO is a development convenience, not a recommendation:
 upstream archived the repository in February 2026, the last published image is
-`RELEASE.2025-09-07`, and there will be no further security patches. The adapter itself is plain
-S3 — nothing in it is MinIO-specific — so production should point `STORAGE_ENDPOINT` at AWS S3,
-Cloudflare R2, or a maintained self-hosted backend.
+`RELEASE.2025-09-07`, and there will be no further security patches. The adapter is plain S3, so
+moving off it is a matter of pointing `STORAGE_ENDPOINT` somewhere else — provided the target
+implements the three operations this upload flow is built on.
 
-SeaweedFS (Apache-2.0, actively maintained) was verified against this exact flow — presigned POST,
-`HeadObject`, `CopyObject` with `CopySourceIfMatch`, ranged reads, and the SDK's default CRC32
-checksum all pass. It needs an S3 identity configured (`-s3.config`) and, since it has no `mc`,
-its own bucket creation and lifecycle setup. The one thing no portable backend accepts is a
-`tagging` field inside a POST policy, which is why staging objects are separated by the `uploads/`
-key prefix and the orphan-expiry lifecycle rule filters on that prefix instead of on a tag.
+| Operation                                      | Used for                                                  |
+| ---------------------------------------------- | --------------------------------------------------------- |
+| `PostObject` (presigned POST policy)           | The browser uploads bytes directly, under a size/MIME cap |
+| `CopyObject` with `x-amz-copy-source-if-match` | Confirm promotes the exact bytes that were verified       |
+| `GetObject` with `Range`                       | Magic-byte inspection without downloading the object      |
+
+Measured against a live container of each, running that flow end to end:
+
+| Backend                    | POST policy | `CopySourceIfMatch` | `Range` | SDK CRC32 | Licence    | Upstream          |
+| -------------------------- | ----------- | ------------------- | ------- | --------- | ---------- | ----------------- |
+| AWS S3                     | yes         | yes                 | yes     | yes       | commercial | —                 |
+| SeaweedFS                  | yes         | enforced            | yes     | yes       | Apache-2.0 | active            |
+| Garage 2.x                 | yes         | enforced            | yes     | yes       | AGPL-3.0   | active            |
+| MinIO `RELEASE.2025-09-07` | yes         | enforced            | yes     | yes       | AGPL-3.0   | archived Feb 2026 |
+| Cloudflare R2              | **no**      | **no**              | yes     | n/a       | commercial | active            |
+
+"enforced" means a stale ETag was actually refused with `PreconditionFailed`, not merely accepted
+and ignored — a guard that silently passes is worse than none.
+
+**Cloudflare R2 does not work with this flow as written.** It implements neither `PostObject` nor
+`x-amz-copy-source-if-match` ([R2 S3 API compatibility](https://developers.cloudflare.com/r2/api/s3/api/)).
+Using it means switching presign to a `PUT` URL and replacing the ETag guard — a code change, not a
+configuration change.
+
+Two smaller differences to plan for: Garage implements only the `Expiration` and
+`AbortIncompleteMultipartUpload` lifecycle actions, and SeaweedFS ships no `mc`, so both need their
+own bucket creation and orphan-expiry setup instead of the bundled `minio-init` one-shot. Neither
+accepts a `tagging` field inside a POST policy, which is why staging objects are separated by the
+`uploads/` key prefix and the lifecycle rule filters on that prefix rather than on a tag.
 
 ## Authentication (Better Auth)
 
