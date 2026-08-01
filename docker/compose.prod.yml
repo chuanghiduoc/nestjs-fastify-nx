@@ -112,7 +112,13 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    # mc writes its alias config under $HOME before it can talk to the server, and dropping every
+    # capability leaves it unable to create /root/.mc. Point it at the tmpfs instead of handing the
+    # capability back.
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
     environment:
+      MC_CONFIG_DIR: /tmp/.mc
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:?MINIO_ROOT_USER is required}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD is required}
       STORAGE_BUCKET: ${STORAGE_BUCKET:?STORAGE_BUCKET is required}
@@ -140,6 +146,16 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    # clamav's entrypoint creates /run/clamav and drops to the clamav user before starting clamd.
+    # With every capability dropped it cannot, and the container exits 1 with "can't change
+    # ownership of /run/clamav" — which then blocks the worker, since it waits for this to be
+    # healthy. These four are what that setup step needs; clamd itself keeps none of them.
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETGID
+      - SETUID
     volumes:
       - clamav_signatures:/var/lib/clamav
     healthcheck:

@@ -1,6 +1,6 @@
 const { spawnSync } = require('node:child_process');
 const { existsSync, globSync, rmSync } = require('node:fs');
-const { dirname, isAbsolute, relative, resolve } = require('node:path');
+const { isAbsolute, relative, resolve, sep } = require('node:path');
 
 const workspaceRoot = resolve(__dirname, '../..');
 const nxCli = resolve(workspaceRoot, 'node_modules/nx/bin/nx.js');
@@ -16,8 +16,16 @@ if (existsSync(nxCli)) {
 }
 
 const generatedOutputs = globSync(
-  ['apps/*/out-tsc', 'libs/*/out-tsc', 'libs/*/*/out-tsc', 'tools/*/out-tsc'],
-  { cwd: workspaceRoot },
+  [
+    'apps/*/out-tsc',
+    'libs/*/out-tsc',
+    'libs/*/*/out-tsc',
+    'tools/*/out-tsc',
+    // tsc --build keeps its incremental state next to the config, and a stale one makes a
+    // "clean" build silently skip work that the deleted outputs no longer back.
+    '**/*.tsbuildinfo',
+  ],
+  { cwd: workspaceRoot, exclude: (name) => name === 'node_modules' },
 );
 
 const disposablePaths = [
@@ -27,8 +35,11 @@ const disposablePaths = [
   '.nx/workspace-data',
   '.cache/webpack',
   'node_modules/.vite',
+  'node_modules/.cache',
   ...generatedOutputs,
 ];
+
+const failures = [];
 
 for (const entry of disposablePaths) {
   const target = resolve(workspaceRoot, entry);
@@ -37,16 +48,34 @@ for (const entry of disposablePaths) {
   if (
     fromRoot === '' ||
     fromRoot === '..' ||
-    fromRoot.startsWith(`..${require('node:path').sep}`) ||
+    fromRoot.startsWith(`..${sep}`) ||
     isAbsolute(fromRoot)
   ) {
     throw new Error(`Refusing to remove path outside the workspace: ${target}`);
   }
 
-  rmSync(target, {
-    recursive: true,
-    force: true,
-    maxRetries: 5,
-    retryDelay: 200,
-  });
+  try {
+    rmSync(target, {
+      recursive: true,
+      force: true,
+      // Windows holds a handle briefly after the daemon exits; one second of retries was not
+      // enough and the resulting EPERM aborted the whole loop, leaving later paths untouched.
+      maxRetries: 20,
+      retryDelay: 250,
+    });
+  } catch (error) {
+    // Collect and continue: one locked path must not stop the rest of the clean.
+    failures.push({ path: fromRoot, message: error.message });
+  }
+}
+
+if (failures.length > 0) {
+  for (const failure of failures) {
+    console.error(`clean: could not remove ${failure.path} — ${failure.message}`);
+  }
+  console.error(
+    'clean: something still holds these paths open. Close editors/terminals using the workspace ' +
+      '(and any running `nx serve`), then re-run `pnpm clean`.',
+  );
+  process.exit(1);
 }

@@ -152,8 +152,9 @@ index.ts           public barrel — re-export only what consumers need
 
 ```bash
 # Bootstrap (after clone)
-cp .env.example .env && pnpm install
+./scripts/gen-env.sh && pnpm install    # writes .env, generates a real BETTER_AUTH_SECRET
 # .env.example documents all required keys; .env is gitignored.
+# Production needs four more per-app files: ./scripts/gen-env.sh --prod (and --check to audit).
 # Run ./scripts/doctor.sh to verify prerequisites + required env vars are set.
 ./scripts/build-dev.sh             # builds + boots full dev stack
 

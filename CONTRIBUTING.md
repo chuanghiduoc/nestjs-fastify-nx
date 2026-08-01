@@ -13,7 +13,7 @@ Welcome. This guide gets you from clone → first PR in under 30 minutes.
 
 ```bash
 # 1. Clone and bootstrap
-cp .env.example .env
+./scripts/gen-env.sh             # creates .env and generates a real BETTER_AUTH_SECRET
 ./scripts/doctor.sh                # ✅ verifies Docker, Node, ports, env vars
 pnpm install
 ./scripts/build-dev.sh             # 🚀 boots full dev stack
