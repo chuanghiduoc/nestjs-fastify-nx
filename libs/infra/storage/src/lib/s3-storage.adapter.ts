@@ -29,12 +29,10 @@ import type {
   UploadOptions,
 } from './storage.port';
 
-// Applied at presign so the lifecycle rule expires uploads that never reach
-// /confirm; finalize() copies validated bytes to an immutable `files/` key.
-const UNCOMMITTED_TAGGING =
-  '<Tagging><TagSet><Tag><Key>committed</Key><Value>false</Value></Tag></TagSet></Tagging>';
+type ChecksumMode = 'WHEN_SUPPORTED' | 'WHEN_REQUIRED';
 
-// forcePathStyle required for MinIO and S3-compatible services (R2, B2); harmless on AWS S3.
+const CHECKSUM_MODES: readonly ChecksumMode[] = ['WHEN_SUPPORTED', 'WHEN_REQUIRED'];
+
 @Injectable()
 export class S3StorageAdapter implements StoragePort, OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(S3StorageAdapter.name);
@@ -58,13 +56,23 @@ export class S3StorageAdapter implements StoragePort, OnModuleInit, OnModuleDest
     const secretAccessKey = this.requireConfig('STORAGE_SECRET_KEY', 'minioadmin');
     const credentials = { accessKeyId, secretAccessKey };
 
-    this.client = new S3Client({
-      endpoint: this.endpoint,
+    // MinIO and most self-hosted backends only answer path-style; AWS S3 accepts both but documents
+    // virtual-hosted as the supported form, so a deployment against real S3 can turn this off.
+    const forcePathStyle = this.config.get<string>('STORAGE_FORCE_PATH_STYLE') !== 'false';
+    // The SDK computes a CRC32 on every upload by default (WHEN_SUPPORTED). AWS S3 and current
+    // MinIO accept it; older Ceph RGW, Backblaze B2 and some gateways reject the header outright,
+    // and WHEN_REQUIRED is the documented way to stop sending it.
+    const requestChecksumCalculation = this.resolveChecksumMode();
+    const clientConfig = {
       region,
       credentials,
-      forcePathStyle: true,
+      forcePathStyle,
       maxAttempts: 3,
-    });
+      requestChecksumCalculation,
+      responseChecksumValidation: requestChecksumCalculation,
+    };
+
+    this.client = new S3Client({ ...clientConfig, endpoint: this.endpoint });
 
     // Presigned URLs must be signed against a host the browser can reach; in
     // containers STORAGE_ENDPOINT is internal (http://minio:9000), so
@@ -76,13 +84,20 @@ export class S3StorageAdapter implements StoragePort, OnModuleInit, OnModuleDest
     this.presignClient =
       this.publicEndpoint === this.endpoint
         ? this.client
-        : new S3Client({
-            endpoint: this.publicEndpoint,
-            region,
-            credentials,
-            forcePathStyle: true,
-            maxAttempts: 3,
-          });
+        : new S3Client({ ...clientConfig, endpoint: this.publicEndpoint });
+  }
+
+  private resolveChecksumMode(): ChecksumMode {
+    const configured = this.config.get<string>('STORAGE_CHECKSUM_MODE')?.trim();
+    if (!configured) {
+      return 'WHEN_SUPPORTED';
+    }
+    if (!CHECKSUM_MODES.includes(configured as ChecksumMode)) {
+      throw new Error(
+        `StorageModule: STORAGE_CHECKSUM_MODE must be one of ${CHECKSUM_MODES.join(', ')}`,
+      );
+    }
+    return configured as ChecksumMode;
   }
 
   // Development MinIO is bootstrapped automatically. Production storage is infrastructure-owned,
@@ -190,6 +205,9 @@ export class S3StorageAdapter implements StoragePort, OnModuleInit, OnModuleDest
   }
 
   // POST policy pins Content-Type and size — prevents mime-type smuggling or oversized payloads.
+  // It deliberately carries no `tagging` field: staging objects live under their own key prefix, so
+  // the orphan-expiry lifecycle rule filters on that prefix instead. Tagging inside a POST policy is
+  // a MinIO/AWS extension that SeaweedFS (and others) reject with `Policy Condition failed`.
   async presignUpload(key: string, options: PresignUploadOptions): Promise<PresignedUpload> {
     const bucket = options.bucket ?? this.bucket;
     const expiresInSeconds = options.expiresInSeconds ?? 300;
@@ -201,9 +219,8 @@ export class S3StorageAdapter implements StoragePort, OnModuleInit, OnModuleDest
         Conditions: [
           ['content-length-range', 1, options.maxBytes],
           ['eq', '$Content-Type', options.contentType],
-          ['eq', '$tagging', UNCOMMITTED_TAGGING],
         ],
-        Fields: { 'Content-Type': options.contentType, tagging: UNCOMMITTED_TAGGING },
+        Fields: { 'Content-Type': options.contentType },
         Expires: expiresInSeconds,
       });
 
@@ -302,8 +319,6 @@ export class S3StorageAdapter implements StoragePort, OnModuleInit, OnModuleDest
           CopySource: encodeCopySource(targetBucket, sourceKey),
           CopySourceIfMatch: expectedEtag,
           MetadataDirective: 'COPY',
-          TaggingDirective: 'REPLACE',
-          Tagging: 'committed=true',
         }),
       );
     } catch (err) {
@@ -314,7 +329,7 @@ export class S3StorageAdapter implements StoragePort, OnModuleInit, OnModuleDest
       });
     }
 
-    // The source stays committed=false, so a delete failure is bounded by lifecycle TTL.
+    // The source keeps its staging prefix, so a delete failure is bounded by the lifecycle TTL.
     await this.delete(sourceKey, targetBucket).catch((err: unknown) => {
       this.logger.warn(
         { err, sourceKey, finalKey },
