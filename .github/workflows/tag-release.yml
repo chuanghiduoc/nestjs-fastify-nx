@@ -1,0 +1,75 @@
+name: Tag release
+
+# Second half of the release path. `version.yml` opens a PR containing the version bump and
+# changelog; when that PR merges, this tags the squashed commit that actually landed on `main` and
+# hands off to `release.yml`.
+#
+# Tagging happens here rather than in `version.yml` because a squash merge rewrites the commit —
+# a tag created before the merge would point at a commit that never reaches `main`.
+#
+# `release.yml` is invoked through `workflow_call`, not by pushing a tag: a tag pushed with the
+# default GITHUB_TOKEN does not start another workflow (GitHub blocks that to avoid recursion), so
+# a `push: tags` trigger alone would leave the release silently unbuilt. Calling it directly keeps
+# the whole chain working without a long-lived PAT.
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: tag-release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  tag:
+    # Only the release commit nx release produced; every other push to main is ignored.
+    if: startsWith(github.event.head_commit.message, 'chore(release):')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+
+      - name: Create and push the version tag
+        id: tag
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          TAG="v${VERSION}"
+
+          if git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; then
+            echo "::error::${TAG} already exists — refusing to move an existing release tag."
+            exit 1
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" -m "$TAG"
+          git push origin "$TAG"
+
+          # The section for this version only: everything between its heading and the next one.
+          awk '/^## /{ if (seen) exit; seen=1 } seen' CHANGELOG.md > /tmp/release-notes.md
+          gh release create "$TAG" --title "$TAG" --notes-file /tmp/release-notes.md
+
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+  publish:
+    needs: tag
+    uses: ./.github/workflows/release.yml
+    with:
+      tag: ${{ needs.tag.outputs.tag }}
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      security-events: write
+    secrets: inherit
