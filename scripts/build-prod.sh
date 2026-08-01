@@ -88,6 +88,15 @@ for svc in api worker scheduler migration; do
   printf '  %-14s %7s MB\n' "$svc" "$size_mb"
 done
 
+# compose.prod.yml pins each service to an immutable ref via ${*_IMAGE:?...} so a real deploy can
+# never boot a floating tag. Those refs are exactly what this script just built, so export them —
+# without this the boot below dies on "MIGRATION_IMAGE is missing a value" no matter how complete
+# the operator's .env is.
+export API_IMAGE="${PREFIX}/api:${IMAGE_TAG}"
+export WORKER_IMAGE="${PREFIX}/worker:${IMAGE_TAG}"
+export SCHEDULER_IMAGE="${PREFIX}/scheduler:${IMAGE_TAG}"
+export MIGRATION_IMAGE="${PREFIX}/migration:${IMAGE_TAG}"
+
 # Image vulnerability scanning is the CI gate's job (release.yml runs Trivy per
 # app and uploads SARIF to GitHub Security). Run ./scripts/security/scan-images.sh
 # manually if you need a local pre-push check.
@@ -164,11 +173,38 @@ else
   sec::log "External S3 + SMTP detected — bundled MinIO / Mailpit skipped"
 fi
 
+# Postgres applies POSTGRES_PASSWORD only when it initialises an empty data directory. A volume
+# left over from an earlier run (the dev stack shares this project name, so it shares this volume)
+# keeps whatever credentials it was created with, and the only symptom is migration retrying P1000
+# until it gives up — a message that points at the credentials rather than at the volume.
+if docker volume inspect "${COMPOSE_PROJECT}_postgres_data" >/dev/null 2>&1; then
+  if ! docker run --rm --network "${COMPOSE_PROJECT}_default" \
+    -e PGPASSWORD="${POSTGRES_ADMIN_PASSWORD:-}" \
+    postgres:18-alpine \
+    psql -h postgres -U "${POSTGRES_ADMIN_USER:-postgres}" -d "${POSTGRES_DB:-nestjs_db}" \
+    -c 'SELECT 1' >/dev/null 2>&1; then
+    sec::warn "An existing ${COMPOSE_PROJECT}_postgres_data volume did not accept the credentials in .env."
+    sec::warn "Postgres ignores POSTGRES_PASSWORD once its data directory exists, so migration will fail with P1000."
+    sec::warn "Either restore the original credentials, or wipe the volume:"
+    sec::warn "    ./scripts/teardown.sh --prod        # removes volumes for this project"
+  fi
+fi
+
 echo ""
 sec::log "Booting prod stack"
 if ! docker compose -p "$COMPOSE_PROJECT" --env-file .env "${COMPOSE_FILES[@]}" \
   up -d --remove-orphans --wait --wait-timeout "${PROD_STARTUP_TIMEOUT_SECONDS:-120}"; then
   sec::err "Production stack did not become healthy"
+  # Postgres applies POSTGRES_PASSWORD only when it initialises an empty data directory. A volume
+  # left from an earlier run — the dev stack shares this project name, so it shares this volume —
+  # keeps the credentials it was created with, and the only symptom is migration retrying P1000.
+  if docker volume inspect "${COMPOSE_PROJECT}_postgres_data" >/dev/null 2>&1; then
+    sec::warn "If the migration logs below show P1000 (authentication failed): the existing"
+    sec::warn "${COMPOSE_PROJECT}_postgres_data volume was initialised with different credentials."
+    sec::warn "Postgres ignores POSTGRES_PASSWORD once its data directory exists. Wipe it with"
+    sec::warn "    ./scripts/teardown.sh --prod"
+    sec::warn "or restore the credentials that volume was created with."
+  fi
   docker compose -p "$COMPOSE_PROJECT" --env-file .env "${COMPOSE_FILES[@]}" ps -a || true
   docker compose -p "$COMPOSE_PROJECT" --env-file .env "${COMPOSE_FILES[@]}" logs \
     --tail=100 api worker scheduler migration minio-init || true
