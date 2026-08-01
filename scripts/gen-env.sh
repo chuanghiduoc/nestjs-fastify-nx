@@ -66,11 +66,20 @@ set_env_value() {
   fi
 }
 
-# Fills a key only when it is missing or still holds the example's placeholder.
+# Reads a key from .env.example, so a value the operator never changed can be told apart from one
+# they deliberately set.
+example_value() {
+  [[ -f .env.example ]] || return 0
+  sed -nE "s/^${1}=(.*)$/\1/p" .env.example | tail -1
+}
+
+# Fills a key only when it is missing or still holds the example's placeholder. The placeholder case
+# matters most for BETTER_AUTH_SECRET: keeping it would give every clone of this repo the same
+# session-signing key.
 ensure_secret() {
   local key="$1" bytes="${2:-24}" current
   current="$(env_value "$key")"
-  if [[ -n "$current" && $FORCE -eq 0 ]]; then
+  if [[ -n "$current" && "$current" != "$(example_value "$key")" && $FORCE -eq 0 ]]; then
     return 0
   fi
   set_env_value "$key" "$(random_secret "$bytes")"
@@ -113,6 +122,10 @@ if [[ ! -f .env ]]; then
   sec::ok "Created .env from .env.example"
 fi
 
+# .env ends up holding the same real credentials as the per-app files, so it gets the same mode.
+# Skipped under --check, which must not touch anything.
+[[ $CHECK_ONLY -eq 1 ]] || chmod 600 .env 2>/dev/null || true
+
 if [[ $CHECK_ONLY -eq 1 ]]; then
   MISSING=()
   for key in BETTER_AUTH_SECRET POSTGRES_ADMIN_USER POSTGRES_ADMIN_PASSWORD \
@@ -126,9 +139,22 @@ if [[ $CHECK_ONLY -eq 1 ]]; then
     sec::warn "Missing from .env: ${MISSING[*]}"
     sec::log "Run ./scripts/gen-env.sh --prod to fill them in."
   fi
+
+  MISSING_FILES=()
   for f in .env.api .env.worker .env.scheduler .env.migration; do
-    [[ -f "$f" ]] && sec::ok "$f present" || sec::warn "$f missing (needed by compose.prod.yml)"
+    if [[ -f "$f" ]]; then
+      sec::ok "$f present"
+    else
+      sec::warn "$f missing (needed by compose.prod.yml)"
+      MISSING_FILES+=("$f")
+    fi
   done
+
+  # A preflight that always exits 0 cannot gate anything — CI and build-prod.sh rely on the status.
+  if [[ ${#MISSING[@]} -gt 0 || ${#MISSING_FILES[@]} -gt 0 ]]; then
+    sec::err "Environment is incomplete for a production boot."
+    exit 1
+  fi
   exit 0
 fi
 

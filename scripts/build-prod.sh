@@ -101,11 +101,17 @@ export MIGRATION_IMAGE="${PREFIX}/migration:${IMAGE_TAG}"
 # app and uploads SARIF to GitHub Security). Run ./scripts/security/scan-images.sh
 # manually if you need a local pre-push check.
 
+COMPOSE_PROJECT="${COMPOSE_PROJECT_NAME:-nestjs-fastify-nx}"
+
 if [[ "${NO_UP:-0}" = "1" ]]; then
   echo ""
   sec::ok "Build complete. NO_UP=1 — skipping auto-boot."
+  # The image refs live only in this process, and compose.prod.yml requires them, so the printed
+  # command carries them inline — copying a bare `docker compose up` would fail on the first ${*_IMAGE:?}.
   sec::ok "Bring the stack up manually:"
-  echo "    docker compose --env-file .env -f docker/compose.yml -f docker/compose.prod.yml up -d"
+  echo "    API_IMAGE=${API_IMAGE} WORKER_IMAGE=${WORKER_IMAGE} \\"
+  echo "    SCHEDULER_IMAGE=${SCHEDULER_IMAGE} MIGRATION_IMAGE=${MIGRATION_IMAGE} \\"
+  echo "    docker compose -p ${COMPOSE_PROJECT} --env-file .env -f docker/compose.yml -f docker/compose.prod.yml up -d"
   exit 0
 fi
 
@@ -116,8 +122,6 @@ fi
 # ---------------------------------------------------------------------------
 echo ""
 sec::log "Tearing down any previous local stack"
-
-COMPOSE_PROJECT="${COMPOSE_PROJECT_NAME:-nestjs-fastify-nx}"
 
 # 1. Swarm leftover (swarm-local-test.sh uses SWARM_STACK_NAME, default `app`).
 SWARM_STACK_NAME="${SWARM_STACK_NAME:-app}"
@@ -171,23 +175,6 @@ if [[ $USE_LOCAL_S3 -eq 1 ]] || [[ $USE_LOCAL_SMTP -eq 1 ]]; then
   fi
 else
   sec::log "External S3 + SMTP detected — bundled MinIO / Mailpit skipped"
-fi
-
-# Postgres applies POSTGRES_PASSWORD only when it initialises an empty data directory. A volume
-# left over from an earlier run (the dev stack shares this project name, so it shares this volume)
-# keeps whatever credentials it was created with, and the only symptom is migration retrying P1000
-# until it gives up — a message that points at the credentials rather than at the volume.
-if docker volume inspect "${COMPOSE_PROJECT}_postgres_data" >/dev/null 2>&1; then
-  if ! docker run --rm --network "${COMPOSE_PROJECT}_default" \
-    -e PGPASSWORD="${POSTGRES_ADMIN_PASSWORD:-}" \
-    postgres:18-alpine \
-    psql -h postgres -U "${POSTGRES_ADMIN_USER:-postgres}" -d "${POSTGRES_DB:-nestjs_db}" \
-    -c 'SELECT 1' >/dev/null 2>&1; then
-    sec::warn "An existing ${COMPOSE_PROJECT}_postgres_data volume did not accept the credentials in .env."
-    sec::warn "Postgres ignores POSTGRES_PASSWORD once its data directory exists, so migration will fail with P1000."
-    sec::warn "Either restore the original credentials, or wipe the volume:"
-    sec::warn "    ./scripts/teardown.sh --prod        # removes volumes for this project"
-  fi
 fi
 
 echo ""
