@@ -72,4 +72,5 @@ jobs:
       packages: write
       id-token: write
       security-events: write
-    secrets: inherit
+    # No secrets are passed: release.yml only uses GITHUB_TOKEN, which a called workflow already
+    # has. `secrets: inherit` would hand it every secret in the repository instead.
