@@ -207,21 +207,29 @@ from your [Conventional Commits](https://www.conventionalcommits.org/) — you n
 hand-edit `CHANGELOG.md` or bump `package.json` manually.
 
 1. Merge your work to `main`.
-2. Cut the version + tag. Either trigger the **Version and Tag** workflow
-   (`.github/workflows/version.yml`, `workflow_dispatch`) or run it locally:
+2. Trigger the **Version and Tag** workflow (`.github/workflows/version.yml`,
+   `workflow_dispatch`). It bumps the version, writes `CHANGELOG.md`, and opens a
+   `chore(release): v{version}` **pull request** with auto-merge enabled — it does not
+   push to `main`, because `main` requires a pull request with `enforce_admins` on and
+   no bypass allowance, so no token can push to it directly. Run it with `dry-run: true`
+   first to preview the version and changelog without creating anything.
 
-   ```bash
-   pnpm release:dry     # preview the next version + changelog, no writes
-   pnpm release         # bump package.json, write CHANGELOG.md, commit, tag v{version}, push
-   ```
+   `pnpm release:dry` previews the same thing locally. `pnpm release` writes and pushes
+   directly and will therefore be rejected by branch protection — use the workflow.
 
    Nx derives the bump from commit types (`feat` → minor, `fix`/`perf`/`refactor`
    → patch, `feat!`/`BREAKING CHANGE` → major; `chore`/`ci`/`test` are hidden).
    The current version is resolved from the last `v*` git tag, and the new version
    is written to the root `package.json`.
 
-3. Pushing the `v*.*.*` tag triggers the [release workflow](../.github/workflows/release.yml),
-   which automatically, per app:
+3. Merging that PR triggers [tag-release.yml](../.github/workflows/tag-release.yml): it tags the
+   squashed commit that actually landed (a tag made before the squash would point at a commit
+   `main` never sees), publishes the GitHub Release with this version's changelog section, and
+   calls the release workflow. The call is a `workflow_call` rather than a tag push because a tag
+   pushed with the default `GITHUB_TOKEN` does not start another workflow, which would leave the
+   release silently unbuilt.
+
+4. The [release workflow](../.github/workflows/release.yml) then does, per app:
    - Builds the image into the runner's local daemon — nothing is published yet.
    - Gates on **Trivy** (HIGH/CRITICAL, fixable only). A failing scan stops here,
      so a vulnerable image is never pushed and never signed.
@@ -230,7 +238,7 @@ hand-edit `CHANGELOG.md` or bump `package.json` manually.
    - Signs the pushed digest with **Cosign keyless** (Sigstore Fulcio) — identity
      is the workflow ref, recorded in the public Rekor log.
    - Runs **Semgrep** SAST (TS/Node/OWASP rule packs) as a separate job.
-4. Roll out from your target environment: pull the published tag from GHCR, run
+5. Roll out from your target environment: pull the published tag from GHCR, run
    the migration image against the prod database, then start/restart the
    services. This step is deployment-specific and intentionally left out of CI.
 
@@ -243,11 +251,11 @@ to verify a signed tag locally with `cosign verify`.
   the very first release must be seeded once. Tag the current baseline and push it:
   `git tag v1.1.0 && git push origin v1.1.0`. That tag also triggers `release.yml`,
   publishing the `1.1.0` images. Every later release is fully derived from commits.
-- **`RELEASE_TOKEN` secret** (CI only) — the Version and Tag workflow pushes the
-  version-bump commit to the protected `main` branch. `GITHUB_TOKEN` cannot bypass
-  the branch-protection pull-request requirement, so a PAT (or GitHub App token)
-  with `contents:write` and permission to push to `main` is required. Running
-  `pnpm release` locally uses your own credentials and needs no secret.
+- **No release PAT is needed.** The release path goes through a pull request, so the default
+  `GITHUB_TOKEN` is sufficient: `version.yml` needs `contents: write` + `pull-requests: write`
+  to open and auto-merge the release PR, and `tag-release.yml` needs `contents: write` to tag
+  and publish the GitHub Release. A long-lived PAT with push access to `main` would be a
+  standing bypass of the branch protection every other change obeys.
 
 ## Health Checks
 

@@ -1,3 +1,22 @@
+## 1.2.1 (2026-08-01)
+
+### Bug Fixes
+
+- system-wide audit — harden auth, validation, idempotency, outbox and queue paths ([#127](https://github.com/chuanghiduoc/nestjs-fastify-nx/pull/127))
+- preserve response content-type in idempotent late-completion replay ([#128](https://github.com/chuanghiduoc/nestjs-fastify-nx/pull/128))
+- preserve buffered headers across better-auth hijack and audit hardening ([#130](https://github.com/chuanghiduoc/nestjs-fastify-nx/pull/130))
+- harden outbox retry, request-id propagation, ws rate limit and metrics lease ([#131](https://github.com/chuanghiduoc/nestjs-fastify-nx/pull/131))
+- harden security and optimize CI/CD runtime ([#136](https://github.com/chuanghiduoc/nestjs-fastify-nx/pull/136))
+- repair broken dev workflows, decouple domain errors from http, and give upload its layers ([#138](https://github.com/chuanghiduoc/nestjs-fastify-nx/pull/138))
+- **api:** stop bull board rendering rate-limit rejections as 500 ([#126](https://github.com/chuanghiduoc/nestjs-fastify-nx/pull/126))
+- **nx:** stabilize workspace builds and caching ([#121](https://github.com/chuanghiduoc/nestjs-fastify-nx/pull/121))
+- **outbox:** stop users.logged_out firing on session purge and user cascade ([#132](https://github.com/chuanghiduoc/nestjs-fastify-nx/pull/132))
+- **swagger:** rebuild openapi setup to canonical shape and fix spec/codegen bugs ([#129](https://github.com/chuanghiduoc/nestjs-fastify-nx/pull/129))
+
+### Documentation
+
+- record cookie v2 hold-back and its nx pruning cause ([#135](https://github.com/chuanghiduoc/nestjs-fastify-nx/pull/135))
+
 ## 1.2.0 (2026-07-18)
 
 ### Features
