@@ -111,7 +111,7 @@ if [[ "${NO_UP:-0}" = "1" ]]; then
   sec::ok "Bring the stack up manually:"
   echo "    API_IMAGE=${API_IMAGE} WORKER_IMAGE=${WORKER_IMAGE} \\"
   echo "    SCHEDULER_IMAGE=${SCHEDULER_IMAGE} MIGRATION_IMAGE=${MIGRATION_IMAGE} \\"
-  echo "    docker compose -p ${COMPOSE_PROJECT} --env-file .env -f docker/compose.yml -f docker/compose.prod.yml up -d"
+  echo "    docker compose -p \"${COMPOSE_PROJECT}\" --env-file .env -f docker/compose.yml -f docker/compose.prod.yml up -d"
   exit 0
 fi
 
