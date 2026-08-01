@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { Mock } from 'vitest';
-import { STORED_FILE_STATUS } from '@nestjs-fastify-nx/shared';
+import { MALWARE_SCAN_OUTCOME, STORED_FILE_STATUS } from '@nestjs-fastify-nx/shared';
 import type { StoragePort } from '@nestjs-fastify-nx/infra-storage';
 import type { StoredFileRepositoryPort } from '../../../domain/ports/stored-file-repository.port';
 import type { MalwareScannerPort } from '../../../domain/ports/malware-scanner.port';
@@ -121,5 +121,49 @@ describe('VerifyUploadHandler', () => {
     files.transitionByKey.mockResolvedValue(false);
 
     await expect(handler.execute(command())).resolves.toBe('skipped');
+  });
+  describe('when the scanner cannot inspect the object', () => {
+    // READY on its own would claim the object was checked. Everything downstream that treats READY
+    // as "virus-checked" relies on this column to tell the two apart.
+    it('publishes it but records that nothing scanned it', async () => {
+      const { handler, files, scanner, storage } = build();
+      scanner.scan.mockResolvedValue('unscannable');
+
+      await expect(handler.execute(command())).resolves.toBe('verified');
+
+      expect(files.transitionByKey).toHaveBeenCalledWith(
+        KEY,
+        STORED_FILE_STATUS.VERIFYING,
+        STORED_FILE_STATUS.READY,
+        expect.objectContaining({ scanOutcome: MALWARE_SCAN_OUTCOME.SKIPPED_TOO_LARGE }),
+      );
+      expect(storage.delete).not.toHaveBeenCalled();
+    });
+
+    it('records a real scan as CLEAN', async () => {
+      const { handler, files } = build();
+
+      await handler.execute(command());
+
+      expect(files.transitionByKey).toHaveBeenCalledWith(
+        KEY,
+        STORED_FILE_STATUS.VERIFYING,
+        STORED_FILE_STATUS.READY,
+        expect.objectContaining({ scanOutcome: MALWARE_SCAN_OUTCOME.CLEAN }),
+      );
+    });
+
+    // Without the size, the scanner cannot refuse before the transfer — which is the whole point of
+    // the gate, since pushing 10 GB across only to have it skipped wastes the transfer and the lock.
+    it('passes the object size so the scanner can refuse before any bytes move', async () => {
+      const { handler, scanner } = build();
+
+      await handler.execute(command());
+
+      expect(scanner.scan).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ sizeBytes: PNG_HEADER.length }),
+      );
+    });
   });
 });
