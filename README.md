@@ -156,7 +156,7 @@ See [docs/architecture.md](docs/architecture.md) for the full module map.
 ```bash
 git clone https://github.com/chuanghiduoc/nestjs-fastify-nx.git
 cd nestjs-fastify-nx
-cp .env.example .env
+./scripts/gen-env.sh             # creates .env and generates a real BETTER_AUTH_SECRET
 pnpm install                    # generates Prisma client via postinstall
 
 ./scripts/doctor.sh             # verify prerequisites (Docker, Node, pnpm, ports)

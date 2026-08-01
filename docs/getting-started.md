@@ -13,7 +13,7 @@ git clone https://github.com/chuanghiduoc/nestjs-fastify-nx.git
 cd nestjs-fastify-nx
 
 # 2. Copy environment file
-cp .env.example .env
+./scripts/gen-env.sh             # creates .env and generates a real BETTER_AUTH_SECRET
 
 # 3. Start all services (DB + Redis + MinIO + API with hot-reload)
 docker compose --env-file .env -f docker/compose.yml -f docker/compose.dev.yml up

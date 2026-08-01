@@ -67,15 +67,18 @@ docker run --rm \
 
 ## Docker Compose (Production)
 
+Each runtime connects as its own least-privilege Postgres role, so production needs `.env` (compose
+interpolation: role credentials, MinIO root, image refs) plus one mode-0600 file per process
+containing only what that process uses. `gen-env.sh` writes all five with generated secrets and
+the right DSN in each — done by hand it is nine credentials and four DSNs, and compose reports only
+the first missing variable per run.
+
 ```bash
-# Compose interpolation/deploy-only values (DB role passwords + immutable image digests)
-cp .env.example .env
-# Create four mode-0600 runtime files containing only variables used by that process:
-# .env.api, .env.worker, .env.scheduler, .env.migration
-# .env.migration must contain DATABASE_URL for the admin/migration role.
-# .env.api uses API_DB_USER/API_DB_PASSWORD in its DATABASE_URL; .env.worker and
-# .env.scheduler use their corresponding role. Keep STORAGE_* only in api/worker,
-# MAIL_* only in worker, and scheduler-only cron settings in scheduler.
+./scripts/gen-env.sh --prod     # .env + .env.{api,worker,scheduler,migration}
+./scripts/gen-env.sh --check    # list everything still missing, in one pass
+
+# Then replace the placeholders it cannot know: BETTER_AUTH_URL, FRONTEND_BASE_URL,
+# CORS_ORIGINS and MAIL_* must point at your real hosts before this is exposed.
 
 # Start infrastructure + apps
 docker compose --env-file .env -f docker/compose.yml -f docker/compose.prod.yml up -d
