@@ -362,6 +362,25 @@ export class S3StorageAdapter implements StoragePort, OnModuleInit, OnModuleDest
     }
   }
 
+  async readStream(key: string, bucket?: string): Promise<AsyncIterable<Uint8Array>> {
+    try {
+      const res = await this.client.send(
+        new GetObjectCommand({ Bucket: bucket ?? this.bucket, Key: key }),
+      );
+      const body = res.Body as AsyncIterable<Uint8Array> | undefined;
+      if (!body?.[Symbol.asyncIterator]) {
+        throw new Error('S3 GetObject returned no streamable body');
+      }
+      return body;
+    } catch (err) {
+      this.logger.error({ err, key }, 'S3 readStream failed');
+      throw new InternalServerErrorException({
+        messageKey: I18N_KEYS.errors.storage.read_range_failed,
+        message: 'Storage readStream failed',
+      });
+    }
+  }
+
   async read(key: string, bucket?: string): Promise<Buffer> {
     try {
       const res = await this.client.send(

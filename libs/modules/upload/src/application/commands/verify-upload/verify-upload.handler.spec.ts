@@ -18,9 +18,20 @@ const LIMITS: UploadLimits = {
 };
 
 function build() {
-  const storage: { readRange: Mock; read: Mock; delete: Mock } = {
+  const storage: { readRange: Mock; read: Mock; readStream: Mock; head: Mock; delete: Mock } = {
     readRange: vi.fn().mockResolvedValue(PNG_HEADER),
     read: vi.fn().mockResolvedValue(PNG_HEADER),
+    readStream: vi.fn().mockImplementation(async () =>
+      (async function* () {
+        yield PNG_HEADER;
+      })(),
+    ),
+    head: vi.fn().mockResolvedValue({
+      contentType: 'image/png',
+      size: PNG_HEADER.length,
+      bucket: 'uploads',
+      etag: '"e"',
+    }),
     delete: vi.fn().mockResolvedValue(undefined),
   };
   const files: { transitionByKey: Mock } = { transitionByKey: vi.fn().mockResolvedValue(true) };

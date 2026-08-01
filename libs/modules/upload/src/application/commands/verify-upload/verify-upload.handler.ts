@@ -1,7 +1,7 @@
 import { Inject, Logger } from '@nestjs/common';
 import { CommandHandler, type ICommandHandler } from '@nestjs/cqrs';
 import { isDomainException } from '@nestjs-fastify-nx/core';
-import { STORED_FILE_STATUS } from '@nestjs-fastify-nx/shared';
+import { MALWARE_SCAN_OUTCOME, STORED_FILE_STATUS } from '@nestjs-fastify-nx/shared';
 import { STORAGE_PORT, type StoragePort } from '@nestjs-fastify-nx/infra-storage';
 import { assertMagicBytesMatch } from '../../../domain/entities/stored-file.entity';
 import {
@@ -45,7 +45,14 @@ export class VerifyUploadHandler implements ICommandHandler<
       return this.reject(key, bucket, reason);
     }
 
-    if ((await this.scanner.scan(await this.storage.read(key, bucket))) === 'infected') {
+    // Streamed, not read into a Buffer: an object here can be tens of gigabytes, and one job
+    // materialising all of it would take the worker down with it. The size goes along so a scanner
+    // that cannot handle the object says so before the transfer starts.
+    const meta = await this.storage.head(key, bucket);
+    const verdict = await this.scanner.scan(await this.storage.readStream(key, bucket), {
+      sizeBytes: meta?.size,
+    });
+    if (verdict === 'infected') {
       this.logger.warn(
         { key, declaredContentType, correlationId },
         'upload-verification: infected object rejected and deleted',
@@ -53,11 +60,27 @@ export class VerifyUploadHandler implements ICommandHandler<
       return this.reject(key, bucket, 'Malware scan rejected the object');
     }
 
+    // ClamAV cannot scan past its own 2 GiB per-file ceiling. The object is published anyway, but
+    // the row records that nothing actually inspected it — a silent READY would claim otherwise.
+    if (verdict === 'unscannable') {
+      this.logger.warn(
+        { key, declaredContentType, correlationId },
+        'upload-verification: object exceeds the scanner limit — publishing unscanned',
+      );
+    }
+
     const flipped = await this.files.transitionByKey(
       key,
       STORED_FILE_STATUS.VERIFYING,
       STORED_FILE_STATUS.READY,
-      { verifiedAt: new Date(), failureReason: null },
+      {
+        verifiedAt: new Date(),
+        failureReason: null,
+        scanOutcome:
+          verdict === 'unscannable'
+            ? MALWARE_SCAN_OUTCOME.SKIPPED_TOO_LARGE
+            : MALWARE_SCAN_OUTCOME.CLEAN,
+      },
     );
     if (!flipped) {
       // A duplicate or retried job — or a row already flipped or purged — is a safe no-op.

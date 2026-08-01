@@ -72,6 +72,12 @@ const e2eStorageStub: StoragePort = {
   readRange: async (key, byteCount) =>
     e2eObjects.get(key)?.body.subarray(0, byteCount) ?? Buffer.alloc(0),
   read: async (key) => e2eObjects.get(key)?.body ?? Buffer.alloc(0),
+  readStream: async (key) => {
+    const body = e2eObjects.get(key)?.body ?? Buffer.alloc(0);
+    return (async function* () {
+      yield body;
+    })();
+  },
 };
 
 // Allowed cross-origin used to assert CORS headers survive the Better Auth hijack path.

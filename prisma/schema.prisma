@@ -106,6 +106,9 @@ model StoredFile {
   etag          String
   status        String    @default("FINALIZING")
   failureReason String?
+  // CLEAN or SKIPPED_TOO_LARGE. Null until verification runs; SKIPPED_TOO_LARGE marks an object
+  // published past the scanner's per-file ceiling, so READY alone never implies it was inspected.
+  scanOutcome   String?
   verifiedAt    DateTime?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt

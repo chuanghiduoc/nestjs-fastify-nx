@@ -54,6 +54,13 @@ const workerEnvSchema = z
     MALWARE_SCANNER_HOST: z.string().default('localhost'),
     MALWARE_SCANNER_PORT: z.coerce.number().int().min(1).max(65_535).default(3310),
     MALWARE_SCANNER_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(120_000).default(30_000),
+    // ClamAV clamps MaxFileSize to 2 GiB internally and skips anything larger, so sending more is
+    // pure waste. Lower it to match a scanner configured more tightly.
+    MALWARE_SCANNER_MAX_BYTES: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .default(2 * 1024 * 1024 * 1024),
 
     // Mail (Nodemailer SMTP)
     MAIL_HOST: z.string().default('localhost'),
