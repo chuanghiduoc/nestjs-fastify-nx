@@ -16,9 +16,15 @@ pre-commit:
   commands:
     # Lint + format staged files only (eslint --fix + prettier). Fast: touches
     # just what you're committing.
+    # Skipped on merge/rebase like the two below: those stage every file the merge touches (hundreds
+    # on a release merge), and ESLint's type-aware pass holds a program for all of them in one
+    # process — enough to exhaust the default heap. The content was already linted on its own commit.
     lint-staged:
       priority: 1
       run: pnpm lint-staged
+      skip:
+        - merge
+        - rebase
     # Typecheck affected projects. --uncommitted scopes to your working-tree
     # changes and cache hits keep repeat commits cheap; glob skips it entirely
     # when the commit has no TS. --output-style=stream prints the real tsc error.

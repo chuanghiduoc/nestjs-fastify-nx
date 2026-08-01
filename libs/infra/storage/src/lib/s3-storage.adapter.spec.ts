@@ -9,7 +9,27 @@ import {
   HeadObjectCommand,
   PutObjectCommand,
 } from '@aws-sdk/client-s3';
+import { createPresignedPost } from '@aws-sdk/s3-presigned-post';
 import { S3StorageAdapter } from './s3-storage.adapter';
+
+type PostParams = { Fields?: Record<string, string>; Conditions?: unknown[] };
+
+// The adapter keeps its clients private, and the SDK normalises each config value into either a
+// literal or a provider function — so read it back the same way the SDK would.
+async function resolvedClientConfig(
+  adapter: S3StorageAdapter,
+): Promise<{ forcePathStyle: boolean; requestChecksumCalculation: string }> {
+  const config = (adapter as unknown as { client: { config: Record<string, unknown> } }).client
+    .config;
+  const read = async (key: string): Promise<unknown> => {
+    const value = config[key];
+    return typeof value === 'function' ? await (value as () => Promise<unknown>)() : value;
+  };
+  return {
+    forcePathStyle: (await read('forcePathStyle')) as boolean,
+    requestChecksumCalculation: (await read('requestChecksumCalculation')) as string,
+  };
+}
 
 // `getSignedUrl` from @aws-sdk/s3-request-presigner is a static helper —
 // stub it before importing the adapter so getSignedUrl() returns a stable
@@ -25,13 +45,14 @@ vi.mock('@aws-sdk/s3-presigned-post', () => ({
   }),
 }));
 
-function makeConfigService(): ConfigService {
+function makeConfigService(overrides: Record<string, string> = {}): ConfigService {
   const env: Record<string, string> = {
     STORAGE_ENDPOINT: 'http://minio:9000',
     STORAGE_BUCKET: 'uploads',
     STORAGE_REGION: 'us-east-1',
     STORAGE_ACCESS_KEY: 'k',
     STORAGE_SECRET_KEY: 's',
+    ...overrides,
   };
   return { get: vi.fn((key: string) => env[key]) } as unknown as ConfigService;
 }
@@ -246,7 +267,7 @@ describe('S3StorageAdapter', () => {
   });
 
   describe('finalize', () => {
-    it('copies the exact staging version to a committed final key and deletes the source', async () => {
+    it('copies the exact staging version to the final key and deletes the source', async () => {
       const send = mockSend(adapter);
       send.mockResolvedValue({});
       await adapter.finalize('uploads/user/x.png', 'files/user/y.png', '"etag-1"');
@@ -257,8 +278,6 @@ describe('S3StorageAdapter', () => {
         Key: 'files/user/y.png',
         CopySource: 'uploads/uploads/user/x.png',
         CopySourceIfMatch: '"etag-1"',
-        TaggingDirective: 'REPLACE',
-        Tagging: 'committed=true',
       });
       expect(send.mock.calls[1][0]).toBeInstanceOf(DeleteObjectCommand);
     });
@@ -290,6 +309,49 @@ describe('S3StorageAdapter', () => {
       expect(result.bucket).toBe('uploads');
       expect(result.maxBytes).toBe(1024);
       expect(Date.parse(result.expiresAt)).not.toBeNaN();
+    });
+
+    // A `tagging` field inside a POST policy is a MinIO/AWS extension. SeaweedFS answers
+    // `Policy Condition failed`, which made the whole presign flow unusable there.
+    it('signs a policy no S3-compatible backend can reject over tagging', async () => {
+      await adapter.presignUpload('uploads/x', { contentType: 'image/png', maxBytes: 1024 });
+
+      const [, params] = vi.mocked(createPresignedPost).mock.calls.at(-1) as [unknown, PostParams];
+      expect(params.Fields).not.toHaveProperty('tagging');
+      expect(JSON.stringify(params.Conditions)).not.toContain('tagging');
+    });
+  });
+
+  describe('backend compatibility switches', () => {
+    it('defaults to path-style addressing and SDK checksums', async () => {
+      const client = await resolvedClientConfig(new S3StorageAdapter(makeConfigService()));
+
+      expect(client.forcePathStyle).toBe(true);
+      expect(client.requestChecksumCalculation).toBe('WHEN_SUPPORTED');
+    });
+
+    // Backends that reject `x-amz-checksum-crc32` (older Ceph RGW, B2) need the SDK to stop
+    // sending it; AWS documents WHEN_REQUIRED as the way to do that.
+    it('stops sending upload checksums when STORAGE_CHECKSUM_MODE says so', async () => {
+      const client = await resolvedClientConfig(
+        new S3StorageAdapter(makeConfigService({ STORAGE_CHECKSUM_MODE: 'WHEN_REQUIRED' })),
+      );
+
+      expect(client.requestChecksumCalculation).toBe('WHEN_REQUIRED');
+    });
+
+    it('switches to virtual-hosted addressing for real AWS S3', async () => {
+      const client = await resolvedClientConfig(
+        new S3StorageAdapter(makeConfigService({ STORAGE_FORCE_PATH_STYLE: 'false' })),
+      );
+
+      expect(client.forcePathStyle).toBe(false);
+    });
+
+    it('rejects an unknown checksum mode at construction', () => {
+      expect(
+        () => new S3StorageAdapter(makeConfigService({ STORAGE_CHECKSUM_MODE: 'sometimes' })),
+      ).toThrow(/STORAGE_CHECKSUM_MODE/);
     });
   });
 });

@@ -20,7 +20,7 @@ services:
         [ "$$connected" = 1 ] || { echo 'minio-init: cannot reach minio after 30s'; exit 1; };
         mc mb --ignore-existing \"local/$$STORAGE_BUCKET\";
         mc ilm rule remove --all --force \"local/$$STORAGE_BUCKET\" 2>/dev/null || true;
-        mc ilm rule add --expire-days "$$MINIO_ORPHAN_EXPIRY_DAYS" --tags 'committed=false' \"local/$$STORAGE_BUCKET\";
+        mc ilm rule add --expire-days "$$MINIO_ORPHAN_EXPIRY_DAYS" --prefix 'uploads/' \"local/$$STORAGE_BUCKET\";
         echo 'bucket ready: '$$STORAGE_BUCKET
       "
 

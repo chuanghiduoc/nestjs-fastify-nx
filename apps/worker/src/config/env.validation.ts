@@ -34,6 +34,11 @@ const workerEnvSchema = z
     STORAGE_PUBLIC_ENDPOINT: z.string().optional(),
     STORAGE_BUCKET: z.string().default('uploads'),
     STORAGE_REGION: z.string().default('us-east-1'),
+    // Self-hosted backends serve path-style; real AWS S3 documents virtual-hosted-style.
+    STORAGE_FORCE_PATH_STYLE: z.enum(['true', 'false']).default('true'),
+    // WHEN_REQUIRED stops the SDK attaching x-amz-checksum-crc32, which some S3-compatible
+    // backends reject outright.
+    STORAGE_CHECKSUM_MODE: z.enum(['WHEN_SUPPORTED', 'WHEN_REQUIRED']).default('WHEN_SUPPORTED'),
     STORAGE_ACCESS_KEY: z.string().default('minioadmin'),
     STORAGE_SECRET_KEY: z.string().default('minioadmin'),
     STORAGE_DOWNLOAD_URL_EXPIRES_SECONDS: z.coerce
