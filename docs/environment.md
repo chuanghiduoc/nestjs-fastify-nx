@@ -40,22 +40,22 @@ Copy `.env.example` to `.env` and fill in the values.
 
 ## Storage (S3-compatible)
 
-| Variable                               | Default                 | Required             | Description                                                                                                                                                                                                                          |
-| -------------------------------------- | ----------------------- | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `STORAGE_ENDPOINT`                     | `http://localhost:9000` | Yes                  | S3-compatible endpoint (app → storage)                                                                                                                                                                                               |
-| `STORAGE_PUBLIC_ENDPOINT`              | _(unset)_               | No                   | Browser-facing endpoint for presigned URLs; set when the app reaches storage at an internal hostname (e.g. `http://minio:9000` in containers) the browser can't resolve                                                              |
-| `STORAGE_ACCESS_KEY`                   | `minioadmin`            | Yes (rotate in prod) | Access key                                                                                                                                                                                                                           |
-| `STORAGE_SECRET_KEY`                   | `minioadmin`            | Yes (rotate in prod) | Secret key                                                                                                                                                                                                                           |
-| `STORAGE_BUCKET`                       | `uploads`               | Yes                  | Default bucket name                                                                                                                                                                                                                  |
-| `STORAGE_REGION`                       | `us-east-1`             | No                   | S3 region                                                                                                                                                                                                                            |
-| `STORAGE_FORCE_PATH_STYLE`             | `true`                  | No                   | Path-style addressing (`endpoint/bucket/key`), which every self-hosted backend serves. Set `false` against real AWS S3, which documents virtual-hosted-style as the supported form                                                   |
-| `STORAGE_CHECKSUM_MODE`                | `WHEN_SUPPORTED`        | No                   | `WHEN_SUPPORTED` lets the SDK attach `x-amz-checksum-crc32` to every upload (AWS S3 and current MinIO accept it). `WHEN_REQUIRED` stops sending it for backends that reject the header — older Ceph RGW, Backblaze B2, some gateways |
-| `UPLOAD_PRESIGN_EXPIRES_SECONDS`       | `300`                   | No                   | Presigned POST policy lifetime (60–3600 seconds)                                                                                                                                                                                     |
-| `STORAGE_DOWNLOAD_URL_EXPIRES_SECONDS` | `3600`                  | No                   | Signed download URL lifetime (60–86400 seconds)                                                                                                                                                                                      |
-| `MALWARE_SCANNER_ENABLED`              | `false`                 | Prod                 | Enable ClamAV scanning before an upload can become `READY`                                                                                                                                                                           |
-| `MALWARE_SCANNER_HOST`                 | `localhost`             | No                   | ClamAV daemon host (production worker uses the internal `malware-scanner` service)                                                                                                                                                   |
-| `MALWARE_SCANNER_PORT`                 | `3310`                  | No                   | ClamAV TCP port                                                                                                                                                                                                                      |
-| `MALWARE_SCANNER_TIMEOUT_MS`           | `30000`                 | No                   | Maximum scan duration before the file remains quarantined                                                                                                                                                                            |
+| Variable                               | Default                 | Required             | Description                                                                                                                                                                                                                                                   |
+| -------------------------------------- | ----------------------- | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `STORAGE_ENDPOINT`                     | `http://localhost:9000` | Yes                  | S3-compatible endpoint (app → storage)                                                                                                                                                                                                                        |
+| `STORAGE_PUBLIC_ENDPOINT`              | _(unset)_               | No                   | Browser-facing endpoint for presigned URLs; set when the app reaches storage at an internal hostname (e.g. `http://minio:9000` in containers) the browser can't resolve                                                                                       |
+| `STORAGE_ACCESS_KEY`                   | `minioadmin`            | Yes (rotate in prod) | Access key                                                                                                                                                                                                                                                    |
+| `STORAGE_SECRET_KEY`                   | `minioadmin`            | Yes (rotate in prod) | Secret key                                                                                                                                                                                                                                                    |
+| `STORAGE_BUCKET`                       | `uploads`               | Yes                  | Default bucket name                                                                                                                                                                                                                                           |
+| `STORAGE_REGION`                       | `us-east-1`             | No                   | Region used for request signing. It must match what the backend expects — the bucket region on real AWS S3, or whatever a self-hosted backend was configured with (Garage defaults to `garage`). A mismatch fails signing with `AuthorizationHeaderMalformed` |
+| `STORAGE_FORCE_PATH_STYLE`             | `true`                  | No                   | Path-style addressing (`endpoint/bucket/key`), which every self-hosted backend serves. Set `false` against real AWS S3, which documents virtual-hosted-style as the supported form                                                                            |
+| `STORAGE_CHECKSUM_MODE`                | `WHEN_SUPPORTED`        | No                   | `WHEN_SUPPORTED` lets the SDK attach `x-amz-checksum-crc32` to every upload (AWS S3 and current MinIO accept it). `WHEN_REQUIRED` stops sending it for backends that reject the header — older Ceph RGW, Backblaze B2, some gateways                          |
+| `UPLOAD_PRESIGN_EXPIRES_SECONDS`       | `300`                   | No                   | Presigned POST policy lifetime (60–3600 seconds)                                                                                                                                                                                                              |
+| `STORAGE_DOWNLOAD_URL_EXPIRES_SECONDS` | `3600`                  | No                   | Signed download URL lifetime (60–86400 seconds)                                                                                                                                                                                                               |
+| `MALWARE_SCANNER_ENABLED`              | `false`                 | Prod                 | Enable ClamAV scanning before an upload can become `READY`                                                                                                                                                                                                    |
+| `MALWARE_SCANNER_HOST`                 | `localhost`             | No                   | ClamAV daemon host (production worker uses the internal `malware-scanner` service)                                                                                                                                                                            |
+| `MALWARE_SCANNER_PORT`                 | `3310`                  | No                   | ClamAV TCP port                                                                                                                                                                                                                                               |
+| `MALWARE_SCANNER_TIMEOUT_MS`           | `30000`                 | No                   | Maximum scan duration before the file remains quarantined                                                                                                                                                                                                     |
 
 **Upload pattern** — clients call `POST /api/v1/upload/presign` to receive a
 short-lived (5 min) S3 presigned-POST policy, upload the bytes browser→S3
@@ -74,16 +74,39 @@ and objects rejected by verification.
 
 **Which backend to run.** The bundled MinIO is a development convenience, not a recommendation:
 upstream archived the repository in February 2026, the last published image is
-`RELEASE.2025-09-07`, and there will be no further security patches. The adapter itself is plain
-S3 — nothing in it is MinIO-specific — so production should point `STORAGE_ENDPOINT` at AWS S3,
-Cloudflare R2, or a maintained self-hosted backend.
+`RELEASE.2025-09-07`, and there will be no further security patches. The adapter is plain S3, so
+moving off it is a matter of pointing `STORAGE_ENDPOINT` somewhere else — provided the target
+implements the three operations this upload flow is built on.
 
-SeaweedFS (Apache-2.0, actively maintained) was verified against this exact flow — presigned POST,
-`HeadObject`, `CopyObject` with `CopySourceIfMatch`, ranged reads, and the SDK's default CRC32
-checksum all pass. It needs an S3 identity configured (`-s3.config`) and, since it has no `mc`,
-its own bucket creation and lifecycle setup. The one thing no portable backend accepts is a
-`tagging` field inside a POST policy, which is why staging objects are separated by the `uploads/`
-key prefix and the orphan-expiry lifecycle rule filters on that prefix instead of on a tag.
+| Operation                                      | Used for                                                  |
+| ---------------------------------------------- | --------------------------------------------------------- |
+| `PostObject` (presigned POST policy)           | The browser uploads bytes directly, under a size/MIME cap |
+| `CopyObject` with `x-amz-copy-source-if-match` | Confirm promotes the exact bytes that were verified       |
+| `GetObject` with `Range`                       | Magic-byte inspection without downloading the object      |
+
+Measured against a live container of each, running that flow end to end:
+
+| Backend                    | POST policy | `CopySourceIfMatch` | `Range` | SDK CRC32 | Licence    | Upstream          |
+| -------------------------- | ----------- | ------------------- | ------- | --------- | ---------- | ----------------- |
+| AWS S3                     | yes         | yes                 | yes     | yes       | commercial | —                 |
+| SeaweedFS                  | yes         | enforced            | yes     | yes       | Apache-2.0 | active            |
+| Garage 2.x                 | yes         | enforced            | yes     | yes       | AGPL-3.0   | active            |
+| MinIO `RELEASE.2025-09-07` | yes         | enforced            | yes     | yes       | AGPL-3.0   | archived Feb 2026 |
+| Cloudflare R2              | **no**      | **no**              | yes     | n/a       | commercial | active            |
+
+"enforced" means a stale ETag was actually refused with `PreconditionFailed`, not merely accepted
+and ignored — a guard that silently passes is worse than none.
+
+**Cloudflare R2 does not work with this flow as written.** It implements neither `PostObject` nor
+`x-amz-copy-source-if-match` ([R2 S3 API compatibility](https://developers.cloudflare.com/r2/api/s3/api/)).
+Using it means switching presign to a `PUT` URL and replacing the ETag guard — a code change, not a
+configuration change.
+
+Two smaller differences to plan for: Garage implements only the `Expiration` and
+`AbortIncompleteMultipartUpload` lifecycle actions, and SeaweedFS ships no `mc`, so both need their
+own bucket creation and orphan-expiry setup instead of the bundled `minio-init` one-shot. Neither
+accepts a `tagging` field inside a POST policy, which is why staging objects are separated by the
+`uploads/` key prefix and the lifecycle rule filters on that prefix rather than on a tag.
 
 ## Authentication (Better Auth)
 
