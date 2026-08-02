@@ -156,6 +156,14 @@ services:
       - FOWNER
       - SETGID
       - SETUID
+    environment:
+      # Without AlertExceedsMax, ClamAV reports a file it refused to scan as clean. With it, the
+      # skip comes back as Heuristics.Limits.Exceeded and the worker records SKIPPED_TOO_LARGE.
+      CLAMD_CONF_AlertExceedsMax: 'yes'
+      # 2 GiB is ClamAV's internal per-file ceiling; asking for more is silently clamped.
+      CLAMD_CONF_MaxFileSize: '2G'
+      CLAMD_CONF_MaxScanSize: '2G'
+      CLAMD_CONF_StreamMaxLength: '2G'
     volumes:
       - clamav_signatures:/var/lib/clamav
     healthcheck:

@@ -40,4 +40,16 @@ describe('validateWorkerConfig', () => {
   it('requires a database URL for durable upload lifecycle state', () => {
     expect(() => validateWorkerConfig({ NODE_ENV: 'development' })).toThrow('DATABASE_URL');
   });
+
+  // Anything above ClamAV's own 2 GiB ceiling would stream an oversized object to clamd and put
+  // back the mid-stream refusal the size gate exists to avoid.
+  it('refuses a scanner ceiling above what ClamAV can actually scan', () => {
+    expect(() =>
+      validateWorkerConfig({
+        NODE_ENV: 'development',
+        DATABASE_URL: 'postgresql://user:pass@db:5432/app',
+        MALWARE_SCANNER_MAX_BYTES: String(10 * 1024 * 1024 * 1024),
+      }),
+    ).toThrow(/MALWARE_SCANNER_MAX_BYTES/);
+  });
 });

@@ -56,6 +56,7 @@ Copy `.env.example` to `.env` and fill in the values.
 | `MALWARE_SCANNER_HOST`                 | `localhost`             | No                   | ClamAV daemon host (production worker uses the internal `malware-scanner` service)                                                                                                                                                                            |
 | `MALWARE_SCANNER_PORT`                 | `3310`                  | No                   | ClamAV TCP port                                                                                                                                                                                                                                               |
 | `MALWARE_SCANNER_TIMEOUT_MS`           | `30000`                 | No                   | Maximum scan duration before the file remains quarantined                                                                                                                                                                                                     |
+| `MALWARE_SCANNER_MAX_BYTES`            | `2147483648`            | No                   | Objects larger than this are published with `scanOutcome=SKIPPED_TOO_LARGE` instead of being sent to the scanner. The default is ClamAV's internal 2 GiB per-file ceiling, past which it skips the file — and, without `AlertExceedsMax`, reports it clean    |
 
 **Upload pattern** — clients call `POST /api/v1/upload/presign` to receive a
 short-lived (5 min) S3 presigned-POST policy, upload the bytes browser→S3
@@ -71,6 +72,11 @@ Confirmed objects are tracked in `stored_files`: `FINALIZING` before the S3 copy
 `VERIFYING` after durable BullMQ enqueue, then `READY` or `REJECTED` in the worker.
 The scheduler removes stale records, committed objects belonging to deleted users,
 and objects rejected by verification.
+
+`READY` on its own does not mean the object was scanned. Every scanner has a size ceiling — ClamAV
+skips anything past 2 GiB — so `stored_files.scanOutcome` records which happened: `CLEAN` for an
+object the scanner actually inspected, `SKIPPED_TOO_LARGE` for one published without inspection.
+Anything treating `READY` as "virus-checked" must read `scanOutcome` too.
 
 **Which backend to run.** The bundled MinIO is a development convenience, not a recommendation:
 upstream archived the repository in February 2026, the last published image is

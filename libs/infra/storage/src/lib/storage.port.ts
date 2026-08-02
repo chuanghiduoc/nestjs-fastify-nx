@@ -56,5 +56,9 @@ export interface StoragePort {
   // magic-byte verifier so the worker doesn't have to download whole files.
   readRange(key: string, byteCount: number, bucket?: string): Promise<Buffer>;
   // Complete quarantined object for malware scanning; it remains unavailable until scan success.
+  // Only for objects known to be small — it materialises the whole body in memory.
   read(key: string, bucket?: string): Promise<Buffer>;
+  // The same bytes as `read`, streamed. Uploads are capped in the hundreds of megabytes upward,
+  // so the scanner consumes this instead: one 10 GB object would otherwise be one 10 GB Buffer.
+  readStream(key: string, bucket?: string): Promise<AsyncIterable<Uint8Array>>;
 }

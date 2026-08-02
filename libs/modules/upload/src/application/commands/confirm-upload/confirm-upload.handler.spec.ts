@@ -33,6 +33,7 @@ function storageMock(): Record<keyof StoragePort, Mock> {
     finalize: vi.fn().mockResolvedValue(undefined),
     readRange: vi.fn().mockResolvedValue(PNG_HEADER),
     read: vi.fn(),
+    readStream: vi.fn(),
   };
 }
 

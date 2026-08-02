@@ -2,7 +2,10 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '@nestjs-fastify-nx/infra-database';
 import type { StoredFileStatus } from '@nestjs-fastify-nx/shared';
 import { StoredFile, type StoredFileProps } from '../../domain/entities/stored-file.entity';
-import type { StoredFileRepositoryPort } from '../../domain/ports/stored-file-repository.port';
+import type {
+  StoredFileRepositoryPort,
+  StoredFileTransitionFields,
+} from '../../domain/ports/stored-file-repository.port';
 
 interface StoredFileRow {
   id: string;
@@ -48,7 +51,7 @@ export class PrismaStoredFileRepository implements StoredFileRepositoryPort {
     id: string,
     from: StoredFileStatus,
     to: StoredFileStatus,
-    fields?: { verifiedAt?: Date; failureReason?: string | null },
+    fields?: StoredFileTransitionFields,
   ): Promise<boolean> {
     const result = await this.writer.storedFile.updateMany({
       where: { id, status: from },
@@ -61,7 +64,7 @@ export class PrismaStoredFileRepository implements StoredFileRepositoryPort {
     key: string,
     from: StoredFileStatus,
     to: StoredFileStatus,
-    fields?: { verifiedAt?: Date; failureReason?: string | null },
+    fields?: StoredFileTransitionFields,
   ): Promise<boolean> {
     const result = await this.writer.storedFile.updateMany({
       where: { key, status: from },
