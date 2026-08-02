@@ -55,11 +55,14 @@ const workerEnvSchema = z
     MALWARE_SCANNER_PORT: z.coerce.number().int().min(1).max(65_535).default(3310),
     MALWARE_SCANNER_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(120_000).default(30_000),
     // ClamAV clamps MaxFileSize to 2 GiB internally and skips anything larger, so sending more is
-    // pure waste. Lower it to match a scanner configured more tightly.
+    // pure waste. Capped at that ceiling rather than left open: a higher value would stream an
+    // oversized object to clamd and reopen the mid-stream refusal this gate exists to avoid. Lower
+    // it to match a scanner configured more tightly.
     MALWARE_SCANNER_MAX_BYTES: z.coerce
       .number()
       .int()
       .min(1)
+      .max(2 * 1024 * 1024 * 1024)
       .default(2 * 1024 * 1024 * 1024),
 
     // Mail (Nodemailer SMTP)
