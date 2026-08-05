@@ -47,7 +47,12 @@ function summarizeBody(body: unknown): string {
   if (!body || typeof body !== 'object') return '(non-object)';
   const keys = Object.keys(body);
   if (keys.length === 0) return '(empty)';
-  const preview = keys.slice(0, 10).join(', ');
+  // JSON.stringify escapes control characters — a key like "[31m" would otherwise
+  // inject ANSI sequences into the terminal from attacker-controlled input.
+  const preview = keys
+    .slice(0, 10)
+    .map((key) => JSON.stringify(key))
+    .join(', ');
   return keys.length > 10 ? `{${preview}, ...+${keys.length - 10}}` : `{${preview}}`;
 }
 
@@ -60,28 +65,24 @@ const NOISY_PATHS = ['/api/v1/health', '/metrics', '/api/health'];
 export function registerDevRequestLogger(fastify: FastifyInstance): void {
   const requestTimes = new WeakMap<FastifyRequest, number>();
 
-  // Log request start - runs before everything
-  fastify.addHook('onRequest', (req: FastifyRequest) => {
+  function logRequestStart(req: FastifyRequest): void {
     if (NOISY_PATHS.some((p) => req.url.startsWith(p))) return;
     requestTimes.set(req, performance.now());
 
     const timestamp = new Date().toLocaleTimeString('en-US', { hour12: false });
     const safeUrl = sanitizeUrlForLogging(req.url) ?? req.url;
     console.log(`${colors.dim}${timestamp}${colors.reset} ${colorMethod(req.method)} ${safeUrl}`);
-  });
+  }
 
-  // Log body field names after parsing (for mutations) - never log values
-  fastify.addHook('preHandler', (req: FastifyRequest) => {
+  function logBodyFields(req: FastifyRequest): void {
     if (NOISY_PATHS.some((p) => req.url.startsWith(p))) return;
     if (!['POST', 'PUT', 'PATCH'].includes(req.method)) return;
     if (!req.body) return;
 
-    const summary = summarizeBody(req.body);
-    console.log(`${colors.dim}            └─ body: ${summary}${colors.reset}`);
-  });
+    console.log(`${colors.dim}            └─ body: ${summarizeBody(req.body)}${colors.reset}`);
+  }
 
-  // Log response - runs after everything, including errors
-  fastify.addHook('onResponse', (req: FastifyRequest, reply: FastifyReply) => {
+  function logResponse(req: FastifyRequest, reply: FastifyReply): void {
     if (NOISY_PATHS.some((p) => req.url.startsWith(p))) return;
 
     const start = requestTimes.get(req);
@@ -91,5 +92,23 @@ export function registerDevRequestLogger(fastify: FastifyInstance): void {
       `${colors.dim}            └─${colors.reset} ${colorStatus(reply.statusCode)} ` +
         `${colors.dim}in ${duration}ms${colors.reset}`,
     );
+  }
+
+  // Fastify only advances the chain once `done` is called, so the logging itself stays in the
+  // helpers above and every hook has exactly one exit path — an early `return` before `done()`
+  // would hang the request instead of skipping the log line.
+  fastify.addHook('onRequest', (req, _reply, done) => {
+    logRequestStart(req);
+    done();
+  });
+
+  fastify.addHook('preHandler', (req, _reply, done) => {
+    logBodyFields(req);
+    done();
+  });
+
+  fastify.addHook('onResponse', (req, reply, done) => {
+    logResponse(req, reply);
+    done();
   });
 }

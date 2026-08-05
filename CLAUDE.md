@@ -164,7 +164,7 @@ pnpm nx affected -t lint test build --base=origin/main
 
 # Inner loop
 ./scripts/dev.sh                   # HOT RELOAD: infra in Docker, api on host (`nx serve` with webpack watch). Pass an app name to reload worker/scheduler instead.
-pnpm nx serve api                  # build once then spawn Node; no file watching. For manual HMR: pnpm nx watch -p api -- pnpm nx run api:build
+pnpm nx serve api                  # same watch loop as dev.sh but without the Docker infra — you supply Postgres/Redis yourself
 pnpm nx test <project>             # vitest
 pnpm nx affected -t lint test build
 pnpm nx run api:e2e                # Testcontainers — Docker required. Set TESTCONTAINERS_REUSE=true to persist containers across runs
