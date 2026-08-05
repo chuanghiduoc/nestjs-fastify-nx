@@ -233,6 +233,7 @@ const DOMAIN_KIND_STATUS: Record<DomainErrorKind, HttpStatus> = {
   conflict: HttpStatus.CONFLICT,
   not_found: HttpStatus.NOT_FOUND,
   forbidden: HttpStatus.FORBIDDEN,
+  unavailable: HttpStatus.SERVICE_UNAVAILABLE,
 };
 
 export function normalizeException(exception: unknown): NormalizedError {

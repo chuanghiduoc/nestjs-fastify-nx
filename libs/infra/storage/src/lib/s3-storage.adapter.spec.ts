@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { BadRequestException, InternalServerErrorException } from '@nestjs/common';
 import type { ConfigService } from '@nestjs/config';
+import { DomainException } from '@nestjs-fastify-nx/core';
 import {
   DeleteObjectCommand,
   CopyObjectCommand,
@@ -130,10 +130,10 @@ describe('S3StorageAdapter', () => {
   });
 
   describe('upload', () => {
-    it('rejects an empty body with BadRequest (no S3 call)', async () => {
+    it('rejects an empty body with DomainException (no S3 call)', async () => {
       const send = mockSend(adapter);
       await expect(adapter.upload('uploads/x', Buffer.alloc(0))).rejects.toBeInstanceOf(
-        BadRequestException,
+        DomainException,
       );
       expect(send).not.toHaveBeenCalled();
     });
@@ -154,11 +154,11 @@ describe('S3StorageAdapter', () => {
       });
     });
 
-    it('wraps S3 errors as InternalServerError', async () => {
+    it('wraps S3 errors as DomainException with unavailable kind', async () => {
       const send = mockSend(adapter);
       send.mockRejectedValueOnce(new Error('NoSuchBucket'));
       await expect(adapter.upload('uploads/x', Buffer.from('p'))).rejects.toBeInstanceOf(
-        InternalServerErrorException,
+        DomainException,
       );
     });
   });
@@ -193,12 +193,12 @@ describe('S3StorageAdapter', () => {
       expect(send.mock.calls[0][0]).toBeInstanceOf(HeadObjectCommand);
     });
 
-    it('throws InternalServerError for non-404 errors', async () => {
+    it('throws DomainException for non-404 errors', async () => {
       const send = mockSend(adapter);
       send.mockRejectedValueOnce(
         Object.assign(new Error('Forbidden'), { $metadata: { httpStatusCode: 403 } }),
       );
-      await expect(adapter.head('uploads/x')).rejects.toBeInstanceOf(InternalServerErrorException);
+      await expect(adapter.head('uploads/x')).rejects.toBeInstanceOf(DomainException);
     });
 
     it('defaults contentType to application/octet-stream when missing', async () => {
@@ -222,12 +222,10 @@ describe('S3StorageAdapter', () => {
       expect(cmd.input.Range).toBe('bytes=0-3');
     });
 
-    it('throws InternalServerError when Body lacks transformToByteArray', async () => {
+    it('throws DomainException when Body lacks transformToByteArray', async () => {
       const send = mockSend(adapter);
       send.mockResolvedValueOnce({ Body: undefined });
-      await expect(adapter.readRange('uploads/x', 16)).rejects.toBeInstanceOf(
-        InternalServerErrorException,
-      );
+      await expect(adapter.readRange('uploads/x', 16)).rejects.toBeInstanceOf(DomainException);
     });
 
     it('clamps the Range header to 0-0 when byteCount is 0', async () => {
@@ -240,12 +238,10 @@ describe('S3StorageAdapter', () => {
       expect(cmd.input.Range).toBe('bytes=0-0');
     });
 
-    it('wraps SDK errors as InternalServerError', async () => {
+    it('wraps SDK errors as DomainException', async () => {
       const send = mockSend(adapter);
       send.mockRejectedValueOnce(new Error('TimeoutError'));
-      await expect(adapter.readRange('uploads/x', 16)).rejects.toBeInstanceOf(
-        InternalServerErrorException,
-      );
+      await expect(adapter.readRange('uploads/x', 16)).rejects.toBeInstanceOf(DomainException);
     });
   });
 
@@ -257,12 +253,10 @@ describe('S3StorageAdapter', () => {
       expect(send.mock.calls[0][0]).toBeInstanceOf(DeleteObjectCommand);
     });
 
-    it('wraps errors as InternalServerError', async () => {
+    it('wraps errors as DomainException', async () => {
       const send = mockSend(adapter);
       send.mockRejectedValueOnce(new Error('AccessDenied'));
-      await expect(adapter.delete('uploads/x')).rejects.toBeInstanceOf(
-        InternalServerErrorException,
-      );
+      await expect(adapter.delete('uploads/x')).rejects.toBeInstanceOf(DomainException);
     });
   });
 
@@ -282,12 +276,12 @@ describe('S3StorageAdapter', () => {
       expect(send.mock.calls[1][0]).toBeInstanceOf(DeleteObjectCommand);
     });
 
-    it('wraps errors as InternalServerError', async () => {
+    it('wraps errors as DomainException', async () => {
       const send = mockSend(adapter);
       send.mockRejectedValueOnce(new Error('AccessDenied'));
       await expect(
         adapter.finalize('uploads/user/x.png', 'files/user/y.png', '"etag-1"'),
-      ).rejects.toBeInstanceOf(InternalServerErrorException);
+      ).rejects.toBeInstanceOf(DomainException);
     });
   });
 

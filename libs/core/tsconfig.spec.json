@@ -5,7 +5,7 @@
     "types": ["vitest/globals", "vitest/importMeta", "node", "vitest"],
     "rootDir": "."
   },
-  "include": ["vitest.config.mts", "src/**/*.spec.ts", "src/**/*.test.ts", "src/**/*.d.ts"],
+  "include": ["src/**/*.spec.ts", "src/**/*.test.ts", "src/**/*.d.ts"],
   "references": [
     {
       "path": "./tsconfig.lib.json"

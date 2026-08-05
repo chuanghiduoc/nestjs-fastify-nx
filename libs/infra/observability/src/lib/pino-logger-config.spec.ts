@@ -32,6 +32,7 @@ describe('buildPinoLoggerConfig', () => {
 
   // Asserting only the full-URL shape passes a filter that matches nothing at runtime.
   it('ignores health and metrics probes but logs real traffic', () => {
+    process.env['NODE_ENV'] = 'production';
     const ignore = (pinoHttp().autoLogging as { ignore: (req: ProbeRequest) => boolean }).ignore;
     expect(ignore({ url: '/', originalUrl: '/metrics' })).toBe(true);
     expect(ignore({ url: '/', originalUrl: '/api/v1/health' })).toBe(true);

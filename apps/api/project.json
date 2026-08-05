@@ -9,12 +9,12 @@
       "executor": "nx:run-commands",
       "options": {
         "command": "webpack-cli build",
-        "args": ["--node-env=production"],
+        "args": ["--config-node-env=production"],
         "cwd": "apps/api"
       },
       "configurations": {
         "development": {
-          "args": ["--node-env=development"]
+          "args": ["--config-node-env=development"]
         }
       }
     },
@@ -32,7 +32,7 @@
       "cache": true,
       "outputs": ["{workspaceRoot}/dist/apps/api-codegen"],
       "options": {
-        "command": "webpack-cli build --config webpack.codegen.config.js --node-env=development",
+        "command": "webpack-cli build --config webpack.codegen.config.js --config-node-env=development",
         "cwd": "apps/api"
       }
     },

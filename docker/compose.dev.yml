@@ -1,3 +1,11 @@
+# Dev overlay — extends compose.yml with build contexts, dev-only services,
+# and container-to-container networking overrides.
+#
+# INTERNAL PORT REFERENCE (fixed, not configurable):
+#   postgres:5432, redis-cache:6379, redis-queue:6380, minio:9000, mailpit:1025
+# Apps inside containers connect to these via service names (e.g. redis-cache:6379).
+# .env port vars (REDIS_CACHE_PORT, etc.) are for HOST apps only (dev.sh).
+
 services:
   # One-shot: creates the STORAGE_BUCKET and its orphan-expiry lifecycle rule if
   # absent. Runs after minio is healthy; restarts on failure until mc connects.
@@ -37,13 +45,36 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/nestjs_db
+      # Container-to-container: hostname is the service name, port is the container port (5432).
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-nestjs_db}
+
+  # Redis UI for browsing cache and queue data — http://localhost:8081
+  # Connects to both redis-cache (db 0-5) and redis-queue (db 0-2).
+  redis-commander:
+    # Unmaintained upstream (last release ~2020). Dev-only tool — pin if instability surfaces.
+    image: rediscommander/redis-commander:latest
+    restart: unless-stopped
+    mem_limit: 128m
+    cpus: 0.25
+    environment:
+      TZ: ${TZ:-UTC}
+      # Comma-separated Redis hosts: label:host:port:dbIndex
+      REDIS_HOSTS: cache:redis-cache:6379:0,queue:redis-queue:6380:0
+    ports:
+      - '${REDIS_COMMANDER_PORT:-8081}:8081'
+    depends_on:
+      redis-cache:
+        condition: service_healthy
+      redis-queue:
+        condition: service_healthy
 
   # Fake SMTP for dev/CI mail testing — UI at http://localhost:8025.
   # Prod deployments terminate at real SMTP via MAIL_HOST in .env.
   mailpit:
     image: axllent/mailpit:v1.30.4
     restart: unless-stopped
+    mem_limit: 64m
+    cpus: 0.25
     environment:
       TZ: ${TZ:-UTC}
     ports:
@@ -61,7 +92,7 @@ services:
     env_file: ../.env
     environment:
       NODE_ENV: development
-      LOG_PRETTY: 'false'
+      LOG_PRETTY: 'true'
       TZ: ${TZ:-UTC}
       # The image only EXPOSEs 9229 and the port is published above — without this the
       # inspector is never actually opened, so attaching silently fails. Bind 0.0.0.0, not
@@ -70,17 +101,16 @@ services:
       # (`NODE_DEBUG_OPTIONS=--inspect=0.0.0.0:9229`, or `--inspect-brk=…` to pause on the
       # first line). It stays a dev-overlay knob and is absent from the production images.
       NODE_OPTIONS: ${NODE_DEBUG_OPTIONS:-}
-      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/nestjs_db
+      # Container-to-container connection uses service names and internal ports.
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-nestjs_db}
       REDIS_CACHE_HOST: redis-cache
-      # In-network port. Unpinned it falls through to env_file, where the value is the HOST
-      # publish port — repointing that to dodge a clash would then break the cache connection.
       REDIS_CACHE_PORT: '6379'
       REDIS_QUEUE_HOST: redis-queue
       REDIS_QUEUE_PORT: '6380'
       STORAGE_ENDPOINT: http://minio:9000
       # Presigned upload/download URLs are signed against the host-reachable
       # address so a browser outside the compose network can resolve them.
-      STORAGE_PUBLIC_ENDPOINT: http://localhost:9000
+      STORAGE_PUBLIC_ENDPOINT: http://localhost:${MINIO_PORT:-9000}
       MAIL_HOST: mailpit
     depends_on:
       postgres:
@@ -107,13 +137,13 @@ services:
     env_file: ../.env
     environment:
       NODE_ENV: development
-      LOG_PRETTY: 'false'
+      LOG_PRETTY: 'true'
+      TZ: ${TZ:-UTC}
       # .env carries the api's name, which would otherwise label this process as the api.
       OTEL_SERVICE_NAME: nestjs-fastify-worker
-      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/nestjs_db
+      # Container-to-container connection uses service names and internal ports.
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-nestjs_db}
       REDIS_CACHE_HOST: redis-cache
-      # In-network port. Unpinned it falls through to env_file, where the value is the HOST
-      # publish port — repointing that to dodge a clash would then break the cache connection.
       REDIS_CACHE_PORT: '6379'
       REDIS_QUEUE_HOST: redis-queue
       REDIS_QUEUE_PORT: '6380'
@@ -154,12 +184,12 @@ services:
     env_file: ../.env
     environment:
       NODE_ENV: development
-      LOG_PRETTY: 'false'
+      LOG_PRETTY: 'true'
+      TZ: ${TZ:-UTC}
       OTEL_SERVICE_NAME: nestjs-fastify-scheduler
-      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/nestjs_db
+      # Container-to-container connection uses service names and internal ports.
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-nestjs_db}
       REDIS_CACHE_HOST: redis-cache
-      # In-network port. Unpinned it falls through to env_file, where the value is the HOST
-      # publish port — repointing that to dodge a clash would then break the cache connection.
       REDIS_CACHE_PORT: '6379'
       REDIS_QUEUE_HOST: redis-queue
       REDIS_QUEUE_PORT: '6380'

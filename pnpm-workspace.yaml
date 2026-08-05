@@ -49,15 +49,15 @@ overrides:
   # cannot be resolved by a plain update.
   find-my-way: '>=9.7.0'
   '@hono/node-server': '2.0.10'
-  # GHSA-mh99-v99m-4gvg (high, ReDoS). Capped below the next major per the repo's override policy:
+  # GHSA-rgw5-rvv9-x895 (high, ReDoS). Capped below the next major per the repo's override policy:
   # an open-ended `>=` let pnpm cross a major boundary and break a peer (see the
   # @babel/plugin-transform-modules-systemjs incident documented in CLAUDE.md).
-  brace-expansion: '>=5.0.8 <6'
+  brace-expansion: '>=5.0.9 <6'
   yaml: '>=2.8.3'
   follow-redirects: '>=1.16.0'
   picomatch: '>=4.0.4'
   uuid: '^14.0.1'
-  fast-uri: '4.1.1'
+  fast-uri: '>=4.1.2 <5'
   fast-xml-builder: '>=1.2.0'
   hono: '4.12.27'
   immutable: '5.1.8'
@@ -90,3 +90,6 @@ overrides:
   # 9->10 (v10 only raises the engine floor to Fastify 5, already in use — mercurius already resolves
   # 10.1.2). Capped below the next major. Also dedupes to a single @fastify/static version.
   '@fastify/static': '>=10.1.2 <11'
+  # cookie v2 renamed exports (parse→parseCookie, serialize→stringifyCookie) breaking register-idempotency.ts.
+  # light-my-request (Fastify core dep) still calls serialize(), so v2 breaks testing too. Pin to 1.x.
+  cookie: '>=1.1.1 <2'

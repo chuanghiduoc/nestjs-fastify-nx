@@ -35,6 +35,7 @@ import { GLOBAL_PREFIX, GLOBAL_PREFIX_EXCLUDES } from './common/http/global-pref
 import { applyFastifyProblemDetailsHook } from './common/filters/fastify-error-handler';
 import { buildProblemDetails } from './common/filters/problem-details.helper';
 import { maskBetterAuthServerResponse } from './common/filters/better-auth-response';
+import { registerDevRequestLogger } from './common/logging/dev-request-logger';
 import type { EnvConfig } from './config/env.validation';
 
 const STRICT_AUTH_PATHS = new Set([
@@ -84,6 +85,13 @@ async function bootstrap() {
   app.enableVersioning({ type: VersioningType.URI, defaultVersion: '1' });
 
   const fastify = app.getHttpAdapter().getInstance();
+
+  // Dev-only: colorful request logging at Fastify level (before guards/interceptors).
+  // Runs for EVERY request including 401s, rate-limits, etc.
+  if (!isProduction) {
+    registerDevRequestLogger(fastify);
+  }
+
   // Register CORS before any direct Fastify routes (Better Auth/Bull Board). Fastify hooks are
   // order-sensitive; registering this near the end would leave earlier routes without CORS headers.
   const corsOrigins = config.get('CORS_ORIGINS', { infer: true });

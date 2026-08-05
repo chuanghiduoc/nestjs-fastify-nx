@@ -35,7 +35,7 @@ describe('RedisLeaderLease', () => {
 
   it('stays a follower when another replica already holds the lease', async () => {
     const redis = redisMock();
-    vi.mocked(redis.set).mockResolvedValueOnce(null);
+    vi.mocked(redis.set).mockResolvedValueOnce(null as never);
     const lease = new RedisLeaderLease({ redis, key: 'k' });
 
     await lease.tick();
@@ -71,7 +71,7 @@ describe('RedisLeaderLease', () => {
     await lease.tick();
 
     vi.mocked(redis.eval).mockResolvedValueOnce(0 as never);
-    vi.mocked(redis.set).mockResolvedValueOnce(null);
+    vi.mocked(redis.set).mockResolvedValueOnce(null as never);
     await lease.tick();
 
     expect(lease.isLeader()).toBe(false);
@@ -111,7 +111,7 @@ describe('RedisLeaderLease', () => {
 
   it('does not attempt a release when it never held the lease', async () => {
     const redis = redisMock();
-    vi.mocked(redis.set).mockResolvedValueOnce(null);
+    vi.mocked(redis.set).mockResolvedValueOnce(null as never);
     const lease = new RedisLeaderLease({ redis, key: 'k' });
     await lease.tick();
 
@@ -131,7 +131,7 @@ describe('RedisLeaderLease', () => {
       expect(onLeadershipLost).not.toHaveBeenCalled();
 
       vi.mocked(redis.eval).mockResolvedValueOnce(0 as never);
-      vi.mocked(redis.set).mockResolvedValueOnce(null);
+      vi.mocked(redis.set).mockResolvedValueOnce(null as never);
       await lease.tick();
 
       expect(onLeadershipLost).toHaveBeenCalledOnce();
@@ -155,7 +155,7 @@ describe('RedisLeaderLease', () => {
       const onLeadershipLost = vi.fn();
       const lease = new RedisLeaderLease({ redis, key: 'k', onLeadershipLost });
 
-      vi.mocked(redis.set).mockResolvedValue(null);
+      vi.mocked(redis.set).mockResolvedValue(null as never);
       await lease.tick();
       await lease.tick();
 
