@@ -149,11 +149,16 @@ describe('normalizeException — domain failures are not server faults', () => {
   // The GraphQL branch of the filter classifies with normalizeException too. Reading
   // `instanceof HttpException` there instead would score every DomainException as a 500 and page on
   // ordinary 4xx domain failures.
-  it('never scores a domain failure as a 5xx', () => {
+  it('never scores a client-correctable domain failure as a 5xx', () => {
     for (const kind of ['malformed', 'validation', 'conflict', 'not_found', 'forbidden'] as const) {
       const result = normalizeException(new DomainException({ kind, violations: [] }));
       expect(result.status).toBeLessThan(HttpStatus.INTERNAL_SERVER_ERROR);
     }
+  });
+
+  it('maps unavailable to 503 for transient infrastructure failures', () => {
+    const result = normalizeException(new DomainException({ kind: 'unavailable', violations: [] }));
+    expect(result.status).toBe(HttpStatus.SERVICE_UNAVAILABLE);
   });
 
   // Without a messageKey the filter must fall back to its status-based localized default; using the

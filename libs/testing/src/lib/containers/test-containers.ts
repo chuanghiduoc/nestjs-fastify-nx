@@ -9,15 +9,19 @@ export interface TestContainers {
   teardown: () => Promise<void>;
 }
 
-// Images match docker/compose.yml so tests exercise what the apps run against. Sequential, not
-// Promise.all: a rejection there discards the other handle, leaking a running container.
+// TESTCONTAINERS_REUSE=true enables container reuse across test runs. Disabled by default for CI.
 export async function createTestContainers(): Promise<TestContainers> {
-  const postgres = await new PostgreSqlContainer('postgres:18-alpine').start();
+  const reuse = process.env['TESTCONTAINERS_REUSE'] === 'true';
+
+  const pgContainer = new PostgreSqlContainer('postgres:18-alpine');
+  const postgres = await (reuse ? pgContainer.withReuse() : pgContainer).start();
+
   let redis: StartedRedisContainer;
   try {
-    redis = await new RedisContainer('redis:8-alpine').start();
+    const redisContainer = new RedisContainer('redis:8-alpine');
+    redis = await (reuse ? redisContainer.withReuse() : redisContainer).start();
   } catch (error) {
-    await postgres.stop().catch(() => undefined);
+    if (!reuse) await postgres.stop().catch(() => undefined);
     throw error;
   }
 
@@ -25,9 +29,7 @@ export async function createTestContainers(): Promise<TestContainers> {
     postgres,
     redis,
     teardown: async () => {
-      // allSettled so one container failing to stop still lets the other be torn down (Promise.all
-      // would reject on the first failure and skip awaiting the second → a leaked container). Then
-      // surface any failure so a leaked container is loud, not silent.
+      if (reuse) return;
       const results = await Promise.allSettled([postgres.stop(), redis.stop()]);
       const failures = results.flatMap((result) =>
         result.status === 'rejected' ? [String(result.reason)] : [],

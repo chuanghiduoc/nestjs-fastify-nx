@@ -1,25 +1,8 @@
-import { defineConfig } from 'vitest/config';
+import { defineVitestConfig } from '../../../vitest.shared';
 
-const isIntegrationRun = process.argv.includes('integration');
-
-export default defineConfig(() => ({
-  root: __dirname,
-  cacheDir: '../../../node_modules/.vite/libs/infra/i18n',
-  resolve: { tsconfigPaths: true },
-  test: {
-    maxWorkers: 2,
-    name: 'infra-i18n',
-    watch: false,
-    globals: true,
-    environment: 'node',
-    include: ['{src,tests}/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
-    exclude: isIntegrationRun ? [] : ['**/*.integration.spec.*'],
-    reporters: ['default'],
-    setupFiles: ['../../../vitest.setup.ts'],
-    passWithNoTests: true,
-    coverage: {
-      reportsDirectory: '../../../coverage/libs/infra/i18n',
-      provider: 'v8' as const,
-    },
-  },
-}));
+export default defineVitestConfig({
+  name: 'infra-i18n',
+  rootDir: 'libs/infra/i18n',
+  coverageExclude: ['src/lib/i18n-infra.module.ts', 'src/lib/i18n-helpers.ts'],
+  coverageThresholds: { lines: 0, functions: 0, branches: 0, statements: 0 },
+});

@@ -43,7 +43,7 @@ describe('SchedulerLeaderService', () => {
 
   it('reports follower state while another replica holds the lease', async () => {
     const redis = redisMock();
-    vi.mocked(redis.set).mockResolvedValueOnce(null);
+    vi.mocked(redis.set).mockResolvedValueOnce(null as never);
     const service = new SchedulerLeaderService(config(), redis);
 
     await tick(service);

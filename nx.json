@@ -1,7 +1,7 @@
 {
   "$schema": "./node_modules/nx/schemas/nx-schema.json",
   "defaultBase": "main",
-  "parallel": 3,
+  "parallel": 6,
   "namedInputs": {
     "default": [
       "{projectRoot}/**/*",
@@ -31,7 +31,12 @@
       "{workspaceRoot}/prisma/schema.prisma",
       "{workspaceRoot}/prisma.config.ts"
     ],
-    "unitTest": ["default", "!{projectRoot}/vite.e2e.config.*", "!{projectRoot}/**/e2e/**/*"],
+    "unitTest": [
+      "default",
+      "!{projectRoot}/vite.e2e.config.*",
+      "!{projectRoot}/**/e2e/**/*",
+      "{workspaceRoot}/vitest.shared.ts"
+    ],
     "e2eTest": [
       "default",
       "!{projectRoot}/**/*.spec.[jt]s",

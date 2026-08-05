@@ -1,13 +1,7 @@
-import {
-  Injectable,
-  Logger,
-  BadRequestException,
-  InternalServerErrorException,
-  type OnModuleDestroy,
-  type OnModuleInit,
-} from '@nestjs/common';
+import { Injectable, Logger, type OnModuleDestroy, type OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { I18N_KEYS } from '@nestjs-fastify-nx/contracts';
+import { DomainException } from '@nestjs-fastify-nx/core';
+import { ERROR_CODES, I18N_KEYS } from '@nestjs-fastify-nx/contracts';
 import {
   S3Client,
   PutObjectCommand,
@@ -171,10 +165,19 @@ export class S3StorageAdapter implements StoragePort, OnModuleInit, OnModuleDest
 
   async upload(key: string, body: Buffer, options?: UploadOptions): Promise<StoredFile> {
     if (body.length === 0) {
-      throw new BadRequestException({
+      throw new DomainException({
+        kind: 'validation',
+        code: ERROR_CODES.STORAGE_BODY_EMPTY,
         messageKey: I18N_KEYS.errors.storage.body_empty,
         args: { key },
-        message: `Upload rejected — body is empty for key "${key}"`,
+        violations: [
+          {
+            path: 'body',
+            code: ERROR_CODES.STORAGE_BODY_EMPTY,
+            message: `Upload rejected — body is empty for key "${key}"`,
+            messageKey: I18N_KEYS.errors.storage.body_empty,
+          },
+        ],
       });
     }
 
@@ -193,9 +196,19 @@ export class S3StorageAdapter implements StoragePort, OnModuleInit, OnModuleDest
       );
     } catch (err) {
       this.logger.error({ err, key }, 'S3 upload failed');
-      throw new InternalServerErrorException({
+      throw new DomainException({
+        kind: 'unavailable',
+        code: ERROR_CODES.STORAGE_UPLOAD_FAILED,
+        permanent: false,
         messageKey: I18N_KEYS.errors.storage.upload_failed,
-        message: 'Storage upload failed',
+        violations: [
+          {
+            path: 'storage',
+            code: ERROR_CODES.STORAGE_UPLOAD_FAILED,
+            message: 'Storage upload failed',
+            messageKey: I18N_KEYS.errors.storage.upload_failed,
+          },
+        ],
       });
     }
 
@@ -228,9 +241,19 @@ export class S3StorageAdapter implements StoragePort, OnModuleInit, OnModuleDest
       return { url, fields, key, bucket, expiresAt, maxBytes: options.maxBytes };
     } catch (err) {
       this.logger.error({ err, key }, 'S3 presign upload failed');
-      throw new InternalServerErrorException({
+      throw new DomainException({
+        kind: 'unavailable',
+        code: ERROR_CODES.STORAGE_PRESIGN_FAILED,
+        permanent: false,
         messageKey: I18N_KEYS.errors.storage.presign_failed,
-        message: 'Storage presign failed',
+        violations: [
+          {
+            path: 'storage',
+            code: ERROR_CODES.STORAGE_PRESIGN_FAILED,
+            message: 'Storage presign failed',
+            messageKey: I18N_KEYS.errors.storage.presign_failed,
+          },
+        ],
       });
     }
   }
@@ -257,9 +280,19 @@ export class S3StorageAdapter implements StoragePort, OnModuleInit, OnModuleDest
         return null;
       }
       this.logger.error({ err, key }, 'S3 head failed');
-      throw new InternalServerErrorException({
+      throw new DomainException({
+        kind: 'unavailable',
+        code: ERROR_CODES.STORAGE_HEAD_FAILED,
+        permanent: false,
         messageKey: I18N_KEYS.errors.storage.head_failed,
-        message: 'Storage head failed',
+        violations: [
+          {
+            path: 'storage',
+            code: ERROR_CODES.STORAGE_HEAD_FAILED,
+            message: 'Storage head failed',
+            messageKey: I18N_KEYS.errors.storage.head_failed,
+          },
+        ],
       });
     }
   }
@@ -280,9 +313,19 @@ export class S3StorageAdapter implements StoragePort, OnModuleInit, OnModuleDest
       return await getSignedUrl(this.presignClient, command, { expiresIn });
     } catch (err) {
       this.logger.error({ err, key }, 'S3 getSignedUrl failed');
-      throw new InternalServerErrorException({
+      throw new DomainException({
+        kind: 'unavailable',
+        code: ERROR_CODES.STORAGE_SIGNED_URL_FAILED,
+        permanent: false,
         messageKey: I18N_KEYS.errors.storage.signed_url_failed,
-        message: 'Storage signed URL generation failed',
+        violations: [
+          {
+            path: 'storage',
+            code: ERROR_CODES.STORAGE_SIGNED_URL_FAILED,
+            message: 'Storage signed URL generation failed',
+            messageKey: I18N_KEYS.errors.storage.signed_url_failed,
+          },
+        ],
       });
     }
   }
@@ -297,9 +340,19 @@ export class S3StorageAdapter implements StoragePort, OnModuleInit, OnModuleDest
       );
     } catch (err) {
       this.logger.error({ err, key }, 'S3 delete failed');
-      throw new InternalServerErrorException({
+      throw new DomainException({
+        kind: 'unavailable',
+        code: ERROR_CODES.STORAGE_DELETE_FAILED,
+        permanent: false,
         messageKey: I18N_KEYS.errors.storage.delete_failed,
-        message: 'Storage delete failed',
+        violations: [
+          {
+            path: 'storage',
+            code: ERROR_CODES.STORAGE_DELETE_FAILED,
+            message: 'Storage delete failed',
+            messageKey: I18N_KEYS.errors.storage.delete_failed,
+          },
+        ],
       });
     }
   }
@@ -323,9 +376,19 @@ export class S3StorageAdapter implements StoragePort, OnModuleInit, OnModuleDest
       );
     } catch (err) {
       this.logger.error({ err, sourceKey, finalKey }, 'S3 finalize copy failed');
-      throw new InternalServerErrorException({
+      throw new DomainException({
+        kind: 'unavailable',
+        code: ERROR_CODES.STORAGE_FINALIZE_FAILED,
+        permanent: false,
         messageKey: I18N_KEYS.errors.storage.commit_failed,
-        message: 'Storage finalize failed; retry confirmation',
+        violations: [
+          {
+            path: 'storage',
+            code: ERROR_CODES.STORAGE_FINALIZE_FAILED,
+            message: 'Storage finalize failed; retry confirmation',
+            messageKey: I18N_KEYS.errors.storage.commit_failed,
+          },
+        ],
       });
     }
 
@@ -355,9 +418,19 @@ export class S3StorageAdapter implements StoragePort, OnModuleInit, OnModuleDest
       return Buffer.from(bytes);
     } catch (err) {
       this.logger.error({ err, key, byteCount }, 'S3 readRange failed');
-      throw new InternalServerErrorException({
+      throw new DomainException({
+        kind: 'unavailable',
+        code: ERROR_CODES.STORAGE_READ_FAILED,
+        permanent: false,
         messageKey: I18N_KEYS.errors.storage.read_range_failed,
-        message: 'Storage readRange failed',
+        violations: [
+          {
+            path: 'storage',
+            code: ERROR_CODES.STORAGE_READ_FAILED,
+            message: 'Storage readRange failed',
+            messageKey: I18N_KEYS.errors.storage.read_range_failed,
+          },
+        ],
       });
     }
   }
@@ -374,9 +447,19 @@ export class S3StorageAdapter implements StoragePort, OnModuleInit, OnModuleDest
       return body;
     } catch (err) {
       this.logger.error({ err, key }, 'S3 readStream failed');
-      throw new InternalServerErrorException({
+      throw new DomainException({
+        kind: 'unavailable',
+        code: ERROR_CODES.STORAGE_READ_FAILED,
+        permanent: false,
         messageKey: I18N_KEYS.errors.storage.read_range_failed,
-        message: 'Storage readStream failed',
+        violations: [
+          {
+            path: 'storage',
+            code: ERROR_CODES.STORAGE_READ_FAILED,
+            message: 'Storage readStream failed',
+            messageKey: I18N_KEYS.errors.storage.read_range_failed,
+          },
+        ],
       });
     }
   }
@@ -393,9 +476,19 @@ export class S3StorageAdapter implements StoragePort, OnModuleInit, OnModuleDest
       return Buffer.from(await body.transformToByteArray());
     } catch (err) {
       this.logger.error({ err, key }, 'S3 full-object read failed');
-      throw new InternalServerErrorException({
+      throw new DomainException({
+        kind: 'unavailable',
+        code: ERROR_CODES.STORAGE_READ_FAILED,
+        permanent: false,
         messageKey: I18N_KEYS.errors.storage.read_range_failed,
-        message: 'Storage read failed',
+        violations: [
+          {
+            path: 'storage',
+            code: ERROR_CODES.STORAGE_READ_FAILED,
+            message: 'Storage read failed',
+            messageKey: I18N_KEYS.errors.storage.read_range_failed,
+          },
+        ],
       });
     }
   }
