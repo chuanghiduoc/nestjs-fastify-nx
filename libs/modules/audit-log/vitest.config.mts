@@ -1,40 +1,9 @@
-import { defineConfig } from 'vitest/config';
+import { defineVitestConfig } from '../../../vitest.shared';
 
-const isIntegrationRun = process.argv.includes('integration');
-
-export default defineConfig(() => ({
-  root: __dirname,
-  cacheDir: '../../../node_modules/.vite/libs/modules/audit-log',
-  resolve: { tsconfigPaths: true },
-  test: {
-    maxWorkers: 2,
-    name: 'modules-audit-log',
-    watch: false,
-    globals: true,
-    environment: 'node',
-    include: ['{src,tests}/**/*.{test,spec,integration}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
-    testTimeout: 60_000,
-    hookTimeout: 60_000,
-    exclude: isIntegrationRun ? [] : ['**/*.integration.spec.*'],
-    reporters: ['default'],
-    setupFiles: ['../../../vitest.setup.ts'],
-    passWithNoTests: true,
-    coverage: {
-      reportsDirectory: '../../../coverage/libs/modules/audit-log',
-      provider: 'v8' as const,
-      include: ['src/**/*.ts'],
-      exclude: [
-        'src/**/*.spec.ts',
-        'src/**/*.integration.ts',
-        'src/**/index.ts',
-        'src/**/*.module.ts',
-      ],
-      thresholds: {
-        lines: 60,
-        functions: 60,
-        branches: 60,
-        statements: 60,
-      },
-    },
-  },
-}));
+export default defineVitestConfig({
+  name: 'modules-audit-log',
+  rootDir: 'libs/modules/audit-log',
+  integrationTests: true,
+  testTimeout: 60_000,
+  hookTimeout: 60_000,
+});

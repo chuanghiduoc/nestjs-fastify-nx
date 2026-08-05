@@ -38,9 +38,19 @@ function isNoisyProbe(req: { url?: string; originalUrl?: string }): boolean {
   return path === '/metrics' || path.startsWith('/api/v1/health');
 }
 
+function isPinoPrettyAvailable(): boolean {
+  try {
+    require.resolve('pino-pretty');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function buildPinoLoggerConfig(overrides: Partial<PinoHttpOptions> = {}): Params {
   const isProduction = process.env['NODE_ENV'] === 'production';
-  const prettyLogs = !isProduction && process.env['LOG_PRETTY'] !== 'false';
+  const prettyLogs =
+    !isProduction && process.env['LOG_PRETTY'] !== 'false' && isPinoPrettyAvailable();
   const service = process.env['OTEL_SERVICE_NAME'] ?? 'app';
   const env = process.env['NODE_ENV'] ?? 'development';
 
@@ -60,7 +70,9 @@ export function buildPinoLoggerConfig(overrides: Partial<PinoHttpOptions> = {}):
       mixin: requestContextMixin,
       // Structured logs use a string level label; pino-pretty expects the numeric level.
       formatters: !prettyLogs ? { level: (label) => ({ level: label }) } : undefined,
-      autoLogging: { ignore: isNoisyProbe },
+      // Dev: disable pino-http access logs — dev-request-logger.ts provides colorful console output.
+      // Prod: log all requests except noisy probes (health, metrics).
+      autoLogging: isProduction ? { ignore: isNoisyProbe } : false,
       // Request essentials only, not the full header/body dump — smaller lines, smaller PII surface.
       // `remoteAddress` is the raw TCP peer (pod IP behind a proxy); pair with X-Forwarded-For
       // upstream if you need the client IP. Error messages/stacks are excluded because drivers

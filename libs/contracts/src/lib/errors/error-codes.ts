@@ -35,6 +35,16 @@ export const ERROR_CODES = {
   UPLOAD_MAGIC_BYTES_MISMATCH: 'upload_magic_bytes_mismatch',
   UPLOAD_COMMIT_FAILED: 'upload_commit_failed',
   UPLOAD_IN_PROGRESS: 'upload_in_progress',
+
+  // Storage adapter failures — raised by S3StorageAdapter, caught by handlers/processors.
+  STORAGE_BODY_EMPTY: 'storage_body_empty',
+  STORAGE_UPLOAD_FAILED: 'storage_upload_failed',
+  STORAGE_PRESIGN_FAILED: 'storage_presign_failed',
+  STORAGE_HEAD_FAILED: 'storage_head_failed',
+  STORAGE_SIGNED_URL_FAILED: 'storage_signed_url_failed',
+  STORAGE_DELETE_FAILED: 'storage_delete_failed',
+  STORAGE_FINALIZE_FAILED: 'storage_finalize_failed',
+  STORAGE_READ_FAILED: 'storage_read_failed',
 } as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES];

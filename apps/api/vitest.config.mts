@@ -1,25 +1,21 @@
-import { defineConfig } from 'vitest/config';
+import { defineVitestConfig } from '../../vitest.shared';
 
-const isIntegrationRun = process.argv.includes('integration');
-
-export default defineConfig(() => ({
-  root: __dirname,
-  cacheDir: '../../node_modules/.vite/apps/api',
-  resolve: { tsconfigPaths: true },
-  test: {
-    maxWorkers: 2,
-    name: 'api',
-    watch: false,
-    globals: true,
-    environment: 'node',
-    include: ['{src,tests}/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
-    exclude: isIntegrationRun ? [] : ['**/*.integration.spec.*'],
-    reporters: ['default'],
-    setupFiles: ['../../vitest.setup.ts'],
-    passWithNoTests: true,
-    coverage: {
-      reportsDirectory: '../../coverage/apps/api',
-      provider: 'v8' as const,
-    },
+export default defineVitestConfig({
+  name: 'api',
+  rootDir: 'apps/api',
+  integrationTests: true,
+  testTimeout: 60_000,
+  hookTimeout: 60_000,
+  coverageExclude: [
+    'src/main.ts',
+    'src/tracing.ts',
+    'src/common/swagger/**',
+    'src/common/logging/dev-request-logger.ts',
+  ],
+  coverageThresholds: {
+    lines: 60,
+    functions: 60,
+    branches: 55,
+    statements: 60,
   },
-}));
+});

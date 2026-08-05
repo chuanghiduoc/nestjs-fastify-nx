@@ -3,8 +3,11 @@
 // HttpException here would put an HTTP status on a failure that, outside the api, nothing maps.
 // The transport decides the status: GlobalExceptionFilter maps `kind`, GraphQL reads it directly.
 // `malformed` is input the layer could not even parse (→ 400); `validation` is input that parsed
-// but broke a rule (→ 422). Keeping them apart is what lets the transport pick the right status.
-export type DomainErrorKind = 'malformed' | 'validation' | 'conflict' | 'not_found' | 'forbidden';
+// but broke a rule (→ 422). `unavailable` signals a downstream dependency is unreachable or
+// unhealthy (→ 503); it always implies `permanent: false`. Keeping them apart is what lets the
+// transport pick the right status.
+export type DomainErrorKind =
+  'malformed' | 'validation' | 'conflict' | 'not_found' | 'forbidden' | 'unavailable';
 
 export interface DomainViolation {
   readonly path: string;
@@ -48,7 +51,8 @@ export class DomainException extends Error {
     this.messageKey = options.messageKey;
     this.args = options.args;
     this.violations = options.violations;
-    this.permanent = options.permanent ?? true;
+    // unavailable implies transient infrastructure failure — always retryable.
+    this.permanent = options.kind === 'unavailable' ? false : (options.permanent ?? true);
   }
 }
 

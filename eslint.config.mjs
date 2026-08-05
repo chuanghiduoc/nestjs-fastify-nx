@@ -59,7 +59,7 @@ export default defineConfig(
             'prisma.config.ts',
             'orval.config.ts',
             'vitest.setup.ts',
-            'vitest.workspace.ts',
+            'vitest.shared.ts',
           ],
           defaultProject: 'tsconfig.tools.json',
         },

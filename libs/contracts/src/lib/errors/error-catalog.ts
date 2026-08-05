@@ -235,6 +235,62 @@ const DOCS: readonly ErrorTypeDoc[] = [
     meaning: 'This object is already being verified by the worker.',
     resolution: 'Wait for verification to settle before confirming again.',
   },
+  {
+    code: ERROR_CODES.STORAGE_BODY_EMPTY,
+    status: 400,
+    title: 'Storage body empty',
+    meaning: 'The upload body was empty — zero bytes.',
+    resolution: 'Send a non-empty payload.',
+  },
+  {
+    code: ERROR_CODES.STORAGE_UPLOAD_FAILED,
+    status: 503,
+    title: 'Storage upload failed',
+    meaning: 'The object store rejected the upload. This is a transient infrastructure error.',
+    resolution: 'Retry with backoff. The condition is expected to be temporary.',
+  },
+  {
+    code: ERROR_CODES.STORAGE_PRESIGN_FAILED,
+    status: 503,
+    title: 'Storage presign failed',
+    meaning: 'The object store could not generate a presigned upload policy.',
+    resolution: 'Retry with backoff. The condition is expected to be temporary.',
+  },
+  {
+    code: ERROR_CODES.STORAGE_HEAD_FAILED,
+    status: 503,
+    title: 'Storage head failed',
+    meaning: 'The object store could not return object metadata.',
+    resolution: 'Retry with backoff. The condition is expected to be temporary.',
+  },
+  {
+    code: ERROR_CODES.STORAGE_SIGNED_URL_FAILED,
+    status: 503,
+    title: 'Storage signed URL failed',
+    meaning: 'The object store could not generate a signed download URL.',
+    resolution: 'Retry with backoff. The condition is expected to be temporary.',
+  },
+  {
+    code: ERROR_CODES.STORAGE_DELETE_FAILED,
+    status: 503,
+    title: 'Storage delete failed',
+    meaning: 'The object store could not delete the object.',
+    resolution: 'Retry with backoff. The condition is expected to be temporary.',
+  },
+  {
+    code: ERROR_CODES.STORAGE_FINALIZE_FAILED,
+    status: 503,
+    title: 'Storage finalize failed',
+    meaning: 'The object store could not move the object from staging to its final location.',
+    resolution: 'Retry with backoff. The condition is expected to be temporary.',
+  },
+  {
+    code: ERROR_CODES.STORAGE_READ_FAILED,
+    status: 503,
+    title: 'Storage read failed',
+    meaning: 'The object store could not read the requested byte range.',
+    resolution: 'Retry with backoff. The condition is expected to be temporary.',
+  },
 ];
 
 // A Map, not a plain object: the slug comes straight off the URL, and an object lookup would answer

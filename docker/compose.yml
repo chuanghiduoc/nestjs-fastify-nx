@@ -1,10 +1,23 @@
 # Project name comes from COMPOSE_PROJECT_NAME (.env) — `name:` at top-level
 # is rejected by `docker stack deploy`'s older parser.
+#
+# PORT CONVENTIONS:
+#   - INTERNAL (container) ports are FIXED: postgres=5432, redis-cache=6379,
+#     redis-queue=6380, minio=9000/9001, mailpit=1025/8025.
+#   - HOST (publish) ports use env vars for flexibility: ${POSTGRES_PORT:-5432}:5432
+#     means "publish internal 5432 to host ${POSTGRES_PORT} (default 5432)".
+#   - Container-to-container traffic uses service names + internal ports
+#     (e.g. postgres:5432), NOT env vars. compose.dev.yml sets these explicitly.
+#   - .env vars like REDIS_CACHE_PORT=6379 are for HOST apps (dev.sh) connecting
+#     to localhost:${REDIS_CACHE_PORT}. Inside containers, apps connect to
+#     redis-cache:6379 (the internal port).
 
 services:
   postgres:
     image: postgres:18-alpine@sha256:9a8afca54e7861fd90fab5fdf4c42477a6b1cb7d293595148e674e0a3181de15
     restart: unless-stopped
+    mem_limit: 512m
+    cpus: 1.0
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
@@ -16,6 +29,7 @@ services:
       # so `pg_upgrade --link` works across major-version bumps.
       - postgres_data:/var/lib/postgresql
     ports:
+      # Host port (env) : Container port (fixed 5432)
       - '${POSTGRES_PORT:-5432}:5432'
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-nestjs_db}']
@@ -27,9 +41,12 @@ services:
   redis-cache:
     image: redis:8-alpine@sha256:8096655e437712b07503796fb64d81359256cfcff0ab29d95a7da72863786efb
     restart: unless-stopped
+    mem_limit: 128m
+    cpus: 0.5
     environment:
       TZ: ${TZ:-UTC}
     ports:
+      # Host port (env) : Container port (fixed 6379)
       - '${REDIS_CACHE_PORT:-6379}:6379'
     # No persistent volume by design: this instance holds only rate-limit counters
     # and idempotency replay keys. Both fail open on loss, so ephemeral storage is
@@ -43,13 +60,17 @@ services:
   redis-queue:
     image: redis:8-alpine@sha256:8096655e437712b07503796fb64d81359256cfcff0ab29d95a7da72863786efb
     restart: unless-stopped
+    mem_limit: 256m
+    cpus: 0.5
     environment:
       TZ: ${TZ:-UTC}
     ports:
+      # Host port (env) : Container port (fixed 6380)
       - '${REDIS_QUEUE_PORT:-6380}:6380'
     # AOF + a named volume make BullMQ jobs durable. Without them, every container
     # recreation (rolling deploy) drops waiting/delayed/active jobs and the DLQ —
     # a dead-letter store on ephemeral storage is not a dead-letter store.
+    # Internal port 6380 to avoid conflict with redis-cache (6379).
     command: redis-server --port 6380 --appendonly yes --appendfsync everysec
     volumes:
       - redis_queue_data:/data
@@ -62,6 +83,9 @@ services:
   minio:
     image: minio/minio:RELEASE.2025-09-07T16-13-09Z@sha256:a1a8bd4ac40ad7881a245bab97323e18f971e4d4cba2c2007ec1bedd21cbaba2
     restart: unless-stopped
+    mem_limit: 256m
+    cpus: 0.5
+    # Internal ports: API=9000, Console=9001
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
@@ -70,6 +94,7 @@ services:
     volumes:
       - minio_data:/data
     ports:
+      # Host ports (env) : Container ports (fixed 9000, 9001)
       - '${MINIO_PORT:-9000}:9000'
       - '${MINIO_CONSOLE_PORT:-9001}:9001'
     healthcheck:

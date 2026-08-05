@@ -10,6 +10,9 @@
       "default": "./src/index.ts"
     }
   },
+  "dependencies": {
+    "@nestjs-fastify-nx/core": "workspace:*"
+  },
   "devDependencies": {
     "@nestjs-fastify-nx/contracts": "workspace:*",
     "@nestjs-fastify-nx/infra-i18n": "workspace:*"
