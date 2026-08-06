@@ -15,11 +15,14 @@ const nxAppPlugin = new NxAppWebpackPlugin({
   optimization: false,
   outputHashing: 'none',
   generatePackageJson: true,
-  // tslib is invisible to webpack's source graph. Swagger's converter is
-  // intentionally dev-only but must be present when the dev image serves docs.
+  // tslib is invisible to webpack's source graph. Swagger's converter and pino-pretty
+  // are dev-only devDependencies but must be present when the dev image runs them
+  // (pino resolves the 'pino-pretty' transport target at runtime, not via static import).
   runtimeDependencies: [
     'tslib',
-    ...(process.env.NODE_ENV !== 'production' ? ['@apiture/openapi-down-convert'] : []),
+    ...(process.env.NODE_ENV !== 'production'
+      ? ['@apiture/openapi-down-convert', 'pino-pretty']
+      : []),
   ],
   sourceMap: true,
 });
