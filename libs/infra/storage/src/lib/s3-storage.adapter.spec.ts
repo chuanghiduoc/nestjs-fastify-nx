@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ConfigService } from '@nestjs/config';
+import type { DomainErrorKind } from '@nestjs-fastify-nx/core';
 import { DomainException } from '@nestjs-fastify-nx/core';
+import { ERROR_CODES } from '@nestjs-fastify-nx/contracts';
 import {
   DeleteObjectCommand,
   CopyObjectCommand,
@@ -13,6 +15,20 @@ import { createPresignedPost } from '@aws-sdk/s3-presigned-post';
 import { S3StorageAdapter } from './s3-storage.adapter';
 
 type PostParams = { Fields?: Record<string, string>; Conditions?: unknown[] };
+
+// `toBeInstanceOf(DomainException)` alone still passes when the adapter reports the wrong kind or
+// code, and the transport maps exactly those two fields onto a status the client keys its retry on.
+async function expectDomainFailure(
+  promise: Promise<unknown>,
+  expected: { kind: DomainErrorKind; code: string; permanent: boolean },
+): Promise<void> {
+  await expect(promise).rejects.toBeInstanceOf(DomainException);
+  const error = await promise.then(
+    () => undefined,
+    (caught: DomainException) => caught,
+  );
+  expect({ kind: error?.kind, code: error?.code, permanent: error?.permanent }).toEqual(expected);
+}
 
 // The adapter keeps its clients private, and the SDK normalises each config value into either a
 // literal or a provider function — so read it back the same way the SDK would.
@@ -130,11 +146,13 @@ describe('S3StorageAdapter', () => {
   });
 
   describe('upload', () => {
-    it('rejects an empty body with DomainException (no S3 call)', async () => {
+    it('rejects an empty body as a permanent validation failure (no S3 call)', async () => {
       const send = mockSend(adapter);
-      await expect(adapter.upload('uploads/x', Buffer.alloc(0))).rejects.toBeInstanceOf(
-        DomainException,
-      );
+      await expectDomainFailure(adapter.upload('uploads/x', Buffer.alloc(0)), {
+        kind: 'validation',
+        code: ERROR_CODES.STORAGE_BODY_EMPTY,
+        permanent: true,
+      });
       expect(send).not.toHaveBeenCalled();
     });
 
@@ -154,12 +172,14 @@ describe('S3StorageAdapter', () => {
       });
     });
 
-    it('wraps S3 errors as DomainException with unavailable kind', async () => {
+    it('wraps S3 errors as a retryable unavailable failure', async () => {
       const send = mockSend(adapter);
       send.mockRejectedValueOnce(new Error('NoSuchBucket'));
-      await expect(adapter.upload('uploads/x', Buffer.from('p'))).rejects.toBeInstanceOf(
-        DomainException,
-      );
+      await expectDomainFailure(adapter.upload('uploads/x', Buffer.from('p')), {
+        kind: 'unavailable',
+        code: ERROR_CODES.STORAGE_UPLOAD_FAILED,
+        permanent: false,
+      });
     });
   });
 

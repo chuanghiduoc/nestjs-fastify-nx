@@ -58,7 +58,9 @@ export function createVitestConfig(options: VitestProjectOptions) {
       globals: true,
       environment: 'node',
       include: includePattern,
-      exclude: isIntegrationRun ? [] : ['**/*.integration.spec.*'],
+      // The include glob admits both `*.integration.ts` and `*.integration.spec.ts`; excluding
+      // only the latter would run Testcontainers suites in the plain `test` target.
+      exclude: isIntegrationRun ? [] : ['**/*.integration.*'],
       reporters: ['default'],
       setupFiles: [`${relativePath}vitest.setup.ts`],
       passWithNoTests: true,

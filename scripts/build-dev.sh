@@ -12,6 +12,7 @@
 #   NO_CACHE=1       full clean rebuild (default: incremental)
 #   BUILD_PARALLEL=0 build services serially on memory-constrained hosts
 #   BUILD_PARALLEL_LIMIT=2 cap concurrent Compose build tasks (default: 2)
+#   WAIT_TIMEOUT=180 seconds to wait for every started service to become healthy
 #
 # Security scanning (Trivy/SBOM/etc.) is intentionally NOT run here — it lives in
 # CI (.github/workflows). Local builds stay fast; run scripts/security/*.sh
@@ -139,9 +140,13 @@ done
 # API_REPLICAS / WORKER_REPLICAS only take effect in Swarm (deploy.replicas is
 # ignored by plain `docker compose up`); the passthrough keeps them visible in
 # the process environment without changing dev behaviour.
+#
+# --wait is the gate for worker/scheduler: the HTTP smoke test below only covers api, so
+# without it a crash-looping worker still exits 0.
 # shellcheck disable=SC2086
 if ! API_REPLICAS="${API_REPLICAS:-1}" WORKER_REPLICAS="${WORKER_REPLICAS:-1}" \
-  docker compose "${COMPOSE_ARGS[@]}" up -d --force-recreate --remove-orphans "${SERVICES[@]}"; then
+  docker compose "${COMPOSE_ARGS[@]}" up -d --force-recreate --remove-orphans \
+  --wait --wait-timeout "${WAIT_TIMEOUT:-180}" "${SERVICES[@]}"; then
   sec::err "Compose startup failed. Container status and recent dependency logs follow."
   docker compose "${COMPOSE_ARGS[@]}" ps -a || true
   docker compose "${COMPOSE_ARGS[@]}" logs --tail=100 \
