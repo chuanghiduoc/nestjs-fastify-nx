@@ -17,10 +17,7 @@ const nxAppPlugin = new NxAppWebpackPlugin({
   generatePackageJson: true,
   // pino-pretty is a devDependency but pino resolves it as the 'pino-pretty' transport
   // target at runtime, not via static import — must ship in the dev image.
-  runtimeDependencies: [
-    'tslib',
-    ...(process.env.NODE_ENV !== 'production' ? ['pino-pretty'] : []),
-  ],
+  runtimeDependencies: ['tslib', ...(process.env.NODE_ENV !== 'production' ? ['pino-pretty'] : [])],
   sourceMap: true,
 });
 
