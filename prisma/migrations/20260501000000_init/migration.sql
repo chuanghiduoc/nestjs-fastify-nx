@@ -177,14 +177,22 @@ ALTER TABLE "accounts" ADD CONSTRAINT "accounts_userId_fkey" FOREIGN KEY ("userI
 -- initial window. `IF NOT EXISTS` covers concurrent ticks. Runtime scheduler roles must not own
 -- application tables, so this runs SECURITY DEFINER with a fixed search_path, scoped to the
 -- migration role and revoked from PUBLIC.
-CREATE OR REPLACE FUNCTION ensure_audit_log_partition(target_month timestamptz)
+-- Schema-qualified: `CREATE SCHEMA IF NOT EXISTS "public"` above does not change the migration
+-- role's active schema, so an unqualified CREATE FUNCTION would land wherever the role's
+-- search_path resolves first. The REVOKE below targets `public.ensure_audit_log_partition`
+-- explicitly, so a function created outside `public` would leave that REVOKE failing to find it.
+CREATE OR REPLACE FUNCTION public.ensure_audit_log_partition(target_month timestamptz)
 RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = pg_catalog, public
 AS $$
 DECLARE
-  start_ts timestamptz := date_trunc('month', target_month);
+  -- `date_trunc('month', timestamptz)` truncates in the session's TimeZone setting, not UTC —
+  -- a session on a non-UTC offset (e.g. UTC+2, just after local midnight) can truncate to the
+  -- previous month. Converting to a naive UTC timestamp before truncating removes the session
+  -- TimeZone from the calculation entirely, so the boundary is always the UTC month.
+  start_ts timestamptz := date_trunc('month', target_month AT TIME ZONE 'UTC') AT TIME ZONE 'UTC';
   end_ts   timestamptz := start_ts + INTERVAL '1 month';
   pname    text := 'audit_logs_' || to_char(start_ts AT TIME ZONE 'UTC', 'YYYY_MM');
 BEGIN
@@ -201,10 +209,10 @@ END;
 $$;
 REVOKE ALL ON FUNCTION public.ensure_audit_log_partition(timestamptz) FROM PUBLIC;
 
-SELECT ensure_audit_log_partition(NOW() - INTERVAL '1 month');
-SELECT ensure_audit_log_partition(NOW());
-SELECT ensure_audit_log_partition(NOW() + INTERVAL '1 month');
-SELECT ensure_audit_log_partition(NOW() + INTERVAL '2 months');
+SELECT public.ensure_audit_log_partition(NOW() - INTERVAL '1 month');
+SELECT public.ensure_audit_log_partition(NOW());
+SELECT public.ensure_audit_log_partition(NOW() + INTERVAL '1 month');
+SELECT public.ensure_audit_log_partition(NOW() + INTERVAL '2 months');
 
 -- Companion to ensure_audit_log_partition — drops partitions older than a retention cutoff.
 -- Same SECURITY DEFINER + fixed search_path + PUBLIC revoke rationale.
