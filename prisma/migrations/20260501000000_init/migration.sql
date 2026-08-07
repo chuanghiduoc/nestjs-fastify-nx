@@ -69,6 +69,9 @@ CREATE TABLE "stored_files" (
     "etag" TEXT NOT NULL,
     "status" TEXT NOT NULL DEFAULT 'FINALIZING',
     "failureReason" TEXT,
+    -- CLEAN or SKIPPED_TOO_LARGE. Null until verification runs; SKIPPED_TOO_LARGE marks an object
+    -- published past ClamAV's 2 GiB scan ceiling, so READY alone never implies it was inspected.
+    "scanOutcome" TEXT,
     "verifiedAt" TIMESTAMP(3),
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
@@ -89,6 +92,10 @@ CREATE TABLE "outbox_events" (
     "attempts" INTEGER NOT NULL DEFAULT 0,
     "lastError" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    -- Earliest time the relay may re-claim this row after a failed attempt. Stamped by the CLAIM
+    -- statement itself (not the error handler) so a relay that dies mid-dispatch still leaves the
+    -- row invisible for the backoff window instead of being re-claimed on the very next poll tick.
+    "nextAttemptAt" TIMESTAMP(3),
 
     CONSTRAINT "outbox_events_pkey" PRIMARY KEY ("id")
 );
@@ -142,9 +149,14 @@ CREATE INDEX "accounts_userId_idx" ON "accounts"("userId");
 CREATE INDEX "verifications_identifier_createdAt_idx" ON "verifications"("identifier", "createdAt" DESC);
 CREATE INDEX "verifications_expiresAt_idx" ON "verifications"("expiresAt");
 
--- Relay claim path uses (processedAt, createdAt); the (eventType, processedAt) index
--- backs ops debugging ("show me all undelivered users.registered events").
+-- Relay scan path — must come first because (processedAt, createdAt) is the leftmost prefix
+-- `WHERE processedAt IS NULL ORDER BY createdAt` uses.
 CREATE INDEX "outbox_events_processedAt_createdAt_idx" ON "outbox_events"("processedAt", "createdAt");
+-- Backoff-aware claim path: `WHERE processedAt IS NULL AND (nextAttemptAt IS NULL OR
+-- nextAttemptAt <= NOW()) ORDER BY createdAt`. The index above cannot serve the added
+-- `nextAttemptAt` predicate.
+CREATE INDEX "outbox_events_processedAt_nextAttemptAt_createdAt_idx" ON "outbox_events"("processedAt", "nextAttemptAt", "createdAt");
+-- Ops debugging path — "show me all undelivered users.registered events".
 CREATE INDEX "outbox_events_eventType_processedAt_idx" ON "outbox_events"("eventType", "processedAt");
 
 CREATE INDEX "audit_logs_userId_createdAt_idx" ON "audit_logs"("userId", "createdAt");
@@ -161,26 +173,70 @@ CREATE INDEX "stored_files_status_updatedAt_idx" ON "stored_files"("status", "up
 ALTER TABLE "sessions" ADD CONSTRAINT "sessions_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 ALTER TABLE "accounts" ADD CONSTRAINT "accounts_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
--- Idempotent partition factory called from the scheduler's daily cron and
--- below to seed the initial window. `IF NOT EXISTS` covers concurrent ticks.
+-- Idempotent partition factory called from the scheduler's daily cron and below to seed the
+-- initial window. `IF NOT EXISTS` covers concurrent ticks. Runtime scheduler roles must not own
+-- application tables, so this runs SECURITY DEFINER with a fixed search_path, scoped to the
+-- migration role and revoked from PUBLIC.
 CREATE OR REPLACE FUNCTION ensure_audit_log_partition(target_month timestamptz)
-RETURNS void AS $$
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
 DECLARE
   start_ts timestamptz := date_trunc('month', target_month);
   end_ts   timestamptz := start_ts + INTERVAL '1 month';
   pname    text := 'audit_logs_' || to_char(start_ts AT TIME ZONE 'UTC', 'YYYY_MM');
 BEGIN
+  -- Target schema must be qualified: `search_path = pg_catalog, public` makes pg_catalog the
+  -- current schema for unqualified DDL, and CREATE TABLE there is rejected outright ("permission
+  -- denied to create pg_catalog.<partition>... System catalog modifications are currently
+  -- disallowed"). Verified by reproduction: an unqualified %I here fails on every call once this
+  -- search_path is set, including the seed calls below and the scheduler's monthly cron.
   EXECUTE format(
-    'CREATE TABLE IF NOT EXISTS %I PARTITION OF "audit_logs" FOR VALUES FROM (%L) TO (%L)',
+    'CREATE TABLE IF NOT EXISTS public.%I PARTITION OF "audit_logs" FOR VALUES FROM (%L) TO (%L)',
     pname, start_ts AT TIME ZONE 'UTC', end_ts AT TIME ZONE 'UTC'
   );
 END;
-$$ LANGUAGE plpgsql;
+$$;
+REVOKE ALL ON FUNCTION public.ensure_audit_log_partition(timestamptz) FROM PUBLIC;
 
 SELECT ensure_audit_log_partition(NOW() - INTERVAL '1 month');
 SELECT ensure_audit_log_partition(NOW());
 SELECT ensure_audit_log_partition(NOW() + INTERVAL '1 month');
 SELECT ensure_audit_log_partition(NOW() + INTERVAL '2 months');
+
+-- Companion to ensure_audit_log_partition — drops partitions older than a retention cutoff.
+-- Same SECURITY DEFINER + fixed search_path + PUBLIC revoke rationale.
+CREATE OR REPLACE FUNCTION public.drop_expired_audit_log_partitions(cutoff_month date)
+RETURNS integer
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+DECLARE
+  partition_name text;
+  partition_month date;
+  dropped integer := 0;
+BEGIN
+  FOR partition_name IN
+    SELECT child.relname
+      FROM pg_inherits i
+      JOIN pg_class parent ON parent.oid = i.inhparent
+      JOIN pg_class child ON child.oid = i.inhrelid
+     WHERE parent.relname = 'audit_logs'
+       AND child.relname ~ '^audit_logs_[0-9]{4}_(0[1-9]|1[0-2])$'
+  LOOP
+    partition_month := to_date(substring(partition_name FROM 12), 'YYYY_MM');
+    IF partition_month < cutoff_month THEN
+      EXECUTE format('DROP TABLE IF EXISTS %I', partition_name);
+      dropped := dropped + 1;
+    END IF;
+  END LOOP;
+  RETURN dropped;
+END;
+$$;
+REVOKE ALL ON FUNCTION public.drop_expired_audit_log_partitions(date) FROM PUBLIC;
 
 -- Atomic transactional outbox triggers. Better Auth commits inserts in its
 -- own transaction before any application-side hook fires, so a NestJS hook
@@ -243,9 +299,24 @@ AFTER INSERT ON "sessions"
 FOR EACH ROW
 EXECUTE FUNCTION emit_user_logged_in_outbox();
 
+-- Stop `users.logged_out` from firing on session rows that nobody logged out of. Two callers
+-- delete sessions without a user ever signing out: SessionCleanupTask's nightly expired-session
+-- purge, and the `ON DELETE CASCADE` from a hard-deleted user. Two discriminators, both verified
+-- against the running database:
+--   * `WHEN (OLD."expiresAt" > NOW())` — an already-expired session is garbage being collected,
+--     not a sign-out. A genuine sign-out always deletes a still-valid row.
+--   * `EXISTS (SELECT 1 FROM users ...)` — inside the child's AFTER DELETE trigger the parent is
+--     already gone during a cascade (returns false), while a direct session delete still sees it
+--     (returns true). That separates "user deleted" from "user signed out".
+-- The WHEN predicate lives on the trigger, not inside the function, so Postgres skips the function
+-- call entirely for expired rows — the nightly purge pays no per-row cost.
 CREATE OR REPLACE FUNCTION emit_user_logged_out_outbox()
 RETURNS TRIGGER AS $$
 BEGIN
+  IF NOT EXISTS (SELECT 1 FROM "users" WHERE "id" = OLD."userId") THEN
+    RETURN OLD;
+  END IF;
+
   INSERT INTO "outbox_events" ("id", "eventType", "aggregateId", "payload", "attempts")
   VALUES (
     uuidv7(),
@@ -271,6 +342,7 @@ $$ LANGUAGE plpgsql;
 CREATE TRIGGER user_logged_out_outbox
 AFTER DELETE ON "sessions"
 FOR EACH ROW
+WHEN (OLD."expiresAt" > NOW())
 EXECUTE FUNCTION emit_user_logged_out_outbox();
 
 -- ─────────────────────────────────────────────────────────────────────────────
