@@ -35,7 +35,7 @@ jobs:
       # OSV-Scanner pulls advisories from osv.dev — wider feed than npm audit
       # (covers GitHub Security Advisories, GHSA, language ecosystems, OS pkgs).
       - name: OSV-Scanner
-        uses: google/osv-scanner-action/osv-scanner-action@9a498708959aeaef5ef730655706c5a1df1edbc2 # v2.3.8
+        uses: google/osv-scanner-action/osv-scanner-action@8deb546fdb875b9996d27d4950be7312dac076a1 # v2.5.0
         with:
           scan-args: |-
             --recursive
@@ -62,7 +62,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
         with:
           # Pinned to match package.json `packageManager` and the Dockerfiles.
           version: 11.14.0
