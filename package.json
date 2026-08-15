@@ -80,7 +80,7 @@
     "@socket.io/redis-adapter": "^8.3.0",
     "axios": "^1.19.0",
     "better-auth": "^1.6.25",
-    "bullmq": "^5.81.3",
+    "bullmq": "^6.0.9",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.15.1",
     "cookie": "^2.0.1",
