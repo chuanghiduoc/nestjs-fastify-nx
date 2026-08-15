@@ -93,3 +93,8 @@ overrides:
   # cookie v2 renamed exports (parse→parseCookie, serialize→stringifyCookie) breaking register-idempotency.ts.
   # light-my-request (Fastify core dep) still calls serialize(), so v2 breaks testing too. Pin to 1.x.
   cookie: '>=1.1.1 <2'
+  # GHSA-5p2g-fcmc-qvqq + GHSA-w3rx-r6r6-pgpr (high, DoS via infinite loop in JXL/HEIF/ICNS
+  # parsers). image-size@0.5.5 is an unused optionalDependency of less (pulled in only by
+  # less-loader via @nx/webpack devDependency; this repo has no .less files). No fixed version
+  # exists upstream (through 2.0.2), so remove it from the install tree instead of pinning.
+  'less@4.5.1>image-size': '-'
