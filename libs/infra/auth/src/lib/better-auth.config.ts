@@ -7,6 +7,7 @@ import type { PrismaClient } from '@nestjs-fastify-nx/infra-database';
 import type { I18nService } from 'nestjs-i18n';
 import { resolveRequestLocale, translateOrFallback } from '@nestjs-fastify-nx/infra-i18n';
 import { usesSecureCookies } from './session-cookie';
+import { organizationAccessControl, organizationRoles } from './organization-access-control';
 import { I18N_KEYS } from '@nestjs-fastify-nx/contracts';
 export interface AuthMailDispatcher {
   send(opts: { to: string; subject: string; body: string; templateId?: string }): Promise<void>;
@@ -246,6 +247,11 @@ export function createBetterAuth(
       bearer(),
       organization({
         teams: { enabled: true },
+        // Without ac/roles the dynamic role endpoints only know Better Auth's own statements, so a
+        // tenant could not create a role granting this app's permissions (file:*, audit_log:*)
+        // even though PostgresPbacAdapter resolves exactly those from organization_roles.
+        ac: organizationAccessControl,
+        roles: organizationRoles,
         dynamicAccessControl: { enabled: true },
         invitationExpiresIn: INVITATION_EXPIRES_IN_SECONDS,
         cancelPendingInvitationsOnReInvite: true,

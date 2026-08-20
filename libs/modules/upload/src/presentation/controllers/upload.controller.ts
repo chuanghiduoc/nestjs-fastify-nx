@@ -96,8 +96,10 @@ export class UploadController {
     );
   }
 
+  // No @RequirePermission here: file:delete can also be held owner-scoped, and the guard evaluates
+  // permissions without a resource. Gating at the route would 403 an owner of the file before the
+  // handler could apply that grant, so the check lives in DeleteUploadHandler where the file is loaded.
   @Delete(':id')
-  @RequirePermission(PERMISSIONS.FILE_DELETE)
   @Throttle(DELETE_LIMIT)
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({

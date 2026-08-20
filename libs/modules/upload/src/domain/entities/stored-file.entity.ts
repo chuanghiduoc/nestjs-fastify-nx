@@ -85,10 +85,6 @@ export class StoredFile {
   isDeleted(): boolean {
     return this.props.deletedAt != null;
   }
-
-  isOwnedBy(userId: string): boolean {
-    return this.props.userId === userId;
-  }
 }
 
 /** The extension the storage key must carry for a mime type the allow-list accepts. */
