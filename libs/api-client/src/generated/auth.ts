@@ -25,6 +25,8 @@ import type {
   ChangeEmailBody,
   ChangePassword200,
   ChangePasswordBody,
+  CreateOrganizationInvitation200,
+  CreateOrganizationInvitationBody,
   DeleteUser200,
   DeleteUserBody,
   DeleteUserCallback200,
@@ -38,6 +40,41 @@ import type {
   LinkSocialAccountBody,
   ListUserAccounts200Item,
   Ok200,
+  Organization,
+  OrganizationAcceptInvitation200,
+  OrganizationAcceptInvitationBody,
+  OrganizationAddTeamMember200,
+  OrganizationAddTeamMemberBody,
+  OrganizationCancelInvitationBody,
+  OrganizationCheckSlugBody,
+  OrganizationCreateBody,
+  OrganizationCreateRoleBody,
+  OrganizationCreateTeam200,
+  OrganizationCreateTeamBody,
+  OrganizationDeleteBody,
+  OrganizationDeleteRoleBody,
+  OrganizationGetActiveMember200,
+  OrganizationGetInvitation200,
+  OrganizationGetInvitationParams,
+  OrganizationHasPermission200,
+  OrganizationHasPermissionBody,
+  OrganizationLeaveBody,
+  OrganizationListTeamMembers200Item,
+  OrganizationListTeams200Item,
+  OrganizationListUserInvitations200Item,
+  OrganizationRejectInvitation200,
+  OrganizationRejectInvitationBody,
+  OrganizationRemoveMember200,
+  OrganizationRemoveMemberBody,
+  OrganizationRemoveTeam200,
+  OrganizationRemoveTeamBody,
+  OrganizationRemoveTeamMember200,
+  OrganizationRemoveTeamMemberBody,
+  OrganizationSetActiveTeamBody,
+  OrganizationUpdateBody,
+  OrganizationUpdateRoleBody,
+  OrganizationUpdateTeam200,
+  OrganizationUpdateTeamBody,
   RefreshToken200,
   RefreshTokenBody,
   RequestPasswordReset200,
@@ -55,6 +92,7 @@ import type {
   SendVerificationEmail200,
   SendVerificationEmailBody,
   Session,
+  SetActiveOrganizationBody,
   SignInEmail200,
   SignInEmailBody,
   SignOut200,
@@ -63,8 +101,11 @@ import type {
   SignUpWithEmailAndPasswordBody,
   SocialSignIn200,
   SocialSignInBody,
+  Team,
   UnlinkAccount200,
   UnlinkAccountBody,
+  UpdateOrganizationMemberRole200,
+  UpdateOrganizationMemberRoleBody,
   UpdateSession200,
   UpdateSessionBody,
   UpdateUser200,
@@ -388,6 +429,348 @@ export const getAuth = () => {
   const error = () => {
     return customAxiosInstance<string>({ url: `/api/auth/error`, method: 'GET' });
   };
+  /**
+   * Create an organization
+   */
+  const organizationCreate = (organizationCreateBody: OrganizationCreateBody) => {
+    return customAxiosInstance<Organization>({
+      url: `/api/auth/organization/create`,
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      data: organizationCreateBody,
+    });
+  };
+  /**
+   * Update an organization
+   */
+  const organizationUpdate = (organizationUpdateBody: OrganizationUpdateBody) => {
+    return customAxiosInstance<Organization>({
+      url: `/api/auth/organization/update`,
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      data: organizationUpdateBody,
+    });
+  };
+  /**
+   * Delete an organization
+   */
+  const organizationDelete = (organizationDeleteBody: OrganizationDeleteBody) => {
+    return customAxiosInstance<string>({
+      url: `/api/auth/organization/delete`,
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      data: organizationDeleteBody,
+    });
+  };
+  /**
+   * Set the active organization
+   */
+  const setActiveOrganization = (setActiveOrganizationBody: SetActiveOrganizationBody) => {
+    return customAxiosInstance<Organization>({
+      url: `/api/auth/organization/set-active`,
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      data: setActiveOrganizationBody,
+    });
+  };
+  /**
+   * Get the full organization
+   */
+  const getOrganization = () => {
+    return customAxiosInstance<Organization>({
+      url: `/api/auth/organization/get-full-organization`,
+      method: 'GET',
+    });
+  };
+  /**
+   * List all organizations
+   */
+  const organizationList = () => {
+    return customAxiosInstance<Organization[]>({
+      url: `/api/auth/organization/list`,
+      method: 'GET',
+    });
+  };
+  /**
+   * Create an invitation to an organization
+   */
+  const createOrganizationInvitation = (
+    createOrganizationInvitationBody: CreateOrganizationInvitationBody,
+  ) => {
+    return customAxiosInstance<CreateOrganizationInvitation200>({
+      url: `/api/auth/organization/invite-member`,
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      data: createOrganizationInvitationBody,
+    });
+  };
+  const organizationCancelInvitation = (
+    organizationCancelInvitationBody: OrganizationCancelInvitationBody,
+  ) => {
+    return customAxiosInstance<unknown>({
+      url: `/api/auth/organization/cancel-invitation`,
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      data: organizationCancelInvitationBody,
+    });
+  };
+  /**
+   * Accept an invitation to an organization
+   */
+  const organizationAcceptInvitation = (
+    organizationAcceptInvitationBody: OrganizationAcceptInvitationBody,
+  ) => {
+    return customAxiosInstance<OrganizationAcceptInvitation200>({
+      url: `/api/auth/organization/accept-invitation`,
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      data: organizationAcceptInvitationBody,
+    });
+  };
+  /**
+   * Get an invitation by ID
+   */
+  const organizationGetInvitation = (params?: OrganizationGetInvitationParams) => {
+    return customAxiosInstance<OrganizationGetInvitation200>({
+      url: `/api/auth/organization/get-invitation`,
+      method: 'GET',
+      params,
+    });
+  };
+  /**
+   * Reject an invitation to an organization
+   */
+  const organizationRejectInvitation = (
+    organizationRejectInvitationBody: OrganizationRejectInvitationBody,
+  ) => {
+    return customAxiosInstance<OrganizationRejectInvitation200>({
+      url: `/api/auth/organization/reject-invitation`,
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      data: organizationRejectInvitationBody,
+    });
+  };
+  const organizationListInvitations = () => {
+    return customAxiosInstance<unknown>({
+      url: `/api/auth/organization/list-invitations`,
+      method: 'GET',
+    });
+  };
+  /**
+   * Get the member details of the active organization
+   */
+  const organizationGetActiveMember = () => {
+    return customAxiosInstance<OrganizationGetActiveMember200>({
+      url: `/api/auth/organization/get-active-member`,
+      method: 'GET',
+    });
+  };
+  const organizationCheckSlug = (organizationCheckSlugBody: OrganizationCheckSlugBody) => {
+    return customAxiosInstance<unknown>({
+      url: `/api/auth/organization/check-slug`,
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      data: organizationCheckSlugBody,
+    });
+  };
+  /**
+   * Remove a member from an organization
+   */
+  const organizationRemoveMember = (organizationRemoveMemberBody: OrganizationRemoveMemberBody) => {
+    return customAxiosInstance<OrganizationRemoveMember200>({
+      url: `/api/auth/organization/remove-member`,
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      data: organizationRemoveMemberBody,
+    });
+  };
+  /**
+   * Update the role of a member in an organization
+   */
+  const updateOrganizationMemberRole = (
+    updateOrganizationMemberRoleBody: UpdateOrganizationMemberRoleBody,
+  ) => {
+    return customAxiosInstance<UpdateOrganizationMemberRole200>({
+      url: `/api/auth/organization/update-member-role`,
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      data: updateOrganizationMemberRoleBody,
+    });
+  };
+  const organizationLeave = (organizationLeaveBody: OrganizationLeaveBody) => {
+    return customAxiosInstance<unknown>({
+      url: `/api/auth/organization/leave`,
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      data: organizationLeaveBody,
+    });
+  };
+  /**
+   * List all invitations a user has received
+   */
+  const organizationListUserInvitations = () => {
+    return customAxiosInstance<OrganizationListUserInvitations200Item[]>({
+      url: `/api/auth/organization/list-user-invitations`,
+      method: 'GET',
+    });
+  };
+  const organizationListMembers = () => {
+    return customAxiosInstance<unknown>({
+      url: `/api/auth/organization/list-members`,
+      method: 'GET',
+    });
+  };
+  const organizationGetActiveMemberRole = () => {
+    return customAxiosInstance<unknown>({
+      url: `/api/auth/organization/get-active-member-role`,
+      method: 'GET',
+    });
+  };
+  /**
+   * Create a new team within an organization
+   */
+  const organizationCreateTeam = (organizationCreateTeamBody: OrganizationCreateTeamBody) => {
+    return customAxiosInstance<OrganizationCreateTeam200>({
+      url: `/api/auth/organization/create-team`,
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      data: organizationCreateTeamBody,
+    });
+  };
+  /**
+   * List all teams in an organization
+   */
+  const organizationListTeams = () => {
+    return customAxiosInstance<OrganizationListTeams200Item[]>({
+      url: `/api/auth/organization/list-teams`,
+      method: 'GET',
+    });
+  };
+  /**
+   * Remove a team from an organization
+   */
+  const organizationRemoveTeam = (organizationRemoveTeamBody: OrganizationRemoveTeamBody) => {
+    return customAxiosInstance<OrganizationRemoveTeam200>({
+      url: `/api/auth/organization/remove-team`,
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      data: organizationRemoveTeamBody,
+    });
+  };
+  /**
+   * Update an existing team in an organization
+   */
+  const organizationUpdateTeam = (organizationUpdateTeamBody: OrganizationUpdateTeamBody) => {
+    return customAxiosInstance<OrganizationUpdateTeam200>({
+      url: `/api/auth/organization/update-team`,
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      data: organizationUpdateTeamBody,
+    });
+  };
+  /**
+   * Set the active team for the current active organization
+   */
+  const organizationSetActiveTeam = (
+    organizationSetActiveTeamBody: OrganizationSetActiveTeamBody,
+  ) => {
+    return customAxiosInstance<Team>({
+      url: `/api/auth/organization/set-active-team`,
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      data: organizationSetActiveTeamBody,
+    });
+  };
+  /**
+   * List all teams that the current user is a part of.
+   */
+  const organizationListUserTeams = () => {
+    return customAxiosInstance<Team[]>({
+      url: `/api/auth/organization/list-user-teams`,
+      method: 'GET',
+    });
+  };
+  /**
+   * List the members of the given team.
+   */
+  const organizationListTeamMembers = () => {
+    return customAxiosInstance<OrganizationListTeamMembers200Item[]>({
+      url: `/api/auth/organization/list-team-members`,
+      method: 'GET',
+    });
+  };
+  /**
+   * The newly created member
+   */
+  const organizationAddTeamMember = (
+    organizationAddTeamMemberBody: OrganizationAddTeamMemberBody,
+  ) => {
+    return customAxiosInstance<OrganizationAddTeamMember200>({
+      url: `/api/auth/organization/add-team-member`,
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      data: organizationAddTeamMemberBody,
+    });
+  };
+  /**
+   * Remove a member from a team
+   */
+  const organizationRemoveTeamMember = (
+    organizationRemoveTeamMemberBody: OrganizationRemoveTeamMemberBody,
+  ) => {
+    return customAxiosInstance<OrganizationRemoveTeamMember200>({
+      url: `/api/auth/organization/remove-team-member`,
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      data: organizationRemoveTeamMemberBody,
+    });
+  };
+  const organizationCreateRole = (organizationCreateRoleBody: OrganizationCreateRoleBody) => {
+    return customAxiosInstance<unknown>({
+      url: `/api/auth/organization/create-role`,
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      data: organizationCreateRoleBody,
+    });
+  };
+  const organizationDeleteRole = (organizationDeleteRoleBody: OrganizationDeleteRoleBody) => {
+    return customAxiosInstance<unknown>({
+      url: `/api/auth/organization/delete-role`,
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      data: organizationDeleteRoleBody,
+    });
+  };
+  const organizationListRoles = () => {
+    return customAxiosInstance<unknown>({
+      url: `/api/auth/organization/list-roles`,
+      method: 'GET',
+    });
+  };
+  const organizationGetRole = () => {
+    return customAxiosInstance<unknown>({ url: `/api/auth/organization/get-role`, method: 'GET' });
+  };
+  const organizationUpdateRole = (organizationUpdateRoleBody: OrganizationUpdateRoleBody) => {
+    return customAxiosInstance<unknown>({
+      url: `/api/auth/organization/update-role`,
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      data: organizationUpdateRoleBody,
+    });
+  };
+  /**
+   * Check if the user has permission
+   */
+  const organizationHasPermission = (
+    organizationHasPermissionBody?: OrganizationHasPermissionBody,
+  ) => {
+    return customAxiosInstance<OrganizationHasPermission200>({
+      url: `/api/auth/organization/has-permission`,
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      data: organizationHasPermissionBody,
+    });
+  };
   return {
     socialSignIn,
     callbackId,
@@ -421,6 +804,41 @@ export const getAuth = () => {
     accountInfo,
     ok,
     error,
+    organizationCreate,
+    organizationUpdate,
+    organizationDelete,
+    setActiveOrganization,
+    getOrganization,
+    organizationList,
+    createOrganizationInvitation,
+    organizationCancelInvitation,
+    organizationAcceptInvitation,
+    organizationGetInvitation,
+    organizationRejectInvitation,
+    organizationListInvitations,
+    organizationGetActiveMember,
+    organizationCheckSlug,
+    organizationRemoveMember,
+    updateOrganizationMemberRole,
+    organizationLeave,
+    organizationListUserInvitations,
+    organizationListMembers,
+    organizationGetActiveMemberRole,
+    organizationCreateTeam,
+    organizationListTeams,
+    organizationRemoveTeam,
+    organizationUpdateTeam,
+    organizationSetActiveTeam,
+    organizationListUserTeams,
+    organizationListTeamMembers,
+    organizationAddTeamMember,
+    organizationRemoveTeamMember,
+    organizationCreateRole,
+    organizationDeleteRole,
+    organizationListRoles,
+    organizationGetRole,
+    organizationUpdateRole,
+    organizationHasPermission,
   };
 };
 export type SocialSignInResult = NonNullable<
@@ -513,3 +931,108 @@ export type AccountInfoResult = NonNullable<
 >;
 export type OkResult = NonNullable<Awaited<ReturnType<ReturnType<typeof getAuth>['ok']>>>;
 export type ErrorResult = NonNullable<Awaited<ReturnType<ReturnType<typeof getAuth>['error']>>>;
+export type OrganizationCreateResult = NonNullable<
+  Awaited<ReturnType<ReturnType<typeof getAuth>['organizationCreate']>>
+>;
+export type OrganizationUpdateResult = NonNullable<
+  Awaited<ReturnType<ReturnType<typeof getAuth>['organizationUpdate']>>
+>;
+export type OrganizationDeleteResult = NonNullable<
+  Awaited<ReturnType<ReturnType<typeof getAuth>['organizationDelete']>>
+>;
+export type SetActiveOrganizationResult = NonNullable<
+  Awaited<ReturnType<ReturnType<typeof getAuth>['setActiveOrganization']>>
+>;
+export type GetOrganizationResult = NonNullable<
+  Awaited<ReturnType<ReturnType<typeof getAuth>['getOrganization']>>
+>;
+export type OrganizationListResult = NonNullable<
+  Awaited<ReturnType<ReturnType<typeof getAuth>['organizationList']>>
+>;
+export type CreateOrganizationInvitationResult = NonNullable<
+  Awaited<ReturnType<ReturnType<typeof getAuth>['createOrganizationInvitation']>>
+>;
+export type OrganizationCancelInvitationResult = NonNullable<
+  Awaited<ReturnType<ReturnType<typeof getAuth>['organizationCancelInvitation']>>
+>;
+export type OrganizationAcceptInvitationResult = NonNullable<
+  Awaited<ReturnType<ReturnType<typeof getAuth>['organizationAcceptInvitation']>>
+>;
+export type OrganizationGetInvitationResult = NonNullable<
+  Awaited<ReturnType<ReturnType<typeof getAuth>['organizationGetInvitation']>>
+>;
+export type OrganizationRejectInvitationResult = NonNullable<
+  Awaited<ReturnType<ReturnType<typeof getAuth>['organizationRejectInvitation']>>
+>;
+export type OrganizationListInvitationsResult = NonNullable<
+  Awaited<ReturnType<ReturnType<typeof getAuth>['organizationListInvitations']>>
+>;
+export type OrganizationGetActiveMemberResult = NonNullable<
+  Awaited<ReturnType<ReturnType<typeof getAuth>['organizationGetActiveMember']>>
+>;
+export type OrganizationCheckSlugResult = NonNullable<
+  Awaited<ReturnType<ReturnType<typeof getAuth>['organizationCheckSlug']>>
+>;
+export type OrganizationRemoveMemberResult = NonNullable<
+  Awaited<ReturnType<ReturnType<typeof getAuth>['organizationRemoveMember']>>
+>;
+export type UpdateOrganizationMemberRoleResult = NonNullable<
+  Awaited<ReturnType<ReturnType<typeof getAuth>['updateOrganizationMemberRole']>>
+>;
+export type OrganizationLeaveResult = NonNullable<
+  Awaited<ReturnType<ReturnType<typeof getAuth>['organizationLeave']>>
+>;
+export type OrganizationListUserInvitationsResult = NonNullable<
+  Awaited<ReturnType<ReturnType<typeof getAuth>['organizationListUserInvitations']>>
+>;
+export type OrganizationListMembersResult = NonNullable<
+  Awaited<ReturnType<ReturnType<typeof getAuth>['organizationListMembers']>>
+>;
+export type OrganizationGetActiveMemberRoleResult = NonNullable<
+  Awaited<ReturnType<ReturnType<typeof getAuth>['organizationGetActiveMemberRole']>>
+>;
+export type OrganizationCreateTeamResult = NonNullable<
+  Awaited<ReturnType<ReturnType<typeof getAuth>['organizationCreateTeam']>>
+>;
+export type OrganizationListTeamsResult = NonNullable<
+  Awaited<ReturnType<ReturnType<typeof getAuth>['organizationListTeams']>>
+>;
+export type OrganizationRemoveTeamResult = NonNullable<
+  Awaited<ReturnType<ReturnType<typeof getAuth>['organizationRemoveTeam']>>
+>;
+export type OrganizationUpdateTeamResult = NonNullable<
+  Awaited<ReturnType<ReturnType<typeof getAuth>['organizationUpdateTeam']>>
+>;
+export type OrganizationSetActiveTeamResult = NonNullable<
+  Awaited<ReturnType<ReturnType<typeof getAuth>['organizationSetActiveTeam']>>
+>;
+export type OrganizationListUserTeamsResult = NonNullable<
+  Awaited<ReturnType<ReturnType<typeof getAuth>['organizationListUserTeams']>>
+>;
+export type OrganizationListTeamMembersResult = NonNullable<
+  Awaited<ReturnType<ReturnType<typeof getAuth>['organizationListTeamMembers']>>
+>;
+export type OrganizationAddTeamMemberResult = NonNullable<
+  Awaited<ReturnType<ReturnType<typeof getAuth>['organizationAddTeamMember']>>
+>;
+export type OrganizationRemoveTeamMemberResult = NonNullable<
+  Awaited<ReturnType<ReturnType<typeof getAuth>['organizationRemoveTeamMember']>>
+>;
+export type OrganizationCreateRoleResult = NonNullable<
+  Awaited<ReturnType<ReturnType<typeof getAuth>['organizationCreateRole']>>
+>;
+export type OrganizationDeleteRoleResult = NonNullable<
+  Awaited<ReturnType<ReturnType<typeof getAuth>['organizationDeleteRole']>>
+>;
+export type OrganizationListRolesResult = NonNullable<
+  Awaited<ReturnType<ReturnType<typeof getAuth>['organizationListRoles']>>
+>;
+export type OrganizationGetRoleResult = NonNullable<
+  Awaited<ReturnType<ReturnType<typeof getAuth>['organizationGetRole']>>
+>;
+export type OrganizationUpdateRoleResult = NonNullable<
+  Awaited<ReturnType<ReturnType<typeof getAuth>['organizationUpdateRole']>>
+>;
+export type OrganizationHasPermissionResult = NonNullable<
+  Awaited<ReturnType<ReturnType<typeof getAuth>['organizationHasPermission']>>
+>;

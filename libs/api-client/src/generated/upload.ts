@@ -52,11 +52,21 @@ export const getUpload = () => {
       data: confirmUploadDto,
     });
   };
-  return { uploadPresign, uploadConfirm };
+  /**
+   * Marks the file deleted and hides it from every read immediately. The object stays in storage until the scheduler purges it after STORED_FILE_PURGE_AFTER_DAYS, so a mistaken delete is recoverable until then. Repeating the call on an already-deleted file is a no-op.
+   * @summary Soft-delete an uploaded file.
+   */
+  const uploadDeleteFile = (id: string) => {
+    return customAxiosInstance<void>({ url: `/api/v1/upload/${id}`, method: 'DELETE' });
+  };
+  return { uploadPresign, uploadConfirm, uploadDeleteFile };
 };
 export type UploadPresignResult = NonNullable<
   Awaited<ReturnType<ReturnType<typeof getUpload>['uploadPresign']>>
 >;
 export type UploadConfirmResult = NonNullable<
   Awaited<ReturnType<ReturnType<typeof getUpload>['uploadConfirm']>>
+>;
+export type UploadDeleteFileResult = NonNullable<
+  Awaited<ReturnType<ReturnType<typeof getUpload>['uploadDeleteFile']>>
 >;

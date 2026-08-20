@@ -24,8 +24,8 @@ import { customAxiosInstance } from '../lib/axios-instance';
 
 export const getAdmin = () => {
   /**
-   * Returns a Stripe-style cursor-paginated list envelope. Pass `startingAfter` from the previous response to fetch the next page. Filterable by `role`, `status`, and `search` (case-insensitive across `email` and `name`). Requires the `ADMIN` role.
-   * @summary List users (admin)
+   * Returns a Stripe-style cursor-paginated list envelope of the users who belong to the caller's active organization. Pass `startingAfter` from the previous response to fetch the next page. Filterable by `role`, `status`, and `search` (case-insensitive across `email` and `name`). Requires the `member:read` permission.
+   * @summary List members of the active organization
    */
   const adminUsersList = (params?: AdminUsersListParams) => {
     return customAxiosInstance<AdminUsersList200>({
