@@ -44,6 +44,9 @@ allowBuilds:
 
 overrides:
   axios: '>=1.18.0'
+  # GHSA-ggr8-5vv4-36mx (high, prototype pollution). Reached only through @prisma/config, which
+  # pins 7.x, so an update cannot resolve it. Capped below 9 per the cap-below-next-major policy.
+  deepmerge-ts: '>=8.0.0 <9'
   fastify: '>=5.8.5'
   # GHSA-c96f-x56v-gq3h (high, HTTP/2 DoS). @nestjs/platform-fastify pins an exact 9.6.0, so this
   # cannot be resolved by a plain update.
