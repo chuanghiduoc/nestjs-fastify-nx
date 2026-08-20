@@ -26,10 +26,14 @@ export class StoredFileCleanupTask {
   // whose owner was hard-deleted mid-flight — that would delete a row while confirm() finalizes the
   // object, orphaning a committed object and 500-ing the request.
   private readonly orphanGraceMinutes = positiveIntEnv('STORED_FILE_ORPHAN_GRACE_MINUTES', 60);
+  // Recovery window for a user-initiated delete: the row and its object survive this long after
+  // `deletedAt` so a mistaken delete stays reversible.
+  private readonly purgeAfterDays = positiveIntEnv('STORED_FILE_PURGE_AFTER_DAYS', 30);
   // @nestjs/schedule does not serialize overlapping ticks. If a run outlasts its interval (e.g. slow
   // S3), the next tick would run concurrently and double the S3/DB work — these flags skip it.
   private cleanupRunning = false;
   private orphanRunning = false;
+  private purgeRunning = false;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -113,6 +117,44 @@ export class StoredFileCleanupTask {
       );
     } finally {
       this.orphanRunning = false;
+    }
+  }
+
+  // Hard delete of rows a user soft-deleted. Storage first, row second: the reverse order would
+  // drop the only pointer to the object and leak it in the bucket forever. A retry is safe because
+  // an S3 delete of a missing key succeeds and deleteMany matches zero rows.
+  @Cron('20 4 * * *', { name: 'stored-file-retention-purge', timeZone: 'UTC' })
+  async purgeSoftDeleted(): Promise<void> {
+    if (!this.leadership.isLeader() || this.purgeRunning) return;
+    this.purgeRunning = true;
+    try {
+      const cutoff = new Date(Date.now() - this.purgeAfterDays * 86_400_000);
+      const candidates = await this.prisma.db.$queryRaw<CleanupCandidate[]>`
+        SELECT id, key, bucket, status, "updatedAt"
+          FROM stored_files
+         WHERE "deletedAt" IS NOT NULL AND "deletedAt" < ${cutoff}
+         ORDER BY "deletedAt"
+         LIMIT ${this.batchSize}`;
+
+      let purged = 0;
+      for (const candidate of candidates) {
+        try {
+          await this.storage.delete(candidate.key, candidate.bucket);
+          await this.prisma.db.storedFile.deleteMany({ where: { id: candidate.id } });
+          purged++;
+        } catch (err) {
+          this.logger.error(
+            { err, fileId: candidate.id, key: candidate.key },
+            'Stored-file retention purge failed',
+          );
+        }
+      }
+
+      if (purged > 0) this.logger.log(`Purged ${purged} soft-deleted stored file(s)`);
+    } catch (err) {
+      this.logger.error({ err }, 'Stored-file retention purge scan failed');
+    } finally {
+      this.purgeRunning = false;
     }
   }
 

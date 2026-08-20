@@ -54,7 +54,7 @@ export async function moduleGenerator(tree: Tree, options: ModuleGeneratorSchema
     root: projectRoot,
     projectType: 'library',
     sourceRoot: `${projectRoot}/src`,
-    tags: [scopeTag, `type:feature`],
+    tags: [scopeTag],
     targets: {},
   });
 

@@ -6,4 +6,6 @@ export interface AuthenticatedSession {
   status: string;
   sessionId: string;
   sessionToken: string;
+  organizationId?: string;
+  teamId?: string;
 }

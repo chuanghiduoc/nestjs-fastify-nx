@@ -27,6 +27,7 @@ function buildTask(opts?: {
       storedFile: {
         updateMany: vi.fn().mockResolvedValue({ count: opts?.claimed ?? 1 }),
         delete: vi.fn().mockResolvedValue(makeCandidate()),
+        deleteMany: vi.fn().mockResolvedValue({ count: 1 }),
       },
     },
   } as unknown as PrismaService;
@@ -172,6 +173,54 @@ describe('StoredFileCleanupTask', () => {
       const { task } = buildTask({ queryRaw });
 
       await expect(task.cleanupOrphaned()).resolves.toBeUndefined();
+    });
+  });
+
+  describe('purgeSoftDeleted', () => {
+    // Deleting the row first would drop the only pointer to the object and leak it forever,
+    // so the order of these two calls is the whole point of the job.
+    it('releases the object before dropping the row', async () => {
+      const candidate = makeCandidate({ status: 'READY' });
+      const queryRaw = vi.fn().mockResolvedValue([candidate]);
+      const { task, prisma, storage } = buildTask({ queryRaw });
+      const order: string[] = [];
+      (storage.delete as ReturnType<typeof vi.fn>).mockImplementation(async () => {
+        order.push('storage');
+      });
+      (prisma.db.storedFile.deleteMany as ReturnType<typeof vi.fn>).mockImplementation(async () => {
+        order.push('row');
+        return { count: 1 };
+      });
+
+      await task.purgeSoftDeleted();
+
+      expect(order).toEqual(['storage', 'row']);
+      expect(storage.delete).toHaveBeenCalledWith('files/user/file.png', 'uploads');
+    });
+
+    it('keeps the row when the object delete fails so the next run retries', async () => {
+      const queryRaw = vi.fn().mockResolvedValue([makeCandidate({ status: 'READY' })]);
+      const { task, prisma, storage } = buildTask({ queryRaw });
+      (storage.delete as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('s3 down'));
+
+      await expect(task.purgeSoftDeleted()).resolves.toBeUndefined();
+
+      expect(prisma.db.storedFile.deleteMany).not.toHaveBeenCalled();
+    });
+
+    it('does nothing on a follower replica', async () => {
+      const { task, prisma } = buildTask({ leader: false });
+
+      await task.purgeSoftDeleted();
+
+      expect(prisma.db.$queryRaw).not.toHaveBeenCalled();
+    });
+
+    it('does not throw when the scan fails', async () => {
+      const queryRaw = vi.fn().mockRejectedValue(new Error('scan failed'));
+      const { task } = buildTask({ queryRaw });
+
+      await expect(task.purgeSoftDeleted()).resolves.toBeUndefined();
     });
   });
 });

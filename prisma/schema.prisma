@@ -11,17 +11,20 @@ datasource db {
 }
 
 model User {
-  id            String    @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  name          String    @default("")
-  email         String    @unique
-  emailVerified Boolean   @default(false)
-  image         String?
-  role          String    @default("USER")
-  status        String    @default("ACTIVE")
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  sessions      Session[]
-  accounts      Account[]
+  id              String       @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  name            String       @default("")
+  email           String       @unique
+  emailVerified   Boolean      @default(false)
+  image           String?
+  role            String       @default("USER")
+  status          String       @default("ACTIVE")
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  sessions        Session[]
+  accounts        Account[]
+  memberships     Member[]
+  teamMembers     TeamMember[]
+  sentInvitations Invitation[]
 
   // The @unique on email already creates a B-tree — a separate @@index([email])
   // would just duplicate writes for zero query benefit, so it is intentionally
@@ -49,7 +52,13 @@ model Session {
   userId    String   @db.Uuid
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  activeOrganizationId String?       @db.Uuid
+  activeOrganization   Organization? @relation(fields: [activeOrganizationId], references: [id], onDelete: SetNull)
+  activeTeamId         String?       @db.Uuid
+  activeTeam           Team?         @relation(fields: [activeTeamId], references: [id], onDelete: SetNull)
+
   @@index([userId])
+  @@index([activeOrganizationId])
   // Backs the scheduler's expired-session purge (SessionCleanupTask). Better Auth never deletes
   // a session row itself, so without this index "WHERE expiresAt < cutoff" degrades into a
   // sequential scan as the table grows unbounded.
@@ -93,46 +102,154 @@ model Verification {
   @@map("verifications")
 }
 
+model Organization {
+  id        String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  name      String
+  slug      String   @unique
+  logo      String?
+  metadata  String?
+  createdAt DateTime @default(now())
+
+  members           Member[]
+  invitations       Invitation[]
+  teams             Team[]
+  organizationRoles OrganizationRole[]
+  activeSessions    Session[]
+
+  @@index([createdAt(sort: Desc), id(sort: Desc)], map: "organizations_createdAt_id_desc_idx")
+  @@map("organizations")
+}
+
+model Member {
+  id             String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  organizationId String   @db.Uuid
+  userId         String   @db.Uuid
+  role           String   @default("member")
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, userId])
+  @@index([userId])
+  @@index([organizationId, createdAt(sort: Desc), id(sort: Desc)], map: "members_org_createdAt_id_desc_idx")
+  @@map("members")
+}
+
+model Invitation {
+  id             String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  organizationId String   @db.Uuid
+  email          String
+  role           String?
+  teamId         String?  @db.Uuid
+  status         String   @default("pending")
+  expiresAt      DateTime
+  inviterId      String   @db.Uuid
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  inviter      User         @relation(fields: [inviterId], references: [id], onDelete: Cascade)
+  team         Team?        @relation(fields: [teamId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, status])
+  @@index([email, status])
+  @@index([expiresAt])
+  @@index([inviterId])
+  @@index([teamId])
+  @@map("invitations")
+}
+
+model Team {
+  id             String    @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  name           String
+  organizationId String    @db.Uuid
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime? @updatedAt
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  members        TeamMember[]
+  invitations    Invitation[]
+  activeSessions Session[]
+
+  @@unique([organizationId, name])
+  @@index([organizationId, createdAt(sort: Desc), id(sort: Desc)], map: "teams_org_createdAt_id_desc_idx")
+  @@map("teams")
+}
+
+model TeamMember {
+  id        String    @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  teamId    String    @db.Uuid
+  userId    String    @db.Uuid
+  createdAt DateTime? @default(now())
+
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, userId])
+  @@index([userId])
+  @@map("team_members")
+}
+
+model OrganizationRole {
+  id             String    @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  organizationId String    @db.Uuid
+  role           String
+  permission     String
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime? @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, role])
+  @@map("organization_roles")
+}
+
 // Durable ownership and lifecycle state for finalized uploads. `userId` deliberately has no
 // foreign key: the scheduler must still see and delete S3 objects after a user row is purged.
 model StoredFile {
-  id            String    @id @db.Uuid
-  userId        String    @db.Uuid
-  sourceKey     String    @unique
-  key           String    @unique
-  bucket        String
-  contentType   String
-  size          Int
-  etag          String
-  status        String    @default("FINALIZING")
-  failureReason String?
+  id             String    @id @db.Uuid
+  organizationId String    @db.Uuid
+  userId         String    @db.Uuid
+  sourceKey      String    @unique
+  key            String    @unique
+  bucket         String
+  contentType    String
+  size           Int
+  etag           String
+  status         String    @default("FINALIZING")
+  failureReason  String?
   // CLEAN or SKIPPED_TOO_LARGE. Null until verification runs; SKIPPED_TOO_LARGE marks an object
   // published past the scanner's per-file ceiling, so READY alone never implies it was inspected.
-  scanOutcome   String?
-  verifiedAt    DateTime?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  scanOutcome    String?
+  verifiedAt     DateTime?
+  deletedAt      DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   @@index([userId, status])
   @@index([status, updatedAt])
+  @@index([organizationId, status])
+  @@index([organizationId, createdAt(sort: Desc), id(sort: Desc)], map: "stored_files_org_createdAt_id_desc_idx")
+  @@index([deletedAt])
   @@map("stored_files")
 }
 
 // `id` is application-stamped UUIDv7 — producer needs the value inside the
 // same transaction to correlate aggregate writes with the outbox row.
 model OutboxEvent {
-  id            String    @id @db.Uuid
-  eventType     String
-  aggregateId   String
-  payload       Json
-  processedAt   DateTime?
-  attempts      Int       @default(0)
-  lastError     String?
-  createdAt     DateTime  @default(now())
+  id             String    @id @db.Uuid
+  organizationId String?   @db.Uuid
+  eventType      String
+  aggregateId    String
+  payload        Json
+  processedAt    DateTime?
+  attempts       Int       @default(0)
+  lastError      String?
+  createdAt      DateTime  @default(now())
   // Earliest time the relay may claim this row again. Stamped by the CLAIM statement itself (not
   // by the error handler) so a relay that crashes mid-dispatch still leaves the row invisible for
   // the backoff window instead of being re-claimed on the very next poll tick.
-  nextAttemptAt DateTime?
+  nextAttemptAt  DateTime?
 
   // Relay scan path — must come first because (processedAt, createdAt) is the
   // leftmost prefix `WHERE processedAt IS NULL ORDER BY createdAt` uses.
@@ -153,19 +270,21 @@ model OutboxEvent {
 // application stamps UUIDv7 ids so id-only uniqueness is preserved by
 // construction even though no global UNIQUE constraint enforces it.
 model AuditLog {
-  id        String   @db.Uuid
-  userId    String?  @db.Uuid
-  action    String
-  resource  String?
-  metadata  Json
-  ipAddress String?
-  userAgent String?
-  createdAt DateTime @default(now())
+  id             String   @db.Uuid
+  organizationId String?  @db.Uuid
+  userId         String?  @db.Uuid
+  action         String
+  resource       String?
+  metadata       Json
+  ipAddress      String?
+  userAgent      String?
+  createdAt      DateTime @default(now())
 
   @@id([id, createdAt])
   @@index([userId, createdAt])
   @@index([action, createdAt])
   @@index([createdAt])
+  @@index([organizationId, createdAt(sort: Desc)])
   // Compliance query path — "every admin action on resource X in window Y".
   // Two-column index with createdAt last so it remains useful for range scans.
   @@index([resource, createdAt])

@@ -3,6 +3,6 @@
   "$schema": "../../../node_modules/nx/schemas/project-schema.json",
   "sourceRoot": "libs/modules/upload/src",
   "projectType": "library",
-  "tags": ["scope:modules", "type:feature"],
+  "tags": ["scope:modules"],
   "targets": {}
 }

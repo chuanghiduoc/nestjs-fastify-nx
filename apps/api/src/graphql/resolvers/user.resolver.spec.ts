@@ -94,8 +94,13 @@ describe('UserResolver', () => {
   });
 
   describe('users', () => {
+    const ORG_ID = '019dd1a5-9235-70db-8d57-54ef90300001';
+    const orgContext = {
+      req: { user: { userId: 'u1', organizationId: ORG_ID } },
+    } as unknown as { req: { user?: AuthenticatedSession } };
+
     it('returns cursor-paginated users from the query bus', async () => {
-      const result = await resolver.users({ limit: 20 });
+      const result = await resolver.users(orgContext, { limit: 20 });
       expect(result.data).toHaveLength(1);
       expect(result.data[0].id).toBe('u1');
       expect(result.hasMore).toBe(false);
@@ -105,7 +110,7 @@ describe('UserResolver', () => {
 
     it('passes startingAfter to the query', async () => {
       const cursor = 'some-cursor';
-      await resolver.users({ limit: 10, startingAfter: cursor });
+      await resolver.users(orgContext, { limit: 10, startingAfter: cursor });
       expect(execute).toHaveBeenCalledWith(
         expect.objectContaining({ startingAfter: cursor, limit: 10 }),
       );
@@ -113,7 +118,7 @@ describe('UserResolver', () => {
 
     it('returns null lastCursor when result has no items', async () => {
       execute.mockResolvedValueOnce({ data: [], hasMore: false, lastCursor: null });
-      const result = await resolver.users({ limit: 20 });
+      const result = await resolver.users(orgContext, { limit: 20 });
       expect(result.lastCursor).toBeNull();
       expect(result.data).toHaveLength(0);
     });

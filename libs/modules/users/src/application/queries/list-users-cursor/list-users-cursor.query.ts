@@ -1,6 +1,6 @@
 import { Query } from '@nestjs/cqrs';
 import type { UserRole, UserStatus } from '../../../domain/entities/user.entity';
-import type { UserListItemDto } from '../../dtos/user-list-item.dto';
+import type { UserListItemDto } from '../../dto/user-list-item.dto';
 
 export interface ListUsersCursorResult {
   data: UserListItemDto[];
@@ -11,6 +11,7 @@ export interface ListUsersCursorResult {
 // Query<TResult> carries the result type so QueryBus.execute() infers it end-to-end.
 export class ListUsersCursorQuery extends Query<ListUsersCursorResult> {
   constructor(
+    readonly organizationId: string,
     readonly limit: number,
     readonly startingAfter?: string,
     readonly role?: UserRole,

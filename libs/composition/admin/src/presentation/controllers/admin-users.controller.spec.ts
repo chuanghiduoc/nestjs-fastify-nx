@@ -9,6 +9,17 @@ import {
 } from '@nestjs-fastify-nx/modules-users';
 import { AdminUsersController } from './admin-users.controller';
 
+const SESSION = {
+  userId: '019dd1a5-9235-70db-8d57-54ef90300003',
+  email: 'admin@example.com',
+  name: 'Admin',
+  role: 'USER',
+  status: 'ACTIVE',
+  sessionId: 's-1',
+  sessionToken: 't-1',
+  organizationId: '019dd1a5-9235-70db-8d57-54ef90300001',
+} as const;
+
 function createUserListItem(overrides: Partial<UserListItemDto> = {}): UserListItemDto {
   return {
     id: '019dd1a5-9235-70db-8d57-54ef901d8185',
@@ -41,7 +52,7 @@ describe('AdminUsersController', () => {
       search: 'jane',
     });
 
-    await controller.list(filter);
+    await controller.list(SESSION, filter);
 
     expect(queryBus.execute).toHaveBeenCalledTimes(1);
     const dispatched = queryBus.execute.mock.calls[0][0] as ListUsersCursorQuery;
@@ -65,7 +76,7 @@ describe('AdminUsersController', () => {
       limit: 10,
     });
 
-    const result = await controller.list(filter);
+    const result = await controller.list(SESSION, filter);
 
     expect(result).toMatchObject({
       object: 'list',
@@ -82,7 +93,7 @@ describe('AdminUsersController', () => {
       limit: 10,
     });
 
-    const result = await controller.list(filter);
+    const result = await controller.list(SESSION, filter);
 
     expect(result.data).toEqual([]);
     expect(result.hasMore).toBe(false);

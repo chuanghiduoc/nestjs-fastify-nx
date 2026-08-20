@@ -83,6 +83,11 @@ export class BetterAuthGuard implements CanActivate {
       });
     }
 
+    const activeScope = session.session as unknown as {
+      activeOrganizationId?: string | null;
+      activeTeamId?: string | null;
+    };
+
     const authenticatedSession: AuthenticatedSession = {
       userId: user.id,
       email: user.email,
@@ -91,6 +96,10 @@ export class BetterAuthGuard implements CanActivate {
       status: user.status,
       sessionId: session.session.id,
       sessionToken: session.session.token,
+      ...(activeScope.activeOrganizationId
+        ? { organizationId: activeScope.activeOrganizationId }
+        : {}),
+      ...(activeScope.activeTeamId ? { teamId: activeScope.activeTeamId } : {}),
     };
 
     (request as FastifyRequest & { user: AuthenticatedSession }).user = authenticatedSession;
@@ -100,6 +109,9 @@ export class BetterAuthGuard implements CanActivate {
     // read back the same value for the rest of the request (logs, error tags).
     if (this.cls.isActive()) {
       this.cls.set(REQUEST_CONTEXT_KEYS.userId, user.id);
+      if (authenticatedSession.organizationId) {
+        this.cls.set(REQUEST_CONTEXT_KEYS.organizationId, authenticatedSession.organizationId);
+      }
     }
     Sentry.setUser({ id: user.id });
 

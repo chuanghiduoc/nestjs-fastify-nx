@@ -18,6 +18,7 @@ export class PrismaAuditLogRepository implements AuditLogRepositoryPort {
       await client.auditLog.create({
         data: {
           id: entry.id,
+          organizationId: entry.organizationId,
           userId: entry.userId,
           action: entry.action,
           resource: entry.resource,

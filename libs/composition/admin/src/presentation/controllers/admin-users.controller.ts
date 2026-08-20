@@ -7,7 +7,13 @@ import {
   ListResponseDto,
   toCursorListResponse,
 } from '@nestjs-fastify-nx/contracts';
-import { Roles } from '@nestjs-fastify-nx/infra-auth';
+import {
+  CurrentUser,
+  requireOrganizationId,
+  type AuthenticatedSession,
+} from '@nestjs-fastify-nx/infra-auth';
+import { RequirePermission } from '@nestjs-fastify-nx/infra-authorization';
+import { PERMISSIONS } from '@nestjs-fastify-nx/shared';
 import {
   ListUsersCursorFilterDto,
   ListUsersCursorQuery,
@@ -17,25 +23,34 @@ import {
 
 const ADMIN_USERS_PATH = '/api/v1/admin/users';
 
+// Organization-scoped, not platform-scoped: `@Roles('ADMIN')` gates on `User.role`, which is the
+// provider's own staff axis and would lock out an organization owner (whose platform role is USER)
+// while letting provider staff read another tenant's members.
 @ApiTags('admin')
 @Controller('admin/users')
-@Roles('ADMIN')
 @ApiCookieAuth('session')
 export class AdminUsersController {
   constructor(private readonly queryBus: QueryBus) {}
 
   @Get()
+  @RequirePermission(PERMISSIONS.MEMBER_READ)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: 'List users (admin)',
+    summary: 'List members of the active organization',
     description:
-      'Returns a Stripe-style cursor-paginated list envelope. Pass `startingAfter` from the previous response to fetch the next page. Filterable by `role`, `status`, and `search` (case-insensitive across `email` and `name`). Requires the `ADMIN` role.',
+      "Returns a Stripe-style cursor-paginated list envelope of the users who belong to the caller's active organization. Pass `startingAfter` from the previous response to fetch the next page. Filterable by `role`, `status`, and `search` (case-insensitive across `email` and `name`). Requires the `member:read` permission.",
   })
   @ApiCommonErrors({ auth: true, forbidden: true, validation: true })
-  @ApiPaginatedResponse(UserListItemResponseDto, { description: 'Cursor-paginated list of users.' })
-  async list(@Query() filter: ListUsersCursorFilterDto): Promise<ListResponseDto<UserListItemDto>> {
+  @ApiPaginatedResponse(UserListItemResponseDto, {
+    description: 'Cursor-paginated list of organization members.',
+  })
+  async list(
+    @CurrentUser() user: AuthenticatedSession,
+    @Query() filter: ListUsersCursorFilterDto,
+  ): Promise<ListResponseDto<UserListItemDto>> {
     const result = await this.queryBus.execute(
       new ListUsersCursorQuery(
+        requireOrganizationId(user),
         filter.limit,
         filter.startingAfter,
         filter.role,

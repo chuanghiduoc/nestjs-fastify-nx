@@ -5,7 +5,7 @@ import { I18N_KEYS, ERROR_CODES } from '@nestjs-fastify-nx/contracts';
 import { decodeCursor, encodeCursor, type DecodedCursor } from '@nestjs-fastify-nx/shared';
 import { USER_REPOSITORY_PORT } from '../../../domain/ports/user-repository.port';
 import type { UserRepositoryPort } from '../../../domain/ports/user-repository.port';
-import type { UserListItemDto } from '../../dtos/user-list-item.dto';
+import type { UserListItemDto } from '../../dto/user-list-item.dto';
 import { ListUsersCursorQuery, type ListUsersCursorResult } from './list-users-cursor.query';
 
 @QueryHandler(ListUsersCursorQuery)
@@ -17,6 +17,7 @@ export class ListUsersCursorHandler implements IQueryHandler<
 
   async execute(query: ListUsersCursorQuery): Promise<ListUsersCursorResult> {
     const { items, hasMore } = await this.users.findAllCursor({
+      organizationId: query.organizationId,
       startingAfter: this.decodeStartingAfter(query.startingAfter),
       limit: query.limit,
       role: query.role,

@@ -92,6 +92,7 @@ export class ConfirmUploadHandler implements ICommandHandler<
     try {
       await this.files.create({
         id: fileId,
+        organizationId: command.organizationId,
         userId: command.userId,
         sourceKey: command.sourceKey,
         key: finalKey,

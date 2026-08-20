@@ -6,6 +6,7 @@ import { positiveIntEnv, QUEUE_NAMES } from '@nestjs-fastify-nx/shared';
 import { UploadController } from './presentation/controllers/upload.controller';
 import { PresignUploadHandler } from './application/commands/presign-upload/presign-upload.handler';
 import { ConfirmUploadHandler } from './application/commands/confirm-upload/confirm-upload.handler';
+import { DeleteUploadHandler } from './application/commands/delete-upload/delete-upload.handler';
 import { VerifyUploadHandler } from './application/commands/verify-upload/verify-upload.handler';
 import { UPLOAD_VERIFICATION_DISPATCHER } from './application/ports/upload-verification.dispatcher';
 import { UPLOAD_LIMITS, type UploadLimits } from './application/upload-limits';
@@ -68,6 +69,7 @@ export class UploadVerificationModule {
     { provide: UPLOAD_VERIFICATION_DISPATCHER, useClass: BullMqUploadVerificationDispatcher },
     PresignUploadHandler,
     ConfirmUploadHandler,
+    DeleteUploadHandler,
   ],
 })
 export class UploadModule {}

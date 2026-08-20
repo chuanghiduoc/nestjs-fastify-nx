@@ -5,6 +5,8 @@ import { UserFactory } from '../../../testing/user.factory';
 import { ListUsersCursorHandler } from './list-users-cursor.handler';
 import { ListUsersCursorQuery } from './list-users-cursor.query';
 
+const ORG_ID = '019dd1a5-9235-70db-8d57-54ef90300001';
+
 describe('ListUsersCursorHandler', () => {
   let repo: MockUserRepository;
   let handler: ListUsersCursorHandler;
@@ -21,7 +23,7 @@ describe('ListUsersCursorHandler', () => {
     await repo.save(UserFactory.create({ email: 'a@test.com' }));
     await repo.save(UserFactory.create({ email: 'b@test.com' }));
 
-    const result = await handler.execute(new ListUsersCursorQuery(10));
+    const result = await handler.execute(new ListUsersCursorQuery(ORG_ID, 10));
 
     expect(result.data).toHaveLength(2);
     expect(result.hasMore).toBe(false);
@@ -33,7 +35,7 @@ describe('ListUsersCursorHandler', () => {
       await repo.save(UserFactory.create({ email: `user${i}@test.com` }));
     }
 
-    const result = await handler.execute(new ListUsersCursorQuery(3));
+    const result = await handler.execute(new ListUsersCursorQuery(ORG_ID, 3));
 
     expect(result.data).toHaveLength(3);
     expect(result.hasMore).toBe(true);
@@ -41,7 +43,7 @@ describe('ListUsersCursorHandler', () => {
   });
 
   it('returns empty result with null lastCursor when store is empty', async () => {
-    const result = await handler.execute(new ListUsersCursorQuery(20));
+    const result = await handler.execute(new ListUsersCursorQuery(ORG_ID, 20));
 
     expect(result.data).toHaveLength(0);
     expect(result.hasMore).toBe(false);
@@ -53,7 +55,7 @@ describe('ListUsersCursorHandler', () => {
       await repo.save(UserFactory.create({ email: `u${i}@test.com` }));
     }
 
-    const result = await handler.execute(new ListUsersCursorQuery(10));
+    const result = await handler.execute(new ListUsersCursorQuery(ORG_ID, 10));
     const last = result.data[result.data.length - 1];
     const decoded = decodeCursor(result.lastCursor ?? '');
 
@@ -68,10 +70,12 @@ describe('ListUsersCursorHandler', () => {
       await repo.save(UserFactory.create({ email: `p${i}@test.com` }));
     }
 
-    const page1 = await handler.execute(new ListUsersCursorQuery(3));
+    const page1 = await handler.execute(new ListUsersCursorQuery(ORG_ID, 3));
     expect(page1.hasMore).toBe(true);
 
-    const page2 = await handler.execute(new ListUsersCursorQuery(3, page1.lastCursor ?? undefined));
+    const page2 = await handler.execute(
+      new ListUsersCursorQuery(ORG_ID, 3, page1.lastCursor ?? undefined),
+    );
 
     const page1Ids = new Set(page1.data.map((u) => u.id));
     for (const item of page2.data) {
@@ -86,14 +90,14 @@ describe('ListUsersCursorHandler', () => {
     // Asserted on the domain kind, not an HTTP status: this layer runs under REST, GraphQL and the
     // scheduler, and only the transport knows that `malformed` means 400.
     await expect(
-      handler.execute(new ListUsersCursorQuery(10, '!!!invalid!!!')),
+      handler.execute(new ListUsersCursorQuery(ORG_ID, 10, '!!!invalid!!!')),
     ).rejects.toMatchObject({ kind: 'malformed', code: 'invalid_cursor', permanent: true });
   });
 
   it('maps domain User fields to UserListItemDto correctly', async () => {
     await repo.save(UserFactory.create({ email: 'dto@test.com', name: 'DTO User' }));
 
-    const result = await handler.execute(new ListUsersCursorQuery(10));
+    const result = await handler.execute(new ListUsersCursorQuery(ORG_ID, 10));
     const item = result.data[0];
 
     expect(item.email).toBe('dto@test.com');

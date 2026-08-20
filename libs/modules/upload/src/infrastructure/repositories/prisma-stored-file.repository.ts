@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { PrismaService } from '@nestjs-fastify-nx/infra-database';
+import { PrismaService, type TransactionClient } from '@nestjs-fastify-nx/infra-database';
 import type { StoredFileStatus } from '@nestjs-fastify-nx/shared';
 import { StoredFile, type StoredFileProps } from '../../domain/entities/stored-file.entity';
 import type {
@@ -9,7 +9,9 @@ import type {
 
 interface StoredFileRow {
   id: string;
+  organizationId: string;
   userId: string;
+  deletedAt: Date | null;
   sourceKey: string;
   key: string;
   bucket: string;
@@ -23,28 +25,46 @@ interface StoredFileRow {
 export class PrismaStoredFileRepository implements StoredFileRepositoryPort {
   constructor(private readonly prisma: PrismaService) {}
 
-  // Reads go to the replica when one is configured, writes to the primary — and both defer to an
-  // open interactive transaction so a repository call inside one commits atomically with it.
-  private get reader() {
-    return this.prisma.currentTransaction ?? this.prisma.dbRead;
-  }
-
-  private get writer() {
-    return this.prisma.currentTransaction ?? this.prisma.db;
+  private run<R>(
+    fn: (client: TransactionClient) => Promise<R>,
+    options: { readOnly: boolean },
+  ): Promise<R> {
+    const active = options.readOnly
+      ? (this.prisma.currentTransaction ?? this.prisma.currentReadTransaction)
+      : this.prisma.currentTransaction;
+    if (active) return fn(active);
+    if (!this.prisma.hasTenantContext) {
+      return fn(options.readOnly ? this.prisma.dbRead : this.prisma.db);
+    }
+    return this.prisma.withTenantContext(fn, { readOnly: options.readOnly });
   }
 
   async findBySourceKey(sourceKey: string): Promise<StoredFile | null> {
-    const row = await this.reader.storedFile.findUnique({ where: { sourceKey } });
+    const row = await this.run(
+      (client) => client.storedFile.findFirst({ where: { sourceKey, deletedAt: null } }),
+      { readOnly: true },
+    );
     return row ? this.toDomain(row) : null;
   }
 
   async findByKey(key: string): Promise<StoredFile | null> {
-    const row = await this.reader.storedFile.findUnique({ where: { key } });
+    const row = await this.run(
+      (client) => client.storedFile.findFirst({ where: { key, deletedAt: null } }),
+      { readOnly: true },
+    );
+    return row ? this.toDomain(row) : null;
+  }
+
+  async findById(id: string): Promise<StoredFile | null> {
+    const row = await this.run(
+      (client) => client.storedFile.findFirst({ where: { id, deletedAt: null } }),
+      { readOnly: true },
+    );
     return row ? this.toDomain(row) : null;
   }
 
   async create(props: StoredFileProps): Promise<void> {
-    await this.writer.storedFile.create({ data: props });
+    await this.run((client) => client.storedFile.create({ data: props }), { readOnly: false });
   }
 
   async transition(
@@ -53,10 +73,14 @@ export class PrismaStoredFileRepository implements StoredFileRepositoryPort {
     to: StoredFileStatus,
     fields?: StoredFileTransitionFields,
   ): Promise<boolean> {
-    const result = await this.writer.storedFile.updateMany({
-      where: { id, status: from },
-      data: { status: to, ...fields },
-    });
+    const result = await this.run(
+      (client) =>
+        client.storedFile.updateMany({
+          where: { id, status: from, deletedAt: null },
+          data: { status: to, ...fields },
+        }),
+      { readOnly: false },
+    );
     return result.count > 0;
   }
 
@@ -66,20 +90,39 @@ export class PrismaStoredFileRepository implements StoredFileRepositoryPort {
     to: StoredFileStatus,
     fields?: StoredFileTransitionFields,
   ): Promise<boolean> {
-    const result = await this.writer.storedFile.updateMany({
-      where: { key, status: from },
-      data: { status: to, ...fields },
-    });
+    const result = await this.run(
+      (client) =>
+        client.storedFile.updateMany({
+          where: { key, status: from, deletedAt: null },
+          data: { status: to, ...fields },
+        }),
+      { readOnly: false },
+    );
     return result.count > 0;
   }
 
   async deleteIfStatus(id: string, status: StoredFileStatus): Promise<void> {
-    await this.writer.storedFile.deleteMany({ where: { id, status } });
+    await this.run((client) => client.storedFile.deleteMany({ where: { id, status } }), {
+      readOnly: false,
+    });
+  }
+
+  async softDelete(id: string): Promise<boolean> {
+    const result = await this.run(
+      (client) =>
+        client.storedFile.updateMany({
+          where: { id, deletedAt: null },
+          data: { deletedAt: new Date() },
+        }),
+      { readOnly: false },
+    );
+    return result.count > 0;
   }
 
   private toDomain(row: StoredFileRow): StoredFile {
     return StoredFile.create({
       id: row.id,
+      organizationId: row.organizationId,
       userId: row.userId,
       sourceKey: row.sourceKey,
       key: row.key,
@@ -88,6 +131,7 @@ export class PrismaStoredFileRepository implements StoredFileRepositoryPort {
       size: row.size,
       etag: row.etag,
       status: row.status as StoredFileStatus,
+      deletedAt: row.deletedAt,
     });
   }
 }

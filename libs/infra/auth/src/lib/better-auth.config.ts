@@ -2,7 +2,7 @@ import { Logger } from '@nestjs/common';
 import { betterAuth } from 'better-auth';
 import type { BetterAuthOptions } from 'better-auth';
 import { prismaAdapter } from 'better-auth/adapters/prisma';
-import { bearer, openAPI } from 'better-auth/plugins';
+import { bearer, openAPI, organization } from 'better-auth/plugins';
 import type { PrismaClient } from '@nestjs-fastify-nx/infra-database';
 import type { I18nService } from 'nestjs-i18n';
 import { resolveRequestLocale, translateOrFallback } from '@nestjs-fastify-nx/infra-i18n';
@@ -13,6 +13,45 @@ export interface AuthMailDispatcher {
 }
 
 const logger = new Logger('BetterAuth');
+
+const INVITATION_EXPIRES_IN_SECONDS = 60 * 60 * 48;
+const ORGANIZATION_OWNER_ROLE = 'owner';
+
+export async function ensurePersonalOrganization(
+  prisma: PrismaClient,
+  userId: string,
+): Promise<string> {
+  const membership = await prisma.member.findFirst({
+    where: { userId },
+    orderBy: { createdAt: 'asc' },
+    select: { organizationId: true },
+  });
+  if (membership) return membership.organizationId;
+
+  const user = await prisma.user.findUniqueOrThrow({
+    where: { id: userId },
+    select: { name: true, email: true },
+  });
+
+  const slug = `ws-${userId.replace(/-/g, '')}`;
+  const name = user.name.trim() || user.email.split('@')[0];
+
+  const organization = await prisma.organization.upsert({
+    where: { slug },
+    update: {},
+    create: { name, slug },
+    select: { id: true },
+  });
+
+  await prisma.member.upsert({
+    where: { organizationId_userId: { organizationId: organization.id, userId } },
+    update: {},
+    create: { organizationId: organization.id, userId, role: ORGANIZATION_OWNER_ROLE },
+    select: { id: true },
+  });
+
+  return organization.id;
+}
 
 type OAuthCredentials = { clientId: string; clientSecret: string };
 
@@ -120,6 +159,16 @@ export function createBetterAuth(
         maxAge: 5 * 60,
       },
     },
+    databaseHooks: {
+      session: {
+        create: {
+          before: async (session) => {
+            const organizationId = await ensurePersonalOrganization(prisma, session.userId);
+            return { data: { ...session, activeOrganizationId: organizationId } };
+          },
+        },
+      },
+    },
     user: {
       additionalFields: {
         role: { type: 'string', defaultValue: 'USER', input: false },
@@ -192,7 +241,38 @@ export function createBetterAuth(
     // `Authorization: Bearer <session-token>`. Better Auth verifies the token signature and maps it
     // to the correctly-named session cookie (incl. the __Secure- prefix under useSecureCookies),
     // which a hand-rolled synthetic cookie can't do reliably.
-    plugins: [openAPI(), bearer()],
+    plugins: [
+      openAPI(),
+      bearer(),
+      organization({
+        teams: { enabled: true },
+        dynamicAccessControl: { enabled: true },
+        invitationExpiresIn: INVITATION_EXPIRES_IN_SECONDS,
+        cancelPendingInvitationsOnReInvite: true,
+        sendInvitationEmail: async (data, request) => {
+          const lang = resolveRequestLocale(request);
+          const link = `${frontendBase}/accept-invitation?id=${encodeURIComponent(data.id)}`;
+          const subject = await translateOrFallback(
+            i18n,
+            I18N_KEYS.emails.organization_invitation.subject,
+            { lang, args: { organization: data.organization.name } },
+          );
+          const body = await renderOrganizationInvitationEmail(i18n, lang, {
+            organizationName: data.organization.name,
+            inviterName: data.inviter.user.name || data.inviter.user.email,
+            role: data.role,
+            expiresAt: data.invitation.expiresAt,
+            link,
+          });
+          await mail.send({
+            to: data.email,
+            subject,
+            body,
+            templateId: 'organization-invitation',
+          });
+        },
+      }),
+    ],
   });
 }
 
@@ -293,6 +373,37 @@ async function renderEmailChangeConfirmation(
     translateOrFallback(i18n, keys.not_you, { lang }),
   ]);
   return emailLayout([hello, lead, target, linkParagraph(ctx.link), notYou]);
+}
+
+async function renderOrganizationInvitationEmail(
+  i18n: I18nService,
+  lang: string,
+  ctx: {
+    organizationName: string;
+    inviterName: string;
+    role: string;
+    expiresAt: Date;
+    link: string;
+  },
+): Promise<string> {
+  const keys = I18N_KEYS.emails.organization_invitation;
+  const [hello, lead, role, accept, expiry] = await Promise.all([
+    greeting(i18n, lang, keys, undefined),
+    translateOrFallback(i18n, keys.lead, {
+      lang,
+      args: {
+        inviter: escapeHtml(ctx.inviterName),
+        organization: escapeHtml(ctx.organizationName),
+      },
+    }),
+    translateOrFallback(i18n, keys.role, { lang, args: { role: escapeHtml(ctx.role) } }),
+    translateOrFallback(i18n, keys.accept, { lang }),
+    translateOrFallback(i18n, keys.expiry, {
+      lang,
+      args: { expiresAt: ctx.expiresAt.toISOString() },
+    }),
+  ]);
+  return emailLayout([hello, lead, role, accept, linkParagraph(ctx.link), expiry]);
 }
 
 async function renderAccountDeletionEmail(

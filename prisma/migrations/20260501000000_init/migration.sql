@@ -23,6 +23,8 @@ CREATE TABLE "sessions" (
     "ipAddress" TEXT,
     "userAgent" TEXT,
     "userId" UUID NOT NULL,
+    "activeOrganizationId" UUID,
+    "activeTeamId" UUID,
 
     CONSTRAINT "sessions_pkey" PRIMARY KEY ("id")
 );
@@ -56,10 +58,77 @@ CREATE TABLE "verifications" (
     CONSTRAINT "verifications_pkey" PRIMARY KEY ("id")
 );
 
+CREATE TABLE "organizations" (
+    "id" UUID NOT NULL DEFAULT uuidv7(),
+    "name" TEXT NOT NULL,
+    "slug" TEXT NOT NULL,
+    "logo" TEXT,
+    "metadata" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "organizations_pkey" PRIMARY KEY ("id")
+);
+
+CREATE TABLE "members" (
+    "id" UUID NOT NULL DEFAULT uuidv7(),
+    "organizationId" UUID NOT NULL,
+    "userId" UUID NOT NULL,
+    "role" TEXT NOT NULL DEFAULT 'member',
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "members_pkey" PRIMARY KEY ("id")
+);
+
+CREATE TABLE "invitations" (
+    "id" UUID NOT NULL DEFAULT uuidv7(),
+    "organizationId" UUID NOT NULL,
+    "email" TEXT NOT NULL,
+    "role" TEXT,
+    "teamId" UUID,
+    "status" TEXT NOT NULL DEFAULT 'pending',
+    "expiresAt" TIMESTAMP(3) NOT NULL,
+    "inviterId" UUID NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "invitations_pkey" PRIMARY KEY ("id"),
+    CONSTRAINT "invitations_status_check" CHECK ("status" IN ('pending', 'accepted', 'rejected', 'canceled'))
+);
+
+CREATE TABLE "teams" (
+    "id" UUID NOT NULL DEFAULT uuidv7(),
+    "name" TEXT NOT NULL,
+    "organizationId" UUID NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3),
+
+    CONSTRAINT "teams_pkey" PRIMARY KEY ("id")
+);
+
+CREATE TABLE "team_members" (
+    "id" UUID NOT NULL DEFAULT uuidv7(),
+    "teamId" UUID NOT NULL,
+    "userId" UUID NOT NULL,
+    "createdAt" TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "team_members_pkey" PRIMARY KEY ("id")
+);
+
+CREATE TABLE "organization_roles" (
+    "id" UUID NOT NULL DEFAULT uuidv7(),
+    "organizationId" UUID NOT NULL,
+    "role" TEXT NOT NULL,
+    "permission" TEXT NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3),
+
+    CONSTRAINT "organization_roles_pkey" PRIMARY KEY ("id")
+);
+
 -- Durable ownership and lifecycle state for finalized uploads. `userId` deliberately has no
 -- foreign key: the scheduler must still see and delete S3 objects after a user row is purged.
 CREATE TABLE "stored_files" (
     "id" UUID NOT NULL,
+    "organizationId" UUID NOT NULL,
     "userId" UUID NOT NULL,
     "sourceKey" TEXT NOT NULL,
     "key" TEXT NOT NULL,
@@ -73,6 +142,7 @@ CREATE TABLE "stored_files" (
     -- published past ClamAV's 2 GiB scan ceiling, so READY alone never implies it was inspected.
     "scanOutcome" TEXT,
     "verifiedAt" TIMESTAMP(3),
+    "deletedAt" TIMESTAMP(3),
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -85,6 +155,7 @@ CREATE TABLE "stored_files" (
 -- writes with the outbox row inside the same transaction.
 CREATE TABLE "outbox_events" (
     "id" UUID NOT NULL,
+    "organizationId" UUID,
     "eventType" TEXT NOT NULL,
     "aggregateId" TEXT NOT NULL,
     "payload" JSONB NOT NULL,
@@ -105,6 +176,7 @@ CREATE TABLE "outbox_events" (
 -- the PK, hence the composite `(id, createdAt)`.
 CREATE TABLE "audit_logs" (
     "id" UUID NOT NULL,
+    "organizationId" UUID,
     "userId" UUID,
     "action" TEXT NOT NULL,
     "resource" TEXT,
@@ -169,9 +241,71 @@ CREATE UNIQUE INDEX "stored_files_sourceKey_key" ON "stored_files"("sourceKey");
 CREATE UNIQUE INDEX "stored_files_key_key" ON "stored_files"("key");
 CREATE INDEX "stored_files_userId_status_idx" ON "stored_files"("userId", "status");
 CREATE INDEX "stored_files_status_updatedAt_idx" ON "stored_files"("status", "updatedAt");
+CREATE INDEX "stored_files_organizationId_status_idx" ON "stored_files"("organizationId", "status");
+CREATE INDEX "stored_files_org_createdAt_id_desc_idx" ON "stored_files"("organizationId", "createdAt" DESC, "id" DESC);
+CREATE INDEX "stored_files_deletedAt_idx" ON "stored_files"("deletedAt");
+
+CREATE UNIQUE INDEX "organizations_slug_key" ON "organizations"("slug");
+CREATE INDEX "organizations_createdAt_id_desc_idx" ON "organizations"("createdAt" DESC, "id" DESC);
+
+CREATE UNIQUE INDEX "members_organizationId_userId_key" ON "members"("organizationId", "userId");
+CREATE INDEX "members_userId_idx" ON "members"("userId");
+CREATE INDEX "members_org_createdAt_id_desc_idx" ON "members"("organizationId", "createdAt" DESC, "id" DESC);
+
+CREATE INDEX "invitations_organizationId_status_idx" ON "invitations"("organizationId", "status");
+CREATE INDEX "invitations_email_status_idx" ON "invitations"("email", "status");
+CREATE INDEX "invitations_expiresAt_idx" ON "invitations"("expiresAt");
+CREATE INDEX "invitations_inviterId_idx" ON "invitations"("inviterId");
+CREATE INDEX "invitations_teamId_idx" ON "invitations"("teamId");
+
+CREATE UNIQUE INDEX "teams_organizationId_name_key" ON "teams"("organizationId", "name");
+CREATE INDEX "teams_org_createdAt_id_desc_idx" ON "teams"("organizationId", "createdAt" DESC, "id" DESC);
+
+CREATE UNIQUE INDEX "team_members_teamId_userId_key" ON "team_members"("teamId", "userId");
+CREATE INDEX "team_members_userId_idx" ON "team_members"("userId");
+
+CREATE UNIQUE INDEX "organization_roles_organizationId_role_key" ON "organization_roles"("organizationId", "role");
+
+CREATE INDEX "sessions_activeOrganizationId_idx" ON "sessions"("activeOrganizationId");
+CREATE INDEX "audit_logs_organizationId_createdAt_idx" ON "audit_logs"("organizationId", "createdAt" DESC);
 
 ALTER TABLE "sessions" ADD CONSTRAINT "sessions_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 ALTER TABLE "accounts" ADD CONSTRAINT "accounts_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "sessions" ADD CONSTRAINT "sessions_activeOrganizationId_fkey" FOREIGN KEY ("activeOrganizationId") REFERENCES "organizations"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE "sessions" ADD CONSTRAINT "sessions_activeTeamId_fkey" FOREIGN KEY ("activeTeamId") REFERENCES "teams"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE "members" ADD CONSTRAINT "members_organizationId_fkey" FOREIGN KEY ("organizationId") REFERENCES "organizations"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "members" ADD CONSTRAINT "members_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "invitations" ADD CONSTRAINT "invitations_organizationId_fkey" FOREIGN KEY ("organizationId") REFERENCES "organizations"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "invitations" ADD CONSTRAINT "invitations_inviterId_fkey" FOREIGN KEY ("inviterId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "invitations" ADD CONSTRAINT "invitations_teamId_fkey" FOREIGN KEY ("teamId") REFERENCES "teams"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE "teams" ADD CONSTRAINT "teams_organizationId_fkey" FOREIGN KEY ("organizationId") REFERENCES "organizations"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "team_members" ADD CONSTRAINT "team_members_teamId_fkey" FOREIGN KEY ("teamId") REFERENCES "teams"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "team_members" ADD CONSTRAINT "team_members_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "organization_roles" ADD CONSTRAINT "organization_roles_organizationId_fkey" FOREIGN KEY ("organizationId") REFERENCES "organizations"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+ALTER TABLE "stored_files" ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "stored_files_tenant_isolation" ON "stored_files"
+    USING ("organizationId" = NULLIF(current_setting('app.current_org_id', true), '')::uuid)
+    WITH CHECK ("organizationId" = NULLIF(current_setting('app.current_org_id', true), '')::uuid);
+
+ALTER TABLE "audit_logs" ENABLE ROW LEVEL SECURITY;
+
+-- Reads are strictly tenant-scoped: an audit row with no organization is a platform-level record
+-- (a user registering, before any organization exists) and must not surface inside a tenant.
+CREATE POLICY "audit_logs_tenant_read" ON "audit_logs"
+    FOR SELECT
+    USING ("organizationId" = NULLIF(current_setting('app.current_org_id', true), '')::uuid);
+
+-- Writes additionally accept a NULL organization, because that is exactly what those
+-- platform-level events carry. Without this the users.* audit trail would be silently rejected
+-- whenever the listener runs in the API process rather than the scheduler.
+CREATE POLICY "audit_logs_tenant_write" ON "audit_logs"
+    FOR INSERT
+    WITH CHECK (
+        "organizationId" IS NULL
+        OR "organizationId" = NULLIF(current_setting('app.current_org_id', true), '')::uuid
+    );
 
 -- Idempotent partition factory called from the scheduler's daily cron and below to seed the
 -- initial window. `IF NOT EXISTS` covers concurrent ticks. Runtime scheduler roles must not own
@@ -399,3 +533,120 @@ END $$;
 -- ─────────────────────────────────────────────────────────────────────────────
 CREATE INDEX IF NOT EXISTS "users_createdAt_id_desc_idx"
   ON "users" ("createdAt" DESC, "id" DESC);
+
+-- Organization lifecycle outbox triggers. Better Auth's organization plugin commits these rows
+-- outside the NestJS request pipeline, so — exactly like the user triggers above — an application
+-- hook would race the commit. `organizationId` is stamped on the outbox row itself so a listener
+-- in another process can rebuild the tenant context the request had.
+
+CREATE OR REPLACE FUNCTION emit_organization_created_outbox()
+RETURNS TRIGGER AS $$
+BEGIN
+  INSERT INTO "outbox_events" ("id", "organizationId", "eventType", "aggregateId", "payload", "attempts")
+  VALUES (
+    uuidv7(),
+    NEW."id",
+    'organizations.created',
+    NEW."id"::text,
+    jsonb_build_object(
+      'schemaVersion', 1,
+      'eventId', uuidv7()::text,
+      'occurredAt', to_char(NOW() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+      'payload', jsonb_build_object('name', NEW."name", 'slug', NEW."slug")
+    ),
+    0
+  );
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER organization_created_outbox
+AFTER INSERT ON "organizations"
+FOR EACH ROW
+EXECUTE FUNCTION emit_organization_created_outbox();
+
+-- No "organizationId" on this row: the organization it points at is gone by the time the relay
+-- reads it, and a FK-free column carrying a dangling id would invite listeners to look it up.
+CREATE OR REPLACE FUNCTION emit_organization_deleted_outbox()
+RETURNS TRIGGER AS $$
+BEGIN
+  INSERT INTO "outbox_events" ("id", "eventType", "aggregateId", "payload", "attempts")
+  VALUES (
+    uuidv7(),
+    'organizations.deleted',
+    OLD."id"::text,
+    jsonb_build_object(
+      'schemaVersion', 1,
+      'eventId', uuidv7()::text,
+      'occurredAt', to_char(NOW() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+      'payload', jsonb_build_object('name', OLD."name", 'slug', OLD."slug")
+    ),
+    0
+  );
+  RETURN OLD;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER organization_deleted_outbox
+AFTER DELETE ON "organizations"
+FOR EACH ROW
+EXECUTE FUNCTION emit_organization_deleted_outbox();
+
+CREATE OR REPLACE FUNCTION emit_organization_member_added_outbox()
+RETURNS TRIGGER AS $$
+BEGIN
+  INSERT INTO "outbox_events" ("id", "organizationId", "eventType", "aggregateId", "payload", "attempts")
+  VALUES (
+    uuidv7(),
+    NEW."organizationId",
+    'organizations.member_added',
+    NEW."organizationId"::text,
+    jsonb_build_object(
+      'schemaVersion', 1,
+      'eventId', uuidv7()::text,
+      'occurredAt', to_char(NOW() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+      'payload', jsonb_build_object('userId', NEW."userId"::text, 'role', NEW."role")
+    ),
+    0
+  );
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER organization_member_added_outbox
+AFTER INSERT ON "members"
+FOR EACH ROW
+EXECUTE FUNCTION emit_organization_member_added_outbox();
+
+-- Skipped when the whole organization is going away: the cascade deletes every member row, and
+-- emitting one member_removed per member would bury the single organizations.deleted event that
+-- actually describes what happened.
+CREATE OR REPLACE FUNCTION emit_organization_member_removed_outbox()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM "organizations" WHERE "id" = OLD."organizationId") THEN
+    RETURN OLD;
+  END IF;
+
+  INSERT INTO "outbox_events" ("id", "organizationId", "eventType", "aggregateId", "payload", "attempts")
+  VALUES (
+    uuidv7(),
+    OLD."organizationId",
+    'organizations.member_removed',
+    OLD."organizationId"::text,
+    jsonb_build_object(
+      'schemaVersion', 1,
+      'eventId', uuidv7()::text,
+      'occurredAt', to_char(NOW() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+      'payload', jsonb_build_object('userId', OLD."userId"::text, 'role', OLD."role")
+    ),
+    0
+  );
+  RETURN OLD;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER organization_member_removed_outbox
+AFTER DELETE ON "members"
+FOR EACH ROW
+EXECUTE FUNCTION emit_organization_member_removed_outbox();

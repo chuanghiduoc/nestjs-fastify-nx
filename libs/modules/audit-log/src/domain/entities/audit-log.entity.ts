@@ -9,6 +9,7 @@ const POSTGRES_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]
 
 export interface AuditLogProps {
   id: string;
+  organizationId: string | null;
   userId: string | null;
   action: string;
   resource: string | null;
@@ -21,6 +22,7 @@ export interface AuditLogProps {
 export interface CreateAuditLogInput {
   /** Deterministic id for idempotent writes (e.g. outbox eventId). Defaults to generateId(). */
   id?: string;
+  organizationId?: string | null;
   userId?: string | null;
   action: string;
   resource?: string | null;
@@ -68,6 +70,7 @@ export class AuditLog {
     }
     return new AuditLog({
       id: input.id ?? generateId(),
+      organizationId: input.organizationId ?? null,
       userId: input.userId ?? null,
       action: input.action,
       resource: input.resource ?? null,
@@ -84,6 +87,9 @@ export class AuditLog {
 
   get id(): string {
     return this.props.id;
+  }
+  get organizationId(): string | null {
+    return this.props.organizationId;
   }
   get userId(): string | null {
     return this.props.userId;

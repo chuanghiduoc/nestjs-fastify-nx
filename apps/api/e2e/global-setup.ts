@@ -1,4 +1,8 @@
-import { createTestContainers, deployTestMigrations } from '@nestjs-fastify-nx/testing';
+import {
+  createTestContainers,
+  deployTestMigrations,
+  provisionRlsRole,
+} from '@nestjs-fastify-nx/testing';
 import type { TestContainers } from '@nestjs-fastify-nx/testing';
 
 // Vitest calls both hooks on one module instance, so module scope carries the handle across.
@@ -21,8 +25,9 @@ export async function setup(): Promise<void> {
   }
 
   if (externalDbUrl && externalRedisHost && externalRedisPort) {
-    configureTestEnvironment(externalDbUrl, externalRedisHost, externalRedisPort);
     deployTestMigrations(externalDbUrl);
+    const rlsUrl = await provisionRlsRole(externalDbUrl);
+    configureTestEnvironment(rlsUrl, externalRedisHost, externalRedisPort, externalDbUrl);
     return;
   }
 
@@ -37,11 +42,6 @@ export async function setup(): Promise<void> {
   process.once('SIGTERM', handleSignal);
 
   const dbUrl = containers.postgres.getConnectionUri();
-  configureTestEnvironment(
-    dbUrl,
-    containers.redis.getHost(),
-    String(containers.redis.getFirstMappedPort()),
-  );
 
   // Run migrations once against the shared container. Any failure here means
   // every subsequent spec will time out against a broken schema — exit loud
@@ -53,12 +53,38 @@ export async function setup(): Promise<void> {
     await stopContainers();
     process.exit(1);
   }
+
+  // The app connects as a NOBYPASSRLS role, not the container superuser, so every
+  // e2e request exercises row-level security exactly as production does. Migrations
+  // above still run as the owner.
+  let appDbUrl: string;
+  try {
+    appDbUrl = await provisionRlsRole(dbUrl);
+  } catch (err) {
+    console.error('failed to provision the RLS role — aborting e2e run', err);
+    await stopContainers();
+    process.exit(1);
+  }
+
+  configureTestEnvironment(
+    appDbUrl,
+    containers.redis.getHost(),
+    String(containers.redis.getFirstMappedPort()),
+    dbUrl,
+  );
 }
 
-function configureTestEnvironment(dbUrl: string, redisHost: string, redisPort: string): void {
+function configureTestEnvironment(
+  dbUrl: string,
+  redisHost: string,
+  redisPort: string,
+  adminDbUrl: string = dbUrl,
+): void {
   // Forked workers inherit env from global setup, so every module-init read sees test endpoints.
   process.env['DATABASE_URL'] = dbUrl;
   process.env['E2E_DATABASE_URL'] = dbUrl;
+  // Owner connection for assertions about rows the request-scoped RLS role cannot see.
+  process.env['E2E_ADMIN_DATABASE_URL'] = adminDbUrl;
   process.env['E2E_REDIS_HOST'] = redisHost;
   process.env['E2E_REDIS_PORT'] = redisPort;
   process.env['REDIS_CACHE_HOST'] = redisHost;

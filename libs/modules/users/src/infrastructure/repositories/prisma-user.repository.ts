@@ -139,8 +139,10 @@ export class PrismaUserRepository implements UserRepositoryPort {
   }
 
   async findAllCursor(options: FindAllCursorOptions): Promise<FindAllCursorResult> {
-    const { startingAfter, limit, role, status, search } = options;
-    const where: Prisma.UserWhereInput = {};
+    const { organizationId, startingAfter, limit, role, status, search } = options;
+    const where: Prisma.UserWhereInput = {
+      memberships: { some: { organizationId } },
+    };
     if (role) where.role = role;
     if (status) where.status = status;
     if (search) {

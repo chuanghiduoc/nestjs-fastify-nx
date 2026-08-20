@@ -62,6 +62,7 @@ export const I18N_KEYS = {
       session_expired: 'errors.auth.session_expired',
       account_inactive: 'errors.auth.account_inactive',
       insufficient_permissions: 'errors.auth.insufficient_permissions',
+      organization_context_required: 'errors.auth.organization_context_required',
     },
     storage: {
       body_empty: 'errors.storage.body_empty',
@@ -104,6 +105,15 @@ export const I18N_KEYS = {
       warning: 'emails.account_deletion.warning',
       confirm: 'emails.account_deletion.confirm',
       not_you: 'emails.account_deletion.not_you',
+    },
+    organization_invitation: {
+      subject: 'emails.organization_invitation.subject',
+      greeting: 'emails.organization_invitation.greeting',
+      greeting_named: 'emails.organization_invitation.greeting_named',
+      lead: 'emails.organization_invitation.lead',
+      role: 'emails.organization_invitation.role',
+      accept: 'emails.organization_invitation.accept',
+      expiry: 'emails.organization_invitation.expiry',
     },
   },
 } as const;

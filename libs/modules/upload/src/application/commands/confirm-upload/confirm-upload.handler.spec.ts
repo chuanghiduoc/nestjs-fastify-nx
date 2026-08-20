@@ -11,6 +11,7 @@ import { ConfirmUploadCommand } from './confirm-upload.command';
 import { ConfirmUploadHandler } from './confirm-upload.handler';
 
 const USER_ID = '019dd1a5-9235-70db-8d57-54ef901d8185';
+const ORGANIZATION_ID = '019dd1a5-9235-70db-8d57-54ef901d8186';
 const OTHER_USER_ID = '019dd1a5-9235-70db-8d57-54ef901d8186';
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 const PNG_HEADER = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
@@ -41,10 +42,12 @@ function repositoryMock(): Record<keyof StoredFileRepositoryPort, Mock> {
   return {
     findBySourceKey: vi.fn().mockResolvedValue(null),
     findByKey: vi.fn().mockResolvedValue(null),
+    findById: vi.fn().mockResolvedValue(null),
     create: vi.fn().mockResolvedValue(undefined),
     transition: vi.fn().mockResolvedValue(true),
     transitionByKey: vi.fn().mockResolvedValue(true),
     deleteIfStatus: vi.fn().mockResolvedValue(undefined),
+    softDelete: vi.fn().mockResolvedValue(true),
   };
 }
 
@@ -74,6 +77,7 @@ function validMeta(overrides: Partial<ObjectMetadata> = {}): ObjectMetadata {
 function existingRecord(overrides: Partial<StoredFileProps> = {}): StoredFile {
   return StoredFile.create({
     id: 'file-1',
+    organizationId: ORGANIZATION_ID,
     userId: USER_ID,
     sourceKey: SOURCE_KEY,
     key: `files/${USER_ID}/file-1.png`,
@@ -87,7 +91,7 @@ function existingRecord(overrides: Partial<StoredFileProps> = {}): StoredFile {
 }
 
 const command = (key = SOURCE_KEY, userId = USER_ID) =>
-  new ConfirmUploadCommand(userId, key, 'corr-1');
+  new ConfirmUploadCommand(ORGANIZATION_ID, userId, key, 'corr-1');
 
 describe('ConfirmUploadHandler — ownership (IDOR)', () => {
   it('rejects a key outside the caller prefix without touching storage or the repository', async () => {

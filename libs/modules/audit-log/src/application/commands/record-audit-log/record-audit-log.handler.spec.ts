@@ -14,6 +14,7 @@ function buildHandler() {
 function buildCommand(overrides: Partial<RecordAuditLogCommand> = {}): RecordAuditLogCommand {
   return new RecordAuditLogCommand(
     overrides.eventId ?? EVT_ID,
+    overrides.organizationId ?? null,
     overrides.userId ?? 'user-123',
     overrides.action ?? 'users.registered',
     overrides.resource ?? 'user',

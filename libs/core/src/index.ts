@@ -17,3 +17,19 @@ export type {
 } from './lib/cqrs/cqrs-metrics-recorder.port';
 export { CQRS_METRICS_RECORDER } from './lib/cqrs/cqrs-metrics-recorder.port';
 export { CqrsInstrumentationInitializer } from './lib/cqrs/cqrs-instrumentation.initializer';
+export { AUTHORIZATION_PORT } from './lib/authorization/authorization.port';
+export type {
+  AccessDecision,
+  AccessFilter,
+  AuthorizationCapabilities,
+  AuthorizationPort,
+  CheckRequest,
+  Principal,
+  RelationInput,
+  ResourceRef,
+} from './lib/authorization/authorization.port';
+export {
+  ACCESS_FILTER_TRUNCATED_CODE,
+  accessFilterTruncated,
+  applyAccessFilter,
+} from './lib/authorization/access-filter';
