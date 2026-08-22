@@ -100,7 +100,7 @@ describe('PrismaUserRepository', () => {
     expect(db.user.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({
-          role: UserRole.USER,
+          memberships: { some: { organizationId: ORG_ID, role: UserRole.USER } },
           status: UserStatus.ACTIVE,
           OR: expect.arrayContaining([
             { email: { contains: '50\\%\\_\\\\', mode: 'insensitive' } },

@@ -28,10 +28,12 @@ const OWNER_SCOPED_PERMISSIONS: readonly Permission[] = [
 
 const TENANT_SCOPED_RESOURCES: readonly ResourceType[] = [
   RESOURCE_TYPES.FILE,
+  RESOURCE_TYPES.ORGANIZATION,
   RESOURCE_TYPES.MEMBER,
   RESOURCE_TYPES.TEAM,
   RESOURCE_TYPES.INVITATION,
   RESOURCE_TYPES.AUDIT_LOG,
+  RESOURCE_TYPES.ROLE,
 ];
 
 function parseCustomRolePermissions(raw: string): readonly Permission[] {
@@ -131,6 +133,9 @@ export class PostgresPbacAdapter implements AuthorizationPort {
     }
 
     const permissions = await this.permissionsFor(principal);
+    if (principal.type === 'user' && !(await this.isMember(principal))) {
+      return { allowed: false, reason: 'principal is not a member of the organization' };
+    }
     if (permissions.includes(permission)) return { allowed: true };
 
     if (
@@ -148,6 +153,12 @@ export class PostgresPbacAdapter implements AuthorizationPort {
     principal: Principal,
     requests: readonly CheckRequest[],
   ): Promise<readonly AccessDecision[]> {
+    if (principal.type === 'user' && !(await this.isMember(principal))) {
+      return requests.map(() => ({
+        allowed: false,
+        reason: 'principal is not a member of the organization',
+      }));
+    }
     const permissions = await this.permissionsFor(principal);
 
     return requests.map((request) => {
@@ -177,10 +188,14 @@ export class PostgresPbacAdapter implements AuthorizationPort {
   ): Promise<AccessFilter> {
     if (principal.type === 'system') return { kind: 'all' };
 
+    if (principal.type === 'user' && !(await this.isMember(principal))) return { kind: 'none' };
     const permissions = await this.permissionsFor(principal);
     const tenantScoped = TENANT_SCOPED_RESOURCES.includes(resourceType);
 
     if (permissions.includes(permission)) {
+      if (resourceType === RESOURCE_TYPES.ORGANIZATION) {
+        return { kind: 'predicate', where: { id: principal.organizationId } };
+      }
       return tenantScoped
         ? { kind: 'predicate', where: { organizationId: principal.organizationId } }
         : { kind: 'all' };
@@ -196,6 +211,20 @@ export class PostgresPbacAdapter implements AuthorizationPort {
     }
 
     return { kind: 'none' };
+  }
+
+  private async isMember(principal: Principal): Promise<boolean> {
+    if (principal.type !== 'user') return true;
+    const membership = await this.prisma.db.member.findUnique({
+      where: {
+        organizationId_userId: {
+          organizationId: principal.organizationId,
+          userId: principal.userId,
+        },
+      },
+      select: { id: true },
+    });
+    return !!membership;
   }
 
   async onResourceCreated(_input: {

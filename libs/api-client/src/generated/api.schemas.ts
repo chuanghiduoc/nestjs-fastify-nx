@@ -275,14 +275,6 @@ export interface ListResponseDto {
   pageSize?: number;
 }
 
-export type UserListItemResponseDtoRole =
-  (typeof UserListItemResponseDtoRole)[keyof typeof UserListItemResponseDtoRole];
-
-export const UserListItemResponseDtoRole = {
-  ADMIN: 'ADMIN',
-  USER: 'USER',
-} as const;
-
 export type UserListItemResponseDtoStatus =
   (typeof UserListItemResponseDtoStatus)[keyof typeof UserListItemResponseDtoStatus];
 
@@ -298,7 +290,8 @@ export interface UserListItemResponseDto {
   email: string;
   /** Display name. */
   name: string;
-  role: UserListItemResponseDtoRole;
+  /** Organization membership role. */
+  role: string;
   status: UserListItemResponseDtoStatus;
   createdAt: string;
   updatedAt: string;
@@ -352,6 +345,8 @@ export interface ConfirmUploadDto {
 }
 
 export interface StoredFileDto {
+  /** Stored-file identifier used by delete operations. */
+  id: string;
   /** Storage key under which the file was persisted. */
   key: string;
   /** Download URL, present only after asynchronous malware verification succeeds. */
@@ -475,9 +470,9 @@ export type AdminUsersListParams = {
    */
   startingAfter?: string;
   /**
-   * Filter by role
+   * Filter by organization membership role.
    */
-  role?: AdminUsersListRole;
+  role?: string;
   /**
    * Filter by account status
    */
@@ -487,13 +482,6 @@ export type AdminUsersListParams = {
    */
   search?: string;
 };
-
-export type AdminUsersListRole = (typeof AdminUsersListRole)[keyof typeof AdminUsersListRole];
-
-export const AdminUsersListRole = {
-  ADMIN: 'ADMIN',
-  USER: 'USER',
-} as const;
 
 export type AdminUsersListStatus = (typeof AdminUsersListStatus)[keyof typeof AdminUsersListStatus];
 

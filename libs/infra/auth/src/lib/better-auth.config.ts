@@ -9,6 +9,7 @@ import { resolveRequestLocale, translateOrFallback } from '@nestjs-fastify-nx/in
 import { usesSecureCookies } from './session-cookie';
 import { organizationAccessControl, organizationRoles } from './organization-access-control';
 import { I18N_KEYS } from '@nestjs-fastify-nx/contracts';
+import { generateId } from '@nestjs-fastify-nx/shared';
 export interface AuthMailDispatcher {
   send(opts: { to: string; subject: string; body: string; templateId?: string }): Promise<void>;
 }
@@ -34,24 +35,29 @@ export async function ensurePersonalOrganization(
     select: { name: true, email: true },
   });
 
-  const slug = `ws-${userId.replace(/-/g, '')}`;
   const name = user.name.trim() || user.email.split('@')[0];
 
-  const organization = await prisma.organization.upsert({
-    where: { slug },
-    update: {},
-    create: { name, slug },
-    select: { id: true },
-  });
+  // The first membership check is the common fast path. The per-user transaction lock closes the
+  // concurrent sign-in race across processes without deriving a slug from the user id.
+  return prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${userId}, 0))`;
+    const existing = await tx.member.findFirst({
+      where: { userId },
+      orderBy: { createdAt: 'asc' },
+      select: { organizationId: true },
+    });
+    if (existing) return existing.organizationId;
 
-  await prisma.member.upsert({
-    where: { organizationId_userId: { organizationId: organization.id, userId } },
-    update: {},
-    create: { organizationId: organization.id, userId, role: ORGANIZATION_OWNER_ROLE },
-    select: { id: true },
+    const organization = await tx.organization.create({
+      data: { name, slug: `ws-${generateId().replace(/-/g, '')}` },
+      select: { id: true },
+    });
+    await tx.member.create({
+      data: { organizationId: organization.id, userId, role: ORGANIZATION_OWNER_ROLE },
+      select: { id: true },
+    });
+    return organization.id;
   });
-
-  return organization.id;
 }
 
 type OAuthCredentials = { clientId: string; clientSecret: string };

@@ -39,16 +39,21 @@ export class AuditLogListener {
     suppressErrors: false,
   })
   async handleOrganizationEvent(event: DomainEvent): Promise<void> {
-    const { userId, ...metadata } = event.payload;
+    const { userId: memberUserId, ...metadata } = event.payload;
 
     await this.commandBus.execute(
       new RecordAuditLogCommand(
         event.eventId,
         event.organizationId ?? event.aggregateId,
-        typeof userId === 'string' ? userId : null,
+        null,
         event.eventType,
         'organization',
-        { ...metadata, eventId: event.eventId, organizationId: event.aggregateId },
+        {
+          ...metadata,
+          ...(typeof memberUserId === 'string' ? { memberUserId } : {}),
+          eventId: event.eventId,
+          organizationId: event.aggregateId,
+        },
         null,
         null,
         event.occurredAt,

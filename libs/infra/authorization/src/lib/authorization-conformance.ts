@@ -121,6 +121,17 @@ export function describeAuthorizationConformance(harness: ConformanceHarness): v
       expect(decision.allowed).toBe(true);
     });
 
+    it('does not treat Object prototype keys as system roles', async () => {
+      await ctx.grantRoles(CONFORMANCE_IDS.orgA, CONFORMANCE_IDS.member, ['constructor']);
+
+      await expect(
+        authorization.check(
+          userPrincipal(CONFORMANCE_IDS.member, CONFORMANCE_IDS.orgA),
+          PERMISSIONS.ORGANIZATION_DELETE,
+        ),
+      ).resolves.toMatchObject({ allowed: false });
+    });
+
     it('unions permissions when a member holds several roles', async () => {
       await ctx.defineCustomRole(CONFORMANCE_IDS.orgA, 'auditor', [PERMISSIONS.AUDIT_LOG_READ]);
       await ctx.grantRoles(CONFORMANCE_IDS.orgA, CONFORMANCE_IDS.member, [
@@ -166,17 +177,46 @@ export function describeAuthorizationConformance(harness: ConformanceHarness): v
       expect(applyAccessFilter({ status: 'READY' }, filter)).toBeNull();
     });
 
-    it('narrows the filter to owned rows when only the owner-scoped grant applies', async () => {
+    it('does not apply owner-scoped grants after membership removal', async () => {
       const filter = await authorization.filter(
         userPrincipal(CONFORMANCE_IDS.outsider, CONFORMANCE_IDS.orgA),
         PERMISSIONS.FILE_READ,
         RESOURCE_TYPES.FILE,
       );
 
-      expect(applyAccessFilter({}, filter)).toMatchObject({
-        organizationId: CONFORMANCE_IDS.orgA,
-        userId: CONFORMANCE_IDS.outsider,
-      });
+      expect(applyAccessFilter({}, filter)).toBeNull();
+
+      const decision = await authorization.check(
+        userPrincipal(CONFORMANCE_IDS.outsider, CONFORMANCE_IDS.orgA),
+        PERMISSIONS.FILE_READ,
+        {
+          type: RESOURCE_TYPES.FILE,
+          id: CONFORMANCE_IDS.file,
+          organizationId: CONFORMANCE_IDS.orgA,
+          ownerId: CONFORMANCE_IDS.outsider,
+        },
+      );
+      expect(decision.allowed).toBe(false);
+    });
+
+    it('uses the organization primary key when filtering organizations', async () => {
+      const filter = await authorization.filter(
+        userPrincipal(CONFORMANCE_IDS.owner, CONFORMANCE_IDS.orgA),
+        PERMISSIONS.ORGANIZATION_READ,
+        RESOURCE_TYPES.ORGANIZATION,
+      );
+
+      expect(applyAccessFilter({}, filter)).toEqual({ id: CONFORMANCE_IDS.orgA });
+    });
+
+    it('scopes role lists to the active organization', async () => {
+      const filter = await authorization.filter(
+        userPrincipal(CONFORMANCE_IDS.owner, CONFORMANCE_IDS.orgA),
+        PERMISSIONS.ROLE_READ,
+        RESOURCE_TYPES.ROLE,
+      );
+
+      expect(applyAccessFilter({}, filter)).toEqual({ organizationId: CONFORMANCE_IDS.orgA });
     });
 
     it('gives the system principal unrestricted access', async () => {

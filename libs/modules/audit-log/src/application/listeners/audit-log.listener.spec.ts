@@ -106,7 +106,7 @@ describe('AuditLogListener', () => {
     const ORG_ID = '00000000-0000-4000-8000-0000000000a1';
     const MEMBER_ID = '00000000-0000-4000-8000-0000000000a2';
 
-    it('takes the actor from the payload, not from the aggregate', async () => {
+    it('does not treat the affected member as the event actor', async () => {
       const { listener, commandBus } = buildListener();
       const event: DomainEvent = {
         eventId: EVT_ORG_MEMBER_ADDED,
@@ -121,10 +121,11 @@ describe('AuditLogListener', () => {
 
       const command = dispatchedCommand(commandBus);
       expect(command.organizationId).toBe(ORG_ID);
-      expect(command.userId).toBe(MEMBER_ID);
+      expect(command.userId).toBeNull();
       expect(command.resource).toBe('organization');
       expect(command.metadata).toEqual({
         role: 'owner',
+        memberUserId: MEMBER_ID,
         eventId: EVT_ORG_MEMBER_ADDED,
         organizationId: ORG_ID,
       });

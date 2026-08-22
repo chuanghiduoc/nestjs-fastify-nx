@@ -1,5 +1,5 @@
 import { Query } from '@nestjs/cqrs';
-import type { UserRole, UserStatus } from '../../../domain/entities/user.entity';
+import type { UserStatus } from '../../../domain/entities/user.entity';
 import type { UserListItemDto } from '../../dto/user-list-item.dto';
 
 export interface ListUsersCursorResult {
@@ -14,7 +14,7 @@ export class ListUsersCursorQuery extends Query<ListUsersCursorResult> {
     readonly organizationId: string,
     readonly limit: number,
     readonly startingAfter?: string,
-    readonly role?: UserRole,
+    readonly role?: string,
     readonly status?: UserStatus,
     readonly search?: string,
   ) {

@@ -98,5 +98,5 @@ export const SYSTEM_ROLE_PERMISSIONS: Readonly<Record<SystemRole, readonly Permi
 };
 
 export function isSystemRole(role: string): role is SystemRole {
-  return role in SYSTEM_ROLE_PERMISSIONS;
+  return Object.hasOwn(SYSTEM_ROLE_PERMISSIONS, role);
 }

@@ -24,10 +24,12 @@ const OWNER_SCOPED_PERMISSIONS: readonly Permission[] = [
 
 const TENANT_SCOPED_RESOURCES: readonly ResourceType[] = [
   RESOURCE_TYPES.FILE,
+  RESOURCE_TYPES.ORGANIZATION,
   RESOURCE_TYPES.MEMBER,
   RESOURCE_TYPES.TEAM,
   RESOURCE_TYPES.INVITATION,
   RESOURCE_TYPES.AUDIT_LOG,
+  RESOURCE_TYPES.ROLE,
 ];
 
 function membershipKey(organizationId: string, userId: string): string {
@@ -101,6 +103,15 @@ export class InMemoryAuthorizationAdapter implements AuthorizationPort {
     requests: readonly CheckRequest[],
   ): Promise<readonly AccessDecision[]> {
     const permissions = await this.permissionsFor(principal);
+    if (
+      principal.type === 'user' &&
+      !this.roles.has(membershipKey(principal.organizationId, principal.userId))
+    ) {
+      return requests.map(() => ({
+        allowed: false,
+        reason: 'principal is not a member of the organization',
+      }));
+    }
 
     return requests.map((request) => {
       if (
@@ -130,9 +141,18 @@ export class InMemoryAuthorizationAdapter implements AuthorizationPort {
     if (principal.type === 'system') return { kind: 'all' };
 
     const permissions = await this.permissionsFor(principal);
+    if (
+      principal.type === 'user' &&
+      !this.roles.has(membershipKey(principal.organizationId, principal.userId))
+    ) {
+      return { kind: 'none' };
+    }
     const tenantScoped = TENANT_SCOPED_RESOURCES.includes(resourceType);
 
     if (permissions.includes(permission)) {
+      if (resourceType === RESOURCE_TYPES.ORGANIZATION) {
+        return { kind: 'predicate', where: { id: principal.organizationId } };
+      }
       return tenantScoped
         ? { kind: 'predicate', where: { organizationId: principal.organizationId } }
         : { kind: 'all' };

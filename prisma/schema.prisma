@@ -59,6 +59,7 @@ model Session {
 
   @@index([userId])
   @@index([activeOrganizationId])
+  @@index([activeTeamId])
   // Backs the scheduler's expired-session purge (SessionCleanupTask). Better Auth never deletes
   // a session row itself, so without this index "WHERE expiresAt < cutoff" degrades into a
   // sequential scan as the table grows unbounded.

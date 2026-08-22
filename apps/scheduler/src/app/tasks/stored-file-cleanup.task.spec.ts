@@ -89,7 +89,7 @@ describe('StoredFileCleanupTask', () => {
       expect(prisma.db.$queryRaw).not.toHaveBeenCalled();
     });
 
-    it('recovers a FINALIZING row to READY (not delete) when its object still exists on storage', async () => {
+    it('deletes a stale FINALIZING row instead of publishing it without async verification', async () => {
       const candidate = makeCandidate({ status: 'FINALIZING' });
       const queryRaw = vi
         .fn()
@@ -104,13 +104,9 @@ describe('StoredFileCleanupTask', () => {
       await task.cleanup();
 
       expect(storage.head).toHaveBeenCalledWith('files/user/file.png', 'uploads');
-      expect(storage.delete).not.toHaveBeenCalled();
-      expect(prisma.db.storedFile.delete).not.toHaveBeenCalled();
-      // Promoted to READY via CAS, never REJECTED.
+      expect(storage.delete).toHaveBeenCalledWith('files/user/file.png', 'uploads');
+      expect(prisma.db.storedFile.delete).toHaveBeenCalled();
       expect(prisma.db.storedFile.updateMany).toHaveBeenCalledWith(
-        expect.objectContaining({ data: expect.objectContaining({ status: 'READY' }) }),
-      );
-      expect(prisma.db.storedFile.updateMany).not.toHaveBeenCalledWith(
         expect.objectContaining({ data: expect.objectContaining({ status: 'REJECTED' }) }),
       );
     });
@@ -155,9 +151,9 @@ describe('StoredFileCleanupTask', () => {
 
       await task.cleanupOrphaned();
 
-      expect(prisma.db.$queryRaw).toHaveBeenCalledOnce();
-      expect(storage.delete).toHaveBeenCalledWith('files/user/file.png', 'uploads');
-      expect(prisma.db.storedFile.delete).toHaveBeenCalled();
+      expect(prisma.db.$queryRaw).toHaveBeenCalledTimes(2);
+      expect(storage.delete).toHaveBeenCalledTimes(2);
+      expect(prisma.db.storedFile.delete).toHaveBeenCalledTimes(2);
     });
 
     it('does nothing on a follower replica', async () => {

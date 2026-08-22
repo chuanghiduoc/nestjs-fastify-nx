@@ -20,9 +20,11 @@ export class MockUserRepository implements UserRepositoryPort {
 
   findAllCursor(options: FindAllCursorOptions): Promise<FindAllCursorResult> {
     const { startingAfter, limit, role, status, search } = options;
-    let rows = [...this.store.values()];
+    let rows = [...this.store.values()].map((user) =>
+      Object.assign(user, { organizationRole: 'member' }),
+    );
 
-    if (role) rows = rows.filter((u) => u.role === role);
+    if (role) rows = rows.filter((u) => u.organizationRole === role);
     if (status) rows = rows.filter((u) => u.status === status);
     if (search) {
       const needle = search.toLowerCase();

@@ -12,6 +12,8 @@ export const DOMAIN_EVENTS = {
   ORGANIZATIONS_DELETED: 'organizations.deleted',
   ORGANIZATIONS_MEMBER_ADDED: 'organizations.member_added',
   ORGANIZATIONS_MEMBER_REMOVED: 'organizations.member_removed',
+  ORGANIZATIONS_MEMBER_ROLE_UPDATED: 'organizations.member_role_updated',
+  ORGANIZATIONS_ROLE_CHANGED: 'organizations.role_changed',
 } as const;
 
 export type DomainEventType = (typeof DOMAIN_EVENTS)[keyof typeof DOMAIN_EVENTS];
@@ -39,6 +41,8 @@ export const organizationEventPayloadSchema = z.object({
   name: z.string().optional(),
   userId: z.uuid().optional(),
   role: z.string().optional(),
+  oldRole: z.string().optional(),
+  action: z.enum(['INSERT', 'UPDATE', 'DELETE']).optional(),
 });
 
 export type OrganizationEventPayload = z.infer<typeof organizationEventPayloadSchema>;

@@ -1,10 +1,10 @@
-import type { UserRole, UserStatus } from '../../domain/entities/user.entity';
+import type { UserStatus } from '../../domain/entities/user.entity';
 
 export interface UserListItemDto {
   id: string;
   email: string;
   name: string;
-  role: UserRole;
+  role: string;
   status: UserStatus;
   createdAt: Date;
   updatedAt: Date;
