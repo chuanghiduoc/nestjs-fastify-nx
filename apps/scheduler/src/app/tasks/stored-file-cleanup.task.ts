@@ -26,10 +26,14 @@ export class StoredFileCleanupTask {
   // whose owner was hard-deleted mid-flight — that would delete a row while confirm() finalizes the
   // object, orphaning a committed object and 500-ing the request.
   private readonly orphanGraceMinutes = positiveIntEnv('STORED_FILE_ORPHAN_GRACE_MINUTES', 60);
+  // Recovery window for a user-initiated delete: the row and its object survive this long after
+  // `deletedAt` so a mistaken delete stays reversible.
+  private readonly purgeAfterDays = positiveIntEnv('STORED_FILE_PURGE_AFTER_DAYS', 30);
   // @nestjs/schedule does not serialize overlapping ticks. If a run outlasts its interval (e.g. slow
   // S3), the next tick would run concurrently and double the S3/DB work — these flags skip it.
   private cleanupRunning = false;
   private orphanRunning = false;
+  private purgeRunning = false;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -111,8 +115,57 @@ export class StoredFileCleanupTask {
            ORDER BY sf."updatedAt"
            LIMIT ${this.batchSize}`,
       );
+      await this.processCandidates(
+        'orphaned (organization deleted)',
+        () =>
+          this.prisma.db.$queryRaw<CleanupCandidate[]>`
+          SELECT sf.id, sf.key, sf.bucket, sf.status, sf."updatedAt"
+            FROM stored_files sf
+            LEFT JOIN organizations o ON o.id = sf."organizationId"
+           WHERE o.id IS NULL AND sf."updatedAt" < ${orphanCutoff}
+           ORDER BY sf."updatedAt"
+           LIMIT ${this.batchSize}`,
+      );
     } finally {
       this.orphanRunning = false;
+    }
+  }
+
+  // Hard delete of rows a user soft-deleted. Storage first, row second: the reverse order would
+  // drop the only pointer to the object and leak it in the bucket forever. A retry is safe because
+  // an S3 delete of a missing key succeeds and deleteMany matches zero rows.
+  @Cron('20 4 * * *', { name: 'stored-file-retention-purge', timeZone: 'UTC' })
+  async purgeSoftDeleted(): Promise<void> {
+    if (!this.leadership.isLeader() || this.purgeRunning) return;
+    this.purgeRunning = true;
+    try {
+      const cutoff = new Date(Date.now() - this.purgeAfterDays * 86_400_000);
+      const candidates = await this.prisma.db.$queryRaw<CleanupCandidate[]>`
+        SELECT id, key, bucket, status, "updatedAt"
+          FROM stored_files
+         WHERE "deletedAt" IS NOT NULL AND "deletedAt" < ${cutoff}
+         ORDER BY "deletedAt"
+         LIMIT ${this.batchSize}`;
+
+      let purged = 0;
+      for (const candidate of candidates) {
+        try {
+          await this.storage.delete(candidate.key, candidate.bucket);
+          await this.prisma.db.storedFile.deleteMany({ where: { id: candidate.id } });
+          purged++;
+        } catch (err) {
+          this.logger.error(
+            { err, fileId: candidate.id, key: candidate.key },
+            'Stored-file retention purge failed',
+          );
+        }
+      }
+
+      if (purged > 0) this.logger.log(`Purged ${purged} soft-deleted stored file(s)`);
+    } catch (err) {
+      this.logger.error({ err }, 'Stored-file retention purge scan failed');
+    } finally {
+      this.purgeRunning = false;
     }
   }
 
@@ -130,58 +183,25 @@ export class StoredFileCleanupTask {
 
     let deleted = 0;
     for (const candidate of candidates) {
-      // A FINALIZING/VERIFYING row whose object still exists on storage was successfully copied to its
-      // final key (FINALIZING: confirm() crashed before flipping status; VERIFYING: the async verify
-      // job was never enqueued after a Redis blip). Deleting it here would destroy a valid, committed,
-      // already-inline-validated upload — so skip it (a client retry, or a re-run of verification,
-      // recovers the row). REJECTED rows are always safe to delete. Skip on a HEAD error too, rather
-      // than risk deleting a live object.
+      // Never recover VERIFYING directly to READY: doing so bypasses the malware scanner. A HEAD
+      // failure still skips cleanup because deleting a possibly live object would be destructive.
       if (
         candidate.status === STORED_FILE_STATUS.FINALIZING ||
         candidate.status === STORED_FILE_STATUS.VERIFYING
       ) {
-        let meta: Awaited<ReturnType<typeof this.storage.head>>;
         try {
-          meta = await this.storage.head(candidate.key, candidate.bucket);
+          const meta = await this.storage.head(candidate.key, candidate.bucket);
+          if (meta) {
+            this.logger.warn(
+              { status: candidate.status, fileId: candidate.id, key: candidate.key },
+              'Deleting stale unverified object',
+            );
+          }
         } catch (err) {
           this.logger.warn(
             { err, status: candidate.status, fileId: candidate.id, key: candidate.key },
             'Skipping stored-file cleanup because HEAD failed',
           );
-          continue;
-        }
-        if (meta) {
-          // The object is committed and was already inline-validated in confirm() (magic bytes are
-          // checked before finalize, and the ETag precondition binds the final object to that exact
-          // validated version). Recover the row to READY via CAS rather than skipping it every tick
-          // (which would re-HEAD + re-log hourly forever). The async verify recheck is redundant for
-          // the current magic-byte-only worker; if a heavier scanner is added to that queue later,
-          // re-enqueue verification here instead of promoting straight to READY. Guarded like the
-          // delete path below so a transient DB error skips only this candidate, not the whole tick.
-          try {
-            const recovered = await this.prisma.db.storedFile.updateMany({
-              where: {
-                id: candidate.id,
-                status: candidate.status,
-                updatedAt: candidate.updatedAt,
-              },
-              data: {
-                status: STORED_FILE_STATUS.READY,
-                verifiedAt: new Date(),
-                failureReason: null,
-              },
-            });
-            if (recovered.count > 0) {
-              this.logger.log(
-                `Recovered ${candidate.status} id=${candidate.id} key=${candidate.key} → READY (object committed and inline-validated)`,
-              );
-            }
-          } catch (err) {
-            this.logger.error(
-              { err, fileId: candidate.id, key: candidate.key },
-              'Stored-file recovery failed',
-            );
-          }
           continue;
         }
       }
@@ -194,9 +214,6 @@ export class StoredFileCleanupTask {
         },
         data: {
           status: STORED_FILE_STATUS.REJECTED,
-          // Only stamp a reason where there is none: a row rejected by the malware scanner already
-          // carries why, and overwriting it destroys the only record of that if the delete below
-          // fails and leaves the row behind.
           ...(candidate.status === STORED_FILE_STATUS.REJECTED
             ? {}
             : { failureReason: 'Lifecycle cleanup' }),

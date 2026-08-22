@@ -130,7 +130,7 @@ application layer import `@nestjs/swagger`, and the layering is gone the moment 
 must stay callable from REST, GraphQL, or a queue consumer without dragging HTTP along.
 
 ```typescript
-// libs/modules/users/src/application/dtos/user-list-item.dto.ts
+// libs/modules/users/src/application/dto/user-list-item.dto.ts
 // Pure TS. No @nestjs/swagger, no class-validator — nothing framework-shaped.
 export interface UserListItemDto {
   id: string;
@@ -160,7 +160,7 @@ projecting into a purpose-built DTO that simply never declares them — not by `
 ```typescript
 // libs/modules/users/src/index.ts
 export { UsersModule } from './users.module';
-export type { UserListItemDto } from './application/dtos/user-list-item.dto';
+export type { UserListItemDto } from './application/dto/user-list-item.dto';
 // Query class + result type — consumers dispatch via QueryBus, no handler injection.
 export {
   GetUserProfileQuery,

@@ -14,6 +14,7 @@ import * as Sentry from '@sentry/nestjs';
 import { ClsService } from 'nestjs-cls';
 import { I18N_KEYS } from '@nestjs-fastify-nx/contracts';
 import { REQUEST_CONTEXT_KEYS, type RequestContextStore } from '@nestjs-fastify-nx/core';
+import { PrismaService } from '@nestjs-fastify-nx/infra-database';
 import { BETTER_AUTH_INSTANCE } from './better-auth-instance.token';
 import type { BetterAuthInstance } from './better-auth.config';
 import type { AuthenticatedSession } from './better-auth.types';
@@ -25,6 +26,7 @@ export class BetterAuthGuard implements CanActivate {
     @Inject(BETTER_AUTH_INSTANCE) private readonly auth: BetterAuthInstance,
     private readonly reflector: Reflector,
     private readonly cls: ClsService<RequestContextStore>,
+    private readonly prisma: PrismaService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -83,6 +85,39 @@ export class BetterAuthGuard implements CanActivate {
       });
     }
 
+    const activeScope = session.session as unknown as {
+      activeOrganizationId?: string | null;
+      activeTeamId?: string | null;
+    };
+
+    let organizationId: string | undefined;
+    let teamId: string | undefined;
+    if (activeScope.activeOrganizationId) {
+      const membership = await this.prisma.db.member.findUnique({
+        where: {
+          organizationId_userId: {
+            organizationId: activeScope.activeOrganizationId,
+            userId: user.id,
+          },
+        },
+        select: { organizationId: true },
+      });
+      if (membership) {
+        organizationId = membership.organizationId;
+        if (activeScope.activeTeamId) {
+          const teamMembership = await this.prisma.db.teamMember.findFirst({
+            where: {
+              teamId: activeScope.activeTeamId,
+              userId: user.id,
+              team: { organizationId: membership.organizationId },
+            },
+            select: { teamId: true },
+          });
+          if (teamMembership) teamId = teamMembership.teamId;
+        }
+      }
+    }
+
     const authenticatedSession: AuthenticatedSession = {
       userId: user.id,
       email: user.email,
@@ -91,6 +126,8 @@ export class BetterAuthGuard implements CanActivate {
       status: user.status,
       sessionId: session.session.id,
       sessionToken: session.session.token,
+      ...(organizationId ? { organizationId } : {}),
+      ...(teamId ? { teamId } : {}),
     };
 
     (request as FastifyRequest & { user: AuthenticatedSession }).user = authenticatedSession;
@@ -100,6 +137,9 @@ export class BetterAuthGuard implements CanActivate {
     // read back the same value for the rest of the request (logs, error tags).
     if (this.cls.isActive()) {
       this.cls.set(REQUEST_CONTEXT_KEYS.userId, user.id);
+      if (authenticatedSession.organizationId) {
+        this.cls.set(REQUEST_CONTEXT_KEYS.organizationId, authenticatedSession.organizationId);
+      }
     }
     Sentry.setUser({ id: user.id });
 

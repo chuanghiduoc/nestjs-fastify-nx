@@ -251,6 +251,22 @@ export async function createTestApp(): Promise<TestAppContext> {
 // Joins multiple Set-Cookie values into one Cookie request header. Better Auth
 // returns several cookies (session_token + dont_remember + …); supertest's
 // .set('Cookie', value) replaces, so the helper concatenates name=value pairs.
+// The NestJS throttler counts per IP in Redis db 1, so every spec in a run shares one budget and a
+// spec that uploads a lot silently 429s whichever spec happens to run next. Clearing that db keeps
+// specs independent of execution order without weakening the limits the app actually ships.
+export async function resetRateLimitBudget(): Promise<void> {
+  const redis = new Redis({
+    host: process.env['E2E_REDIS_HOST'],
+    port: Number(process.env['E2E_REDIS_PORT']),
+    db: 1,
+  });
+  try {
+    await redis.flushdb();
+  } finally {
+    await redis.quit().catch(() => redis.disconnect());
+  }
+}
+
 export function cookieHeaderFromSetCookies(setCookieHeader: string | string[] | undefined): string {
   if (!setCookieHeader) return '';
   const headers = Array.isArray(setCookieHeader) ? setCookieHeader : [setCookieHeader];

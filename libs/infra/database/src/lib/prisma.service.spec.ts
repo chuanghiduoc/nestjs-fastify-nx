@@ -295,3 +295,144 @@ describe('PrismaService — DATABASE_LOG_QUERIES full query debug logging', () =
     expect(debugSpy).not.toHaveBeenCalled();
   });
 });
+
+describe('PrismaService — tenant context', () => {
+  const originalEnv = process.env;
+  const ORG_ID = '019dd1a5-9235-70db-8d57-54ef90400001';
+
+  beforeEach(() => {
+    process.env = { ...originalEnv };
+    process.env['DATABASE_URL'] = 'postgresql://test:test@localhost:5432/test';
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
+    vi.restoreAllMocks();
+  });
+
+  function clsStub(organizationId?: string) {
+    return {
+      isActive: () => true,
+      get: (key: string) => (key === 'organizationId' ? organizationId : undefined),
+    };
+  }
+
+  // withTenantContext opens the transaction on the underlying client directly, not through the
+  // db/dbRead getters, so the field is what has to be replaced.
+  function stubTransaction(svc: PrismaService, target: '_writeClient' | '_readClient') {
+    const executeRaw = vi.fn().mockResolvedValue(1);
+    const client = { $executeRaw: executeRaw };
+    const transaction = vi
+      .fn()
+      .mockImplementation((fn: (c: unknown) => Promise<unknown>) => fn(client));
+    (svc as unknown as Record<string, unknown>)[target] = { $transaction: transaction };
+    return { executeRaw, transaction, client };
+  }
+
+  it('reports no tenant context when CLS is absent', () => {
+    expect(new PrismaService().hasTenantContext).toBe(false);
+  });
+
+  it('reports no tenant context when CLS carries no organization', () => {
+    const svc = new PrismaService(clsStub() as never);
+    expect(svc.hasTenantContext).toBe(false);
+  });
+
+  // Fail closed: running unscoped would hand the caller another tenant's rows on any table whose
+  // row-level security policy reads app.current_org_id.
+  it('refuses tenant-scoped work when no organization is in context', async () => {
+    const svc = new PrismaService(clsStub() as never);
+
+    await expect(svc.withTenantContext(async () => 'never')).rejects.toMatchObject({
+      code: 'organization_context_required',
+    });
+  });
+
+  it('binds the organization before running the callback', async () => {
+    const svc = new PrismaService(clsStub(ORG_ID) as never);
+    const { executeRaw } = stubTransaction(svc, '_writeClient');
+
+    const order: string[] = [];
+    executeRaw.mockImplementation(async () => {
+      order.push('bind');
+      return 1;
+    });
+
+    await svc.withTenantContext(async () => {
+      order.push('callback');
+    });
+
+    expect(order).toEqual(['bind', 'callback']);
+    expect(executeRaw).toHaveBeenCalledTimes(1);
+  });
+
+  it('exposes the transaction client through currentTransaction while it runs', async () => {
+    const svc = new PrismaService(clsStub(ORG_ID) as never);
+    const { client } = stubTransaction(svc, '_writeClient');
+
+    await svc.withTenantContext(async () => {
+      expect(svc.currentTransaction).toBe(client);
+    });
+
+    expect(svc.currentTransaction).toBeUndefined();
+  });
+
+  it('keeps a read-only unit of work off the primary when a replica exists', async () => {
+    process.env['DATABASE_REPLICA_URL'] = 'postgresql://test:test@localhost:5433/test';
+    const svc = new PrismaService(clsStub(ORG_ID) as never);
+    const read = stubTransaction(svc, '_readClient');
+    const write = stubTransaction(svc, '_writeClient');
+
+    await svc.withTenantContext(async () => undefined, { readOnly: true });
+
+    expect(read.transaction).toHaveBeenCalledTimes(1);
+    expect(write.transaction).not.toHaveBeenCalled();
+  });
+
+  it('sends a read-only unit of work to the primary when no replica is configured', async () => {
+    delete process.env['DATABASE_REPLICA_URL'];
+    const svc = new PrismaService(clsStub(ORG_ID) as never);
+    const write = stubTransaction(svc, '_writeClient');
+
+    await svc.withTenantContext(async () => undefined, { readOnly: true });
+
+    expect(write.transaction).toHaveBeenCalledTimes(1);
+  });
+
+  // A write must never join the replica transaction a surrounding read opened, or it would run
+  // against a read-only standby.
+  it('does not reuse an open read transaction for write work', async () => {
+    process.env['DATABASE_REPLICA_URL'] = 'postgresql://test:test@localhost:5433/test';
+    const svc = new PrismaService(clsStub(ORG_ID) as never);
+    const read = stubTransaction(svc, '_readClient');
+    const write = stubTransaction(svc, '_writeClient');
+
+    await svc.withTenantContext(
+      async () => {
+        await svc.withTenantContext(async () => undefined);
+      },
+      { readOnly: true },
+    );
+
+    expect(read.transaction).toHaveBeenCalledTimes(1);
+    expect(write.transaction).toHaveBeenCalledTimes(1);
+  });
+
+  it('binds the organization on a plain transaction when one is in context', async () => {
+    const svc = new PrismaService(clsStub(ORG_ID) as never);
+    const { executeRaw } = stubTransaction(svc, '_writeClient');
+
+    await svc.transaction(async () => undefined);
+
+    expect(executeRaw).toHaveBeenCalledTimes(1);
+  });
+
+  it('leaves a plain transaction unbound for system work with no organization', async () => {
+    const svc = new PrismaService(clsStub() as never);
+    const { executeRaw } = stubTransaction(svc, '_writeClient');
+
+    await svc.transaction(async () => undefined);
+
+    expect(executeRaw).not.toHaveBeenCalled();
+  });
+});

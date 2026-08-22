@@ -22,7 +22,7 @@
   ],
   "references": [
     {
-      "path": "../../core/tsconfig.lib.json"
+      "path": "../../testing/tsconfig.lib.json"
     },
     {
       "path": "../../shared/tsconfig.lib.json"
@@ -37,7 +37,13 @@
       "path": "../../infra/database/tsconfig.lib.json"
     },
     {
+      "path": "../../infra/authorization/tsconfig.lib.json"
+    },
+    {
       "path": "../../infra/auth/tsconfig.lib.json"
+    },
+    {
+      "path": "../../core/tsconfig.lib.json"
     },
     {
       "path": "../../contracts/tsconfig.lib.json"

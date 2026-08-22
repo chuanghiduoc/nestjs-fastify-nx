@@ -22,13 +22,19 @@
   ],
   "references": [
     {
+      "path": "../../shared/tsconfig.lib.json"
+    },
+    {
+      "path": "../../modules/users/tsconfig.lib.json"
+    },
+    {
+      "path": "../../infra/authorization/tsconfig.lib.json"
+    },
+    {
       "path": "../../infra/auth/tsconfig.lib.json"
     },
     {
       "path": "../../contracts/tsconfig.lib.json"
-    },
-    {
-      "path": "../../modules/users/tsconfig.lib.json"
     }
   ]
 }

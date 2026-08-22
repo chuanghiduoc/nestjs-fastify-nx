@@ -112,7 +112,7 @@ module/src/
     commands/          # CQRS command handlers
     queries/           # CQRS query handlers
     listeners/         # Domain-event subscribers
-    dtos/              # Application-layer transport types
+    dto/               # Application-layer transport types
   infrastructure/
     repositories/      # Prisma implementations of domain ports
   presentation/

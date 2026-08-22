@@ -5,6 +5,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { User, UserRole, UserStatus } from '../../domain/entities/user.entity';
 import { PrismaUserRepository } from './prisma-user.repository';
 
+const ORG_ID = '019dd1a5-9235-70db-8d57-54ef90300001';
+
 const now = new Date('2026-01-01T00:00:00.000Z');
 const row = {
   id: 'u1',
@@ -86,6 +88,7 @@ describe('PrismaUserRepository', () => {
   it('escapes LIKE metacharacters and returns one page plus hasMore', async () => {
     db.user.findMany.mockResolvedValueOnce([row, { ...row, id: 'u2' }]);
     const result = await repository.findAllCursor({
+      organizationId: ORG_ID,
       limit: 1,
       role: UserRole.USER,
       status: UserStatus.ACTIVE,
@@ -97,7 +100,7 @@ describe('PrismaUserRepository', () => {
     expect(db.user.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({
-          role: UserRole.USER,
+          memberships: { some: { organizationId: ORG_ID, role: UserRole.USER } },
           status: UserStatus.ACTIVE,
           OR: expect.arrayContaining([
             { email: { contains: '50\\%\\_\\\\', mode: 'insensitive' } },

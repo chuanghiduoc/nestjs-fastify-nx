@@ -64,6 +64,9 @@
     },
     {
       "path": "./apps/api"
+    },
+    {
+      "path": "./libs/infra/authorization"
     }
   ]
 }

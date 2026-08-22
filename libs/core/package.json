@@ -9,5 +9,8 @@
       "types": "./src/index.ts",
       "default": "./src/index.ts"
     }
+  },
+  "devDependencies": {
+    "@nestjs-fastify-nx/shared": "workspace:*"
   }
 }

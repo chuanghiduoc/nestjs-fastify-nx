@@ -73,7 +73,20 @@ describe('Users E2E', () => {
   });
 
   describe('GET /api/v1/admin/users', () => {
-    it('returns 403 with Problem Details for a non-admin session', async () => {
+    // The listing is organization-scoped now, so an ordinary member is allowed to see their own
+    // organization's members. What is refused is a role that does not carry member:read.
+    it('returns 403 with Problem Details when the role lacks member:read', async () => {
+      const prisma = ctx.app.get(PrismaService).db;
+      const membership = await prisma.member.findFirstOrThrow();
+      await prisma.organizationRole.create({
+        data: {
+          organizationId: membership.organizationId,
+          role: 'no-access',
+          permission: JSON.stringify({ file: ['read'] }),
+        },
+      });
+      await prisma.member.updateMany({ data: { role: 'no-access' } });
+
       const res = await request(ctx.app.getHttpServer())
         .get('/api/v1/admin/users')
         .set('Cookie', cookie)
@@ -84,8 +97,30 @@ describe('Users E2E', () => {
       expect(res.body.code).toBe('forbidden');
     });
 
-    it('returns 200 + Stripe-style cursor envelope when caller has ADMIN role', async () => {
-      const adminCookie = await promoteAndReSignIn();
+    it('lists only members of the caller organization', async () => {
+      const prisma = ctx.app.get(PrismaService).db;
+      const outsider = await prisma.user.create({
+        data: { email: 'outsider@example.com', name: 'Outsider', updatedAt: new Date() },
+      });
+      const otherOrg = await prisma.organization.create({
+        data: { name: 'Other', slug: `other-${Date.now()}` },
+      });
+      await prisma.member.create({
+        data: { organizationId: otherOrg.id, userId: outsider.id, role: 'owner' },
+      });
+
+      const res = await request(ctx.app.getHttpServer())
+        .get('/api/v1/admin/users?limit=50')
+        .set('Cookie', cookie)
+        .expect(200);
+
+      const emails = res.body.data.map((u: { email: string }) => u.email);
+      expect(emails).toContain(userEmail);
+      expect(emails).not.toContain('outsider@example.com');
+    });
+
+    it('returns 200 + Stripe-style cursor envelope for a member with member:read', async () => {
+      const adminCookie = cookie;
 
       const res = await request(ctx.app.getHttpServer())
         .get('/api/v1/admin/users?limit=5')
@@ -111,8 +146,8 @@ describe('Users E2E', () => {
       expect(res.body).not.toHaveProperty('totalCount');
     });
 
-    it('rejects limit > 100 with 422 validation_failed (admin caller)', async () => {
-      const adminCookie = await promoteAndReSignIn();
+    it('rejects limit > 100 with 422 validation_failed', async () => {
+      const adminCookie = cookie;
 
       const res = await request(ctx.app.getHttpServer())
         .get('/api/v1/admin/users?limit=9999')
@@ -134,20 +169,6 @@ describe('Users E2E', () => {
         .expect(401);
     });
   });
-
-  // Note: Better Auth ships a 5-min cookie cache (see libs/infra/auth/better-auth.config.ts
-  // session.cookieCache). Operator-side session deletion / role changes are NOT visible
-  // in real-time within that window — re-sign-in (fresh cookie payload) is required.
-  // This is an acknowledged design trade-off, not a bug. The promote-then-resign-in
-  // pattern below covers the realistic flow.
-  async function promoteAndReSignIn(): Promise<string> {
-    const prisma = ctx.app.get(PrismaService).db;
-    await prisma.user.update({ where: { email: userEmail }, data: { role: 'ADMIN' } });
-    const signIn = await request(ctx.app.getHttpServer())
-      .post('/api/auth/sign-in/email')
-      .send({ email: userEmail, password: 'password123' });
-    return cookieHeaderFromSetCookies(signIn.headers['set-cookie']);
-  }
 
   describe('Problem Details — unknown route', () => {
     it('returns 404 with the canonical RFC 9457 envelope', async () => {

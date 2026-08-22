@@ -8,6 +8,7 @@ import { RedisQueueModule } from '@nestjs-fastify-nx/infra-redis';
 import { MessagingModule } from '@nestjs-fastify-nx/infra-messaging';
 import { StorageModule } from '@nestjs-fastify-nx/infra-storage';
 import { BetterAuthModule, BetterAuthGuard, RolesGuard } from '@nestjs-fastify-nx/infra-auth';
+import { AuthorizationModule, PermissionGuard } from '@nestjs-fastify-nx/infra-authorization';
 import { I18nInfraModule } from '@nestjs-fastify-nx/infra-i18n';
 import { UsersModule } from '@nestjs-fastify-nx/modules-users';
 import { AdminModule } from '@nestjs-fastify-nx/composition-admin';
@@ -29,6 +30,7 @@ import { AppController } from '../../app/app.controller';
     LoggingModule,
     HealthModule,
     DatabaseModule,
+    AuthorizationModule,
     RedisQueueModule,
     MessagingModule,
     StorageModule,
@@ -42,6 +44,7 @@ import { AppController } from '../../app/app.controller';
   providers: [
     { provide: APP_GUARD, useClass: BetterAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
+    { provide: APP_GUARD, useClass: PermissionGuard },
     { provide: APP_FILTER, useClass: GlobalExceptionFilter },
   ],
 })

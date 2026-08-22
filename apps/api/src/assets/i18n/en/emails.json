@@ -28,5 +28,14 @@
     "warning": "We received a request to delete your account. This action is permanent.",
     "confirm": "If you really want to proceed, confirm via this link:",
     "not_you": "If this was not you, change your password immediately."
+  },
+  "organization_invitation": {
+    "subject": "You have been invited to join {organization}",
+    "greeting": "Hi,",
+    "greeting_named": "Hi {name},",
+    "lead": "{inviter} invited you to join {organization}.",
+    "role": "You will join as: {role}",
+    "accept": "Accept the invitation using the link below:",
+    "expiry": "This invitation expires on {expiresAt}. If you were not expecting it, you can safely ignore this email."
   }
 }

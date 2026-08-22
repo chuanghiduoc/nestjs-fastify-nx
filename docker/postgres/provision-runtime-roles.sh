@@ -30,9 +30,12 @@ WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = :'worker_user') \gexec
 SELECT format('CREATE ROLE %I LOGIN', :'scheduler_user')
 WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = :'scheduler_user') \gexec
 
-ALTER ROLE :"api_user" WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION PASSWORD :'api_password';
-ALTER ROLE :"worker_user" WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION PASSWORD :'worker_password';
-ALTER ROLE :"scheduler_user" WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION PASSWORD :'scheduler_password';
+-- api_user is the RLS-enforced request path: it must NOT hold BYPASSRLS. worker and scheduler are
+-- the cross-tenant system path (queue processing, retention sweeps, outbox relay) and cannot carry a
+-- per-request organization context, so they bypass instead.
+ALTER ROLE :"api_user" WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS PASSWORD :'api_password';
+ALTER ROLE :"worker_user" WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION BYPASSRLS PASSWORD :'worker_password';
+ALTER ROLE :"scheduler_user" WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION BYPASSRLS PASSWORD :'scheduler_password';
 
 REVOKE CREATE ON SCHEMA public FROM PUBLIC;
 GRANT USAGE ON SCHEMA public TO :"api_user", :"worker_user", :"scheduler_user";
@@ -55,6 +58,12 @@ ALTER DEFAULT PRIVILEGES FOR ROLE :"admin_user" IN SCHEMA public
   GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO :"api_user";
 ALTER DEFAULT PRIVILEGES FOR ROLE :"admin_user" IN SCHEMA public
   GRANT USAGE, SELECT ON SEQUENCES TO :"api_user";
+-- Without these the scheduler silently loses access to every table added by a later migration:
+-- the GRANTs above only cover tables that existed when this script ran.
+ALTER DEFAULT PRIVILEGES FOR ROLE :"admin_user" IN SCHEMA public
+  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO :"scheduler_user";
+ALTER DEFAULT PRIVILEGES FOR ROLE :"admin_user" IN SCHEMA public
+  GRANT USAGE, SELECT ON SEQUENCES TO :"scheduler_user";
 SQL
 do
   if [ "$attempt" -ge 20 ]; then

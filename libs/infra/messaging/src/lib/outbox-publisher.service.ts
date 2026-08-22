@@ -31,8 +31,12 @@ export class OutboxPublisher implements EventPublisherPort {
   }
 
   private async persist(events: DomainEvent[]): Promise<void> {
+    // The tenant is taken from the event, not from the ambient request context: a handler may
+    // legitimately publish for an organization other than the caller's active one, and reading CLS
+    // here would silently overwrite that with the wrong tenant.
     const rows = events.map((event) => ({
       id: generateId(), // UUIDv7 — PK locality aligns with event ordering.
+      organizationId: event.organizationId ?? null,
       eventType: event.eventType,
       aggregateId: event.aggregateId,
       payload: this.serializePayload(event),

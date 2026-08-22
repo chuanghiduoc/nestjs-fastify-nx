@@ -29,6 +29,7 @@ type UserRow = {
   status: string;
   createdAt: Date;
   updatedAt: Date;
+  memberships?: Array<{ role: string }>;
 };
 
 @Injectable()
@@ -139,9 +140,11 @@ export class PrismaUserRepository implements UserRepositoryPort {
   }
 
   async findAllCursor(options: FindAllCursorOptions): Promise<FindAllCursorResult> {
-    const { startingAfter, limit, role, status, search } = options;
-    const where: Prisma.UserWhereInput = {};
-    if (role) where.role = role;
+    const { organizationId, startingAfter, limit, role, status, search } = options;
+    const where: Prisma.UserWhereInput = {
+      memberships: { some: { organizationId } },
+    };
+    if (role) where.memberships = { some: { organizationId, role } };
     if (status) where.status = status;
     if (search) {
       const escapedSearch = escapeLikePattern(search);
@@ -163,11 +166,16 @@ export class PrismaUserRepository implements UserRepositoryPort {
     try {
       const rows = await this.reader.user.findMany({
         where,
+        include: { memberships: { where: { organizationId }, select: { role: true } } },
         orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
         take: limit + 1,
       });
       const hasMore = rows.length > limit;
-      const items = (hasMore ? rows.slice(0, limit) : rows).map((row) => this.mapToEntity(row));
+      const items = (hasMore ? rows.slice(0, limit) : rows).map((row) =>
+        Object.assign(this.mapToEntity(row), {
+          organizationRole: row.memberships?.[0]?.role ?? '',
+        }),
+      );
       return { items, hasMore };
     } catch (err) {
       return this.handleError(err, 'findAllCursor');

@@ -1,7 +1,9 @@
 import { Resolver, Query, Context, Args } from '@nestjs/graphql';
 import { QueryBus } from '@nestjs/cqrs';
 import { isDomainException } from '@nestjs-fastify-nx/core';
-import { Roles, type AuthenticatedSession } from '@nestjs-fastify-nx/infra-auth';
+import { requireOrganizationId, type AuthenticatedSession } from '@nestjs-fastify-nx/infra-auth';
+import { RequirePermission } from '@nestjs-fastify-nx/infra-authorization';
+import { PERMISSIONS } from '@nestjs-fastify-nx/shared';
 import { ListUsersCursorQuery, GetUserProfileQuery } from '@nestjs-fastify-nx/modules-users';
 import { UserType } from '../types/user.type';
 import { UserCursorPageType } from '../types/user-cursor-page.type';
@@ -34,10 +36,23 @@ export class UserResolver {
   }
 
   @Query(() => UserCursorPageType, { name: 'users' })
-  @Roles('ADMIN')
-  async users(@Args() args: ListUsersCursorArgs): Promise<UserCursorPageType> {
+  @RequirePermission(PERMISSIONS.MEMBER_READ)
+  async users(
+    @Context() context: { req: { user?: AuthenticatedSession } },
+    @Args() args: ListUsersCursorArgs,
+  ): Promise<UserCursorPageType> {
+    const user = context.req.user;
+    if (!user) throw new Error('users query reached the resolver without a session');
+
     const result = await this.queryBus.execute(
-      new ListUsersCursorQuery(args.limit, args.startingAfter, args.role, args.status, args.search),
+      new ListUsersCursorQuery(
+        requireOrganizationId(user),
+        args.limit,
+        args.startingAfter,
+        args.role,
+        args.status,
+        args.search,
+      ),
     );
     return {
       data: result.data.map((u) => ({

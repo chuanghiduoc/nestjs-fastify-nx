@@ -28,5 +28,14 @@
     "warning": "Chúng tôi nhận được yêu cầu xóa tài khoản của bạn. Hành động này không thể hoàn tác.",
     "confirm": "Nếu bạn thực sự muốn tiếp tục, vui lòng xác nhận qua liên kết:",
     "not_you": "Nếu đây không phải bạn, hãy đổi mật khẩu ngay lập tức."
+  },
+  "organization_invitation": {
+    "subject": "Bạn được mời tham gia {organization}",
+    "greeting": "Chào bạn,",
+    "greeting_named": "Chào {name},",
+    "lead": "{inviter} đã mời bạn tham gia {organization}.",
+    "role": "Bạn sẽ tham gia với vai trò: {role}",
+    "accept": "Chấp nhận lời mời qua liên kết dưới đây:",
+    "expiry": "Lời mời sẽ hết hạn vào {expiresAt}. Nếu bạn không mong đợi email này, hãy bỏ qua nó."
   }
 }

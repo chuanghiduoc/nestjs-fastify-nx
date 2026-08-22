@@ -1,9 +1,25 @@
-import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
+import {
+  Inject,
+  Injectable,
+  Logger,
+  Optional,
+  OnModuleInit,
+  OnModuleDestroy,
+} from '@nestjs/common';
 import { PrismaClient } from '../generated/prisma/client';
 import type { Prisma } from '../generated/prisma/client';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { PrismaPg } from '@prisma/adapter-pg';
+import { ClsService } from 'nestjs-cls';
 import { boolEnv, injectDatabasePassword, intEnv } from '@nestjs-fastify-nx/shared';
+import {
+  DomainException,
+  REQUEST_CONTEXT_KEYS,
+  type RequestContextStore,
+} from '@nestjs-fastify-nx/core';
+import { ERROR_CODES, I18N_KEYS } from '@nestjs-fastify-nx/contracts';
+
+const TENANT_SETTING = 'app.current_org_id';
 
 // Derived from the $transaction overload to avoid importing @prisma/client/runtime internals.
 export type TransactionClient = Parameters<PrismaClient['$transaction']>[0] extends (
@@ -24,6 +40,23 @@ interface PrismaQueryEventEmitter {
 // Exported so the threshold decision is unit-testable without wiring a real Prisma event.
 export function isSlowQuery(durationMs: number, thresholdMs: number): boolean {
   return durationMs > thresholdMs;
+}
+
+function tenantContextRequired(): DomainException {
+  return new DomainException({
+    kind: 'forbidden',
+    code: ERROR_CODES.ORGANIZATION_CONTEXT_REQUIRED,
+    title: 'Organization context required',
+    messageKey: I18N_KEYS.errors.auth.organization_context_required,
+    violations: [
+      {
+        path: 'session.activeOrganizationId',
+        code: ERROR_CODES.ORGANIZATION_CONTEXT_REQUIRED,
+        message: 'Tenant-scoped database access requires an active organization',
+        messageKey: I18N_KEYS.errors.auth.organization_context_required,
+      },
+    ],
+  });
 }
 
 function buildPgAdapter(
@@ -53,8 +86,13 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
   private readonly _readClient: PrismaClient;
   private readonly _hasReplica: boolean;
   private readonly transactionContext = new AsyncLocalStorage<TransactionClient>();
+  private readonly readTransactionContext = new AsyncLocalStorage<TransactionClient>();
 
-  constructor() {
+  constructor(
+    @Optional()
+    @Inject(ClsService)
+    private readonly cls?: ClsService<RequestContextStore>,
+  ) {
     const passwordFile = process.env['DB_PASSWORD_FILE'];
     const writeUrl = injectDatabasePassword(process.env['DATABASE_URL'], passwordFile);
     if (!writeUrl) throw new Error('DATABASE_URL is required');
@@ -155,6 +193,23 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
     return this.transactionContext.getStore();
   }
 
+  get currentReadTransaction(): TransactionClient | undefined {
+    return this.readTransactionContext.getStore();
+  }
+
+  get hasTenantContext(): boolean {
+    return this.resolveOrganizationId() !== undefined;
+  }
+
+  private resolveOrganizationId(): string | undefined {
+    if (!this.cls?.isActive()) return undefined;
+    return this.cls.get(REQUEST_CONTEXT_KEYS.organizationId);
+  }
+
+  private async bindTenant(client: TransactionClient, organizationId: string): Promise<void> {
+    await client.$executeRaw`SELECT set_config(${TENANT_SETTING}, ${organizationId}, true)`;
+  }
+
   // Always on primary — replicas can't coordinate interactive transactions (write serialization).
   async transaction<R>(
     fn: (client: TransactionClient) => Promise<R>,
@@ -168,10 +223,40 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
         'Nested prisma.transaction() is not supported — reuse the active client via prisma.currentTransaction',
       );
     }
-    return this._writeClient.$transaction(
-      (client) => this.transactionContext.run(client, () => fn(client)),
-      options,
-    );
+    const organizationId = this.resolveOrganizationId();
+    return this._writeClient.$transaction(async (client) => {
+      if (organizationId) await this.bindTenant(client, organizationId);
+      return this.transactionContext.run(client, () => fn(client));
+    }, options);
+  }
+
+  async withTenantContext<R>(
+    fn: (client: TransactionClient) => Promise<R>,
+    options?: { readOnly?: boolean; maxWait?: number; timeout?: number },
+  ): Promise<R> {
+    const organizationId = this.resolveOrganizationId();
+    if (!organizationId) throw tenantContextRequired();
+
+    const readOnly = options?.readOnly === true;
+    const limits = { maxWait: options?.maxWait, timeout: options?.timeout };
+
+    // A write must never join a replica transaction, so only a read may fall back to one.
+    const active = readOnly
+      ? (this.transactionContext.getStore() ?? this.readTransactionContext.getStore())
+      : this.transactionContext.getStore();
+    if (active) {
+      await this.bindTenant(active, organizationId);
+      return fn(active);
+    }
+
+    if (!readOnly || !this._hasReplica) {
+      return this.transaction(fn, limits);
+    }
+
+    return this._readClient.$transaction(async (client) => {
+      await this.bindTenant(client, organizationId);
+      return this.readTransactionContext.run(client, () => fn(client));
+    }, limits);
   }
 
   async onModuleInit(): Promise<void> {

@@ -15,7 +15,7 @@ export {
   ListUsersCursorQuery,
   type ListUsersCursorResult,
 } from './application/queries/list-users-cursor/list-users-cursor.query';
-export type { UserListItemDto } from './application/dtos/user-list-item.dto';
+export type { UserListItemDto } from './application/dto/user-list-item.dto';
 
 // Public presentation types
 export { ListUsersCursorFilterDto } from './presentation/dto/list-users-cursor-filter.dto';

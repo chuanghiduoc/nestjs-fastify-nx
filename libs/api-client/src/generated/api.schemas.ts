@@ -275,14 +275,6 @@ export interface ListResponseDto {
   pageSize?: number;
 }
 
-export type UserListItemResponseDtoRole =
-  (typeof UserListItemResponseDtoRole)[keyof typeof UserListItemResponseDtoRole];
-
-export const UserListItemResponseDtoRole = {
-  ADMIN: 'ADMIN',
-  USER: 'USER',
-} as const;
-
 export type UserListItemResponseDtoStatus =
   (typeof UserListItemResponseDtoStatus)[keyof typeof UserListItemResponseDtoStatus];
 
@@ -298,7 +290,8 @@ export interface UserListItemResponseDto {
   email: string;
   /** Display name. */
   name: string;
-  role: UserListItemResponseDtoRole;
+  /** Organization membership role. */
+  role: string;
   status: UserListItemResponseDtoStatus;
   createdAt: string;
   updatedAt: string;
@@ -352,6 +345,8 @@ export interface ConfirmUploadDto {
 }
 
 export interface StoredFileDto {
+  /** Stored-file identifier used by delete operations. */
+  id: string;
   /** Storage key under which the file was persisted. */
   key: string;
   /** Download URL, present only after asynchronous malware verification succeeds. */
@@ -383,6 +378,8 @@ export interface Session {
   ipAddress?: string;
   userAgent?: string;
   userId: string;
+  readonly activeOrganizationId?: string;
+  readonly activeTeamId?: string;
 }
 
 export interface Account {
@@ -410,6 +407,59 @@ export interface Verification {
   updatedAt: string;
 }
 
+export interface Organization {
+  readonly id: string;
+  name: string;
+  slug: string;
+  logo?: string;
+  createdAt: string;
+  metadata?: string;
+}
+
+export interface OrganizationRole {
+  readonly id: string;
+  organizationId: string;
+  role: string;
+  permission: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface Team {
+  readonly id: string;
+  name: string;
+  organizationId: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface TeamMember {
+  readonly id: string;
+  teamId: string;
+  userId: string;
+  createdAt?: string;
+}
+
+export interface Member {
+  readonly id: string;
+  organizationId: string;
+  userId: string;
+  role: string;
+  createdAt: string;
+}
+
+export interface Invitation {
+  readonly id: string;
+  organizationId: string;
+  email: string;
+  role?: string;
+  teamId?: string;
+  status: string;
+  expiresAt: string;
+  createdAt: string;
+  inviterId: string;
+}
+
 export type AdminUsersListParams = {
   /**
    * Items per page (1–100).
@@ -420,9 +470,9 @@ export type AdminUsersListParams = {
    */
   startingAfter?: string;
   /**
-   * Filter by role
+   * Filter by organization membership role.
    */
-  role?: AdminUsersListRole;
+  role?: string;
   /**
    * Filter by account status
    */
@@ -432,13 +482,6 @@ export type AdminUsersListParams = {
    */
   search?: string;
 };
-
-export type AdminUsersListRole = (typeof AdminUsersListRole)[keyof typeof AdminUsersListRole];
-
-export const AdminUsersListRole = {
-  ADMIN: 'ADMIN',
-  USER: 'USER',
-} as const;
 
 export type AdminUsersListStatus = (typeof AdminUsersListStatus)[keyof typeof AdminUsersListStatus];
 
@@ -1536,5 +1579,1033 @@ export type Error403 = {
 };
 
 export type Error404 = {
+  message?: string;
+};
+
+/**
+ * The metadata of the organization
+ */
+export type OrganizationCreateBodyMetadata = { [key: string]: unknown };
+
+export type OrganizationCreateBody = {
+  /**
+   * The name of the organization
+   * @minLength 1
+   */
+  name: string;
+  /**
+   * The slug of the organization
+   * @minLength 1
+   */
+  slug: string;
+  /** The user id of the organization creator. If not provided, the current user will be used. Should only be used by admins or when called by the server. server-only. Eg: "user-id" */
+  userId?: string;
+  /**
+   * The logo of the organization
+   * @nullable
+   */
+  logo?: string | null;
+  /** The metadata of the organization */
+  metadata?: OrganizationCreateBodyMetadata;
+  /** Whether to keep the current active organization active after creating a new one. Eg: true */
+  keepCurrentActiveOrganization?: boolean;
+};
+
+export type OrganizationCreate400 = {
+  message: string;
+};
+
+export type OrganizationCreate401 = {
+  message: string;
+};
+
+export type OrganizationCreate403 = {
+  message?: string;
+};
+
+export type OrganizationCreate404 = {
+  message?: string;
+};
+
+/**
+ * The metadata of the organization
+ */
+export type OrganizationUpdateBodyDataMetadata = { [key: string]: unknown };
+
+export type OrganizationUpdateBodyData = {
+  /**
+   * The name of the organization
+   * @minLength 1
+   */
+  name?: string;
+  /**
+   * The slug of the organization
+   * @minLength 1
+   */
+  slug?: string;
+  /**
+   * The logo of the organization
+   * @nullable
+   */
+  logo?: string | null;
+  /** The metadata of the organization */
+  metadata?: OrganizationUpdateBodyDataMetadata;
+};
+
+export type OrganizationUpdateBody = {
+  data: OrganizationUpdateBodyData;
+  /** The organization ID. Eg: "org-id" */
+  organizationId?: string;
+};
+
+export type OrganizationUpdate400 = {
+  message: string;
+};
+
+export type OrganizationUpdate401 = {
+  message: string;
+};
+
+export type OrganizationUpdate403 = {
+  message?: string;
+};
+
+export type OrganizationUpdate404 = {
+  message?: string;
+};
+
+export type OrganizationDeleteBody = {
+  /** The organization id to delete */
+  organizationId: string;
+};
+
+export type OrganizationDelete400 = {
+  message: string;
+};
+
+export type OrganizationDelete401 = {
+  message: string;
+};
+
+export type OrganizationDelete403 = {
+  message?: string;
+};
+
+export type OrganizationDelete404 = {
+  message?: string;
+};
+
+export type SetActiveOrganizationBody = {
+  /**
+   * The organization id to set as active. It can be null to unset the active organization. Eg: "org-id"
+   * @nullable
+   */
+  organizationId?: string | null;
+  /** The organization slug to set as active. It can be null to unset the active organization if organizationId is not provided. Eg: "org-slug" */
+  organizationSlug?: string;
+};
+
+export type SetActiveOrganization400 = {
+  message: string;
+};
+
+export type SetActiveOrganization401 = {
+  message: string;
+};
+
+export type SetActiveOrganization403 = {
+  message?: string;
+};
+
+export type SetActiveOrganization404 = {
+  message?: string;
+};
+
+export type GetOrganization400 = {
+  message: string;
+};
+
+export type GetOrganization401 = {
+  message: string;
+};
+
+export type GetOrganization403 = {
+  message?: string;
+};
+
+export type GetOrganization404 = {
+  message?: string;
+};
+
+export type OrganizationList400 = {
+  message: string;
+};
+
+export type OrganizationList401 = {
+  message: string;
+};
+
+export type OrganizationList403 = {
+  message?: string;
+};
+
+export type OrganizationList404 = {
+  message?: string;
+};
+
+export type CreateOrganizationInvitationBody = {
+  /** The email address of the user to invite */
+  email: string;
+  /** The role(s) to assign to the user. It can be `admin`, `member`, owner. Eg: "member" */
+  role: string | string[];
+  /** The organization ID to invite the user to */
+  organizationId?: string;
+  /** Resend the invitation email, if the user is already invited. Eg: true */
+  resend?: boolean;
+  teamId?: string | string[];
+};
+
+export type CreateOrganizationInvitation200 = {
+  id: string;
+  email: string;
+  role: string;
+  organizationId: string;
+  inviterId: string;
+  status: string;
+  expiresAt: string;
+  createdAt: string;
+};
+
+export type CreateOrganizationInvitation400 = {
+  message: string;
+};
+
+export type CreateOrganizationInvitation401 = {
+  message: string;
+};
+
+export type CreateOrganizationInvitation403 = {
+  message?: string;
+};
+
+export type CreateOrganizationInvitation404 = {
+  message?: string;
+};
+
+export type OrganizationCancelInvitationBody = {
+  /** The ID of the invitation to cancel */
+  invitationId: string;
+};
+
+export type OrganizationCancelInvitation400 = {
+  message: string;
+};
+
+export type OrganizationCancelInvitation401 = {
+  message: string;
+};
+
+export type OrganizationCancelInvitation403 = {
+  message?: string;
+};
+
+export type OrganizationCancelInvitation404 = {
+  message?: string;
+};
+
+export type OrganizationAcceptInvitationBody = {
+  /** The ID of the invitation to accept */
+  invitationId: string;
+};
+
+export type OrganizationAcceptInvitation200Invitation = { [key: string]: unknown };
+
+export type OrganizationAcceptInvitation200Member = { [key: string]: unknown };
+
+export type OrganizationAcceptInvitation200 = {
+  invitation?: OrganizationAcceptInvitation200Invitation;
+  member?: OrganizationAcceptInvitation200Member;
+};
+
+export type OrganizationAcceptInvitation400 = {
+  message: string;
+};
+
+export type OrganizationAcceptInvitation401 = {
+  message: string;
+};
+
+export type OrganizationAcceptInvitation403 = {
+  message?: string;
+};
+
+export type OrganizationAcceptInvitation404 = {
+  message?: string;
+};
+
+export type OrganizationGetInvitationParams = {
+  /**
+   * The ID of the invitation to get
+   */
+  id?: string;
+};
+
+export type OrganizationGetInvitation200 = {
+  id: string;
+  email: string;
+  role: string;
+  organizationId: string;
+  inviterId: string;
+  status: string;
+  expiresAt: string;
+  organizationName: string;
+  organizationSlug: string;
+  inviterEmail: string;
+};
+
+export type OrganizationGetInvitation400 = {
+  message: string;
+};
+
+export type OrganizationGetInvitation401 = {
+  message: string;
+};
+
+export type OrganizationGetInvitation403 = {
+  message?: string;
+};
+
+export type OrganizationGetInvitation404 = {
+  message?: string;
+};
+
+export type OrganizationRejectInvitationBody = {
+  /** The ID of the invitation to reject */
+  invitationId: string;
+};
+
+export type OrganizationRejectInvitation200Invitation = { [key: string]: unknown };
+
+/**
+ * @nullable
+ */
+export type OrganizationRejectInvitation200Member = { [key: string]: unknown } | null;
+
+export type OrganizationRejectInvitation200 = {
+  invitation?: OrganizationRejectInvitation200Invitation;
+  /** @nullable */
+  member?: OrganizationRejectInvitation200Member;
+};
+
+export type OrganizationRejectInvitation400 = {
+  message: string;
+};
+
+export type OrganizationRejectInvitation401 = {
+  message: string;
+};
+
+export type OrganizationRejectInvitation403 = {
+  message?: string;
+};
+
+export type OrganizationRejectInvitation404 = {
+  message?: string;
+};
+
+export type OrganizationListInvitations400 = {
+  message: string;
+};
+
+export type OrganizationListInvitations401 = {
+  message: string;
+};
+
+export type OrganizationListInvitations403 = {
+  message?: string;
+};
+
+export type OrganizationListInvitations404 = {
+  message?: string;
+};
+
+export type OrganizationGetActiveMember200 = {
+  id: string;
+  userId: string;
+  organizationId: string;
+  role: string;
+};
+
+export type OrganizationGetActiveMember400 = {
+  message: string;
+};
+
+export type OrganizationGetActiveMember401 = {
+  message: string;
+};
+
+export type OrganizationGetActiveMember403 = {
+  message?: string;
+};
+
+export type OrganizationGetActiveMember404 = {
+  message?: string;
+};
+
+export type OrganizationCheckSlugBody = {
+  /** The organization slug to check. Eg: "my-org" */
+  slug: string;
+};
+
+export type OrganizationCheckSlug400 = {
+  message: string;
+};
+
+export type OrganizationCheckSlug401 = {
+  message: string;
+};
+
+export type OrganizationCheckSlug403 = {
+  message?: string;
+};
+
+export type OrganizationCheckSlug404 = {
+  message?: string;
+};
+
+export type OrganizationRemoveMemberBody = {
+  /** The ID or email of the member to remove */
+  memberIdOrEmail: string;
+  /** The ID of the organization to remove the member from. If not provided, the active organization will be used. Eg: "org-id" */
+  organizationId?: string;
+};
+
+export type OrganizationRemoveMember200Member = {
+  id: string;
+  userId: string;
+  organizationId: string;
+  role: string;
+};
+
+export type OrganizationRemoveMember200 = {
+  member: OrganizationRemoveMember200Member;
+};
+
+export type OrganizationRemoveMember400 = {
+  message: string;
+};
+
+export type OrganizationRemoveMember401 = {
+  message: string;
+};
+
+export type OrganizationRemoveMember403 = {
+  message?: string;
+};
+
+export type OrganizationRemoveMember404 = {
+  message?: string;
+};
+
+export type UpdateOrganizationMemberRoleBody = {
+  /** The new role to be applied. This can be a string or array of strings representing the roles. Eg: ["admin", "sale"] */
+  role: string | string[];
+  /** The member id to apply the role update to. Eg: "member-id" */
+  memberId: string;
+  /** An optional organization ID which the member is a part of to apply the role update. If not provided, you must provide session headers to get the active organization. Eg: "organization-id" */
+  organizationId?: string;
+};
+
+export type UpdateOrganizationMemberRole200Member = {
+  id: string;
+  userId: string;
+  organizationId: string;
+  role: string;
+};
+
+export type UpdateOrganizationMemberRole200 = {
+  member: UpdateOrganizationMemberRole200Member;
+};
+
+export type UpdateOrganizationMemberRole400 = {
+  message: string;
+};
+
+export type UpdateOrganizationMemberRole401 = {
+  message: string;
+};
+
+export type UpdateOrganizationMemberRole403 = {
+  message?: string;
+};
+
+export type UpdateOrganizationMemberRole404 = {
+  message?: string;
+};
+
+export type OrganizationLeaveBody = {
+  /** The organization Id for the member to leave. Eg: "organization-id" */
+  organizationId: string;
+};
+
+export type OrganizationLeave400 = {
+  message: string;
+};
+
+export type OrganizationLeave401 = {
+  message: string;
+};
+
+export type OrganizationLeave403 = {
+  message?: string;
+};
+
+export type OrganizationLeave404 = {
+  message?: string;
+};
+
+export type OrganizationListUserInvitations200Item = {
+  id: string;
+  email: string;
+  role: string;
+  organizationId: string;
+  organizationName: string;
+  /** The ID of the user who created the invitation */
+  inviterId: string;
+  /**
+   * The ID of the team associated with the invitation
+   * @nullable
+   */
+  teamId?: string | null;
+  status: string;
+  expiresAt: string;
+  createdAt: string;
+};
+
+export type OrganizationListUserInvitations400 = {
+  message: string;
+};
+
+export type OrganizationListUserInvitations401 = {
+  message: string;
+};
+
+export type OrganizationListUserInvitations403 = {
+  message?: string;
+};
+
+export type OrganizationListUserInvitations404 = {
+  message?: string;
+};
+
+export type OrganizationListMembers400 = {
+  message: string;
+};
+
+export type OrganizationListMembers401 = {
+  message: string;
+};
+
+export type OrganizationListMembers403 = {
+  message?: string;
+};
+
+export type OrganizationListMembers404 = {
+  message?: string;
+};
+
+export type OrganizationGetActiveMemberRole400 = {
+  message: string;
+};
+
+export type OrganizationGetActiveMemberRole401 = {
+  message: string;
+};
+
+export type OrganizationGetActiveMemberRole403 = {
+  message?: string;
+};
+
+export type OrganizationGetActiveMemberRole404 = {
+  message?: string;
+};
+
+export type OrganizationCreateTeamBody = {
+  /** The name of the team. Eg: "my-team" */
+  name: string;
+  /** The organization ID which the team will be created in. Defaults to the active organization. Eg: "organization-id" */
+  organizationId?: string;
+};
+
+export type OrganizationCreateTeam200 = {
+  /** Unique identifier of the created team */
+  id: string;
+  /** Name of the team */
+  name: string;
+  /** ID of the organization the team belongs to */
+  organizationId: string;
+  /** Timestamp when the team was created */
+  createdAt: string;
+  /** Timestamp when the team was last updated */
+  updatedAt: string;
+};
+
+export type OrganizationCreateTeam400 = {
+  message: string;
+};
+
+export type OrganizationCreateTeam401 = {
+  message: string;
+};
+
+export type OrganizationCreateTeam403 = {
+  message?: string;
+};
+
+export type OrganizationCreateTeam404 = {
+  message?: string;
+};
+
+export type OrganizationListTeams200Item = {
+  /** Unique identifier of the team */
+  id: string;
+  /** Name of the team */
+  name: string;
+  /** ID of the organization the team belongs to */
+  organizationId: string;
+  /** Timestamp when the team was created */
+  createdAt: string;
+  /** Timestamp when the team was last updated */
+  updatedAt: string;
+};
+
+export type OrganizationListTeams400 = {
+  message: string;
+};
+
+export type OrganizationListTeams401 = {
+  message: string;
+};
+
+export type OrganizationListTeams403 = {
+  message?: string;
+};
+
+export type OrganizationListTeams404 = {
+  message?: string;
+};
+
+export type OrganizationRemoveTeamBody = {
+  /** The team ID of the team to remove. Eg: "team-id" */
+  teamId: string;
+  /** The organization ID which the team falls under. If not provided, it will default to the user's active organization. Eg: "organization-id" */
+  organizationId?: string;
+};
+
+/**
+ * Confirmation message indicating successful removal
+ */
+export type OrganizationRemoveTeam200Message =
+  (typeof OrganizationRemoveTeam200Message)[keyof typeof OrganizationRemoveTeam200Message];
+
+export const OrganizationRemoveTeam200Message = {
+  Team_removed_successfully: 'Team removed successfully.',
+} as const;
+
+export type OrganizationRemoveTeam200 = {
+  /** Confirmation message indicating successful removal */
+  message: OrganizationRemoveTeam200Message;
+};
+
+export type OrganizationRemoveTeam400 = {
+  message: string;
+};
+
+export type OrganizationRemoveTeam401 = {
+  message: string;
+};
+
+export type OrganizationRemoveTeam403 = {
+  message?: string;
+};
+
+export type OrganizationRemoveTeam404 = {
+  message?: string;
+};
+
+export type OrganizationUpdateTeamBodyData = {
+  id?: string;
+  /** @minLength 1 */
+  name?: string;
+  organizationId?: string;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+export type OrganizationUpdateTeamBody = {
+  /** The ID of the team to be updated. Eg: "team-id" */
+  teamId: string;
+  data: OrganizationUpdateTeamBodyData;
+};
+
+export type OrganizationUpdateTeam200 = {
+  /** Unique identifier of the updated team */
+  id: string;
+  /** Updated name of the team */
+  name: string;
+  /** ID of the organization the team belongs to */
+  organizationId: string;
+  /** Timestamp when the team was created */
+  createdAt: string;
+  /** Timestamp when the team was last updated */
+  updatedAt: string;
+};
+
+export type OrganizationUpdateTeam400 = {
+  message: string;
+};
+
+export type OrganizationUpdateTeam401 = {
+  message: string;
+};
+
+export type OrganizationUpdateTeam403 = {
+  message?: string;
+};
+
+export type OrganizationUpdateTeam404 = {
+  message?: string;
+};
+
+export type OrganizationSetActiveTeamBody = {
+  /**
+   * The team id to set as active. It can be null to unset the active team
+   * @nullable
+   */
+  teamId?: string | null;
+};
+
+export type OrganizationSetActiveTeam400 = {
+  message: string;
+};
+
+export type OrganizationSetActiveTeam401 = {
+  message: string;
+};
+
+export type OrganizationSetActiveTeam403 = {
+  message?: string;
+};
+
+export type OrganizationSetActiveTeam404 = {
+  message?: string;
+};
+
+export type OrganizationListUserTeams400 = {
+  message: string;
+};
+
+export type OrganizationListUserTeams401 = {
+  message: string;
+};
+
+export type OrganizationListUserTeams403 = {
+  message?: string;
+};
+
+export type OrganizationListUserTeams404 = {
+  message?: string;
+};
+
+/**
+ * The team member
+ */
+export type OrganizationListTeamMembers200Item = {
+  /** Unique identifier of the team member */
+  id: string;
+  /** The user ID of the team member */
+  userId: string;
+  /** The team ID of the team the team member is in */
+  teamId: string;
+  /** Timestamp when the team member was created */
+  createdAt: string;
+};
+
+export type OrganizationListTeamMembers400 = {
+  message: string;
+};
+
+export type OrganizationListTeamMembers401 = {
+  message: string;
+};
+
+export type OrganizationListTeamMembers403 = {
+  message?: string;
+};
+
+export type OrganizationListTeamMembers404 = {
+  message?: string;
+};
+
+export type OrganizationAddTeamMemberBody = {
+  /** The team the user should be a member of. */
+  teamId: string;
+  /** The user Id which represents the user to be added as a member. */
+  userId: string;
+  /** The organization ID which the team falls under. If not provided, it will default to the user's active organization. */
+  organizationId?: string;
+};
+
+/**
+ * The team member
+ */
+export type OrganizationAddTeamMember200 = {
+  /** Unique identifier of the team member */
+  id: string;
+  /** The user ID of the team member */
+  userId: string;
+  /** The team ID of the team the team member is in */
+  teamId: string;
+  /** Timestamp when the team member was created */
+  createdAt: string;
+};
+
+export type OrganizationAddTeamMember400 = {
+  message: string;
+};
+
+export type OrganizationAddTeamMember401 = {
+  message: string;
+};
+
+export type OrganizationAddTeamMember403 = {
+  message?: string;
+};
+
+export type OrganizationAddTeamMember404 = {
+  message?: string;
+};
+
+export type OrganizationRemoveTeamMemberBody = {
+  /** The team the user should be removed from. */
+  teamId: string;
+  /** The user which should be removed from the team. */
+  userId: string;
+  /** The organization ID which the team falls under. If not provided, it will default to the user's active organization. */
+  organizationId?: string;
+};
+
+/**
+ * Confirmation message indicating successful removal
+ */
+export type OrganizationRemoveTeamMember200Message =
+  (typeof OrganizationRemoveTeamMember200Message)[keyof typeof OrganizationRemoveTeamMember200Message];
+
+export const OrganizationRemoveTeamMember200Message = {
+  Team_member_removed_successfully: 'Team member removed successfully.',
+} as const;
+
+export type OrganizationRemoveTeamMember200 = {
+  /** Confirmation message indicating successful removal */
+  message: OrganizationRemoveTeamMember200Message;
+};
+
+export type OrganizationRemoveTeamMember400 = {
+  message: string;
+};
+
+export type OrganizationRemoveTeamMember401 = {
+  message: string;
+};
+
+export type OrganizationRemoveTeamMember403 = {
+  message?: string;
+};
+
+export type OrganizationRemoveTeamMember404 = {
+  message?: string;
+};
+
+/**
+ * The permission to assign to the role
+ */
+export type OrganizationCreateRoleBodyPermission = { [key: string]: string[] };
+
+export type OrganizationCreateRoleBodyAdditionalFields = { [key: string]: unknown };
+
+export type OrganizationCreateRoleBody = {
+  organizationId?: string;
+  /** The name of the role to create */
+  role: string;
+  /** The permission to assign to the role */
+  permission: OrganizationCreateRoleBodyPermission;
+  additionalFields?: OrganizationCreateRoleBodyAdditionalFields;
+};
+
+export type OrganizationCreateRole400 = {
+  message: string;
+};
+
+export type OrganizationCreateRole401 = {
+  message: string;
+};
+
+export type OrganizationCreateRole403 = {
+  message?: string;
+};
+
+export type OrganizationCreateRole404 = {
+  message?: string;
+};
+
+export type OrganizationDeleteRoleBody = (
+  | {
+      /**
+       * The name of the role to delete
+       * @minLength 1
+       */
+      roleName: string;
+    }
+  | {
+      /**
+       * The id of the role to delete
+       * @minLength 1
+       */
+      roleId: string;
+    }
+) & {
+  organizationId?: string;
+};
+
+export type OrganizationDeleteRole400 = {
+  message: string;
+};
+
+export type OrganizationDeleteRole401 = {
+  message: string;
+};
+
+export type OrganizationDeleteRole403 = {
+  message?: string;
+};
+
+export type OrganizationDeleteRole404 = {
+  message?: string;
+};
+
+export type OrganizationListRoles400 = {
+  message: string;
+};
+
+export type OrganizationListRoles401 = {
+  message: string;
+};
+
+export type OrganizationListRoles403 = {
+  message?: string;
+};
+
+export type OrganizationListRoles404 = {
+  message?: string;
+};
+
+export type OrganizationGetRole400 = {
+  message: string;
+};
+
+export type OrganizationGetRole401 = {
+  message: string;
+};
+
+export type OrganizationGetRole403 = {
+  message?: string;
+};
+
+export type OrganizationGetRole404 = {
+  message?: string;
+};
+
+export type OrganizationUpdateRoleBodyDataPermission = { [key: string]: string[] };
+
+export type OrganizationUpdateRoleBodyData = {
+  permission?: OrganizationUpdateRoleBodyDataPermission;
+  roleName?: string;
+};
+
+export type OrganizationUpdateRoleBody = (
+  | {
+      /**
+       * The name of the role to update
+       * @minLength 1
+       */
+      roleName: string;
+    }
+  | {
+      /**
+       * The id of the role to update
+       * @minLength 1
+       */
+      roleId: string;
+    }
+) & {
+  organizationId?: string;
+  data: OrganizationUpdateRoleBodyData;
+};
+
+export type OrganizationUpdateRole400 = {
+  message: string;
+};
+
+export type OrganizationUpdateRole401 = {
+  message: string;
+};
+
+export type OrganizationUpdateRole403 = {
+  message?: string;
+};
+
+export type OrganizationUpdateRole404 = {
+  message?: string;
+};
+
+/**
+ * The permission to check
+ * @deprecated
+ */
+export type OrganizationHasPermissionBodyPermission = { [key: string]: unknown };
+
+/**
+ * The permission to check
+ */
+export type OrganizationHasPermissionBodyPermissions = { [key: string]: unknown };
+
+export type OrganizationHasPermissionBody = {
+  /**
+   * The permission to check
+   * @deprecated
+   */
+  permission?: OrganizationHasPermissionBodyPermission;
+  /** The permission to check */
+  permissions: OrganizationHasPermissionBodyPermissions;
+};
+
+export type OrganizationHasPermission200 = {
+  error?: string;
+  success: boolean;
+};
+
+export type OrganizationHasPermission400 = {
+  message: string;
+};
+
+export type OrganizationHasPermission401 = {
+  message: string;
+};
+
+export type OrganizationHasPermission403 = {
+  message?: string;
+};
+
+export type OrganizationHasPermission404 = {
   message?: string;
 };

@@ -11,6 +11,8 @@ const EVT_REGISTERED = '00000000-0000-4000-8000-000000000001';
 const EVT_DETERMINISTIC = '00000000-0000-4000-8000-000000000002';
 const EVT_LOGGED_OUT = '00000000-0000-4000-8000-000000000004';
 const EVT_LOGGED_IN = '00000000-0000-4000-8000-000000000005';
+const EVT_ORG_MEMBER_ADDED = '00000000-0000-4000-8000-000000000006';
+const EVT_ORG_DELETED = '00000000-0000-4000-8000-000000000007';
 
 function buildListener() {
   const commandBus = { execute: vi.fn().mockResolvedValue(undefined) };
@@ -98,5 +100,55 @@ describe('AuditLogListener', () => {
     // Errors bubble up to EventEmitter2 (ignoreErrors: false) which lets the
     // outbox relay record lastError instead of marking the row processed.
     await expect(listener.handleUserEvent(event)).rejects.toThrow('db down');
+  });
+
+  describe('organizations stream', () => {
+    const ORG_ID = '00000000-0000-4000-8000-0000000000a1';
+    const MEMBER_ID = '00000000-0000-4000-8000-0000000000a2';
+
+    it('does not treat the affected member as the event actor', async () => {
+      const { listener, commandBus } = buildListener();
+      const event: DomainEvent = {
+        eventId: EVT_ORG_MEMBER_ADDED,
+        eventType: 'organizations.member_added',
+        occurredAt: new Date('2026-08-20T10:00:00.000Z'),
+        aggregateId: ORG_ID,
+        organizationId: ORG_ID,
+        payload: { userId: MEMBER_ID, role: 'owner' },
+      };
+
+      await listener.handleOrganizationEvent(event);
+
+      const command = dispatchedCommand(commandBus);
+      expect(command.organizationId).toBe(ORG_ID);
+      expect(command.userId).toBeNull();
+      expect(command.resource).toBe('organization');
+      expect(command.metadata).toEqual({
+        role: 'owner',
+        memberUserId: MEMBER_ID,
+        eventId: EVT_ORG_MEMBER_ADDED,
+        organizationId: ORG_ID,
+      });
+    });
+
+    // organizations.deleted leaves outbox_events.organizationId NULL on purpose, but the audit
+    // trail still has to say which organization was removed.
+    it('falls back to the aggregate when the row carries no tenant', async () => {
+      const { listener, commandBus } = buildListener();
+      const event: DomainEvent = {
+        eventId: EVT_ORG_DELETED,
+        eventType: 'organizations.deleted',
+        occurredAt: new Date('2026-08-20T11:00:00.000Z'),
+        aggregateId: ORG_ID,
+        organizationId: null,
+        payload: { name: 'Acme', slug: 'acme' },
+      };
+
+      await listener.handleOrganizationEvent(event);
+
+      const command = dispatchedCommand(commandBus);
+      expect(command.organizationId).toBe(ORG_ID);
+      expect(command.userId).toBeNull();
+    });
   });
 });

@@ -132,10 +132,24 @@ GQL_USERS=$(curl -s -o "$TMP_DIR/gql-users.json" --max-time 10 -w '%{http_code}'
   -H "Content-Type: application/json" -H "Cookie: $COOKIE" \
   -d '{"query":"query { users(limit:5) { data { id email } hasMore lastCursor } }"}')
 check "POST /graphql query users (USER cookie)" "200" "$GQL_USERS"
+# `users` is organization-scoped (member:read), not platform-scoped: a signed-in member reads their
+# own organization's members and must NOT get an authorization error. What the query must never do
+# is return members of another organization — the e2e suite covers that, since this smoke stack has
+# only one tenant.
 if node -e "const r=require(process.argv[1]); process.exit(Array.isArray(r.errors)&&r.errors.length>0?0:1)" "$TMP_DIR/gql-users.json"; then
-  check "GraphQL users rejects USER role" "forbidden" "forbidden"
+  check "GraphQL users allows an organization member" "allowed" "unexpected-error"
 else
-  check "GraphQL users rejects USER role" "forbidden" "unexpected-success"
+  check "GraphQL users allows an organization member" "allowed" "allowed"
+fi
+
+GQL_USERS_ANON=$(curl -s -o "$TMP_DIR/gql-users-anon.json" --max-time 10 -w '%{http_code}' -X POST "$BASE/graphql" \
+  -H "Content-Type: application/json" \
+  -d '{"query":"query { users(limit:5) { data { id email } hasMore lastCursor } }"}')
+check "POST /graphql query users (no cookie)" "200" "$GQL_USERS_ANON"
+if node -e "const r=require(process.argv[1]); process.exit(Array.isArray(r.errors)&&r.errors.length>0?0:1)" "$TMP_DIR/gql-users-anon.json"; then
+  check "GraphQL users rejects an anonymous caller" "rejected" "rejected"
+else
+  check "GraphQL users rejects an anonymous caller" "rejected" "unexpected-success"
 fi
 
 echo "=== BATCH D: Socket.io WebSocket ==="

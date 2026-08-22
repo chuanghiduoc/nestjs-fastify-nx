@@ -19,12 +19,43 @@ export class AuditLogListener {
     await this.commandBus.execute(
       new RecordAuditLogCommand(
         event.eventId,
+        event.organizationId ?? null,
         event.aggregateId,
         event.eventType,
         'user',
         { ...metadata, eventId: event.eventId },
         typeof ip === 'string' ? ip : null,
         typeof userAgent === 'string' ? userAgent : null,
+        event.occurredAt,
+      ),
+    );
+  }
+
+  // On this stream `aggregateId` is the organization, and the acting member (when there is one)
+  // travels in the payload — so userId comes from there rather than from the aggregate.
+  @OnEvent(DOMAIN_EVENT_STREAMS.ORGANIZATIONS, {
+    async: true,
+    promisify: true,
+    suppressErrors: false,
+  })
+  async handleOrganizationEvent(event: DomainEvent): Promise<void> {
+    const { userId: memberUserId, ...metadata } = event.payload;
+
+    await this.commandBus.execute(
+      new RecordAuditLogCommand(
+        event.eventId,
+        event.organizationId ?? event.aggregateId,
+        null,
+        event.eventType,
+        'organization',
+        {
+          ...metadata,
+          ...(typeof memberUserId === 'string' ? { memberUserId } : {}),
+          eventId: event.eventId,
+          organizationId: event.aggregateId,
+        },
+        null,
+        null,
         event.occurredAt,
       ),
     );

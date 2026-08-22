@@ -322,7 +322,7 @@ The handler calls `users.findAllCursor(...)`, maps entities to
 raw NestJS `NotFoundException` — the global exception filter maps `kind` to the
 status and renders RFC 9457 Problem Details. See [error-handling.md](./error-handling.md).
 
-### `application/dtos/` — application-layer transport types
+### `application/dto/` — application-layer transport types
 
 A **pure TypeScript interface**, no decorators. Application code must stay
 framework-agnostic — the same handler could run from REST, GraphQL, or a
@@ -330,7 +330,7 @@ queue consumer. Create one whenever a query/command result needs a named,
 reusable shape.
 
 ```typescript
-// application/dtos/user-list-item.dto.ts
+// application/dto/user-list-item.dto.ts
 export interface UserListItemDto {
   id: string;
   email: string;
@@ -517,7 +517,7 @@ fields without redeclaring them.
 | `ListUsersCursorFilterDto` | presentation | `class-validator` + `@ApiPropertyOptional` | validates + documents the incoming query string             |
 
 **Rules**: never let `@nestjs/swagger` or `class-validator` leak into
-`application/dtos/`. If you're importing an application DTO into a
+`application/dto/`. If you're importing an application DTO into a
 controller's `@ApiOkResponse`, create the presentation counterpart instead.
 
 ### `presentation/decorators/` & `presentation/types/` — route-scoped helpers
@@ -625,7 +625,7 @@ export {
   ListUsersCursorQuery,
   type ListUsersCursorResult,
 } from './application/queries/list-users-cursor/list-users-cursor.query';
-export type { UserListItemDto } from './application/dtos/user-list-item.dto';
+export type { UserListItemDto } from './application/dto/user-list-item.dto';
 
 export { ListUsersCursorFilterDto } from './presentation/dto/list-users-cursor-filter.dto';
 export {
