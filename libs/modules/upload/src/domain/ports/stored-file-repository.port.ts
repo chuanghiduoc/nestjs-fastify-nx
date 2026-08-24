@@ -12,6 +12,7 @@ export interface StoredFileTransitionFields {
 export interface StoredFileRepositoryPort {
   findBySourceKey(sourceKey: string): Promise<StoredFile | null>;
   findByKey(key: string): Promise<StoredFile | null>;
+  findById(id: string): Promise<StoredFile | null>;
   /** Rejects with a duplicate-key error the caller can recover from when sourceKey already exists. */
   create(props: StoredFileProps): Promise<void>;
   /**
@@ -32,6 +33,11 @@ export interface StoredFileRepositoryPort {
     fields?: StoredFileTransitionFields,
   ): Promise<boolean>;
   deleteIfStatus(id: string, status: StoredFileStatus): Promise<void>;
+  /**
+   * Compare-and-set soft delete: succeeds only while the row is still live, so a duplicate
+   * DELETE is a no-op rather than moving the retention clock forward.
+   */
+  softDelete(id: string): Promise<boolean>;
 }
 
 export function isDuplicateKeyError(error: unknown): boolean {

@@ -21,7 +21,8 @@
     "session_missing": "Phiên làm việc không tồn tại hoặc đã hết hạn",
     "session_expired": "Phiên làm việc đã hết hạn",
     "account_inactive": "Tài khoản chưa được kích hoạt",
-    "insufficient_permissions": "Không đủ quyền"
+    "insufficient_permissions": "Không đủ quyền",
+    "organization_context_required": "Phiên đăng nhập chưa chọn tổ chức nào"
   },
   "storage": {
     "body_empty": "Upload bị từ chối — nội dung rỗng cho key \"{key}\"",

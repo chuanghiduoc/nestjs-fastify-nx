@@ -21,7 +21,8 @@
     "session_missing": "Session not found or expired",
     "session_expired": "Session expired",
     "account_inactive": "Account is not active",
-    "insufficient_permissions": "Insufficient permissions"
+    "insufficient_permissions": "Insufficient permissions",
+    "organization_context_required": "No active organization selected for this session"
   },
   "storage": {
     "body_empty": "Upload rejected — body is empty for key \"{key}\"",

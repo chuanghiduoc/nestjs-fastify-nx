@@ -10,6 +10,7 @@ import {
 
 export interface StoredFileProps {
   id: string;
+  organizationId: string;
   userId: string;
   sourceKey: string;
   key: string;
@@ -18,6 +19,7 @@ export interface StoredFileProps {
   size: number;
   etag: string;
   status: StoredFileStatus;
+  deletedAt?: Date | null;
 }
 
 // FINALIZING → VERIFYING → READY | REJECTED. Every write in the flow is a compare-and-set on the
@@ -39,6 +41,9 @@ export class StoredFile {
 
   get id(): string {
     return this.props.id;
+  }
+  get organizationId(): string {
+    return this.props.organizationId;
   }
   get userId(): string {
     return this.props.userId;
@@ -65,12 +70,20 @@ export class StoredFile {
     return this.props.status;
   }
 
+  get deletedAt(): Date | null {
+    return this.props.deletedAt ?? null;
+  }
+
   canTransitionTo(next: StoredFileStatus): boolean {
     return ALLOWED_TRANSITIONS[this.props.status].includes(next);
   }
 
   isQuarantined(): boolean {
     return this.props.status !== STORED_FILE_STATUS.READY;
+  }
+
+  isDeleted(): boolean {
+    return this.props.deletedAt != null;
   }
 }
 

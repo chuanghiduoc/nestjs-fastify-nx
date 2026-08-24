@@ -41,7 +41,7 @@ libs/modules/products/
 │   │   │       └── create-products.handler.ts
 │   │   ├── queries/                # add query handlers here
 │   │   ├── listeners/              # add domain-event listeners here
-│   │   ├── dtos/                   # application-layer DTOs
+│   │   ├── dto/                    # application-layer DTOs
 │   │   └── index.ts
 │   ├── infrastructure/
 │   │   ├── repositories/

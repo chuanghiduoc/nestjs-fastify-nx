@@ -10,6 +10,8 @@ import { UserFactory } from '../../testing/user.factory';
 import { PrismaUserRepository } from './prisma-user.repository';
 import { PrismaService } from '@nestjs-fastify-nx/infra-database';
 
+const ORG_ID = '019dd1a5-9235-70db-8d57-54ef90300001';
+
 describe('PrismaUserRepository (integration)', () => {
   let containers: TestContainers;
   let prismaService: PrismaService;
@@ -39,7 +41,19 @@ describe('PrismaUserRepository (integration)', () => {
   beforeEach(async () => {
     await cleaner.truncateAll();
     UserFactory.reset();
+    await prismaService.db.organization.create({
+      data: { id: ORG_ID, name: 'Integration Org', slug: 'integration-org' },
+    });
   });
+
+  // findAllCursor lists members of one organization, so a saved user is invisible until it has a
+  // membership — which is exactly the tenant scoping this asserts.
+  async function saveAsMember(user: Parameters<typeof repository.save>[0]): Promise<void> {
+    await repository.save(user);
+    await prismaService.db.member.create({
+      data: { organizationId: ORG_ID, userId: user.id, role: 'member' },
+    });
+  }
 
   it('saves and retrieves user by id', async () => {
     const user = UserFactory.create({ email: 'repo@test.com' });
@@ -88,19 +102,19 @@ describe('PrismaUserRepository (integration)', () => {
         UserFactory.create({ email: 'c1@test.com' }),
         UserFactory.create({ email: 'c2@test.com' }),
       ];
-      for (const u of users) await repository.save(u);
+      for (const u of users) await saveAsMember(u);
 
-      const result = await repository.findAllCursor({ limit: 10 });
+      const result = await repository.findAllCursor({ organizationId: ORG_ID, limit: 10 });
       expect(result.items).toHaveLength(2);
       expect(result.hasMore).toBe(false);
     });
 
     it('returns hasMore=true when items exceed limit', async () => {
       for (let i = 0; i < 5; i++) {
-        await repository.save(UserFactory.create({ email: `page${i}@test.com` }));
+        await saveAsMember(UserFactory.create({ email: `page${i}@test.com` }));
       }
 
-      const result = await repository.findAllCursor({ limit: 3 });
+      const result = await repository.findAllCursor({ organizationId: ORG_ID, limit: 3 });
       expect(result.items).toHaveLength(3);
       expect(result.hasMore).toBe(true);
     });
@@ -109,7 +123,7 @@ describe('PrismaUserRepository (integration)', () => {
       // The composite createdAt/id cursor is stable when timestamps match.
       for (let i = 0; i < 30; i++) {
         const user = UserFactory.create({ email: `bulk${i}@test.com` });
-        await repository.save(user);
+        await saveAsMember(user);
       }
 
       const seenIds = new Set<string>();
@@ -117,7 +131,11 @@ describe('PrismaUserRepository (integration)', () => {
       let pagesRead = 0;
 
       for (let page = 0; page < 3; page++) {
-        const result = await repository.findAllCursor({ limit: 10, startingAfter: cursor });
+        const result = await repository.findAllCursor({
+          organizationId: ORG_ID,
+          limit: 10,
+          startingAfter: cursor,
+        });
         expect(result.items).toHaveLength(10);
 
         for (const item of result.items) {
@@ -140,25 +158,65 @@ describe('PrismaUserRepository (integration)', () => {
       expect(seenIds.size).toBe(30);
     });
 
-    it('filters by search term', async () => {
-      await repository.save(UserFactory.create({ email: 'alpha@test.com' }));
-      await repository.save(UserFactory.create({ email: 'beta@test.com' }));
+    // The users table is global identity with no row-level security behind it, so this join is the
+    // only thing standing between one tenant and another tenant's member list.
+    it('never returns a user who belongs to another organization', async () => {
+      const otherOrgId = '019dd1a5-9235-70db-8d57-54ef90300002';
+      await prismaService.db.organization.create({
+        data: { id: otherOrgId, name: 'Other', slug: 'other-org' },
+      });
 
-      const result = await repository.findAllCursor({ limit: 10, search: 'alpha' });
+      const mine = UserFactory.create({ email: 'mine@test.com' });
+      await saveAsMember(mine);
+
+      const theirs = UserFactory.create({ email: 'theirs@test.com' });
+      await repository.save(theirs);
+      await prismaService.db.member.create({
+        data: { organizationId: otherOrgId, userId: theirs.id, role: 'member' },
+      });
+
+      const result = await repository.findAllCursor({ organizationId: ORG_ID, limit: 10 });
+
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0].email.toString()).toBe('mine@test.com');
+    });
+
+    it('excludes a user with no membership at all', async () => {
+      await repository.save(UserFactory.create({ email: 'orphan@test.com' }));
+
+      const result = await repository.findAllCursor({ organizationId: ORG_ID, limit: 10 });
+
+      expect(result.items).toHaveLength(0);
+    });
+
+    it('filters by search term', async () => {
+      await saveAsMember(UserFactory.create({ email: 'alpha@test.com' }));
+      await saveAsMember(UserFactory.create({ email: 'beta@test.com' }));
+
+      const result = await repository.findAllCursor({
+        organizationId: ORG_ID,
+        limit: 10,
+        search: 'alpha',
+      });
       expect(result.items).toHaveLength(1);
       expect(result.items[0].email.toString()).toBe('alpha@test.com');
     });
 
     it('treats % and _ in the search term as literal characters, not SQL wildcards', async () => {
-      await repository.save(UserFactory.create({ email: '50%off@test.com' }));
-      await repository.save(UserFactory.create({ email: 'has_underscore@test.com' }));
-      await repository.save(UserFactory.create({ email: 'unrelated@test.com' }));
+      await saveAsMember(UserFactory.create({ email: '50%off@test.com' }));
+      await saveAsMember(UserFactory.create({ email: 'has_underscore@test.com' }));
+      await saveAsMember(UserFactory.create({ email: 'unrelated@test.com' }));
 
-      const percentResult = await repository.findAllCursor({ limit: 10, search: '50%off' });
+      const percentResult = await repository.findAllCursor({
+        organizationId: ORG_ID,
+        limit: 10,
+        search: '50%off',
+      });
       expect(percentResult.items).toHaveLength(1);
       expect(percentResult.items[0].email.toString()).toBe('50%off@test.com');
 
       const underscoreResult = await repository.findAllCursor({
+        organizationId: ORG_ID,
         limit: 10,
         search: 'has_underscore',
       });

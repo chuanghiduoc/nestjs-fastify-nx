@@ -1,6 +1,6 @@
 import { ArgsType, Field, Int } from '@nestjs/graphql';
 import { IsEnum, IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
-import { UserRole, UserStatus } from '../types/user-enums';
+import { UserStatus } from '../types/user-enums';
 
 @ArgsType()
 export class ListUsersCursorArgs {
@@ -16,10 +16,10 @@ export class ListUsersCursorArgs {
   @MaxLength(100)
   startingAfter?: string;
 
-  @Field(() => UserRole, { nullable: true })
+  @Field(() => String, { nullable: true })
   @IsOptional()
-  @IsEnum(UserRole)
-  role?: UserRole;
+  @IsString()
+  role?: string;
 
   @Field(() => UserStatus, { nullable: true })
   @IsOptional()

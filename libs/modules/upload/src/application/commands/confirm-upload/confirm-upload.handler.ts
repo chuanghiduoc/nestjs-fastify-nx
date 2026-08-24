@@ -92,6 +92,7 @@ export class ConfirmUploadHandler implements ICommandHandler<
     try {
       await this.files.create({
         id: fileId,
+        organizationId: command.organizationId,
         userId: command.userId,
         sourceKey: command.sourceKey,
         key: finalKey,
@@ -141,7 +142,7 @@ export class ConfirmUploadHandler implements ICommandHandler<
       correlationId: command.correlationId,
     });
 
-    return { key: finalKey, bucket: meta.bucket, size: meta.size };
+    return { id: fileId, key: finalKey, bucket: meta.bucket, size: meta.size };
   }
 
   private async recoverExisting(
@@ -188,7 +189,7 @@ export class ConfirmUploadHandler implements ICommandHandler<
     const url = record.isQuarantined()
       ? undefined
       : await this.storage.getSignedUrl(record.key, undefined, record.bucket);
-    return { key: record.key, url, bucket: record.bucket, size: record.size };
+    return { id: record.id, key: record.key, url, bucket: record.bucket, size: record.size };
   }
 
   // A failed delete must not mask the validation error that triggered it, but swallowing it

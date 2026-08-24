@@ -6,7 +6,7 @@ import { PrismaStoredFileRepository } from './prisma-stored-file.repository';
 
 function build(overrides: Partial<Record<string, Mock>> = {}) {
   const storedFile = {
-    findUnique: vi.fn().mockResolvedValue(null),
+    findFirst: vi.fn().mockResolvedValue(null),
     create: vi.fn().mockResolvedValue(undefined),
     updateMany: vi.fn().mockResolvedValue({ count: 1 }),
     deleteMany: vi.fn().mockResolvedValue({ count: 1 }),
@@ -30,7 +30,7 @@ describe('PrismaStoredFileRepository — compare-and-set', () => {
       repository.transition('f1', STORED_FILE_STATUS.FINALIZING, STORED_FILE_STATUS.VERIFYING),
     ).resolves.toBe(true);
     expect(storedFile.updateMany).toHaveBeenCalledWith({
-      where: { id: 'f1', status: STORED_FILE_STATUS.FINALIZING },
+      where: { id: 'f1', status: STORED_FILE_STATUS.FINALIZING, deletedAt: null },
       data: { status: STORED_FILE_STATUS.VERIFYING },
     });
   });
@@ -56,7 +56,7 @@ describe('PrismaStoredFileRepository — compare-and-set', () => {
     });
 
     expect(storedFile.updateMany).toHaveBeenCalledWith({
-      where: { key: 'k', status: STORED_FILE_STATUS.VERIFYING },
+      where: { key: 'k', status: STORED_FILE_STATUS.VERIFYING, deletedAt: null },
       data: { status: STORED_FILE_STATUS.READY, verifiedAt, failureReason: null },
     });
   });
@@ -71,12 +71,41 @@ describe('PrismaStoredFileRepository — compare-and-set', () => {
       where: { id: 'f1', status: STORED_FILE_STATUS.FINALIZING },
     });
   });
+
+  // A second DELETE must not restamp deletedAt: that would silently extend the retention window
+  // and push the hard purge further out every time the caller retried.
+  it('soft-deletes only a live row and reports a lost race', async () => {
+    const { repository, storedFile } = build();
+
+    await expect(repository.softDelete('f1')).resolves.toBe(true);
+
+    expect(storedFile.updateMany).toHaveBeenCalledWith({
+      where: { id: 'f1', deletedAt: null },
+      data: { deletedAt: expect.any(Date) },
+    });
+
+    const lost = build({ updateMany: vi.fn().mockResolvedValue({ count: 0 }) });
+    await expect(lost.repository.softDelete('f1')).resolves.toBe(false);
+  });
+
+  it('hides soft-deleted rows from every read path', async () => {
+    const { repository, storedFile } = build();
+
+    await repository.findBySourceKey('uploads/u/f.png');
+    await repository.findByKey('files/u/f.png');
+    await repository.findById('f1');
+
+    for (const call of storedFile.findFirst.mock.calls) {
+      expect(call[0].where).toMatchObject({ deletedAt: null });
+    }
+    expect(storedFile.findFirst).toHaveBeenCalledTimes(3);
+  });
 });
 
 describe('PrismaStoredFileRepository — client selection', () => {
   it('reads through the open transaction when one is active so uncommitted writes are visible', async () => {
-    const txStoredFile = { findUnique: vi.fn().mockResolvedValue(null) };
-    const outside = { findUnique: vi.fn().mockResolvedValue(null) };
+    const txStoredFile = { findFirst: vi.fn().mockResolvedValue(null) };
+    const outside = { findFirst: vi.fn().mockResolvedValue(null) };
     const prisma = {
       db: { storedFile: outside },
       dbRead: { storedFile: outside },
@@ -85,7 +114,7 @@ describe('PrismaStoredFileRepository — client selection', () => {
 
     await new PrismaStoredFileRepository(prisma).findBySourceKey('uploads/u/f.png');
 
-    expect(txStoredFile.findUnique).toHaveBeenCalledOnce();
-    expect(outside.findUnique).not.toHaveBeenCalled();
+    expect(txStoredFile.findFirst).toHaveBeenCalledOnce();
+    expect(outside.findFirst).not.toHaveBeenCalled();
   });
 });

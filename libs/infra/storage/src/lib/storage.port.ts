@@ -5,6 +5,7 @@ export interface UploadOptions {
 }
 
 export interface StoredFile {
+  id?: string;
   key: string;
   // Present only after asynchronous malware verification reaches READY.
   url?: string;

@@ -1,10 +1,10 @@
 import { ObjectType, Field } from '@nestjs/graphql';
-import { UserType } from './user.type';
+import { OrganizationMemberType } from './organization-member.type';
 
 @ObjectType()
 export class UserCursorPageType {
-  @Field(() => [UserType])
-  data!: UserType[];
+  @Field(() => [OrganizationMemberType])
+  data!: OrganizationMemberType[];
 
   @Field()
   hasMore!: boolean;

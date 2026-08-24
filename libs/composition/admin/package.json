@@ -13,6 +13,8 @@
   "devDependencies": {
     "@nestjs-fastify-nx/contracts": "workspace:*",
     "@nestjs-fastify-nx/infra-auth": "workspace:*",
-    "@nestjs-fastify-nx/modules-users": "workspace:*"
+    "@nestjs-fastify-nx/infra-authorization": "workspace:*",
+    "@nestjs-fastify-nx/modules-users": "workspace:*",
+    "@nestjs-fastify-nx/shared": "workspace:*"
   }
 }

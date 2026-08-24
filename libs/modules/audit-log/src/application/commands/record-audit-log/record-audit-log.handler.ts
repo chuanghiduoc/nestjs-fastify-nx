@@ -15,6 +15,7 @@ export class RecordAuditLogHandler implements ICommandHandler<RecordAuditLogComm
     const entry = AuditLog.create({
       // id derived from eventId so outbox redelivery reproduces the same PK; repo treats P2002 as no-op.
       id: command.eventId,
+      organizationId: command.organizationId,
       userId: command.userId,
       action: command.action,
       resource: command.resource,

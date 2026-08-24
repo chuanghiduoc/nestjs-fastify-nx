@@ -10,6 +10,7 @@ import { RedisQueueModule } from '@nestjs-fastify-nx/infra-redis';
 import { MessagingModule } from '@nestjs-fastify-nx/infra-messaging';
 import { StorageModule } from '@nestjs-fastify-nx/infra-storage';
 import { BetterAuthModule, BetterAuthGuard, RolesGuard } from '@nestjs-fastify-nx/infra-auth';
+import { AuthorizationModule, PermissionGuard } from '@nestjs-fastify-nx/infra-authorization';
 import { I18nInfraModule } from '@nestjs-fastify-nx/infra-i18n';
 import { UsersModule } from '@nestjs-fastify-nx/modules-users';
 import { AdminModule } from '@nestjs-fastify-nx/composition-admin';
@@ -40,6 +41,7 @@ import { AppController } from './app.controller';
     HealthModule,
     ErrorDocsModule,
     DatabaseModule,
+    AuthorizationModule,
     RedisQueueModule,
     MessagingModule,
     StorageModule,
@@ -65,6 +67,9 @@ import { AppController } from './app.controller';
     { provide: APP_GUARD, useClass: GqlThrottlerGuard },
     { provide: APP_GUARD, useClass: BetterAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
+    // After BetterAuthGuard: it needs the resolved session to build the principal. RolesGuard
+    // covers the platform-level role (staff), PermissionGuard the organization-scoped one.
+    { provide: APP_GUARD, useClass: PermissionGuard },
     { provide: APP_FILTER, useClass: GlobalExceptionFilter },
     // Aborts handlers exceeding HTTP_REQUEST_TIMEOUT_MS with a 504 so a hung await can't pin a
     // worker. Auth routes bypass the Nest pipeline (reply.hijack) and are unaffected.

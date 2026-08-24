@@ -1,21 +1,39 @@
-import { Body, Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  HttpCode,
+  HttpStatus,
+  Param,
+  ParseUUIDPipe,
+  Post,
+} from '@nestjs/common';
 import { CommandBus } from '@nestjs/cqrs';
 import { Throttle } from '@nestjs/throttler';
 import {
   ApiBody,
   ApiCookieAuth,
   ApiCreatedResponse,
+  ApiNoContentResponse,
   ApiOkResponse,
   ApiOperation,
+  ApiParam,
   ApiTags,
 } from '@nestjs/swagger';
 import { ClsService } from 'nestjs-cls';
 import { REQUEST_CONTEXT_KEYS, type RequestContextStore } from '@nestjs-fastify-nx/core';
 import { ApiCommonErrors } from '@nestjs-fastify-nx/contracts';
+import { PERMISSIONS } from '@nestjs-fastify-nx/shared';
+import { RequirePermission } from '@nestjs-fastify-nx/infra-authorization';
 import type { PresignedUpload, StoredFile } from '@nestjs-fastify-nx/infra-storage';
-import { CurrentUser, type AuthenticatedSession } from '@nestjs-fastify-nx/infra-auth';
+import {
+  CurrentUser,
+  requireOrganizationId,
+  type AuthenticatedSession,
+} from '@nestjs-fastify-nx/infra-auth';
 import { PresignUploadCommand } from '../../application/commands/presign-upload/presign-upload.command';
 import { ConfirmUploadCommand } from '../../application/commands/confirm-upload/confirm-upload.command';
+import { DeleteUploadCommand } from '../../application/commands/delete-upload/delete-upload.command';
 import { PresignUploadDto } from '../dto/presign-upload.dto';
 import { ConfirmUploadDto } from '../dto/confirm-upload.dto';
 import { PresignedUploadDto } from '../dto/presigned-upload.dto';
@@ -23,6 +41,7 @@ import { StoredFileDto } from '../dto/stored-file.dto';
 
 const PRESIGN_LIMIT = { default: { limit: 10, ttl: 60_000 } };
 const CONFIRM_LIMIT = { default: { limit: 30, ttl: 60_000 } };
+const DELETE_LIMIT = { default: { limit: 30, ttl: 60_000 } };
 
 @ApiTags('upload')
 @Controller('upload')
@@ -34,6 +53,7 @@ export class UploadController {
   ) {}
 
   @Post('presign')
+  @RequirePermission(PERMISSIONS.FILE_CREATE)
   @Throttle(PRESIGN_LIMIT)
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({
@@ -52,6 +72,7 @@ export class UploadController {
   }
 
   @Post('confirm')
+  @RequirePermission(PERMISSIONS.FILE_CREATE)
   @Throttle(CONFIRM_LIMIT)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
@@ -70,6 +91,31 @@ export class UploadController {
   ): Promise<StoredFile> {
     // BullMQ processing runs outside the request's CLS context, so the id travels on the command.
     const correlationId = this.cls.get(REQUEST_CONTEXT_KEYS.correlationId);
-    return this.commandBus.execute(new ConfirmUploadCommand(user.userId, dto.key, correlationId));
+    return this.commandBus.execute(
+      new ConfirmUploadCommand(requireOrganizationId(user), user.userId, dto.key, correlationId),
+    );
+  }
+
+  // No @RequirePermission here: file:delete can also be held owner-scoped, and the guard evaluates
+  // permissions without a resource. Gating at the route would 403 an owner of the file before the
+  // handler could apply that grant, so the check lives in DeleteUploadHandler where the file is loaded.
+  @Delete(':id')
+  @Throttle(DELETE_LIMIT)
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({
+    summary: 'Soft-delete an uploaded file.',
+    description:
+      'Marks the file deleted and hides it from every read immediately. The object stays in storage until the scheduler purges it after STORED_FILE_PURGE_AFTER_DAYS, so a mistaken delete is recoverable until then. Repeating the call on an already-deleted file is a no-op.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Stored file id (UUID v7).' })
+  @ApiNoContentResponse({ description: 'File soft-deleted.' })
+  @ApiCommonErrors({ auth: true, notFound: true })
+  deleteFile(
+    @CurrentUser() user: AuthenticatedSession,
+    @Param('id', new ParseUUIDPipe({ version: '7' })) id: string,
+  ): Promise<void> {
+    return this.commandBus.execute(
+      new DeleteUploadCommand(requireOrganizationId(user), user.userId, id),
+    );
   }
 }

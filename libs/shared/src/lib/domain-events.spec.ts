@@ -24,10 +24,15 @@ describe('DOMAIN_EVENTS', () => {
     },
   );
 
-  it('matches every event name with its stream wildcard', () => {
-    const prefix = DOMAIN_EVENT_STREAMS.USERS.replace('*', '');
-    const userEvents = Object.values(DOMAIN_EVENTS).filter((name) => name.startsWith(prefix));
-    expect(userEvents).toHaveLength(Object.keys(DOMAIN_EVENTS).length);
+  // An event whose name matches no stream is never delivered: listeners subscribe to the wildcard,
+  // not to individual names, so a typo'd prefix silently drops the event instead of failing.
+  it('routes every event name to exactly one stream wildcard', () => {
+    const prefixes = Object.values(DOMAIN_EVENT_STREAMS).map((stream) => stream.replace('*', ''));
+
+    for (const name of Object.values(DOMAIN_EVENTS)) {
+      const matches = prefixes.filter((prefix) => name.startsWith(prefix));
+      expect(matches, `${name} must match exactly one stream`).toHaveLength(1);
+    }
   });
 });
 

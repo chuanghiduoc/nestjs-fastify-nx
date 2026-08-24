@@ -27,6 +27,7 @@ export const ERROR_CODES = {
   // the client keys its i18n off this value.
   USER_NOT_FOUND: 'user_not_found',
   USER_ALREADY_EXISTS: 'user_already_exists',
+  ORGANIZATION_CONTEXT_REQUIRED: 'organization_context_required',
   INVALID_AUDIT_LOG_ID: 'invalid_audit_log_id',
   INVALID_CURSOR: 'invalid_cursor',
   UPLOAD_MIME_NOT_ALLOWED: 'upload_mime_not_allowed',

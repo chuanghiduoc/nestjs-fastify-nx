@@ -6,6 +6,7 @@ settings:
 
 overrides:
   axios: '>=1.18.0'
+  deepmerge-ts: '>=8.0.0 <9'
   fastify: '>=5.8.5'
   find-my-way: '>=9.7.0'
   '@hono/node-server': 2.0.10
@@ -396,6 +397,9 @@ importers:
       '@nestjs-fastify-nx/infra-auth':
         specifier: workspace:*
         version: link:../../libs/infra/auth
+      '@nestjs-fastify-nx/infra-authorization':
+        specifier: workspace:*
+        version: link:../../libs/infra/authorization
       '@nestjs-fastify-nx/infra-database':
         specifier: workspace:*
         version: link:../../libs/infra/database
@@ -493,9 +497,15 @@ importers:
       '@nestjs-fastify-nx/infra-auth':
         specifier: workspace:*
         version: link:../../infra/auth
+      '@nestjs-fastify-nx/infra-authorization':
+        specifier: workspace:*
+        version: link:../../infra/authorization
       '@nestjs-fastify-nx/modules-users':
         specifier: workspace:*
         version: link:../../modules/users
+      '@nestjs-fastify-nx/shared':
+        specifier: workspace:*
+        version: link:../../shared
 
   libs/contracts:
     devDependencies:
@@ -503,7 +513,11 @@ importers:
         specifier: workspace:*
         version: link:../shared
 
-  libs/core: {}
+  libs/core:
+    devDependencies:
+      '@nestjs-fastify-nx/shared':
+        specifier: workspace:*
+        version: link:../shared
 
   libs/infra/auth:
     devDependencies:
@@ -523,8 +537,35 @@ importers:
         specifier: workspace:*
         version: link:../../shared
 
+  libs/infra/authorization:
+    devDependencies:
+      '@nestjs-fastify-nx/contracts':
+        specifier: workspace:*
+        version: link:../../contracts
+      '@nestjs-fastify-nx/core':
+        specifier: workspace:*
+        version: link:../../core
+      '@nestjs-fastify-nx/infra-auth':
+        specifier: workspace:*
+        version: link:../auth
+      '@nestjs-fastify-nx/infra-database':
+        specifier: workspace:*
+        version: link:../database
+      '@nestjs-fastify-nx/shared':
+        specifier: workspace:*
+        version: link:../../shared
+      '@nestjs-fastify-nx/testing':
+        specifier: workspace:*
+        version: link:../../testing
+
   libs/infra/database:
     devDependencies:
+      '@nestjs-fastify-nx/contracts':
+        specifier: workspace:*
+        version: link:../../contracts
+      '@nestjs-fastify-nx/core':
+        specifier: workspace:*
+        version: link:../../core
       '@nestjs-fastify-nx/shared':
         specifier: workspace:*
         version: link:../../shared
@@ -613,6 +654,9 @@ importers:
       '@nestjs-fastify-nx/infra-auth':
         specifier: workspace:*
         version: link:../../infra/auth
+      '@nestjs-fastify-nx/infra-authorization':
+        specifier: workspace:*
+        version: link:../../infra/authorization
       '@nestjs-fastify-nx/infra-database':
         specifier: workspace:*
         version: link:../../infra/database
@@ -625,6 +669,9 @@ importers:
       '@nestjs-fastify-nx/shared':
         specifier: workspace:*
         version: link:../../shared
+      '@nestjs-fastify-nx/testing':
+        specifier: workspace:*
+        version: link:../../testing
 
   libs/modules/users:
     devDependencies:
@@ -5687,8 +5734,8 @@ packages:
   deep-is@0.1.4:
     resolution: {integrity: sha512-oIPzksmTg4/MriiaYGO+okXDT7ztn/w3Eptv/+gSIdMdKsJo0u4CfYNFJPy+4SKMuCqGw2wxnA+URMg3t8a/bQ==}
 
-  deepmerge-ts@7.1.5:
-    resolution: {integrity: sha512-HOJkrhaYsweh+W+e74Yn7YStZOilkoPb6fycpwNLKzSPtruFs48nYis0zy5yJz1+ktUhHxoRDJ27RQAWLIJVJw==}
+  deepmerge-ts@8.0.1:
+    resolution: {integrity: sha512-szCXE7YLCvLKR9bFPJcvsezOShdalctSvrgN/LM/QGUEPZQajwjmsMObZ6/DuANT5lxzM/wtO8Feubwdkz8myA==}
     engines: {node: '>=16.0.0'}
 
   deepmerge@4.3.1:
@@ -12982,7 +13029,7 @@ snapshots:
   '@prisma/config@7.9.1(magicast@0.5.4)':
     dependencies:
       c12: 3.3.4(magicast@0.5.4)
-      deepmerge-ts: 7.1.5
+      deepmerge-ts: 8.0.1
       effect: 3.20.0
       empathic: 2.0.0
     transitivePeerDependencies:
@@ -15198,7 +15245,7 @@ snapshots:
 
   deep-is@0.1.4: {}
 
-  deepmerge-ts@7.1.5: {}
+  deepmerge-ts@8.0.1: {}
 
   deepmerge@4.3.1: {}
 

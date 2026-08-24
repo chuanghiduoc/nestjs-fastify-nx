@@ -5,7 +5,8 @@ import { Command } from '@nestjs/cqrs';
 export class RecordAuditLogCommand extends Command<void> {
   constructor(
     readonly eventId: string,
-    readonly userId: string,
+    readonly organizationId: string | null,
+    readonly userId: string | null,
     readonly action: string,
     readonly resource: string,
     readonly metadata: Record<string, unknown>,

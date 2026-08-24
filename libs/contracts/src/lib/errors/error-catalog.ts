@@ -179,6 +179,14 @@ const DOCS: readonly ErrorTypeDoc[] = [
     resolution: 'Sign in instead, or start a password reset.',
   },
   {
+    code: ERROR_CODES.ORGANIZATION_CONTEXT_REQUIRED,
+    status: 403,
+    title: 'Organization context required',
+    meaning: 'The session has no active organization, so the request cannot be scoped to a tenant.',
+    resolution:
+      'Select an organization for the session (POST /api/auth/organization/set-active) and retry.',
+  },
+  {
     code: ERROR_CODES.INVALID_AUDIT_LOG_ID,
     status: 400,
     title: 'Invalid audit log id',

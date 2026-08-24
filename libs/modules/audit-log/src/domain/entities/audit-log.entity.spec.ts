@@ -45,6 +45,7 @@ describe('AuditLog entity', () => {
   it('reconstitutes from persistence without mutating', () => {
     const props = {
       id: '00000000-0000-0000-0000-000000000001',
+      organizationId: null,
       userId: 'u-2',
       action: 'users.logged_out',
       resource: 'user',

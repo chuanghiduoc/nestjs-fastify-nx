@@ -1,6 +1,11 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import request from 'supertest';
-import { createTestApp, cookieHeaderFromSetCookies, type TestAppContext } from './test-app';
+import {
+  createTestApp,
+  cookieHeaderFromSetCookies,
+  resetRateLimitBudget,
+  type TestAppContext,
+} from './test-app';
 
 // Exercises the Fastify idempotency plugin end-to-end against real Redis (Testcontainers) and a
 // real authenticated endpoint. presign returns a freshly-random `key` each call, so an identical
@@ -19,6 +24,7 @@ describe('Idempotency E2E', () => {
 
   beforeEach(async () => {
     await ctx.cleaner.truncateAll();
+    await resetRateLimitBudget();
     const email = `idem-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
     const signUp = await request(ctx.app.getHttpServer())
       .post('/api/auth/sign-up/email')

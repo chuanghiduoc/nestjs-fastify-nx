@@ -14,14 +14,12 @@ describe('module generator', () => {
     }
   });
 
-  it('creates project configuration with scope:modules and type:feature tags', async () => {
+  it('creates project configuration tagged with scope only', async () => {
     await moduleGenerator(tree, { name: 'orders', directory: 'modules', withCqrs: true });
 
     const config = readProjectConfiguration(tree, 'modules-orders');
     expect(config.root).toBe('libs/modules/orders');
-    expect(config.tags).toContain('scope:modules');
-    expect(config.tags).toContain('type:feature');
-    expect(config.tags).not.toContain('module:orders');
+    expect(config.tags).toEqual(['scope:modules']);
     // No explicit targets — typecheck/lint/test are all inferred by the
     // workspace plugins from tsconfig/eslint/vitest configs.
     expect(config.targets?.['test']).toBeUndefined();
@@ -73,7 +71,8 @@ describe('module generator', () => {
 
     expect(tree.exists('libs/modules/products/src/application/queries/.gitkeep')).toBe(true);
     expect(tree.exists('libs/modules/products/src/application/listeners/.gitkeep')).toBe(true);
-    expect(tree.exists('libs/modules/products/src/application/dtos/.gitkeep')).toBe(true);
+    expect(tree.exists('libs/modules/products/src/application/ports/.gitkeep')).toBe(true);
+    expect(tree.exists('libs/modules/products/src/application/dto/.gitkeep')).toBe(true);
   });
 
   it('generates infrastructure repository', async () => {
@@ -213,9 +212,7 @@ describe('module generator', () => {
 
     const config = readProjectConfiguration(tree, 'composition-admin');
     expect(config.root).toBe('libs/composition/admin');
-    expect(config.tags).toContain('scope:composition');
-    expect(config.tags).not.toContain('scope:modules');
-    expect(config.tags).toContain('type:feature');
+    expect(config.tags).toEqual(['scope:composition']);
     expect(tree.exists('libs/composition/admin/src/admin.module.ts')).toBe(true);
   });
 

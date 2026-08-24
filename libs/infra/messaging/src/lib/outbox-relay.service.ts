@@ -23,6 +23,7 @@ interface OutboxPayloadShape {
 
 interface OutboxRow {
   id: string;
+  organizationId: string | null;
   eventType: string;
   aggregateId: string;
   payload: unknown;
@@ -219,7 +220,7 @@ export class OutboxRelayService implements OnModuleInit, OnModuleDestroy {
                   )
              FROM locked
             WHERE o.id = locked.id
-           RETURNING o.id, o."eventType", o."aggregateId", o.payload, o.attempts`,
+           RETURNING o.id, o."organizationId", o."eventType", o."aggregateId", o.payload, o.attempts`,
           this.maxAttempts,
           this.batchSize,
           this.retryBaseMs / 1000,
@@ -255,6 +256,7 @@ export class OutboxRelayService implements OnModuleInit, OnModuleDestroy {
       aggregateId: row.aggregateId,
       occurredAt: new Date(payload.occurredAt),
       payload: payload.payload,
+      organizationId: row.organizationId,
     };
 
     try {

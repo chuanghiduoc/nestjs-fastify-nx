@@ -58,8 +58,8 @@ export class UserListItemResponseDto {
   @ApiProperty({ description: 'Display name.', example: 'Jane Doe' })
   name!: string;
 
-  @ApiProperty({ enum: UserRole, example: UserRole.USER })
-  role!: UserRole;
+  @ApiProperty({ description: 'Organization membership role.', example: 'member' })
+  role!: string;
 
   @ApiProperty({ enum: UserStatus, example: UserStatus.ACTIVE })
   status!: UserStatus;
