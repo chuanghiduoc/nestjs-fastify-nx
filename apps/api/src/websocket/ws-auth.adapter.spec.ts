@@ -201,10 +201,10 @@ describe('createWsAuthMiddleware', () => {
       );
     });
 
-    it('ignores a spoofed X-Forwarded-For when trustProxyHops is 0 (the default)', async () => {
+    it('ignores a spoofed X-Forwarded-For when trustedProxies is empty (the default)', async () => {
       const auth = makeAuth(VALID_SESSION);
       const redis = makeRedis(1);
-      // trustProxyHops defaults to 0 -> XFF must never be consulted, even when an attacker sends it.
+      // trustedProxies defaults to [] -> XFF must never be consulted, even when an attacker sends it.
       const middleware = createWsAuthMiddleware(auth, { redis, maxConcurrentPerIp: 50 });
       const socket = makeSocket({
         auth: { token: 'tok' },
@@ -230,13 +230,13 @@ describe('createWsAuthMiddleware', () => {
       );
     });
 
-    it('uses the first untrusted address behind the configured proxy hops', async () => {
+    it('uses the first address that is not a trusted proxy', async () => {
       const auth = makeAuth(VALID_SESSION);
       const redis = makeRedis(1);
       const middleware = createWsAuthMiddleware(auth, {
         redis,
         maxConcurrentPerIp: 50,
-        trustProxyHops: 2,
+        trustedProxies: ['10.0.0.0/8'],
       });
       const socket = makeSocket({
         auth: { token: 'tok' },
@@ -262,7 +262,7 @@ describe('createWsAuthMiddleware', () => {
       const middleware = createWsAuthMiddleware(auth, {
         redis,
         maxConcurrentPerIp: 50,
-        trustProxyHops: 1,
+        trustedProxies: ['10.0.0.10/32'],
       });
       const socket = makeSocket({
         auth: { token: 'tok' },

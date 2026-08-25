@@ -21,10 +21,13 @@ export class BullMqHealthIndicator implements OnModuleDestroy {
     private readonly healthIndicator: HealthIndicatorService,
     config: ConfigService<EnvConfig, true>,
   ) {
+    const host: string = config.get('REDIS_QUEUE_HOST', { infer: true });
+    const port: number = config.get('REDIS_QUEUE_PORT', { infer: true });
+
     this.queue = new Queue(QUEUE_NAMES.EMAIL_NOTIFICATION, {
       connection: {
-        host: config.get('REDIS_QUEUE_HOST', { infer: true }),
-        port: config.get('REDIS_QUEUE_PORT', { infer: true }),
+        host,
+        port,
         maxRetriesPerRequest: 1,
         connectTimeout: PROBE_TIMEOUT_MS,
         // A number, not null: null makes ioredis give up reconnecting for good, so one Redis blip

@@ -75,6 +75,24 @@ describe('validateConfig', () => {
     expect(result.CORS_ORIGINS).toEqual(['http://localhost:3000', 'https://app.com']);
   });
 
+  it('parses TRUST_PROXY_CIDRS into string array', () => {
+    const result = validateConfig({
+      ...baseDevEnv,
+      TRUST_PROXY_CIDRS: '10.0.0.0/8, loopback',
+    });
+    expect(result.TRUST_PROXY_CIDRS).toEqual(['10.0.0.0/8', 'loopback']);
+  });
+
+  it('defaults TRUST_PROXY_CIDRS to an empty list so no proxy is trusted', () => {
+    expect(validateConfig(baseDevEnv).TRUST_PROXY_CIDRS).toEqual([]);
+  });
+
+  it('rejects a TRUST_PROXY_CIDRS entry proxy-addr cannot compile', () => {
+    expect(() => validateConfig({ ...baseDevEnv, TRUST_PROXY_CIDRS: 'not-an-ip' })).toThrow(
+      /TRUST_PROXY_CIDRS/,
+    );
+  });
+
   it('rejects a non-postgres DATABASE_URL in production', () => {
     expect(() => validateConfig({ ...baseProdEnv, DATABASE_URL: 'mysql://localhost/db' })).toThrow(
       /DATABASE_URL/,

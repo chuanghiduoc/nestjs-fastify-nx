@@ -53,25 +53,30 @@ export class RedisQueueClientProvider implements OnModuleDestroy {
     BullModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
-      useFactory: (config: ConfigService<RedisQueueEnv, true>) => ({
-        connection: {
-          host: config.get('REDIS_QUEUE_HOST', { infer: true }),
-          port: config.get('REDIS_QUEUE_PORT', { infer: true }),
-          // BullMQ requires `maxRetriesPerRequest: null` — without it BullMQ
-          // throws on every connection blip instead of letting ioredis retry.
-          maxRetriesPerRequest: null,
-          retryStrategy: redisReconnectStrategy,
-        },
-        prefix: config.get('REDIS_QUEUE_PREFIX', { infer: true }),
-        defaultJobOptions: {
-          attempts: 3,
-          backoff: { type: 'exponential', delay: 1000 },
-          // Keep the 100 most-recent successes and 500 most-recent failures
-          // for post-mortem; age cap prevents unbounded growth.
-          removeOnComplete: { count: 100, age: 24 * 3600 },
-          removeOnFail: { count: 500, age: 7 * 24 * 3600 },
-        },
-      }),
+      useFactory: (config: ConfigService<RedisQueueEnv, true>) => {
+        const host: string = config.get('REDIS_QUEUE_HOST', { infer: true });
+        const port: number = config.get('REDIS_QUEUE_PORT', { infer: true });
+
+        return {
+          connection: {
+            host,
+            port,
+            // BullMQ requires `maxRetriesPerRequest: null` — without it BullMQ
+            // throws on every connection blip instead of letting ioredis retry.
+            maxRetriesPerRequest: null,
+            retryStrategy: redisReconnectStrategy,
+          },
+          prefix: config.get('REDIS_QUEUE_PREFIX', { infer: true }),
+          defaultJobOptions: {
+            attempts: 3,
+            backoff: { type: 'exponential', delay: 1000 },
+            // Keep the 100 most-recent successes and 500 most-recent failures
+            // for post-mortem; age cap prevents unbounded growth.
+            removeOnComplete: { count: 100, age: 24 * 3600 },
+            removeOnFail: { count: 500, age: 7 * 24 * 3600 },
+          },
+        };
+      },
     }),
   ],
   providers: [

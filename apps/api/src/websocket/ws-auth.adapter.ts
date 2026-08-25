@@ -95,7 +95,7 @@ export function wsData(socket: Socket): WsSocketData {
 export interface WsAuthOptions {
   redis?: Redis;
   maxConcurrentPerIp?: number;
-  trustProxyHops?: number;
+  trustedProxies?: readonly string[];
   onSessionError?: (error: unknown) => void;
 }
 
@@ -176,13 +176,15 @@ export async function releaseWsConnectionLease(redis: Redis, socket: Socket): Pr
 }
 
 export function createWsAuthMiddleware(auth: BetterAuthInstance, options: WsAuthOptions = {}) {
-  const { redis, maxConcurrentPerIp = 50, trustProxyHops = 0, onSessionError } = options;
+  const { redis, maxConcurrentPerIp = 50, trustedProxies = [], onSessionError } = options;
+  const isTrustedProxy =
+    trustedProxies.length > 0 ? proxyaddr.compile([...trustedProxies]) : undefined;
 
   return async (socket: Socket, next: (err?: Error) => void): Promise<void> => {
     try {
       await revalidateWsSession(auth, socket);
 
-      const ip = resolveClientIp(socket, trustProxyHops);
+      const ip = resolveClientIp(socket, isTrustedProxy);
       if (redis && ip) {
         try {
           const key = `${WS_CONN_KEY_PREFIX}${ip}`;
@@ -223,15 +225,15 @@ export function createWsAuthMiddleware(auth: BetterAuthInstance, options: WsAuth
   };
 }
 
-// Mirror Fastify's numeric trust-proxy model via `proxy-addr` (the same package Fastify uses
-// internally): trust exactly the configured number of hops walking in from the TCP peer, then
-// return the first untrusted (i.e. client) address. With zero hops, forwarded headers are never
-// trusted — proxy-addr's trust callback receives a hop index, not a raw count, so it cannot accept
-// a bare number the way Fastify's `trustProxy` option does; the index-based predicate below
-// reproduces that same "trust N hops" semantics.
-function resolveClientIp(socket: Socket, trustProxyHops: number): string | undefined {
+// Mirrors Fastify's `trustProxy` allow-list model via `proxy-addr` (the same package Fastify uses
+// internally): walk in from the TCP peer and return the first address that is not a trusted proxy.
+// With an empty allow-list, forwarded headers are never trusted.
+function resolveClientIp(
+  socket: Socket,
+  isTrustedProxy: ReturnType<typeof proxyaddr.compile> | undefined,
+): string | undefined {
   const direct = socket.conn.remoteAddress;
-  if (!direct || trustProxyHops <= 0) return direct;
+  if (!direct || !isTrustedProxy) return direct;
 
   const forwardedFor = socket.handshake.headers['x-forwarded-for'];
   const reqLike = {
@@ -245,5 +247,5 @@ function resolveClientIp(socket: Socket, trustProxyHops: number): string | undef
     connection: { remoteAddress: direct },
   } as unknown as IncomingMessage;
 
-  return proxyaddr(reqLike, (_addr, hopIndex) => hopIndex < trustProxyHops);
+  return proxyaddr(reqLike, isTrustedProxy);
 }

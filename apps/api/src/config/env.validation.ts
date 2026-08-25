@@ -3,6 +3,7 @@ import { stripEmptyEnvStrings } from '@nestjs-fastify-nx/shared';
 // The package version is the single source of truth for APP_VERSION's default; nx release bumps it
 // (and root) in lockstep. Operators can still override APP_VERSION/APP_NAME via env.
 import pkg from '../../package.json';
+import { isCompilableTrustedProxyList, parseTrustedProxies } from '../common/http/trusted-proxies';
 
 const envSchema = z
   .object({
@@ -130,8 +131,15 @@ const envSchema = z
               .filter(Boolean)
           : [],
       ),
-    // Wrong value lets attacker spoof req.ip and bypass rate limits. 1=single proxy, 2=Cloudflare+ingress.
-    TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(10).default(0),
+    // Wrong value lets attacker spoof req.ip and bypass rate limits. Empty trusts no proxy at all.
+    TRUST_PROXY_CIDRS: z
+      .string()
+      .default('')
+      .transform(parseTrustedProxies)
+      .refine(isCompilableTrustedProxyList, {
+        message:
+          'TRUST_PROXY_CIDRS must be a comma-separated list of IPs, CIDR ranges, or proxy-addr presets (loopback, linklocal, uniquelocal)',
+      }),
     // Per-IP WebSocket cap — prevents a single client from OOMing the gateway.
     WS_CONNECTION_LIMIT_PER_IP: z.coerce.number().int().min(1).default(50),
     WS_SESSION_REVALIDATE_MS: z.coerce.number().int().min(5_000).max(300_000).default(60_000),
