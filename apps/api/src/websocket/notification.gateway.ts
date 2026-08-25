@@ -37,7 +37,7 @@ interface WsRedisEnv {
   WS_SESSION_REVALIDATE_CONCURRENCY: number;
   WS_MESSAGE_RATE_LIMIT_MAX: number;
   WS_MESSAGE_RATE_LIMIT_WINDOW_MS: number;
-  TRUST_PROXY_HOPS: number;
+  TRUST_PROXY_CIDRS: string[];
 }
 
 // Empty allowlist in production rejects all cross-origin upgrades — never use origin: true with credentials.
@@ -113,7 +113,7 @@ export class NotificationGateway
     const wsAuthMiddleware = createWsAuthMiddleware(this.auth, {
       redis: this.rateLimitClient,
       maxConcurrentPerIp: this.config.get('WS_CONNECTION_LIMIT_PER_IP', { infer: true }),
-      trustProxyHops: this.config.get('TRUST_PROXY_HOPS', { infer: true }),
+      trustedProxies: this.config.get('TRUST_PROXY_CIDRS', { infer: true }),
       onSessionError: (err) =>
         this.logger.error({ err }, 'WebSocket handshake session validation failed'),
     });

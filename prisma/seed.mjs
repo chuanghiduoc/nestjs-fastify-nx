@@ -2,7 +2,8 @@
 
 /**
  * Better Auth stores credentials in `accounts.password` (provider="credential",
- * accountId=user.id) using its own scrypt-based hash. The on-disk format must
+ * issuer="local:credential", accountId=user.id) using its own scrypt-based hash.
+ * Since 1.7 account identity is keyed by (issuer, accountId). The on-disk format must
  * be produced by `hashPassword` from `better-auth/crypto` — any other hasher
  * (e.g. argon2) yields output that Better Auth's signin path cannot verify.
  *
@@ -60,8 +61,8 @@ async function main() {
     const userId = userResult.rows[0].id;
 
     await client.query(
-      `INSERT INTO accounts ("userId", "accountId", "providerId", password, "updatedAt")
-       VALUES ($1, $2, 'credential', $3, now())`,
+      `INSERT INTO accounts ("userId", "accountId", "issuer", "providerId", password, "updatedAt")
+       VALUES ($1, $2, 'local:credential', 'credential', $3, now())`,
       [userId, userId, passwordHash],
     );
 

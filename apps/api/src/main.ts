@@ -16,7 +16,6 @@ import { createHash } from 'node:crypto';
 import { toNodeHandler } from 'better-auth/node';
 import { BETTER_AUTH_INSTANCE, type BetterAuthInstance } from '@nestjs-fastify-nx/infra-auth';
 import {
-  intEnv,
   positiveIntEnv,
   redisReconnectStrategy,
   sanitizeUrlForLogging,
@@ -31,6 +30,7 @@ import { createBullBoardPlugin } from './common/bull-board/create-bull-board-plu
 import { registerIdempotency } from './common/idempotency/register-idempotency';
 import { redisFixedWindowIncr } from './common/rate-limit/redis-fixed-window';
 import { flushBufferedReplyHeaders } from './common/http/flush-reply-headers';
+import { resolveTrustedProxies } from './common/http/trusted-proxies';
 import { GLOBAL_PREFIX, GLOBAL_PREFIX_EXCLUDES } from './common/http/global-prefix';
 import { applyFastifyProblemDetailsHook } from './common/filters/fastify-error-handler';
 import { buildProblemDetails } from './common/filters/problem-details.helper';
@@ -55,12 +55,9 @@ const BULL_BOARD_CSP =
 startSentry({ serviceName: 'nestjs-fastify-api', profiling: true });
 
 async function bootstrap() {
-  // trustProxy depth must match proxy topology — wrong value lets XFF spoofing bypass IP rate limits.
   const bodyLimitBytes = positiveIntEnv('HTTP_BODY_LIMIT_BYTES', 1_048_576);
-  const configuredProxyHops = intEnv('TRUST_PROXY_HOPS', 0);
   // Keep adapter construction safe so ConfigModule can report the original invalid value cleanly.
-  const trustProxyHops =
-    configuredProxyHops >= 0 && configuredProxyHops <= 10 ? configuredProxyHops : 0;
+  const trustedProxies = resolveTrustedProxies(process.env['TRUST_PROXY_CIDRS']);
 
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
@@ -68,7 +65,7 @@ async function bootstrap() {
     // non-slash form — otherwise the trailing-slash variant falls through to the looser wildcard
     // bucket and skips the account-wide credential-stuffing limiter.
     new FastifyAdapter({
-      trustProxy: trustProxyHops,
+      trustProxy: trustedProxies.length > 0 ? trustedProxies : false,
       bodyLimit: bodyLimitBytes,
       ignoreTrailingSlash: true,
     }),

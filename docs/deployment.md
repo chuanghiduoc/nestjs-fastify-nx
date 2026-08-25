@@ -128,8 +128,8 @@ the box. This image is deploy-agnostic — pick whichever fits, nothing else cha
 > `depends_on` conditions; do not remove that one-shot service or start workers
 > before it has completed successfully.
 
-See also `TRUST_PROXY_HOPS` under [Scaling](#scaling) — set it to the number of
-proxy hops so Fastify resolves `req.ip` from `X-Forwarded-For` correctly.
+See also `TRUST_PROXY_CIDRS` under [Scaling](#scaling) — list the proxy addresses
+so Fastify resolves `req.ip` from `X-Forwarded-For` correctly.
 
 ## Local Observability Stack (opt-in)
 
@@ -284,7 +284,7 @@ Worker and scheduler use file-based liveness probes (`/tmp/worker-alive`, `/tmp/
 | `WORKER_EMAIL_CONCURRENCY`  | `5`     | Per-queue parallelism inside each worker replica for email jobs. Effective throughput = concurrency × replicas.               |
 | `WORKER_UPLOAD_CONCURRENCY` | `5`     | Per-queue parallelism inside each worker replica for upload-verification jobs.                                                |
 
-Place any L7 reverse proxy in front of the api service that forwards `X-Forwarded-For` and proxies WebSocket upgrades. Set `TRUST_PROXY_HOPS` to the number of proxy hops between the edge and the api container so Fastify and the WebSocket connection limiter resolve the client IP consistently. The metrics allowlist intentionally uses the raw TCP peer address because scrapers are expected to connect from the trusted internal network.
+Place any L7 reverse proxy in front of the api service that forwards `X-Forwarded-For` and proxies WebSocket upgrades. Set `TRUST_PROXY_CIDRS` to the addresses or CIDR ranges those proxies connect from (e.g. `10.0.0.0/8`) so Fastify and the WebSocket connection limiter resolve the client IP consistently — an address outside the list is treated as the client, so a proxy left out of it makes `req.ip` the proxy itself. The metrics allowlist intentionally uses the raw TCP peer address because scrapers are expected to connect from the trusted internal network.
 
 > **Important**: Throttler limits (`THROTTLER_LIMIT`, `AUTH_RATE_LIMIT_MAX`) are cluster-wide counters backed by Redis shared state — set them for **total** expected traffic, not per-replica. With `API_REPLICAS=5` and `THROTTLER_LIMIT=100`, each IP is limited to 100 req/min total, not 500.
 >
