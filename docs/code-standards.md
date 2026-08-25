@@ -298,7 +298,7 @@ the status after the interceptor chain.
 - **Invariant:** `IDEMPOTENCY_LOCK_TTL_SECONDS * 1000 > HTTP_REQUEST_TIMEOUT_MS` (validated
   on boot) so a finishing request always still owns its lock — preventing a lock-steal.
 - **Known gap — tenant context is outside the fingerprint.** The fingerprint covers
-  method + URL + body only; the active organization lives server-side on the session row,
+  `method + url + body` only; the active organization lives server-side on the session row,
   which the Fastify-layer plugin cannot see (it runs before the auth guard resolves the
   membership). A retry sent after switching the active organization therefore replays the
   previous organization's response instead of executing against the new one. Until this is
