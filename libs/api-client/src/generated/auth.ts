@@ -474,9 +474,18 @@ export const getAuth = () => {
     });
   };
   /**
-   * Get the full organization
+   * Get the organization metadata
    */
   const getOrganization = () => {
+    return customAxiosInstance<Organization>({
+      url: `/api/auth/organization/get-organization`,
+      method: 'GET',
+    });
+  };
+  /**
+   * Get the full organization
+   */
+  const getFullOrganization = () => {
     return customAxiosInstance<Organization>({
       url: `/api/auth/organization/get-full-organization`,
       method: 'GET',
@@ -682,7 +691,7 @@ export const getAuth = () => {
     });
   };
   /**
-   * List all teams that the current user is a part of.
+   * List teams for a user. Without parameters, returns teams for the current user across every organization they belong to. Pass `organizationId` to scope the result to a specific organization. Pass `userId` to list teams for another member; this requires `member:update` permission in the target organization (the explicit `organizationId` if provided, otherwise the session's active organization).
    */
   const organizationListUserTeams = () => {
     return customAxiosInstance<Team[]>({
@@ -809,6 +818,7 @@ export const getAuth = () => {
     organizationDelete,
     setActiveOrganization,
     getOrganization,
+    getFullOrganization,
     organizationList,
     createOrganizationInvitation,
     organizationCancelInvitation,
@@ -945,6 +955,9 @@ export type SetActiveOrganizationResult = NonNullable<
 >;
 export type GetOrganizationResult = NonNullable<
   Awaited<ReturnType<ReturnType<typeof getAuth>['getOrganization']>>
+>;
+export type GetFullOrganizationResult = NonNullable<
+  Awaited<ReturnType<ReturnType<typeof getAuth>['getFullOrganization']>>
 >;
 export type OrganizationListResult = NonNullable<
   Awaited<ReturnType<ReturnType<typeof getAuth>['organizationList']>>

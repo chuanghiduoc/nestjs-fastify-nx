@@ -384,6 +384,7 @@ export interface Session {
 
 export interface Account {
   readonly id: string;
+  issuer: string;
   accountId: string;
   providerId: string;
   userId: string;
@@ -428,6 +429,7 @@ export interface OrganizationRole {
 export interface Team {
   readonly id: string;
   name: string;
+  readonly memberCount?: number;
   organizationId: string;
   createdAt: string;
   updatedAt?: string;
@@ -437,6 +439,7 @@ export interface TeamMember {
   readonly id: string;
   teamId: string;
   userId: string;
+  readonly membershipKey?: string;
   createdAt?: string;
 }
 
@@ -523,6 +526,11 @@ export type SocialSignInBodyIdToken = {
   user?: SocialSignInBodyIdTokenUser;
 };
 
+/**
+ * Extra query parameters to append to the provider authorization URL (e.g. Cognito identity_provider, Google hd).
+ */
+export type SocialSignInBodyAdditionalParams = { [key: string]: string };
+
 export type SocialSignInBodyAdditionalData = { [key: string]: unknown };
 
 export type SocialSignInBody = {
@@ -577,6 +585,8 @@ export type SocialSignInBody = {
   requestSignUp?: boolean;
   /** The login hint to use for the authorization code request */
   loginHint?: string;
+  /** Extra query parameters to append to the provider authorization URL (e.g. Cognito identity_provider, Google hd). */
+  additionalParams?: SocialSignInBodyAdditionalParams;
   additionalData?: SocialSignInBodyAdditionalData;
 };
 
@@ -629,6 +639,7 @@ export type CallbackIdPostBody = {
   error_description?: string;
   state?: string;
   user?: string;
+  iss?: string;
 };
 
 export type CallbackIdPost400 = {
@@ -697,10 +708,21 @@ export type GetSessionPost404 = {
   message?: string;
 };
 
-export type SignOutBody = { [key: string]: unknown };
+export type SignOutBody = {
+  /** The URL to redirect to after provider logout */
+  callbackURL?: string;
+  /** Return the provider logout URL without redirecting */
+  disableRedirect?: boolean;
+  /** State to pass to the provider logout endpoint */
+  state?: string;
+};
 
 export type SignOut200 = {
   success?: boolean;
+  /** Provider logout URL when RP-initiated logout is available */
+  url?: string;
+  /** Whether the client should redirect to the provider logout URL */
+  redirect?: boolean;
 };
 
 export type SignOut400 = {
@@ -1281,8 +1303,12 @@ export type LinkSocialAccountBodyIdToken = {
   nonce?: string;
   accessToken?: string;
   refreshToken?: string;
-  scopes?: string[];
 };
+
+/**
+ * Extra query parameters to append to the provider authorization URL (e.g. Cognito identity_provider, Google hd).
+ */
+export type LinkSocialAccountBodyAdditionalParams = { [key: string]: string };
 
 export type LinkSocialAccountBodyAdditionalData = { [key: string]: unknown };
 
@@ -1334,6 +1360,10 @@ export type LinkSocialAccountBody = {
   errorCallbackURL?: string;
   /** Disable automatic redirection to the provider. Useful for handling the redirection yourself */
   disableRedirect?: boolean;
+  /** The login hint to use for the authorization code request */
+  loginHint?: string;
+  /** Extra query parameters to append to the provider authorization URL (e.g. Cognito identity_provider, Google hd). */
+  additionalParams?: LinkSocialAccountBodyAdditionalParams;
   additionalData?: LinkSocialAccountBodyAdditionalData;
 };
 
@@ -1366,6 +1396,7 @@ export type ListUserAccounts200Item = {
   providerId: string;
   createdAt: string;
   updatedAt: string;
+  issuer: string;
   accountId: string;
   userId: string;
   scopes: string[];
@@ -1432,8 +1463,8 @@ export type DeleteUserCallback404 = {
 };
 
 export type UnlinkAccountBody = {
-  providerId: string;
-  accountId?: string;
+  /** The Better Auth account ID to unlink */
+  accountId: string;
 };
 
 export type UnlinkAccount200 = {
@@ -1456,14 +1487,19 @@ export type UnlinkAccount404 = {
   message?: string;
 };
 
-export type RefreshTokenBody = {
-  /** The provider ID for the OAuth provider */
-  providerId: string;
-  /** The account ID associated with the refresh token */
-  accountId?: string;
-  /** The user ID associated with the account */
-  userId?: string;
-};
+export type RefreshTokenBody =
+  | {
+      /** The Better Auth account ID */
+      accountId: string;
+      /** The user ID associated with the account */
+      userId?: string;
+    }
+  | {
+      /** Select the current OAuth account from its signed cookie */
+      useAccountCookie: true;
+      /** The user ID associated with the account */
+      userId?: string;
+    };
 
 export type RefreshToken200 = {
   tokenType?: string;
@@ -1486,14 +1522,19 @@ export type RefreshToken404 = {
   message?: string;
 };
 
-export type GetAccessTokenBody = {
-  /** The provider ID for the OAuth provider */
-  providerId: string;
-  /** The account ID associated with the refresh token */
-  accountId?: string;
-  /** The user ID associated with the account */
-  userId?: string;
-};
+export type GetAccessTokenBody =
+  | {
+      /** The Better Auth account ID */
+      accountId: string;
+      /** The user ID associated with the account */
+      userId?: string;
+    }
+  | {
+      /** Select the current OAuth account from its signed cookie */
+      useAccountCookie: true;
+      /** The user ID associated with the account */
+      userId?: string;
+    };
 
 export type GetAccessToken200 = {
   tokenType?: string;
@@ -1515,17 +1556,25 @@ export type GetAccessToken404 = {
 };
 
 export type AccountInfo200User = {
-  id: string;
   name?: string;
-  email?: string;
+  /** @nullable */
+  email?: string | null;
   image?: string;
   emailVerified: boolean;
+};
+
+export type AccountInfo200Account = {
+  id: string;
+  providerId: string;
+  issuer: string;
+  accountId: string;
 };
 
 export type AccountInfo200Data = { [key: string]: unknown };
 
 export type AccountInfo200 = {
   user: AccountInfo200User;
+  account: AccountInfo200Account;
   data: AccountInfo200Data;
 };
 
@@ -1734,6 +1783,22 @@ export type GetOrganization403 = {
 };
 
 export type GetOrganization404 = {
+  message?: string;
+};
+
+export type GetFullOrganization400 = {
+  message: string;
+};
+
+export type GetFullOrganization401 = {
+  message: string;
+};
+
+export type GetFullOrganization403 = {
+  message?: string;
+};
+
+export type GetFullOrganization404 = {
   message?: string;
 };
 
@@ -2234,12 +2299,9 @@ export type OrganizationRemoveTeam404 = {
 };
 
 export type OrganizationUpdateTeamBodyData = {
-  id?: string;
   /** @minLength 1 */
   name?: string;
   organizationId?: string;
-  createdAt?: string;
-  updatedAt?: string;
 };
 
 export type OrganizationUpdateTeamBody = {
