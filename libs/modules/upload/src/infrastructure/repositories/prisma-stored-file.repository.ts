@@ -73,10 +73,10 @@ export class PrismaStoredFileRepository implements StoredFileRepositoryPort {
     to: StoredFileStatus,
     fields?: StoredFileTransitionFields,
   ): Promise<boolean> {
-    const where =
-      to === STORED_FILE_STATUS.REJECTED
-        ? { id, status: from }
-        : { id, status: from, deletedAt: null };
+    const allowDeleted =
+      to === STORED_FILE_STATUS.REJECTED &&
+      (from === STORED_FILE_STATUS.FINALIZING || from === STORED_FILE_STATUS.VERIFYING);
+    const where = allowDeleted ? { id, status: from } : { id, status: from, deletedAt: null };
     const result = await this.run(
       (client) =>
         client.storedFile.updateMany({
@@ -94,10 +94,10 @@ export class PrismaStoredFileRepository implements StoredFileRepositoryPort {
     to: StoredFileStatus,
     fields?: StoredFileTransitionFields,
   ): Promise<boolean> {
-    const where =
-      to === STORED_FILE_STATUS.REJECTED
-        ? { key, status: from }
-        : { key, status: from, deletedAt: null };
+    const allowDeleted =
+      to === STORED_FILE_STATUS.REJECTED &&
+      (from === STORED_FILE_STATUS.FINALIZING || from === STORED_FILE_STATUS.VERIFYING);
+    const where = allowDeleted ? { key, status: from } : { key, status: from, deletedAt: null };
     const result = await this.run(
       (client) =>
         client.storedFile.updateMany({
