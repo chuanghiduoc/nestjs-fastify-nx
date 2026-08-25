@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService, type TransactionClient } from '@nestjs-fastify-nx/infra-database';
-import type { StoredFileStatus } from '@nestjs-fastify-nx/shared';
+import { STORED_FILE_STATUS, type StoredFileStatus } from '@nestjs-fastify-nx/shared';
 import { StoredFile, type StoredFileProps } from '../../domain/entities/stored-file.entity';
 import type {
   StoredFileRepositoryPort,
@@ -73,10 +73,14 @@ export class PrismaStoredFileRepository implements StoredFileRepositoryPort {
     to: StoredFileStatus,
     fields?: StoredFileTransitionFields,
   ): Promise<boolean> {
+    const where =
+      to === STORED_FILE_STATUS.REJECTED
+        ? { id, status: from }
+        : { id, status: from, deletedAt: null };
     const result = await this.run(
       (client) =>
         client.storedFile.updateMany({
-          where: { id, status: from, deletedAt: null },
+          where,
           data: { status: to, ...fields },
         }),
       { readOnly: false },
@@ -90,10 +94,14 @@ export class PrismaStoredFileRepository implements StoredFileRepositoryPort {
     to: StoredFileStatus,
     fields?: StoredFileTransitionFields,
   ): Promise<boolean> {
+    const where =
+      to === STORED_FILE_STATUS.REJECTED
+        ? { key, status: from }
+        : { key, status: from, deletedAt: null };
     const result = await this.run(
       (client) =>
         client.storedFile.updateMany({
-          where: { key, status: from, deletedAt: null },
+          where,
           data: { status: to, ...fields },
         }),
       { readOnly: false },

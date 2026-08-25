@@ -61,6 +61,24 @@ describe('PrismaStoredFileRepository — compare-and-set', () => {
     });
   });
 
+  it('allows transition to REJECTED even if the record was soft-deleted to ensure infected files are purged', async () => {
+    const { repository, storedFile } = build();
+
+    await repository.transitionByKey(
+      'k',
+      STORED_FILE_STATUS.VERIFYING,
+      STORED_FILE_STATUS.REJECTED,
+      {
+        failureReason: 'Malware detected',
+      },
+    );
+
+    expect(storedFile.updateMany).toHaveBeenCalledWith({
+      where: { key: 'k', status: STORED_FILE_STATUS.VERIFYING },
+      data: { status: STORED_FILE_STATUS.REJECTED, failureReason: 'Malware detected' },
+    });
+  });
+
   // Deleting by id alone would remove a row another execution had already moved on from.
   it('deletes only while the row still holds the expected status', async () => {
     const { repository, storedFile } = build();
