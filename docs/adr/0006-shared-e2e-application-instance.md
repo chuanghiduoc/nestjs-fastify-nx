@@ -27,9 +27,12 @@ Postgres refuses once the role holds grants.
 
 ## Decision
 
-**One worker, one module registry.** `vite.e2e.config.ts` sets
-`isolate: false` with `pool: 'threads'` and `poolOptions.threads.singleThread`.
-All spec files execute in a single worker that evaluates the module graph once.
+**One worker, one module registry.** `vite.e2e.config.ts` keeps
+`fileParallelism: false`, which pins `maxWorkers` to 1, and adds `isolate: false`
+with `pool: 'threads'`. All spec files execute in that single worker, which
+evaluates the module graph once. Vitest 4 removed `poolOptions`, so
+`poolOptions.threads.singleThread` is neither available nor needed —
+`fileParallelism: false` already delivers the single worker.
 
 **One application instance.** `createTestApp()` memoises the boot promise in
 module scope, which now survives across spec files. Specs no longer call
