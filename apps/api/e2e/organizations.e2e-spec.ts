@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import request from 'supertest';
 import { Client } from 'pg';
 import {
@@ -42,10 +42,6 @@ describe('Organizations E2E', () => {
   beforeAll(async () => {
     ctx = await createTestApp();
   }, 60_000);
-
-  afterAll(async () => {
-    await ctx.app.close();
-  });
 
   beforeEach(async () => {
     await ctx.cleaner.truncateAll();

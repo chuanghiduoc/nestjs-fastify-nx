@@ -31,6 +31,9 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
+        # Same trade as libs/testing's Testcontainers config: a CI database that is destroyed with
+        # the job has nothing to recover, so the WAL fsync on every TRUNCATE is pure cost.
+        command: postgres -c fsync=off -c synchronous_commit=off -c full_page_writes=off
 
       redis-cache:
         image: redis:8-alpine
@@ -69,6 +72,13 @@ jobs:
       REDIS_CACHE_PORT: 6379
       REDIS_QUEUE_HOST: localhost
       REDIS_QUEUE_PORT: 6380
+      # The e2e global setup boots its own Postgres + Redis through Testcontainers unless all three
+      # are supplied. This job already runs both as service containers, so pointing the suite at
+      # them removes a duplicate container startup from every run. Nothing else is shared: the
+      # suite still deploys migrations, provisions the NOBYPASSRLS role and truncates per test.
+      E2E_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/nestjs_test_db
+      E2E_REDIS_HOST: localhost
+      E2E_REDIS_PORT: 6379
       # Better Auth replaces the legacy JWT setup; only one secret is needed.
       BETTER_AUTH_SECRET: integration-better-auth-secret-min-32-chars-long
       STORAGE_ENDPOINT: http://localhost:9000
