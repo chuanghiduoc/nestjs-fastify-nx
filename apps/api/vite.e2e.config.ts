@@ -14,6 +14,9 @@ export default defineConfig({
     testTimeout: 120_000,
     hookTimeout: 120_000,
     fileParallelism: false,
+    // See docs/adr/0006-shared-e2e-application-instance.md
+    isolate: false,
+    pool: 'threads',
     reporters: ['default'],
     // Boot Postgres + Redis once for the entire e2e run; each spec calls
     // databaseCleaner.truncateAll() in beforeEach to maintain isolation.
