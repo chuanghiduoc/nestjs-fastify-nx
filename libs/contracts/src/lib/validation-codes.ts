@@ -46,6 +46,9 @@ export const VALIDATOR_CODES: Readonly<Record<string, keyof typeof I18N_KEYS.val
   whitelistValidation: 'unknown_field',
 };
 
+// Object.hasOwn, not `?? fallback`: a plain object literal reaches Object.prototype through index
+// access, so a rule named `constructor` or `toString` resolves to a prototype member instead of
+// undefined and slips past the nullish fallback as a non-code value.
 export function validatorToCode(rule: string): keyof typeof I18N_KEYS.validation {
-  return VALIDATOR_CODES[rule] ?? 'invalid_value';
+  return Object.hasOwn(VALIDATOR_CODES, rule) ? VALIDATOR_CODES[rule] : 'invalid_value';
 }
