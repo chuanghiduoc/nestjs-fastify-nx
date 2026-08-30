@@ -33,6 +33,7 @@ function roleFor(role: SystemRole) {
   // Owner and admin also administer the organization itself, which lives in Better Auth's own
   // statements; member-level roles get the application permissions only.
   const administers = role === SYSTEM_ROLES.OWNER || role === SYSTEM_ROLES.ADMIN;
+  const isOwner = role === SYSTEM_ROLES.OWNER;
   return organizationAccessControl.newRole({
     ...appPermissions,
     ...(administers
@@ -40,7 +41,7 @@ function roleFor(role: SystemRole) {
           member: [...(appPermissions['member'] ?? []), 'create', 'update', 'delete'],
           invitation: [...(appPermissions['invitation'] ?? []), 'create', 'cancel'],
           team: [...(appPermissions['team'] ?? []), 'create', 'update', 'delete'],
-          ac: ['create', 'read', 'update', 'delete'],
+          ac: isOwner ? ['create', 'read', 'update', 'delete'] : ['read'],
         }
       : {}),
   } as never);
