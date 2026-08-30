@@ -297,6 +297,13 @@ the status after the interceptor chain.
   back on error, leaving no committed side effect to duplicate.
 - **Invariant:** `IDEMPOTENCY_LOCK_TTL_SECONDS * 1000 > HTTP_REQUEST_TIMEOUT_MS` (validated
   on boot) so a finishing request always still owns its lock — preventing a lock-steal.
+- **Known gap — tenant context is outside the fingerprint.** The fingerprint covers
+  `method + url + body` only; the active organization lives server-side on the session row,
+  which the Fastify-layer plugin cannot see (it runs before the auth guard resolves the
+  membership). A retry sent after switching the active organization therefore replays the
+  previous organization's response instead of executing against the new one. Until this is
+  addressed (options: resolve the membership in the plugin, or add an org-changed marker to
+  the fingerprint), clients that switch organizations should rotate the Idempotency-Key.
 
 **Request timeout** — a global `TimeoutInterceptor` (`HTTP_REQUEST_TIMEOUT_MS`, default
 30s) aborts a handler that runs too long with `504 request_timeout`. WebSocket handlers

@@ -439,6 +439,27 @@ describe('registerIdempotency', () => {
     expect(res.json().code).toBe('idempotency_key_mismatch');
   });
 
+  it('replays across an active-organization switch because tenant context is outside the fingerprint', async () => {
+    const { app, callCount } = await buildApp(redis);
+    const sessionCookie = { cookie: 'better-auth.session_token=test-session-1' };
+
+    await app.inject({
+      method: 'POST',
+      url: '/api/v1/echo',
+      headers: { ...KEY_HEADER, ...sessionCookie, 'x-active-organization-id': 'org-a' },
+      payload: { a: 1 },
+    });
+    const second = await app.inject({
+      method: 'POST',
+      url: '/api/v1/echo',
+      headers: { ...KEY_HEADER, ...sessionCookie, 'x-active-organization-id': 'org-b' },
+      payload: { a: 1 },
+    });
+
+    expect(second.headers['idempotent-replayed']).toBe('true');
+    expect(callCount()).toBe(1);
+  });
+
   it('returns 409 while an identical request is still in flight', async () => {
     const errors: string[] = [];
     let release!: () => void;
