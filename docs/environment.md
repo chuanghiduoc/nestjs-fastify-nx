@@ -230,18 +230,19 @@ safe because command handlers roll back their transaction on error.
 
 ## Eventing & Outbox
 
-| Variable                   | Default     | Required | Description                                                                                                                                                                                  |
-| -------------------------- | ----------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `EVENT_PUBLISHER_DRIVER`   | `inprocess` | No       | `inprocess` (EventEmitter2) or `outbox` (Postgres outbox + scheduler relay)                                                                                                                  |
-| `OUTBOX_TX_TIMEOUT_MS`     | `30000`     | No       | Outbox interactive tx timeout (30 sec); increase if events hang in publish                                                                                                                   |
-| `OUTBOX_POLL_INTERVAL_MS`  | `1000`      | No       | Relay polling cadence                                                                                                                                                                        |
-| `OUTBOX_BATCH_SIZE`        | `50`        | No       | Max events relayed per poll                                                                                                                                                                  |
-| `OUTBOX_MAX_ATTEMPTS`      | `10`        | No       | Retry budget before an event is parked                                                                                                                                                       |
-| `OUTBOX_RETRY_BASE_MS`     | `2000`      | No       | Backoff base. A failed row waits `min(BASE × 2^attempts, MAX)`, where `attempts` is the **pre-increment** count — so the wait after the Nth attempt is `BASE × 2^(N-1)`                      |
-| `OUTBOX_RETRY_MAX_MS`      | `300000`    | No       | Backoff cap (5 min). At the defaults the 1st and 10th attempts are **~13.5 min** apart instead of ~10 s. The delay stamped by the 10th attempt is never consumed — the row is already parked |
-| `OUTBOX_RETENTION_DAYS`    | `7`         | No       | Age after which a **processed** row is hard-deleted (03:15 UTC). Unprocessed rows are never purged by this cron                                                                              |
-| `OUTBOX_PURGE_BATCH_SIZE`  | `1000`      | No       | Rows deleted per purge batch                                                                                                                                                                 |
-| `OUTBOX_PURGE_MAX_BATCHES` | `200`       | No       | Batches per purge run — the cap is `BATCH_SIZE × MAX_BATCHES` rows/night                                                                                                                     |
+| Variable                       | Default     | Required | Description                                                                                                                                                                                  |
+| ------------------------------ | ----------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `EVENT_PUBLISHER_DRIVER`       | `inprocess` | No       | `inprocess` (EventEmitter2) or `outbox` (Postgres outbox + scheduler relay)                                                                                                                  |
+| `OUTBOX_TX_TIMEOUT_MS`         | `30000`     | No       | Outbox interactive tx timeout (30 sec); increase if events hang in publish                                                                                                                   |
+| `OUTBOX_POLL_INTERVAL_MS`      | `1000`      | No       | Relay polling cadence                                                                                                                                                                        |
+| `OUTBOX_BATCH_SIZE`            | `50`        | No       | Max events relayed per poll                                                                                                                                                                  |
+| `OUTBOX_MAX_ATTEMPTS`          | `10`        | No       | Retry budget before an event is parked                                                                                                                                                       |
+| `OUTBOX_RETRY_BASE_MS`         | `2000`      | No       | Backoff base. A failed row waits `min(BASE × 2^attempts, MAX)`, where `attempts` is the **pre-increment** count — so the wait after the Nth attempt is `BASE × 2^(N-1)`                      |
+| `OUTBOX_RETRY_MAX_MS`          | `300000`    | No       | Backoff cap (5 min). At the defaults the 1st and 10th attempts are **~13.5 min** apart instead of ~10 s. The delay stamped by the 10th attempt is never consumed — the row is already parked |
+| `OUTBOX_RETENTION_DAYS`        | `7`         | No       | Age after which a **processed** row is hard-deleted (03:15 UTC). Rows still inside their retry budget are never touched by this cron                                                         |
+| `OUTBOX_PARKED_RETENTION_DAYS` | `30`        | No       | Age after which a **parked** row (attempts exhausted, never delivered) is dropped by the 03:50 UTC cron, logging `eventType`/`lastError`. Clamped at runtime to ≥ `OUTBOX_RETENTION_DAYS`    |
+| `OUTBOX_PURGE_BATCH_SIZE`      | `1000`      | No       | Rows deleted per purge batch                                                                                                                                                                 |
+| `OUTBOX_PURGE_MAX_BATCHES`     | `200`       | No       | Batches per purge run — the cap is `BATCH_SIZE × MAX_BATCHES` rows/night                                                                                                                     |
 
 ## Scheduler cleanup
 
@@ -255,7 +256,10 @@ safe because command handlers roll back their transaction on error.
 | `STORED_FILE_CLEANUP_BATCH_SIZE`       | `500`   | Stored-file lifecycle records scanned per hour   |
 | `STORED_FILE_FINALIZING_STALE_MINUTES` | `60`    | FINALIZING age considered abandoned              |
 | `STORED_FILE_VERIFYING_STALE_HOURS`    | `24`    | VERIFYING age considered abandoned               |
+| `STORED_FILE_REJECTED_RETAIN_HOURS`    | `72`    | REJECTED row retained after its bytes are purged |
 | `STORED_FILE_ORPHAN_GRACE_MINUTES`     | `60`    | Grace before an owner-deleted file is reclaimed  |
+| `STORED_FILE_PURGE_AFTER_DAYS`         | `30`    | Recovery window before a soft-deleted file dies  |
+| `STORED_FILE_PURGE_MAX_BATCHES`        | `200`   | Maximum retention purge batches per run          |
 | `VERIFICATION_PURGE_GRACE_DAYS`        | `1`     | Age past `expiresAt` before a token is deleted   |
 | `VERIFICATION_PURGE_BATCH_SIZE`        | `1000`  | Verification rows deleted per batch              |
 | `VERIFICATION_PURGE_MAX_BATCHES`       | `200`   | Maximum verification purge batches per run       |

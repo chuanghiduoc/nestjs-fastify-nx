@@ -197,6 +197,14 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
     return this.readTransactionContext.getStore();
   }
 
+  writeTarget(): TransactionClient {
+    return this.currentTransaction ?? this.db;
+  }
+
+  readTarget(): TransactionClient {
+    return this.currentTransaction ?? this.currentReadTransaction ?? this.dbRead;
+  }
+
   get hasTenantContext(): boolean {
     return this.resolveOrganizationId() !== undefined;
   }
@@ -240,13 +248,12 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
     const readOnly = options?.readOnly === true;
     const limits = { maxWait: options?.maxWait, timeout: options?.timeout };
 
-    // A write must never join a replica transaction, so only a read may fall back to one.
-    const active = readOnly
+    const activeClient = readOnly
       ? (this.transactionContext.getStore() ?? this.readTransactionContext.getStore())
       : this.transactionContext.getStore();
-    if (active) {
-      await this.bindTenant(active, organizationId);
-      return fn(active);
+    if (activeClient) {
+      await this.bindTenant(activeClient, organizationId);
+      return fn(activeClient);
     }
 
     if (!readOnly || !this._hasReplica) {

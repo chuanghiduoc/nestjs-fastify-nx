@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { PERMISSIONS, RESOURCE_TYPES, SYSTEM_ROLES } from '@nestjs-fastify-nx/shared';
 import { applyAccessFilter, type AuthorizationPort, type Principal } from '@nestjs-fastify-nx/core';
+import { DENIAL_REASONS } from './access-policy';
 
 export const CONFORMANCE_IDS = {
   orgA: '019dd1a5-9235-70db-8d57-54ef90100001',
@@ -71,6 +72,31 @@ export function describeAuthorizationConformance(harness: ConformanceHarness): v
         PERMISSIONS.ORGANIZATION_READ,
       );
       expect(decision.allowed).toBe(false);
+      expect(decision.reason).toBe(DENIAL_REASONS.notAMember);
+    });
+
+    it('reports non-membership ahead of a cross-organization resource', async () => {
+      const decision = await authorization.check(
+        userPrincipal(CONFORMANCE_IDS.outsider, CONFORMANCE_IDS.orgA),
+        PERMISSIONS.FILE_READ,
+        {
+          type: RESOURCE_TYPES.FILE,
+          id: CONFORMANCE_IDS.file,
+          organizationId: CONFORMANCE_IDS.orgB,
+        },
+      );
+      expect(decision).toEqual({ allowed: false, reason: DENIAL_REASONS.notAMember });
+    });
+
+    it('reports the same reason from check and checkMany', async () => {
+      const principal = userPrincipal(CONFORMANCE_IDS.viewer, CONFORMANCE_IDS.orgA);
+      const single = await authorization.check(principal, PERMISSIONS.ORGANIZATION_DELETE);
+      const [batched] = await authorization.checkMany(principal, [
+        { permission: PERMISSIONS.ORGANIZATION_DELETE },
+      ]);
+
+      expect(single).toEqual({ allowed: false, reason: DENIAL_REASONS.permissionNotGranted });
+      expect(batched).toEqual(single);
     });
 
     // A role held in one organization must never carry into another — the failure mode that turns
@@ -93,7 +119,7 @@ export function describeAuthorizationConformance(harness: ConformanceHarness): v
           organizationId: CONFORMANCE_IDS.orgB,
         },
       );
-      expect(decision.allowed).toBe(false);
+      expect(decision).toEqual({ allowed: false, reason: DENIAL_REASONS.crossOrganization });
     });
 
     it('lets an owner-scoped permission through for the resource the caller owns', async () => {

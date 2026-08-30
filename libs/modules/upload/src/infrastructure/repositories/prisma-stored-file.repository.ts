@@ -29,10 +29,10 @@ export class PrismaStoredFileRepository implements StoredFileRepositoryPort {
     fn: (client: TransactionClient) => Promise<R>,
     options: { readOnly: boolean },
   ): Promise<R> {
-    const active = options.readOnly
+    const joined = options.readOnly
       ? (this.prisma.currentTransaction ?? this.prisma.currentReadTransaction)
       : this.prisma.currentTransaction;
-    if (active) return fn(active);
+    if (joined) return fn(joined);
     if (!this.prisma.hasTenantContext) {
       return fn(options.readOnly ? this.prisma.dbRead : this.prisma.db);
     }

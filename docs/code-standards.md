@@ -292,9 +292,12 @@ the status after the interceptor chain.
   key → `400 idempotency_key_invalid`.
 - Scope: the store key hashes the session token (or client IP for anonymous) with the
   key, so principals never read each other's cached response.
-- **Fail-open** on a Redis error (mirrors the throttler). Non-2xx responses release the
-  lock so the client may retry — safe because command handlers roll their transaction
-  back on error, leaving no committed side effect to duplicate.
+- **Fail-open** on a Redis error (mirrors the throttler). A **4xx** releases the lock so the
+  client may retry — it was rejected before the handler could commit anything. A **5xx keeps
+  the record pending until its TTL**, so a retry gets `409` instead: a 500 says nothing about
+  whether the mutation committed (a post-commit step, an in-process listener, or the response
+  mapping can throw after the write landed), and releasing the lock would invite the retry that
+  duplicates it. A `504` is the most visible case of the same uncertainty, not a special one.
 - **Invariant:** `IDEMPOTENCY_LOCK_TTL_SECONDS * 1000 > HTTP_REQUEST_TIMEOUT_MS` (validated
   on boot) so a finishing request always still owns its lock — preventing a lock-steal.
 - **Known gap — tenant context is outside the fingerprint.** The fingerprint covers

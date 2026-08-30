@@ -10,12 +10,25 @@ import type { CqrsMetricsRecorder } from './cqrs-metrics-recorder.port';
 // this static holder is the DI-free equivalent of nestjs-cls's ClsServiceManager.
 export class CqrsMetricsRecorderHolder {
   private static recorder: CqrsMetricsRecorder | undefined;
+  private static sealed = false;
 
   static set(recorder: CqrsMetricsRecorder | undefined): void {
+    if (CqrsMetricsRecorderHolder.sealed && CqrsMetricsRecorderHolder.recorder !== recorder) {
+      throw new Error(
+        'CqrsMetricsRecorderHolder already initialized with a different recorder — ' +
+          'multiple CqrsInstrumentationInitializer instances in one process?',
+      );
+    }
+    CqrsMetricsRecorderHolder.sealed = true;
     CqrsMetricsRecorderHolder.recorder = recorder;
   }
 
   static get(): CqrsMetricsRecorder | undefined {
     return CqrsMetricsRecorderHolder.recorder;
+  }
+
+  static reset(): void {
+    CqrsMetricsRecorderHolder.recorder = undefined;
+    CqrsMetricsRecorderHolder.sealed = false;
   }
 }

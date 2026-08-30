@@ -8,6 +8,10 @@
     ".": {
       "types": "./src/index.ts",
       "default": "./src/index.ts"
+    },
+    "./testing": {
+      "types": "./src/index.testing.ts",
+      "default": "./src/index.testing.ts"
     }
   },
   "devDependencies": {

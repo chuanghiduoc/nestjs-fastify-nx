@@ -74,7 +74,7 @@ describe('ListUsersCursorHandler', () => {
     expect(page1.hasMore).toBe(true);
 
     const page2 = await handler.execute(
-      new ListUsersCursorQuery(ORG_ID, 3, page1.lastCursor ?? undefined),
+      new ListUsersCursorQuery(ORG_ID, 3, { startingAfter: page1.lastCursor ?? undefined }),
     );
 
     const page1Ids = new Set(page1.data.map((u) => u.id));
@@ -90,7 +90,7 @@ describe('ListUsersCursorHandler', () => {
     // Asserted on the domain kind, not an HTTP status: this layer runs under REST, GraphQL and the
     // scheduler, and only the transport knows that `malformed` means 400.
     await expect(
-      handler.execute(new ListUsersCursorQuery(ORG_ID, 10, '!!!invalid!!!')),
+      handler.execute(new ListUsersCursorQuery(ORG_ID, 10, { startingAfter: '!!!invalid!!!' })),
     ).rejects.toMatchObject({ kind: 'malformed', code: 'invalid_cursor', permanent: true });
   });
 

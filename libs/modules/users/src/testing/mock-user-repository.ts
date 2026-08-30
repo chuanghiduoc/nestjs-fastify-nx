@@ -61,10 +61,6 @@ export class MockUserRepository implements UserRepositoryPort {
     return Promise.resolve();
   }
 
-  exists(email: string): Promise<boolean> {
-    return Promise.resolve([...this.store.values()].some((u) => u.email.toString() === email));
-  }
-
   clear(): void {
     this.store.clear();
   }

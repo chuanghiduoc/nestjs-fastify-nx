@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import { PERMISSIONS, STORED_FILE_STATUS, SYSTEM_ROLES } from '@nestjs-fastify-nx/shared';
 import { isDomainException, type AuthorizationPort } from '@nestjs-fastify-nx/core';
-import { InMemoryAuthorizationAdapter } from '@nestjs-fastify-nx/infra-authorization';
+import { InMemoryAuthorizationAdapter } from '@nestjs-fastify-nx/infra-authorization/testing';
 import { StoredFile } from '../../../domain/entities/stored-file.entity';
 import type { StoredFileRepositoryPort } from '../../../domain/ports/stored-file-repository.port';
 import { DeleteUploadCommand } from './delete-upload.command';

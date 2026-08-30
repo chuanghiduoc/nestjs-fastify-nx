@@ -2,7 +2,7 @@ import { Injectable, Logger, type OnApplicationShutdown } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { Queue } from 'bullmq';
 import { ConfigService } from '@nestjs/config';
-import { dlqNameFor, routeFailedJobToDlq } from '@nestjs-fastify-nx/infra-redis';
+import { dlqJobIdFor, dlqNameFor, routeFailedJobToDlq } from '@nestjs-fastify-nx/infra-redis';
 import { QUEUE_NAMES, positiveIntEnv } from '@nestjs-fastify-nx/shared';
 import { SchedulerLeaderService } from '../leadership/scheduler-leader.service';
 
@@ -76,42 +76,52 @@ export class DlqMonitorTask implements OnApplicationShutdown {
     if (!this.leadership.isLeader() || this.reconcileRunning) return;
     this.reconcileRunning = true;
     try {
-      for (const { source, dlq } of this.pairs) {
-        let failed: Awaited<ReturnType<Queue['getFailed']>>;
-        try {
-          failed = await source.getFailed(0, RECONCILE_SCAN_LIMIT - 1);
-        } catch (err) {
-          this.logger.error({ err, queue: source.name }, 'DLQ reconcile scan failed');
-          continue;
-        }
-        // No silent cap: if the failed set fills the scan window, older/newer entries beyond it are
-        // not reconciled this tick. Surfaces the invariant (keep removeOnFail.count <= this limit).
-        if (failed.length >= RECONCILE_SCAN_LIMIT) {
-          this.logger.warn(
-            `DLQ reconcile hit the ${RECONCILE_SCAN_LIMIT}-job scan window for "${source.name}"; a larger failed backlog may not be fully reconciled`,
-          );
-        }
-        for (const job of failed) {
-          if (job.id === undefined) continue;
-          const jobId = String(job.id);
-          const alreadyRouted = await dlq.getJob(`dlq__${jobId}`).catch(() => undefined);
-          if (alreadyRouted) continue;
-          try {
-            await routeFailedJobToDlq(
-              source,
-              dlq,
-              { jobId, failedReason: job.failedReason ?? 'reconciled: missed failed event' },
-              this.logger,
-            );
-          } catch (err) {
-            // Guarded per job, like the scan above: one unroutable job must not abandon the rest of
-            // this queue — nor every queue still queued behind it — until the next tick.
-            this.logger.error({ err, queue: source.name, jobId }, 'DLQ reconcile route failed');
-          }
-        }
-      }
+      await Promise.all(this.pairs.map(({ source, dlq }) => this.reconcilePair(source, dlq)));
     } finally {
       this.reconcileRunning = false;
+    }
+  }
+
+  private async reconcilePair(source: Queue, dlq: Queue): Promise<void> {
+    let failed: Awaited<ReturnType<Queue['getFailed']>>;
+    try {
+      failed = await source.getFailed(0, RECONCILE_SCAN_LIMIT - 1);
+    } catch (err) {
+      this.logger.error({ err, queue: source.name }, 'DLQ reconcile scan failed');
+      return;
+    }
+    // No silent cap: if the failed set fills the scan window, older/newer entries beyond it are
+    // not reconciled this tick. Surfaces the invariant (keep removeOnFail.count <= this limit).
+    if (failed.length >= RECONCILE_SCAN_LIMIT) {
+      this.logger.warn(
+        `DLQ reconcile hit the ${RECONCILE_SCAN_LIMIT}-job scan window for "${source.name}"; a larger failed backlog may not be fully reconciled`,
+      );
+    }
+    const candidates = failed.flatMap((job) =>
+      job.id === undefined ? [] : [{ jobId: String(job.id), failedReason: job.failedReason }],
+    );
+
+    let alreadyRouted: Set<string>;
+    try {
+      const present = await Promise.all(candidates.map((c) => dlq.getJob(dlqJobIdFor(c.jobId))));
+      alreadyRouted = new Set(candidates.filter((_, i) => present[i]).map((c) => c.jobId));
+    } catch (err) {
+      this.logger.warn({ err, queue: source.name }, 'DLQ reconcile bulk pre-check failed');
+      alreadyRouted = new Set();
+    }
+
+    for (const { jobId, failedReason } of candidates) {
+      if (alreadyRouted.has(jobId)) continue;
+      try {
+        await routeFailedJobToDlq(
+          source,
+          dlq,
+          { jobId, failedReason: failedReason ?? 'reconciled: missed failed event' },
+          this.logger,
+        );
+      } catch (err) {
+        this.logger.error({ err, queue: source.name, jobId }, 'DLQ reconcile route failed');
+      }
     }
   }
 

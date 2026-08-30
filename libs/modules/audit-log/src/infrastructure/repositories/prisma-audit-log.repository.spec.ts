@@ -27,6 +27,9 @@ function buildRepository(createImpl: () => Promise<unknown>) {
         create: vi.fn().mockImplementation(createImpl),
       },
     },
+    writeTarget: vi.fn(function (this: { db: unknown }) {
+      return this.db;
+    }),
   } as unknown as PrismaService;
   return new PrismaAuditLogRepository(prisma);
 }

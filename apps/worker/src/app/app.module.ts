@@ -6,11 +6,13 @@ import { DeadLetterModule, RedisQueueModule } from '@nestjs-fastify-nx/infra-red
 import { StorageModule } from '@nestjs-fastify-nx/infra-storage';
 import { DatabaseModule } from '@nestjs-fastify-nx/infra-database';
 import { QUEUE_NAMES } from '@nestjs-fastify-nx/shared';
-import { buildPinoLoggerConfig } from '@nestjs-fastify-nx/infra-observability';
+import {
+  LivenessProbeService,
+  buildPinoLoggerConfig,
+} from '@nestjs-fastify-nx/infra-observability';
 import { UploadVerificationModule } from '@nestjs-fastify-nx/modules-upload';
 import { EmailNotificationProcessor } from './processors/email-notification.processor';
 import { UploadVerificationProcessor } from './processors/upload-verification.processor';
-import { WorkerHealthService } from './health/worker-health.service';
 import { MailModule } from './mail/mail.module';
 import { validateWorkerConfig } from '../config/env.validation';
 import { MalwareScannerModule } from './security/malware-scanner.module';
@@ -33,6 +35,14 @@ import { MalwareScannerModule } from './security/malware-scanner.module';
     DeadLetterModule.forFeature(QUEUE_NAMES.UPLOAD_VERIFICATION),
     MailModule,
   ],
-  providers: [EmailNotificationProcessor, UploadVerificationProcessor, WorkerHealthService],
+  providers: [
+    EmailNotificationProcessor,
+    UploadVerificationProcessor,
+    {
+      provide: LivenessProbeService,
+      useFactory: () =>
+        new LivenessProbeService({ probeFile: '/tmp/worker-alive', name: 'Worker' }),
+    },
+  ],
 })
 export class AppModule {}

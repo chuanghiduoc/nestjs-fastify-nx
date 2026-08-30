@@ -3,6 +3,7 @@ import type { Socket } from 'socket.io';
 import { fromNodeHeaders } from 'better-auth/node';
 import proxyaddr from 'proxy-addr';
 import type { BetterAuthInstance } from '@nestjs-fastify-nx/infra-auth';
+import { USER_STATUS } from '@nestjs-fastify-nx/shared';
 import type Redis from 'ioredis';
 import { extractBearerToken } from '../common/http/bearer-token';
 
@@ -142,7 +143,7 @@ export async function revalidateWsSession(auth: BetterAuthInstance, socket: Sock
     role: string;
     status: string;
   };
-  if (user.status !== 'ACTIVE') {
+  if (user.status !== USER_STATUS.ACTIVE) {
     throw wsPublicError('UNAUTHORIZED: Account not active');
   }
 

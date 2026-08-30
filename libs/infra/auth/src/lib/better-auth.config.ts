@@ -9,15 +9,30 @@ import { resolveRequestLocale, translateOrFallback } from '@nestjs-fastify-nx/in
 import { usesSecureCookies } from './session-cookie';
 import { organizationAccessControl, organizationRoles } from './organization-access-control';
 import { I18N_KEYS } from '@nestjs-fastify-nx/contracts';
-import { generateId } from '@nestjs-fastify-nx/shared';
+import {
+  EMAIL_TEMPLATES,
+  PLATFORM_ROLES,
+  SYSTEM_ROLES,
+  USER_STATUS,
+  generateId,
+  type EmailTemplate,
+} from '@nestjs-fastify-nx/shared';
 export interface AuthMailDispatcher {
-  send(opts: { to: string; subject: string; body: string; templateId?: string }): Promise<void>;
+  send(opts: {
+    to: string;
+    subject: string;
+    body: string;
+    templateId?: EmailTemplate;
+  }): Promise<void>;
 }
 
 const logger = new Logger('BetterAuth');
 
 const INVITATION_EXPIRES_IN_SECONDS = 60 * 60 * 48;
-const ORGANIZATION_OWNER_ROLE = 'owner';
+
+const SESSION_EXPIRES_IN_SECONDS = 7 * 24 * 60 * 60;
+const SESSION_UPDATE_AGE_SECONDS = 24 * 60 * 60;
+const SESSION_COOKIE_CACHE_MAX_AGE_SECONDS = 5 * 60;
 
 export async function ensurePersonalOrganization(
   prisma: PrismaClient,
@@ -53,7 +68,7 @@ export async function ensurePersonalOrganization(
       select: { id: true },
     });
     await tx.member.create({
-      data: { organizationId: organization.id, userId, role: ORGANIZATION_OWNER_ROLE },
+      data: { organizationId: organization.id, userId, role: SYSTEM_ROLES.OWNER },
       select: { id: true },
     });
     return organization.id;
@@ -135,7 +150,7 @@ export function createBetterAuth(
           to: user.email,
           subject,
           body,
-          templateId: 'password-reset',
+          templateId: EMAIL_TEMPLATES.PASSWORD_RESET,
         });
       },
     },
@@ -154,16 +169,16 @@ export function createBetterAuth(
           to: user.email,
           subject,
           body,
-          templateId: 'email-verification',
+          templateId: EMAIL_TEMPLATES.EMAIL_VERIFICATION,
         });
       },
     },
     session: {
-      expiresIn: 60 * 60 * 24 * 7,
-      updateAge: 60 * 60 * 24,
+      expiresIn: SESSION_EXPIRES_IN_SECONDS,
+      updateAge: SESSION_UPDATE_AGE_SECONDS,
       cookieCache: {
         enabled: true,
-        maxAge: 5 * 60,
+        maxAge: SESSION_COOKIE_CACHE_MAX_AGE_SECONDS,
       },
     },
     databaseHooks: {
@@ -178,8 +193,8 @@ export function createBetterAuth(
     },
     user: {
       additionalFields: {
-        role: { type: 'string', defaultValue: 'USER', input: false },
-        status: { type: 'string', defaultValue: 'ACTIVE', input: false },
+        role: { type: 'string', defaultValue: PLATFORM_ROLES.USER, input: false },
+        status: { type: 'string', defaultValue: USER_STATUS.ACTIVE, input: false },
       },
       changeEmail: {
         enabled: true,
@@ -200,7 +215,7 @@ export function createBetterAuth(
             to: user.email,
             subject,
             body,
-            templateId: 'email-change-confirmation',
+            templateId: EMAIL_TEMPLATES.EMAIL_CHANGE_CONFIRMATION,
           });
         },
       },
@@ -220,7 +235,7 @@ export function createBetterAuth(
             to: user.email,
             subject,
             body,
-            templateId: 'account-deletion',
+            templateId: EMAIL_TEMPLATES.ACCOUNT_DELETION,
           });
         },
       },
@@ -280,7 +295,7 @@ export function createBetterAuth(
             to: data.email,
             subject,
             body,
-            templateId: 'organization-invitation',
+            templateId: EMAIL_TEMPLATES.ORGANIZATION_INVITATION,
           });
         },
       }),

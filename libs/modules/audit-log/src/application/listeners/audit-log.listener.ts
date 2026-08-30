@@ -17,17 +17,17 @@ export class AuditLogListener {
 
     // Errors propagate to EventBusService.publish; outbox relay marks lastError, in-process aborts the handler.
     await this.commandBus.execute(
-      new RecordAuditLogCommand(
-        event.eventId,
-        event.organizationId ?? null,
-        event.aggregateId,
-        event.eventType,
-        'user',
-        { ...metadata, eventId: event.eventId },
-        typeof ip === 'string' ? ip : null,
-        typeof userAgent === 'string' ? userAgent : null,
-        event.occurredAt,
-      ),
+      new RecordAuditLogCommand({
+        eventId: event.eventId,
+        organizationId: event.organizationId ?? null,
+        userId: event.aggregateId,
+        action: event.eventType,
+        resource: 'user',
+        metadata: { ...metadata, eventId: event.eventId },
+        ipAddress: typeof ip === 'string' ? ip : null,
+        userAgent: typeof userAgent === 'string' ? userAgent : null,
+        occurredAt: event.occurredAt,
+      }),
     );
   }
 
@@ -42,22 +42,22 @@ export class AuditLogListener {
     const { userId: memberUserId, ...metadata } = event.payload;
 
     await this.commandBus.execute(
-      new RecordAuditLogCommand(
-        event.eventId,
-        event.organizationId ?? event.aggregateId,
-        null,
-        event.eventType,
-        'organization',
-        {
+      new RecordAuditLogCommand({
+        eventId: event.eventId,
+        organizationId: event.organizationId ?? event.aggregateId,
+        userId: null,
+        action: event.eventType,
+        resource: 'organization',
+        metadata: {
           ...metadata,
           ...(typeof memberUserId === 'string' ? { memberUserId } : {}),
           eventId: event.eventId,
           organizationId: event.aggregateId,
         },
-        null,
-        null,
-        event.occurredAt,
-      ),
+        ipAddress: null,
+        userAgent: null,
+        occurredAt: event.occurredAt,
+      }),
     );
   }
 }

@@ -203,7 +203,8 @@ describe('OutboxRelayService', () => {
     expect(bus.publish).toHaveBeenCalledOnce();
     expect(dbExecuteCalls).toHaveLength(2);
     expect(dbExecuteCalls[0].sql).toMatch(/lastError/);
-    expect(dbExecuteCalls[0].args[0]).toBe('Invalid outbox payload envelope');
+    expect(String(dbExecuteCalls[0].args[0])).toMatch(/^Invalid outbox payload envelope — /);
+    expect(String(dbExecuteCalls[0].args[0])).toContain('received null');
     expect(dbExecuteCalls[1].sql).toMatch(/processedAt/);
   });
 

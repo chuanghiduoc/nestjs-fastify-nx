@@ -12,9 +12,7 @@ export class PrismaAuditLogRepository implements AuditLogRepositoryPort {
 
   async append(entry: AuditLog): Promise<void> {
     try {
-      // Participate in an open interactive transaction (currentTransaction) so an append issued inside
-      // prisma.transaction(...) commits atomically with it; otherwise the primary. Mirrors OutboxPublisher.
-      const client = this.prisma.currentTransaction ?? this.prisma.db;
+      const client = this.prisma.writeTarget();
       await client.auditLog.create({
         data: {
           id: entry.id,

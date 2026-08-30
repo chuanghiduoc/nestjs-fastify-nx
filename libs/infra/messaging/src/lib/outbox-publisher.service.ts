@@ -4,11 +4,12 @@ import type { Prisma } from '@nestjs-fastify-nx/infra-database';
 import type { DomainEvent, EventPublisherPort } from '@nestjs-fastify-nx/core';
 import { generateId } from '@nestjs-fastify-nx/shared';
 import { OUTBOX_SCHEMA_VERSION } from './outbox-schema-version';
+import type { OutboxEnvelope } from './outbox-envelope';
 
 interface OutboxPayload extends Prisma.InputJsonObject {
-  schemaVersion: number;
-  eventId: string;
-  occurredAt: string;
+  schemaVersion: OutboxEnvelope['schemaVersion'];
+  eventId: OutboxEnvelope['eventId'];
+  occurredAt: OutboxEnvelope['occurredAt'];
   payload: Prisma.InputJsonValue;
 }
 

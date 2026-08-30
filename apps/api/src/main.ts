@@ -11,15 +11,10 @@ import { fastifyHelmet } from '@fastify/helmet';
 import fastifyRateLimit from '@fastify/rate-limit';
 import fastifyCompress from '@fastify/compress';
 import fastifyUnderPressure from '@fastify/under-pressure';
-import { Redis } from 'ioredis';
 import { createHash } from 'node:crypto';
 import { toNodeHandler } from 'better-auth/node';
 import { BETTER_AUTH_INSTANCE, type BetterAuthInstance } from '@nestjs-fastify-nx/infra-auth';
-import {
-  positiveIntEnv,
-  redisReconnectStrategy,
-  sanitizeUrlForLogging,
-} from '@nestjs-fastify-nx/shared';
+import { positiveIntEnv, sanitizeUrlForLogging } from '@nestjs-fastify-nx/shared';
 import { ERROR_CODES } from '@nestjs-fastify-nx/contracts';
 import { reportFatalError, startSentry } from '@nestjs-fastify-nx/infra-observability';
 import { AppModule } from './app/app.module';
@@ -28,6 +23,7 @@ import { ProblemDetailsValidationPipe } from './common/pipes';
 import { setupSwagger } from './common/swagger/swagger.config';
 import { createBullBoardPlugin } from './common/bull-board/create-bull-board-plugin';
 import { registerIdempotency } from './common/idempotency/register-idempotency';
+import { REDIS_DB, createApiRedis } from './common/redis/api-redis.factory';
 import { redisFixedWindowIncr } from './common/rate-limit/redis-fixed-window';
 import { flushBufferedReplyHeaders } from './common/http/flush-reply-headers';
 import { resolveTrustedProxies } from './common/http/trusted-proxies';
@@ -51,6 +47,11 @@ const BULL_BOARD_CSP =
   "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'self'; " +
   "script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; " +
   "img-src 'self' data: https:; font-src 'self' https: data:; connect-src 'self'";
+
+const CORS_PREFLIGHT_MAX_AGE_SECONDS = 600;
+const HSTS_MAX_AGE_SECONDS = 2 * 365 * 24 * 60 * 60;
+const RETRY_AFTER_OVERLOAD_SECONDS = 10;
+const RETRY_AFTER_AUTH_UNAVAILABLE_SECONDS = 5;
 
 startSentry({ serviceName: 'nestjs-fastify-api', profiling: true });
 
@@ -115,7 +116,7 @@ async function bootstrap() {
       'X-Correlation-Id',
     ],
     exposedHeaders: ['Idempotent-Replayed', 'X-Request-Id', 'X-Correlation-Id'],
-    maxAge: 600,
+    maxAge: CORS_PREFLIGHT_MAX_AGE_SECONDS,
   });
 
   // CSP is disabled in dev so Scalar/Bull Board load freely. In prod the JSON API surface gets a
@@ -144,7 +145,7 @@ async function bootstrap() {
         }
       : false,
     hsts: {
-      maxAge: 63072000,
+      maxAge: HSTS_MAX_AGE_SECONDS,
       includeSubDomains: true,
       preload: true,
     },
@@ -165,18 +166,14 @@ async function bootstrap() {
     });
   }
 
-  // Idempotency-Key replay for mutating /api/v1/* writes (Stripe pattern). Registered before
-  // @fastify/compress so its onSend hook stores the uncompressed JSON body. db=5 isolates the
-  // keyspace from cache (0), throttler (1), and rate-limit (4). Fail-open on a Redis error.
   if (config.get('IDEMPOTENCY_ENABLED', { infer: true })) {
-    const idempotencyRedis = new Redis({
-      host: config.get('REDIS_CACHE_HOST', { infer: true }),
-      port: config.get('REDIS_CACHE_PORT', { infer: true }),
-      db: 5,
-      maxRetriesPerRequest: 1,
-      retryStrategy: redisReconnectStrategy,
-      enableOfflineQueue: false,
-    });
+    const idempotencyRedis = createApiRedis(
+      {
+        host: config.get('REDIS_CACHE_HOST', { infer: true }),
+        port: config.get('REDIS_CACHE_PORT', { infer: true }),
+      },
+      REDIS_DB.IDEMPOTENCY,
+    );
     idempotencyRedis.on('error', (err: Error) => {
       app.get(Logger).warn({ err }, 'Idempotency Redis error');
     });
@@ -213,7 +210,7 @@ async function bootstrap() {
         .code(HttpStatus.SERVICE_UNAVAILABLE)
         .header('content-type', 'application/problem+json')
         .header('x-request-id', requestId)
-        .header('retry-after', '10')
+        .header('retry-after', String(RETRY_AFTER_OVERLOAD_SECONDS))
         .send(
           buildProblemDetails({
             status: HttpStatus.SERVICE_UNAVAILABLE,
@@ -241,15 +238,13 @@ async function bootstrap() {
   const authRateLimitWindowMs = config.get('AUTH_RATE_LIMIT_WINDOW_MS', { infer: true });
   const authRateLimitFailOpen = config.get('AUTH_RATE_LIMIT_FAIL_OPEN', { infer: true });
 
-  // db=4 isolated from cache (db=0), throttler (db=1), and queue databases.
-  const rateLimitRedis = new Redis({
-    host: config.get('REDIS_CACHE_HOST', { infer: true }),
-    port: config.get('REDIS_CACHE_PORT', { infer: true }),
-    db: 4,
-    maxRetriesPerRequest: 1,
-    retryStrategy: redisReconnectStrategy,
-    enableOfflineQueue: false,
-  });
+  const rateLimitRedis = createApiRedis(
+    {
+      host: config.get('REDIS_CACHE_HOST', { infer: true }),
+      port: config.get('REDIS_CACHE_PORT', { infer: true }),
+    },
+    REDIS_DB.RATE_LIMIT,
+  );
   rateLimitRedis.on('error', (err: Error) => {
     app.get(Logger).warn({ err }, 'Rate-limit Redis error');
   });
@@ -346,7 +341,7 @@ async function bootstrap() {
       return reply
         .status(HttpStatus.SERVICE_UNAVAILABLE)
         .header('content-type', 'application/problem+json')
-        .header('retry-after', '5')
+        .header('retry-after', String(RETRY_AFTER_AUTH_UNAVAILABLE_SECONDS))
         .send(
           buildProblemDetails({
             status: HttpStatus.SERVICE_UNAVAILABLE,
@@ -480,7 +475,7 @@ async function bootstrap() {
           'X-Request-Id': requestId,
           'X-Correlation-Id': correlationId,
         };
-        if (timedOut) headers['Retry-After'] = '5';
+        if (timedOut) headers['Retry-After'] = String(RETRY_AFTER_AUTH_UNAVAILABLE_SECONDS);
         reply.raw.writeHead(status, headers);
         reply.raw.end(body);
       } else if (!reply.raw.writableEnded) {

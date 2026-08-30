@@ -27,6 +27,95 @@ type ChecksumMode = 'WHEN_SUPPORTED' | 'WHEN_REQUIRED';
 
 const CHECKSUM_MODES: readonly ChecksumMode[] = ['WHEN_SUPPORTED', 'WHEN_REQUIRED'];
 
+const DEFAULT_PRESIGN_EXPIRY_SECONDS = 300;
+const SDK_MAX_ATTEMPTS = 3;
+const ABSENT_BUCKET_CODES = ['NotFound', 'NoSuchBucket'] as const;
+const ABSENT_OBJECT_CODES = ['NotFound', 'NoSuchKey'] as const;
+
+const FAILURES = {
+  upload: {
+    code: ERROR_CODES.STORAGE_UPLOAD_FAILED,
+    messageKey: I18N_KEYS.errors.storage.upload_failed,
+    message: 'Storage upload failed',
+    log: 'S3 upload failed',
+  },
+  presign: {
+    code: ERROR_CODES.STORAGE_PRESIGN_FAILED,
+    messageKey: I18N_KEYS.errors.storage.presign_failed,
+    message: 'Storage presign failed',
+    log: 'S3 presign upload failed',
+  },
+  head: {
+    code: ERROR_CODES.STORAGE_HEAD_FAILED,
+    messageKey: I18N_KEYS.errors.storage.head_failed,
+    message: 'Storage head failed',
+    log: 'S3 head failed',
+  },
+  signedUrl: {
+    code: ERROR_CODES.STORAGE_SIGNED_URL_FAILED,
+    messageKey: I18N_KEYS.errors.storage.signed_url_failed,
+    message: 'Storage signed URL generation failed',
+    log: 'S3 getSignedUrl failed',
+  },
+  delete: {
+    code: ERROR_CODES.STORAGE_DELETE_FAILED,
+    messageKey: I18N_KEYS.errors.storage.delete_failed,
+    message: 'Storage delete failed',
+    log: 'S3 delete failed',
+  },
+  finalize: {
+    code: ERROR_CODES.STORAGE_FINALIZE_FAILED,
+    messageKey: I18N_KEYS.errors.storage.commit_failed,
+    message: 'Storage finalize failed; retry confirmation',
+    log: 'S3 finalize copy failed',
+  },
+  readRange: {
+    code: ERROR_CODES.STORAGE_READ_FAILED,
+    messageKey: I18N_KEYS.errors.storage.read_range_failed,
+    message: 'Storage readRange failed',
+    log: 'S3 readRange failed',
+  },
+  readStream: {
+    code: ERROR_CODES.STORAGE_READ_FAILED,
+    messageKey: I18N_KEYS.errors.storage.read_range_failed,
+    message: 'Storage readStream failed',
+    log: 'S3 readStream failed',
+  },
+  read: {
+    code: ERROR_CODES.STORAGE_READ_FAILED,
+    messageKey: I18N_KEYS.errors.storage.read_range_failed,
+    message: 'Storage read failed',
+    log: 'S3 full-object read failed',
+  },
+} as const satisfies Record<string, FailureContract>;
+
+interface FailureContract {
+  readonly code: string;
+  readonly messageKey: string;
+  readonly message: string;
+  readonly log: string;
+}
+
+function assertByteArray(body: unknown): { transformToByteArray: () => Promise<Uint8Array> } {
+  const candidate = body as { transformToByteArray?: () => Promise<Uint8Array> } | undefined;
+  if (!candidate?.transformToByteArray) {
+    throw new Error('S3 GetObject returned no readable body');
+  }
+  return candidate as { transformToByteArray: () => Promise<Uint8Array> };
+}
+
+function assertStream(body: unknown): AsyncIterable<Uint8Array> {
+  const candidate = body as AsyncIterable<Uint8Array> | undefined;
+  if (!candidate?.[Symbol.asyncIterator]) {
+    throw new Error('S3 GetObject returned no streamable body');
+  }
+  return candidate;
+}
+
+function encodeCopySource(bucket: string, key: string): string {
+  return [bucket, ...key.split('/')].map(encodeURIComponent).join('/');
+}
+
 @Injectable()
 export class S3StorageAdapter implements StoragePort, OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(S3StorageAdapter.name);
@@ -61,7 +150,7 @@ export class S3StorageAdapter implements StoragePort, OnModuleInit, OnModuleDest
       region,
       credentials,
       forcePathStyle,
-      maxAttempts: 3,
+      maxAttempts: SDK_MAX_ATTEMPTS,
       requestChecksumCalculation,
       responseChecksumValidation: requestChecksumCalculation,
     };
@@ -104,7 +193,9 @@ export class S3StorageAdapter implements StoragePort, OnModuleInit, OnModuleDest
       const status = (err as { $metadata?: { httpStatusCode?: number } })?.$metadata
         ?.httpStatusCode;
       const code = (err as { name?: string })?.name;
-      const missing = status === 404 || code === 'NotFound' || code === 'NoSuchBucket';
+      const missing =
+        status === 404 ||
+        ABSENT_BUCKET_CODES.includes(code as (typeof ABSENT_BUCKET_CODES)[number]);
       if (!missing) {
         // A non-404 (403, connection refused, TLS failure) means the bucket may well exist and we
         // simply cannot see it — creating it would be wrong, so surface the fault instead.
@@ -163,6 +254,28 @@ export class S3StorageAdapter implements StoragePort, OnModuleInit, OnModuleDest
     return value;
   }
 
+  private failure(
+    failure: FailureContract,
+    ctx: Record<string, unknown>,
+    err: unknown,
+  ): DomainException {
+    this.logger.error({ err, ...ctx }, failure.log);
+    return new DomainException({
+      kind: 'unavailable',
+      code: failure.code,
+      permanent: false,
+      messageKey: failure.messageKey,
+      violations: [
+        {
+          path: 'storage',
+          code: failure.code,
+          message: failure.message,
+          messageKey: failure.messageKey,
+        },
+      ],
+    });
+  }
+
   async upload(key: string, body: Buffer, options?: UploadOptions): Promise<StoredFile> {
     if (body.length === 0) {
       throw new DomainException({
@@ -195,21 +308,7 @@ export class S3StorageAdapter implements StoragePort, OnModuleInit, OnModuleDest
         }),
       );
     } catch (err) {
-      this.logger.error({ err, key }, 'S3 upload failed');
-      throw new DomainException({
-        kind: 'unavailable',
-        code: ERROR_CODES.STORAGE_UPLOAD_FAILED,
-        permanent: false,
-        messageKey: I18N_KEYS.errors.storage.upload_failed,
-        violations: [
-          {
-            path: 'storage',
-            code: ERROR_CODES.STORAGE_UPLOAD_FAILED,
-            message: 'Storage upload failed',
-            messageKey: I18N_KEYS.errors.storage.upload_failed,
-          },
-        ],
-      });
+      throw this.failure(FAILURES.upload, { key }, err);
     }
 
     const url = `${this.publicEndpoint}/${bucket}/${key}`;
@@ -223,7 +322,7 @@ export class S3StorageAdapter implements StoragePort, OnModuleInit, OnModuleDest
   // a MinIO/AWS extension that SeaweedFS (and others) reject with `Policy Condition failed`.
   async presignUpload(key: string, options: PresignUploadOptions): Promise<PresignedUpload> {
     const bucket = options.bucket ?? this.bucket;
-    const expiresInSeconds = options.expiresInSeconds ?? 300;
+    const expiresInSeconds = options.expiresInSeconds ?? DEFAULT_PRESIGN_EXPIRY_SECONDS;
 
     try {
       const { url, fields } = await createPresignedPost(this.presignClient, {
@@ -240,21 +339,7 @@ export class S3StorageAdapter implements StoragePort, OnModuleInit, OnModuleDest
       const expiresAt = new Date(Date.now() + expiresInSeconds * 1000).toISOString();
       return { url, fields, key, bucket, expiresAt, maxBytes: options.maxBytes };
     } catch (err) {
-      this.logger.error({ err, key }, 'S3 presign upload failed');
-      throw new DomainException({
-        kind: 'unavailable',
-        code: ERROR_CODES.STORAGE_PRESIGN_FAILED,
-        permanent: false,
-        messageKey: I18N_KEYS.errors.storage.presign_failed,
-        violations: [
-          {
-            path: 'storage',
-            code: ERROR_CODES.STORAGE_PRESIGN_FAILED,
-            message: 'Storage presign failed',
-            messageKey: I18N_KEYS.errors.storage.presign_failed,
-          },
-        ],
-      });
+      throw this.failure(FAILURES.presign, { key }, err);
     }
   }
 
@@ -276,24 +361,13 @@ export class S3StorageAdapter implements StoragePort, OnModuleInit, OnModuleDest
       const status = (err as { $metadata?: { httpStatusCode?: number } })?.$metadata
         ?.httpStatusCode;
       const name = (err as { name?: string })?.name;
-      if (status === 404 || name === 'NotFound' || name === 'NoSuchKey') {
+      if (
+        status === 404 ||
+        ABSENT_OBJECT_CODES.includes(name as (typeof ABSENT_OBJECT_CODES)[number])
+      ) {
         return null;
       }
-      this.logger.error({ err, key }, 'S3 head failed');
-      throw new DomainException({
-        kind: 'unavailable',
-        code: ERROR_CODES.STORAGE_HEAD_FAILED,
-        permanent: false,
-        messageKey: I18N_KEYS.errors.storage.head_failed,
-        violations: [
-          {
-            path: 'storage',
-            code: ERROR_CODES.STORAGE_HEAD_FAILED,
-            message: 'Storage head failed',
-            messageKey: I18N_KEYS.errors.storage.head_failed,
-          },
-        ],
-      });
+      throw this.failure(FAILURES.head, { key }, err);
     }
   }
 
@@ -312,21 +386,7 @@ export class S3StorageAdapter implements StoragePort, OnModuleInit, OnModuleDest
       });
       return await getSignedUrl(this.presignClient, command, { expiresIn });
     } catch (err) {
-      this.logger.error({ err, key }, 'S3 getSignedUrl failed');
-      throw new DomainException({
-        kind: 'unavailable',
-        code: ERROR_CODES.STORAGE_SIGNED_URL_FAILED,
-        permanent: false,
-        messageKey: I18N_KEYS.errors.storage.signed_url_failed,
-        violations: [
-          {
-            path: 'storage',
-            code: ERROR_CODES.STORAGE_SIGNED_URL_FAILED,
-            message: 'Storage signed URL generation failed',
-            messageKey: I18N_KEYS.errors.storage.signed_url_failed,
-          },
-        ],
-      });
+      throw this.failure(FAILURES.signedUrl, { key }, err);
     }
   }
 
@@ -339,21 +399,7 @@ export class S3StorageAdapter implements StoragePort, OnModuleInit, OnModuleDest
         }),
       );
     } catch (err) {
-      this.logger.error({ err, key }, 'S3 delete failed');
-      throw new DomainException({
-        kind: 'unavailable',
-        code: ERROR_CODES.STORAGE_DELETE_FAILED,
-        permanent: false,
-        messageKey: I18N_KEYS.errors.storage.delete_failed,
-        violations: [
-          {
-            path: 'storage',
-            code: ERROR_CODES.STORAGE_DELETE_FAILED,
-            message: 'Storage delete failed',
-            messageKey: I18N_KEYS.errors.storage.delete_failed,
-          },
-        ],
-      });
+      throw this.failure(FAILURES.delete, { key }, err);
     }
   }
 
@@ -375,21 +421,7 @@ export class S3StorageAdapter implements StoragePort, OnModuleInit, OnModuleDest
         }),
       );
     } catch (err) {
-      this.logger.error({ err, sourceKey, finalKey }, 'S3 finalize copy failed');
-      throw new DomainException({
-        kind: 'unavailable',
-        code: ERROR_CODES.STORAGE_FINALIZE_FAILED,
-        permanent: false,
-        messageKey: I18N_KEYS.errors.storage.commit_failed,
-        violations: [
-          {
-            path: 'storage',
-            code: ERROR_CODES.STORAGE_FINALIZE_FAILED,
-            message: 'Storage finalize failed; retry confirmation',
-            messageKey: I18N_KEYS.errors.storage.commit_failed,
-          },
-        ],
-      });
+      throw this.failure(FAILURES.finalize, { sourceKey, finalKey }, err);
     }
 
     // The source keeps its staging prefix, so a delete failure is bounded by the lifecycle TTL.
@@ -410,28 +442,9 @@ export class S3StorageAdapter implements StoragePort, OnModuleInit, OnModuleDest
           Range: `bytes=0-${Math.max(0, byteCount - 1)}`,
         }),
       );
-      const body = res.Body as { transformToByteArray?: () => Promise<Uint8Array> } | undefined;
-      if (!body?.transformToByteArray) {
-        throw new Error('S3 GetObject returned no readable body');
-      }
-      const bytes = await body.transformToByteArray();
-      return Buffer.from(bytes);
+      return Buffer.from(await assertByteArray(res.Body).transformToByteArray());
     } catch (err) {
-      this.logger.error({ err, key, byteCount }, 'S3 readRange failed');
-      throw new DomainException({
-        kind: 'unavailable',
-        code: ERROR_CODES.STORAGE_READ_FAILED,
-        permanent: false,
-        messageKey: I18N_KEYS.errors.storage.read_range_failed,
-        violations: [
-          {
-            path: 'storage',
-            code: ERROR_CODES.STORAGE_READ_FAILED,
-            message: 'Storage readRange failed',
-            messageKey: I18N_KEYS.errors.storage.read_range_failed,
-          },
-        ],
-      });
+      throw this.failure(FAILURES.readRange, { key, byteCount }, err);
     }
   }
 
@@ -440,27 +453,9 @@ export class S3StorageAdapter implements StoragePort, OnModuleInit, OnModuleDest
       const res = await this.client.send(
         new GetObjectCommand({ Bucket: bucket ?? this.bucket, Key: key }),
       );
-      const body = res.Body as AsyncIterable<Uint8Array> | undefined;
-      if (!body?.[Symbol.asyncIterator]) {
-        throw new Error('S3 GetObject returned no streamable body');
-      }
-      return body;
+      return assertStream(res.Body);
     } catch (err) {
-      this.logger.error({ err, key }, 'S3 readStream failed');
-      throw new DomainException({
-        kind: 'unavailable',
-        code: ERROR_CODES.STORAGE_READ_FAILED,
-        permanent: false,
-        messageKey: I18N_KEYS.errors.storage.read_range_failed,
-        violations: [
-          {
-            path: 'storage',
-            code: ERROR_CODES.STORAGE_READ_FAILED,
-            message: 'Storage readStream failed',
-            messageKey: I18N_KEYS.errors.storage.read_range_failed,
-          },
-        ],
-      });
+      throw this.failure(FAILURES.readStream, { key }, err);
     }
   }
 
@@ -469,31 +464,9 @@ export class S3StorageAdapter implements StoragePort, OnModuleInit, OnModuleDest
       const res = await this.client.send(
         new GetObjectCommand({ Bucket: bucket ?? this.bucket, Key: key }),
       );
-      const body = res.Body as { transformToByteArray?: () => Promise<Uint8Array> } | undefined;
-      if (!body?.transformToByteArray) {
-        throw new Error('S3 GetObject returned no readable body');
-      }
-      return Buffer.from(await body.transformToByteArray());
+      return Buffer.from(await assertByteArray(res.Body).transformToByteArray());
     } catch (err) {
-      this.logger.error({ err, key }, 'S3 full-object read failed');
-      throw new DomainException({
-        kind: 'unavailable',
-        code: ERROR_CODES.STORAGE_READ_FAILED,
-        permanent: false,
-        messageKey: I18N_KEYS.errors.storage.read_range_failed,
-        violations: [
-          {
-            path: 'storage',
-            code: ERROR_CODES.STORAGE_READ_FAILED,
-            message: 'Storage read failed',
-            messageKey: I18N_KEYS.errors.storage.read_range_failed,
-          },
-        ],
-      });
+      throw this.failure(FAILURES.read, { key }, err);
     }
   }
-}
-
-function encodeCopySource(bucket: string, key: string): string {
-  return [bucket, ...key.split('/')].map(encodeURIComponent).join('/');
 }
