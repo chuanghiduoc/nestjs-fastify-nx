@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
 import { createHash } from 'node:crypto';
-import { QUEUE_NAMES } from '@nestjs-fastify-nx/shared';
+import { BULL_JOB_NAMES, QUEUE_NAMES, RETRIED_JOB_OPTIONS } from '@nestjs-fastify-nx/shared';
 import type {
   UploadVerificationDispatcher,
   UploadVerificationRequest,
@@ -22,12 +22,9 @@ export class BullMqUploadVerificationDispatcher implements UploadVerificationDis
 
   async dispatch(request: UploadVerificationRequest): Promise<void> {
     try {
-      await this.queue.add('verify-magic-bytes', request, {
+      await this.queue.add(BULL_JOB_NAMES.VERIFY_MAGIC_BYTES, request, {
         jobId: verificationJobId(request.key),
-        attempts: 3,
-        backoff: { type: 'exponential', delay: 5_000 },
-        removeOnComplete: { count: 100 },
-        removeOnFail: { count: 50 },
+        ...RETRIED_JOB_OPTIONS,
       });
     } catch (err) {
       this.logger.error({ err, key: request.key }, 'enqueue verify-magic-bytes failed');

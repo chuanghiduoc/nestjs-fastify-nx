@@ -141,6 +141,17 @@ describe('StoredFileCleanupTask', () => {
       expect(prisma.db.$queryRaw).toHaveBeenCalledTimes(3);
       expect(storage.delete).toHaveBeenCalledWith('files/user/file.png', 'uploads');
     });
+
+    it('bounds the REJECTED scan by a retention cutoff like every other scan', async () => {
+      const queryRaw = vi.fn().mockResolvedValue([]);
+      const { task } = buildTask({ queryRaw });
+
+      await task.cleanup();
+
+      const [, rejectedCutoff] = queryRaw.mock.calls[0] as [unknown, Date];
+      expect(rejectedCutoff).toBeInstanceOf(Date);
+      expect(Date.now() - rejectedCutoff.getTime()).toBeGreaterThanOrEqual(72 * 3_600_000 - 5_000);
+    });
   });
 
   describe('cleanupOrphaned', () => {
@@ -217,6 +228,40 @@ describe('StoredFileCleanupTask', () => {
       const { task } = buildTask({ queryRaw });
 
       await expect(task.purgeSoftDeleted()).resolves.toBeUndefined();
+    });
+
+    it('keeps draining while a full batch comes back', async () => {
+      const fullPage = Array.from({ length: 500 }, (_, i) => ({
+        id: `019dd1a7-443a-7dd2-a546-2169d81d7${String(i).padStart(3, '0')}`,
+        key: `files/user/file-${i}.png`,
+        bucket: 'uploads',
+      }));
+      const queryRaw = vi
+        .fn()
+        .mockResolvedValueOnce(fullPage)
+        .mockResolvedValueOnce([{ id: 'tail', key: 'files/user/tail.png', bucket: 'uploads' }]);
+      const { task, prisma, storage } = buildTask({ queryRaw });
+
+      await task.purgeSoftDeleted();
+
+      expect(queryRaw).toHaveBeenCalledTimes(2);
+      expect(storage.delete).toHaveBeenCalledTimes(501);
+      expect(prisma.db.storedFile.deleteMany).toHaveBeenCalledTimes(501);
+    });
+
+    it('stops the run when a whole batch fails so it cannot spin on the same rows', async () => {
+      const fullPage = Array.from({ length: 500 }, (_, i) => ({
+        id: `019dd1a7-443a-7dd2-a546-2169d81d7${String(i).padStart(3, '0')}`,
+        key: `files/user/file-${i}.png`,
+        bucket: 'uploads',
+      }));
+      const queryRaw = vi.fn().mockResolvedValue(fullPage);
+      const { task, storage } = buildTask({ queryRaw });
+      (storage.delete as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('s3 down'));
+
+      await expect(task.purgeSoftDeleted()).resolves.toBeUndefined();
+
+      expect(queryRaw).toHaveBeenCalledTimes(1);
     });
   });
 });

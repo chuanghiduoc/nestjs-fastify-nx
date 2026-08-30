@@ -8,16 +8,28 @@ export interface ListUsersCursorResult {
   lastCursor: string | null;
 }
 
-// Query<TResult> carries the result type so QueryBus.execute() infers it end-to-end.
+export interface ListUsersCursorFilters {
+  readonly startingAfter?: string;
+  readonly role?: string;
+  readonly status?: UserStatus;
+  readonly search?: string;
+}
+
 export class ListUsersCursorQuery extends Query<ListUsersCursorResult> {
-  constructor(
-    readonly organizationId: string,
-    readonly limit: number,
-    readonly startingAfter?: string,
-    readonly role?: string,
-    readonly status?: UserStatus,
-    readonly search?: string,
-  ) {
+  readonly organizationId: string;
+  readonly limit: number;
+  readonly startingAfter?: string;
+  readonly role?: string;
+  readonly status?: UserStatus;
+  readonly search?: string;
+
+  constructor(organizationId: string, limit: number, filters: ListUsersCursorFilters = {}) {
     super();
+    this.organizationId = organizationId;
+    this.limit = limit;
+    this.startingAfter = filters.startingAfter;
+    this.role = filters.role;
+    this.status = filters.status;
+    this.search = filters.search;
   }
 }

@@ -80,8 +80,10 @@ const schedulerEnvSchema = z
     STORED_FILE_CLEANUP_BATCH_SIZE: z.coerce.number().int().min(10).max(10_000).default(500),
     STORED_FILE_FINALIZING_STALE_MINUTES: z.coerce.number().int().min(5).max(1_440).default(60),
     STORED_FILE_VERIFYING_STALE_HOURS: z.coerce.number().int().min(1).max(168).default(24),
+    STORED_FILE_REJECTED_RETAIN_HOURS: z.coerce.number().int().min(1).max(8_760).default(72),
     STORED_FILE_ORPHAN_GRACE_MINUTES: z.coerce.number().int().min(5).max(1_440).default(60),
     STORED_FILE_PURGE_AFTER_DAYS: z.coerce.number().int().min(1).max(3_650).default(30),
+    STORED_FILE_PURGE_MAX_BATCHES: z.coerce.number().int().min(1).max(10_000).default(200),
 
     OUTBOX_POLL_INTERVAL_MS: z.coerce.number().int().min(100).max(60_000).default(1_000),
     OUTBOX_BATCH_SIZE: z.coerce.number().int().min(1).max(1_000).default(50),
@@ -95,6 +97,7 @@ const schedulerEnvSchema = z
     OUTBOX_RETRY_MAX_MS: z.coerce.number().int().min(1_000).max(3_600_000).default(300_000),
 
     OUTBOX_RETENTION_DAYS: z.coerce.number().int().min(1).max(365).default(7),
+    OUTBOX_PARKED_RETENTION_DAYS: z.coerce.number().int().min(1).max(90).default(30),
     OUTBOX_PURGE_BATCH_SIZE: z.coerce.number().int().min(100).max(10_000).default(1_000),
     OUTBOX_PURGE_MAX_BATCHES: z.coerce.number().int().min(1).max(10_000).default(200),
 

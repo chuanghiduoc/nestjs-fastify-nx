@@ -21,6 +21,18 @@ interface StoredFileRow {
   status: string;
 }
 
+// Quarantining an in-flight upload must reach the row even after the owner soft-deleted it,
+// otherwise the infected bytes sit in the bucket until the retention purge. Restricted to the two
+// in-flight sources so no other transition can bypass the soft-delete predicate.
+const REJECTABLE_FROM_STATUSES: readonly StoredFileStatus[] = [
+  STORED_FILE_STATUS.FINALIZING,
+  STORED_FILE_STATUS.VERIFYING,
+];
+
+function matchesSoftDeleted(from: StoredFileStatus, to: StoredFileStatus): boolean {
+  return to === STORED_FILE_STATUS.REJECTED && REJECTABLE_FROM_STATUSES.includes(from);
+}
+
 @Injectable()
 export class PrismaStoredFileRepository implements StoredFileRepositoryPort {
   constructor(private readonly prisma: PrismaService) {}
@@ -29,10 +41,10 @@ export class PrismaStoredFileRepository implements StoredFileRepositoryPort {
     fn: (client: TransactionClient) => Promise<R>,
     options: { readOnly: boolean },
   ): Promise<R> {
-    const active = options.readOnly
+    const joined = options.readOnly
       ? (this.prisma.currentTransaction ?? this.prisma.currentReadTransaction)
       : this.prisma.currentTransaction;
-    if (active) return fn(active);
+    if (joined) return fn(joined);
     if (!this.prisma.hasTenantContext) {
       return fn(options.readOnly ? this.prisma.dbRead : this.prisma.db);
     }
@@ -73,10 +85,9 @@ export class PrismaStoredFileRepository implements StoredFileRepositoryPort {
     to: StoredFileStatus,
     fields?: StoredFileTransitionFields,
   ): Promise<boolean> {
-    const allowDeleted =
-      to === STORED_FILE_STATUS.REJECTED &&
-      (from === STORED_FILE_STATUS.FINALIZING || from === STORED_FILE_STATUS.VERIFYING);
-    const where = allowDeleted ? { id, status: from } : { id, status: from, deletedAt: null };
+    const where = matchesSoftDeleted(from, to)
+      ? { id, status: from }
+      : { id, status: from, deletedAt: null };
     const result = await this.run(
       (client) =>
         client.storedFile.updateMany({
@@ -94,10 +105,9 @@ export class PrismaStoredFileRepository implements StoredFileRepositoryPort {
     to: StoredFileStatus,
     fields?: StoredFileTransitionFields,
   ): Promise<boolean> {
-    const allowDeleted =
-      to === STORED_FILE_STATUS.REJECTED &&
-      (from === STORED_FILE_STATUS.FINALIZING || from === STORED_FILE_STATUS.VERIFYING);
-    const where = allowDeleted ? { key, status: from } : { key, status: from, deletedAt: null };
+    const where = matchesSoftDeleted(from, to)
+      ? { key, status: from }
+      : { key, status: from, deletedAt: null };
     const result = await this.run(
       (client) =>
         client.storedFile.updateMany({

@@ -9,7 +9,7 @@ import {
 import { HEADERS_METADATA, HTTP_CODE_METADATA } from '@nestjs/common/constants';
 import { Reflector } from '@nestjs/core';
 import { ConfigService } from '@nestjs/config';
-import { Observable, throwError, TimeoutError } from 'rxjs';
+import { Observable, throwError, TimeoutError, type Subscriber } from 'rxjs';
 import { catchError, timeout } from 'rxjs/operators';
 import type { FastifyRequest } from 'fastify';
 import { ERROR_CODES } from '@nestjs-fastify-nx/contracts';
@@ -63,64 +63,21 @@ export class TimeoutInterceptor implements NestInterceptor {
       );
     }
 
-    const idempotency = request.idempotency;
     const successStatus = this.resolveSuccessStatus(context, request.method);
     const contentType = this.resolveContentType(context);
 
-    return new Observable<unknown>((subscriber) => {
-      let timedOut = false;
-      let settled = false;
-      let lateTimer: NodeJS.Timeout | undefined;
-
-      const timer = setTimeout(() => {
-        if (settled) return;
-        timedOut = true;
-        subscriber.error(this.timeoutException());
-        // Bounded window to capture a late completion, then release the subscription. Beyond it the
-        // pending idempotency lock has lapsed (lock TTL > request timeout) so completeLate would
-        // no-op anyway — holding the source (and this request) longer would only leak memory.
-        lateTimer = setTimeout(() => sub.unsubscribe(), this.timeoutMs);
-        lateTimer.unref();
-      }, this.timeoutMs);
-
-      const sub = next.handle().subscribe({
-        next: (value) => {
-          if (!timedOut) {
-            settled = true;
-            clearTimeout(timer);
-            subscriber.next(value);
-            return;
-          }
+    return new Observable<unknown>((subscriber) =>
+      subscribeWithLateCapture(next.handle(), subscriber, this.timeoutMs, {
+        timeoutError: () => this.timeoutException(),
+        onLateValue: (value) => {
           // Late success after the 504 already replied — record it so a retry replays instead of
           // re-running. completeLate swallows its own errors; guard again so nothing escapes here.
-          if (lateTimer) clearTimeout(lateTimer);
-          void idempotency.completeLate(successStatus, value, contentType).catch(() => undefined);
-          sub.unsubscribe();
+          void request.idempotency
+            ?.completeLate(successStatus, value, contentType)
+            .catch(() => undefined);
         },
-        error: (err: unknown) => {
-          if (!timedOut) {
-            settled = true;
-            clearTimeout(timer);
-            subscriber.error(this.mapError(err));
-            return;
-          }
-          // Late failure: nothing to record; the pending lock lapses at its TTL.
-          if (lateTimer) clearTimeout(lateTimer);
-          sub.unsubscribe();
-        },
-        complete: () => {
-          if (!timedOut) subscriber.complete();
-        },
-      });
-
-      // On the 504 path downstream unsubscribes immediately — keep the source alive (bounded by
-      // lateTimer) to catch the late result; on the normal path, tear it down at once.
-      return () => {
-        clearTimeout(timer);
-        if (lateTimer) clearTimeout(lateTimer);
-        if (!timedOut) sub.unsubscribe();
-      };
-    });
+      }),
+    );
   }
 
   private mapError(err: unknown): unknown {
@@ -155,4 +112,64 @@ export class TimeoutInterceptor implements NestInterceptor {
     );
     return headers?.find((header) => header.name.toLowerCase() === 'content-type')?.value;
   }
+}
+
+export interface LateCaptureHooks {
+  readonly timeoutError: () => unknown;
+  readonly onLateValue: (value: unknown) => void;
+}
+
+export function subscribeWithLateCapture(
+  source: Observable<unknown>,
+  subscriber: Subscriber<unknown>,
+  timeoutMs: number,
+  hooks: LateCaptureHooks,
+): () => void {
+  let timedOut = false;
+  let settled = false;
+  let lateTimer: NodeJS.Timeout | undefined;
+
+  const timer = setTimeout(() => {
+    if (settled) return;
+    timedOut = true;
+    subscriber.error(hooks.timeoutError());
+    lateTimer = setTimeout(() => sub.unsubscribe(), timeoutMs);
+    lateTimer.unref();
+  }, timeoutMs);
+
+  const sub = source.subscribe({
+    next: (value) => {
+      if (!timedOut) {
+        settled = true;
+        clearTimeout(timer);
+        subscriber.next(value);
+        return;
+      }
+      if (lateTimer) clearTimeout(lateTimer);
+      hooks.onLateValue(value);
+      sub.unsubscribe();
+    },
+    error: (err: unknown) => {
+      if (!timedOut) {
+        settled = true;
+        clearTimeout(timer);
+        subscriber.error(err);
+        return;
+      }
+      // Late failure: nothing to record; the pending lock lapses at its TTL.
+      if (lateTimer) clearTimeout(lateTimer);
+      sub.unsubscribe();
+    },
+    complete: () => {
+      if (!timedOut) subscriber.complete();
+    },
+  });
+
+  // On the 504 path downstream unsubscribes immediately — keep the source alive (bounded by
+  // lateTimer) to catch the late result; on the normal path, tear it down at once.
+  return () => {
+    clearTimeout(timer);
+    if (lateTimer) clearTimeout(lateTimer);
+    if (!timedOut) sub.unsubscribe();
+  };
 }

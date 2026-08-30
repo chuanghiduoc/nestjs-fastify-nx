@@ -5,8 +5,9 @@ import type { ConfigService } from '@nestjs/config';
 import type { Reflector } from '@nestjs/core';
 import { firstValueFrom, of, Subject, throwError } from 'rxjs';
 import { delay } from 'rxjs/operators';
+import { Subscriber } from 'rxjs';
 import type { EnvConfig } from '../../config/env.validation';
-import { TimeoutInterceptor } from './timeout.interceptor';
+import { TimeoutInterceptor, subscribeWithLateCapture } from './timeout.interceptor';
 
 function makeContext(type: 'http' | 'ws', request?: unknown): ExecutionContext {
   return {
@@ -137,6 +138,70 @@ describe('TimeoutInterceptor', () => {
 
       expect(result).toBe('ok');
       expect(completeLate).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('subscribeWithLateCapture', () => {
+    interface Harness {
+      next: (v: unknown) => void;
+      error: (e: unknown) => void;
+      complete: () => void;
+      received: unknown[];
+      errors: unknown[];
+      completed: boolean;
+    }
+
+    function run(timeoutMs: number): Harness & { source: Subject<unknown> } {
+      const source = new Subject<unknown>();
+      const harness: Harness = {
+        received: [],
+        errors: [],
+        completed: false,
+        next: (value) => void harness.received.push(value),
+        error: (err) => void harness.errors.push(err),
+        complete: () => {
+          harness.completed = true;
+        },
+      };
+      subscribeWithLateCapture(source, new Subscriber(harness), timeoutMs, {
+        timeoutError: () => 'TIMEOUT',
+        onLateValue: (value) => harness.received.push(`late:${String(value)}`),
+      });
+      return Object.assign(harness, { source });
+    }
+
+    it('mirrors values before the budget lapses without touching onLateValue', () => {
+      const h = run(30);
+      h.source.next('a');
+      expect(h.received).toEqual(['a']);
+    });
+
+    it('hands the subscriber exactly one timeout error, then feeds a late value to the hook', async () => {
+      const h = run(10);
+      await tick(20);
+      expect(h.errors).toEqual(['TIMEOUT']);
+
+      h.source.next('x');
+      await tick(0);
+      expect(h.received).toEqual([`late:x`]);
+    });
+
+    it('stops capturing after the late window elapses', async () => {
+      const h = run(10);
+      await tick(15);
+      await tick(15);
+
+      h.source.next('too-late');
+      await tick(0);
+      expect(h.errors).toEqual(['TIMEOUT']);
+      expect(h.received).toEqual([]);
+    });
+
+    it('ignores a late error after the 504', async () => {
+      const h = run(10);
+      await tick(20);
+      expect(() => h.source.error(new Error('boom'))).not.toThrow();
+      expect(h.received).toEqual([]);
     });
   });
 });

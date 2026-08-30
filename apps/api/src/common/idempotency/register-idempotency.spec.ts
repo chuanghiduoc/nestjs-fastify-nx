@@ -72,6 +72,10 @@ async function buildApp(redis: Redis): Promise<AppSetup> {
     calls += 1;
     return reply.status(500).send({ calls, failed: true });
   });
+  app.post('/api/v1/reject', async (_req, reply) => {
+    calls += 1;
+    return reply.status(422).send({ calls, rejected: true });
+  });
   app.post('/api/v1/timeout', async (_req, reply) => {
     calls += 1;
     return reply.status(504).send({ calls, timeout: true });
@@ -443,7 +447,7 @@ describe('registerIdempotency', () => {
     const { app, callCount } = await buildApp(redis);
     const sessionCookie = { cookie: 'better-auth.session_token=test-session-1' };
 
-    await app.inject({
+    const first = await app.inject({
       method: 'POST',
       url: '/api/v1/echo',
       headers: { ...KEY_HEADER, ...sessionCookie, 'x-active-organization-id': 'org-a' },
@@ -458,6 +462,10 @@ describe('registerIdempotency', () => {
 
     expect(second.headers['idempotent-replayed']).toBe('true');
     expect(callCount()).toBe(1);
+    // The gap is that org-b receives org-a's response verbatim, so the body is what pins it —
+    // callCount alone would still pass if the replay returned something else.
+    expect(second.statusCode).toBe(first.statusCode);
+    expect(second.body).toBe(first.body);
   });
 
   it('returns 409 while an identical request is still in flight', async () => {
@@ -502,7 +510,29 @@ describe('registerIdempotency', () => {
     expect(done.statusCode).toBe(200);
   });
 
-  it('releases the lock on a non-2xx response so the client may retry', async () => {
+  it('releases the lock on a 4xx so the client may retry', async () => {
+    const { app, callCount } = await buildApp(redis);
+
+    const first = await app.inject({
+      method: 'POST',
+      url: '/api/v1/reject',
+      headers: KEY_HEADER,
+      payload: { a: 1 },
+    });
+    const second = await app.inject({
+      method: 'POST',
+      url: '/api/v1/reject',
+      headers: KEY_HEADER,
+      payload: { a: 1 },
+    });
+
+    expect(first.statusCode).toBe(422);
+    expect(second.statusCode).toBe(422);
+    expect(second.headers['idempotent-replayed']).toBeUndefined();
+    expect(callCount()).toBe(2);
+  });
+
+  it('keeps the lock on a 500 because the mutation may already have committed', async () => {
     const { app, callCount } = await buildApp(redis);
 
     const first = await app.inject({
@@ -519,9 +549,9 @@ describe('registerIdempotency', () => {
     });
 
     expect(first.statusCode).toBe(500);
-    expect(second.statusCode).toBe(500);
-    expect(second.headers['idempotent-replayed']).toBeUndefined();
-    expect(callCount()).toBe(2);
+    expect(second.statusCode).toBe(409);
+    expect(second.json().code).toBe('idempotency_key_conflict');
+    expect(callCount()).toBe(1);
   });
 
   it('rejects an over-long key with 400', async () => {

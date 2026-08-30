@@ -41,7 +41,7 @@ describe('TracedCommandBus', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
-    CqrsMetricsRecorderHolder.set(undefined);
+    CqrsMetricsRecorderHolder.reset();
   });
 
   it('starts a command.<Name> span and records a success metric', async () => {
@@ -73,7 +73,7 @@ describe('TracedCommandBus', () => {
   });
 
   it('does not throw when no metrics recorder is registered', async () => {
-    CqrsMetricsRecorderHolder.set(undefined);
+    CqrsMetricsRecorderHolder.reset();
     const bus = new TracedCommandBus({} as ModuleRef);
     vi.spyOn(CommandBus.prototype, 'execute').mockResolvedValue('ok');
 

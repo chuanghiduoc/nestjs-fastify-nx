@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { EmailNotificationProcessor } from './email-notification.processor';
-import type { EmailNotificationPayload } from './email-notification.processor';
+import { EMAIL_TEMPLATES, type EmailNotificationPayload } from '@nestjs-fastify-nx/shared';
 import type { Job } from 'bullmq';
 import type { MailAdapter } from '../mail/mail.adapter';
 import type Redis from 'ioredis';
@@ -74,7 +74,7 @@ describe('EmailNotificationProcessor', () => {
       to: 'tpl@example.com',
       subject: 'Welcome',
       body: 'Hi {{name}}',
-      templateId: 'tpl-001',
+      templateId: EMAIL_TEMPLATES.WELCOME,
       variables: { name: 'Alice' },
     });
     await processor.process(job);

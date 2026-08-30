@@ -49,14 +49,12 @@ export class AdminUsersController {
     @Query() filter: ListUsersCursorFilterDto,
   ): Promise<ListResponseDto<UserListItemDto>> {
     const result = await this.queryBus.execute(
-      new ListUsersCursorQuery(
-        requireOrganizationId(user),
-        filter.limit,
-        filter.startingAfter,
-        filter.role,
-        filter.status,
-        filter.search,
-      ),
+      new ListUsersCursorQuery(requireOrganizationId(user), filter.limit, {
+        startingAfter: filter.startingAfter,
+        role: filter.role,
+        status: filter.status,
+        search: filter.search,
+      }),
     );
 
     return toCursorListResponse({

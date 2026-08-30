@@ -1,26 +1,8 @@
-import { Field, ID, ObjectType } from '@nestjs/graphql';
-import { UserStatus } from './user-enums';
+import { Field, ObjectType } from '@nestjs/graphql';
+import { MemberIdentityFields } from './member-identity-fields.type';
 
 @ObjectType()
-export class OrganizationMemberType {
-  @Field(() => ID)
-  id!: string;
-
-  @Field()
-  email!: string;
-
-  @Field()
-  name!: string;
-
+export class OrganizationMemberType extends MemberIdentityFields {
   @Field()
   role!: string;
-
-  @Field(() => UserStatus)
-  status!: UserStatus;
-
-  @Field()
-  createdAt!: Date;
-
-  @Field()
-  updatedAt!: Date;
 }

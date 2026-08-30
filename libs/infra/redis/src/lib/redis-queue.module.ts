@@ -56,6 +56,7 @@ export class RedisQueueClientProvider implements OnModuleDestroy {
       useFactory: (config: ConfigService<RedisQueueEnv, true>) => {
         const host: string = config.get('REDIS_QUEUE_HOST', { infer: true });
         const port: number = config.get('REDIS_QUEUE_PORT', { infer: true });
+        const prefix: string = config.get('REDIS_QUEUE_PREFIX', { infer: true });
 
         return {
           connection: {
@@ -66,7 +67,7 @@ export class RedisQueueClientProvider implements OnModuleDestroy {
             maxRetriesPerRequest: null,
             retryStrategy: redisReconnectStrategy,
           },
-          prefix: config.get('REDIS_QUEUE_PREFIX', { infer: true }),
+          prefix,
           defaultJobOptions: {
             attempts: 3,
             backoff: { type: 'exponential', delay: 1000 },

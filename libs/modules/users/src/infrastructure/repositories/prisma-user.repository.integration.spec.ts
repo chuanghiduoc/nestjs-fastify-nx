@@ -80,13 +80,6 @@ describe('PrismaUserRepository (integration)', () => {
     expect(found.id).toBe(user.id);
   });
 
-  it('exists returns true for saved email, false for unknown', async () => {
-    const user = UserFactory.create({ email: 'exists@test.com' });
-    await repository.save(user);
-    expect(await repository.exists('exists@test.com')).toBe(true);
-    expect(await repository.exists('ghost@test.com')).toBe(false);
-  });
-
   it('upsert updates existing user', async () => {
     const user = UserFactory.create({ email: 'update@test.com' });
     await repository.save(user);

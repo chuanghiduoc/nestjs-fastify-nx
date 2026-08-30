@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { Mock } from 'vitest';
 import { MALWARE_SCAN_OUTCOME, STORED_FILE_STATUS } from '@nestjs-fastify-nx/shared';
+import { DomainException } from '@nestjs-fastify-nx/core';
 import type { StoragePort } from '@nestjs-fastify-nx/infra-storage';
 import type { StoredFileRepositoryPort } from '../../../domain/ports/stored-file-repository.port';
 import type { MalwareScannerPort } from '../../../domain/ports/malware-scanner.port';
@@ -34,7 +35,10 @@ function build() {
     }),
     delete: vi.fn().mockResolvedValue(undefined),
   };
-  const files: { transitionByKey: Mock } = { transitionByKey: vi.fn().mockResolvedValue(true) };
+  const files: { transitionByKey: Mock; findByKey: Mock } = {
+    transitionByKey: vi.fn().mockResolvedValue(true),
+    findByKey: vi.fn().mockResolvedValue(null),
+  };
   const scanner = { scan: vi.fn().mockResolvedValue('clean' as const) };
   const handler = new VerifyUploadHandler(
     storage as unknown as StoragePort,
@@ -75,6 +79,22 @@ describe('VerifyUploadHandler', () => {
     expect(storage.delete).toHaveBeenCalledWith(KEY, 'uploads');
   });
 
+  it('propagates a storage read failure instead of treating it as a signature rejection', async () => {
+    const { handler, storage, files } = build();
+    storage.readRange.mockRejectedValue(
+      new DomainException({
+        kind: 'unavailable',
+        code: 'storage_read_failed',
+        permanent: false,
+        violations: [{ path: 'storage', code: 'storage_read_failed', message: 'S3 unreachable' }],
+      }),
+    );
+
+    await expect(handler.execute(command())).rejects.toMatchObject({ kind: 'unavailable' });
+    expect(storage.delete).not.toHaveBeenCalled();
+    expect(files.transitionByKey).not.toHaveBeenCalled();
+  });
+
   it('rejects and deletes an infected object', async () => {
     const { handler, storage, scanner } = build();
     scanner.scan.mockResolvedValue('infected');
@@ -88,6 +108,27 @@ describe('VerifyUploadHandler', () => {
     const { handler, storage, files } = build();
     storage.readRange.mockResolvedValue(JPEG_HEADER);
     files.transitionByKey.mockResolvedValue(false);
+    files.findByKey.mockResolvedValue({ status: STORED_FILE_STATUS.READY });
+
+    await expect(handler.execute(command())).resolves.toBe('skipped');
+    expect(storage.delete).not.toHaveBeenCalled();
+  });
+
+  it('finishes the delete on a retry that finds the row already REJECTED', async () => {
+    const { handler, storage, files } = build();
+    storage.readRange.mockResolvedValue(JPEG_HEADER);
+    files.transitionByKey.mockResolvedValue(false);
+    files.findByKey.mockResolvedValue({ status: STORED_FILE_STATUS.REJECTED });
+
+    await expect(handler.execute(command())).resolves.toBe('rejected');
+    expect(storage.delete).toHaveBeenCalledWith(KEY, 'uploads');
+  });
+
+  it('does not delete when the row vanished entirely', async () => {
+    const { handler, storage, files } = build();
+    storage.readRange.mockResolvedValue(JPEG_HEADER);
+    files.transitionByKey.mockResolvedValue(false);
+    files.findByKey.mockResolvedValue(null);
 
     await expect(handler.execute(command())).resolves.toBe('skipped');
     expect(storage.delete).not.toHaveBeenCalled();

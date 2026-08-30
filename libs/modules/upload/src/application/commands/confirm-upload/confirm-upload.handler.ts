@@ -10,13 +10,13 @@ import {
   type StoredFile as StoredFileResult,
 } from '@nestjs-fastify-nx/infra-storage';
 import {
-  assertMagicBytesMatch,
   assertMimeAllowed,
   assertOwnsSourceKey,
   assertSizeWithinLimit,
   objectNotFound,
   StoredFile,
 } from '../../../domain/entities/stored-file.entity';
+import { readHeadAndAssertMagicBytes } from '../../ports/read-magic-bytes';
 import {
   isDuplicateKeyError,
   STORED_FILE_REPOSITORY,
@@ -67,10 +67,12 @@ export class ConfirmUploadHandler implements ICommandHandler<
       assertSizeWithinLimit(meta.size, this.limits.maxFileBytes);
 
       // Inline check: if the queue is unreachable this still blocks a tampered upload.
-      const head = Buffer.from(
-        await this.storage.readRange(sourceKey, this.limits.magicByteCount, meta.bucket),
+      await readHeadAndAssertMagicBytes(
+        { storage: this.storage, limits: this.limits },
+        sourceKey,
+        meta.contentType,
+        meta.bucket,
       );
-      assertMagicBytesMatch(head, meta.contentType, sourceKey);
     } catch (err) {
       await this.safeDelete(sourceKey);
       throw err;

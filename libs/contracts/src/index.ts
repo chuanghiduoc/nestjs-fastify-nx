@@ -21,6 +21,7 @@ export {
   type ErrorTypeDoc,
 } from './lib/errors/error-catalog';
 export { I18N_KEYS, type I18nKey } from './lib/i18n-keys';
+export { VALIDATOR_CODES, validatorToCode } from './lib/validation-codes';
 export {
   ApiCommonErrors,
   buildProblemExample,

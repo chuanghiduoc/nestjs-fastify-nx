@@ -5,9 +5,9 @@ import {
   type ThrottlerStorageRedis,
 } from '@nest-lab/throttler-storage-redis';
 import type { ThrottlerStorage } from '@nestjs/throttler';
-import { redisReconnectStrategy } from '@nestjs-fastify-nx/shared';
-import Redis from 'ioredis';
+import type Redis from 'ioredis';
 import type { EnvConfig } from '../../config/env.validation';
+import { REDIS_DB, createApiRedis } from '../redis/api-redis.factory';
 
 // Fail-open: Redis outage issues a permit rather than 500. Auth paths use a separate Fastify limiter (db=4).
 // Set THROTTLER_FAIL_OPEN=false where any lapse is unacceptable.
@@ -21,14 +21,13 @@ export class ThrottlerRedisStorage implements OnModuleDestroy {
 
   constructor(config: ConfigService<EnvConfig, true>) {
     this.failOpen = config.get('THROTTLER_FAIL_OPEN', { infer: true });
-    this.redis = new Redis({
-      host: config.get('REDIS_CACHE_HOST', { infer: true }),
-      port: config.get('REDIS_CACHE_PORT', { infer: true }),
-      db: 1,
-      maxRetriesPerRequest: 1,
-      retryStrategy: redisReconnectStrategy,
-      enableOfflineQueue: false,
-    });
+    this.redis = createApiRedis(
+      {
+        host: config.get('REDIS_CACHE_HOST', { infer: true }),
+        port: config.get('REDIS_CACHE_PORT', { infer: true }),
+      },
+      REDIS_DB.THROTTLER,
+    );
     this.redis.on('error', (err: Error) => {
       this.logger.error({ err }, 'ioredis error');
     });

@@ -80,16 +80,54 @@ describe('DlqMonitorTask.reconcile', () => {
     );
   });
 
-  it('skips a job already present in the DLQ (idempotent, no re-route/log-spam)', async () => {
+  it('skips jobs already present in the DLQ without routing them again', async () => {
     const { task } = build();
-    const src = q('email-notification');
-    const dlq = q('email-notification.dlq');
-    src.getFailed.mockResolvedValue([{ id: 'j1', failedReason: 'boom' }]);
-    dlq.getJob.mockResolvedValue({ id: 'dlq__j1' });
+    q('email-notification').getFailed.mockResolvedValue([{ id: 'j1', failedReason: 'boom' }]);
+    q('email-notification.dlq').getJob.mockResolvedValue({ id: 'dlq__j1' });
 
     await task.reconcile();
 
     expect(routeSpy).not.toHaveBeenCalled();
+  });
+
+  it('pre-checks the whole batch concurrently and preserves each job’s failedReason', async () => {
+    const { task } = build();
+    const src = q('email-notification');
+    const dlq = q('email-notification.dlq');
+    src.getFailed.mockResolvedValue([
+      { id: 'a', failedReason: 'first reason' },
+      { id: 'b' },
+      { id: undefined },
+    ]);
+    dlq.getJob.mockImplementation(async (id: string) =>
+      id === 'dlq__a' ? { id: 'dlq__a' } : undefined,
+    );
+
+    await task.reconcile();
+
+    expect(dlq.getJob).toHaveBeenCalledTimes(2);
+    expect(routeSpy).toHaveBeenCalledExactlyOnceWith(
+      src,
+      dlq,
+      expect.objectContaining({ jobId: 'b', failedReason: 'reconciled: missed failed event' }),
+      expect.anything(),
+    );
+  });
+
+  it('degrades to routing everything when the bulk pre-check throws', async () => {
+    const { task } = build();
+    const src = q('email-notification');
+    src.getFailed.mockResolvedValue([{ id: 'j1', failedReason: 'boom' }]);
+    q('email-notification.dlq').getJob.mockRejectedValue(new Error('redis busy'));
+
+    await task.reconcile();
+
+    expect(routeSpy).toHaveBeenCalledWith(
+      src,
+      q('email-notification.dlq'),
+      expect.objectContaining({ jobId: 'j1' }),
+      expect.anything(),
+    );
   });
 
   it('does nothing on a follower replica', async () => {
@@ -103,14 +141,13 @@ describe('DlqMonitorTask.reconcile', () => {
   it('continues to the next queue when one source scan throws', async () => {
     const { task } = build();
     q('email-notification').getFailed.mockRejectedValue(new Error('redis down'));
-    const upload = q('upload-verification');
-    upload.getFailed.mockResolvedValue([{ id: 'u1', failedReason: 'x' }]);
-    upload.getJob.mockResolvedValue(undefined);
+    q('upload-verification').getFailed.mockResolvedValue([{ id: 'u1', failedReason: 'x' }]);
+    q('upload-verification.dlq').getJob.mockResolvedValue(undefined);
 
     await expect(task.reconcile()).resolves.toBeUndefined();
 
     expect(routeSpy).toHaveBeenCalledWith(
-      upload,
+      q('upload-verification'),
       q('upload-verification.dlq'),
       expect.objectContaining({ jobId: 'u1' }),
       expect.anything(),
