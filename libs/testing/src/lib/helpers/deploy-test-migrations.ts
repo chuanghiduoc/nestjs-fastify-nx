@@ -1,5 +1,6 @@
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 
 // The inferred @nx/vitest target runs vitest with cwd = projectRoot (not the
@@ -19,10 +20,15 @@ function resolveWorkspaceRoot(): string {
   return dir;
 }
 
+function resolvePrismaCli(): string {
+  const resolveFrom = createRequire(import.meta.url);
+  return join(dirname(resolveFrom.resolve('prisma/package.json')), 'build', 'index.js');
+}
+
 export function deployTestMigrations(databaseUrl: string): void {
-  execSync('pnpm prisma migrate deploy', {
+  execFileSync(process.execPath, [resolvePrismaCli(), 'migrate', 'deploy'], {
     cwd: resolveWorkspaceRoot(),
-    env: { ...process.env, DATABASE_URL: databaseUrl },
+    env: { ...process.env, DATABASE_URL: databaseUrl, PRISMA_HIDE_UPDATE_MESSAGE: 'true' },
     stdio: 'inherit',
   });
 }

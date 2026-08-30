@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll } from 'vitest';
 import request from 'supertest';
 import { ERROR_CATALOG_ENTRIES, errorTypeSlug } from '@nestjs-fastify-nx/contracts';
 import { createTestApp, type TestAppContext } from './test-app';
@@ -11,10 +11,6 @@ describe('Error type documentation E2E', () => {
   beforeAll(async () => {
     ctx = await createTestApp();
   }, 60_000);
-
-  afterAll(async () => {
-    await ctx.app.close();
-  });
 
   it('serves the type URI advertised by a real error response', async () => {
     const problem = await request(ctx.app.getHttpServer())
