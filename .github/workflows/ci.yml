@@ -97,19 +97,16 @@ jobs:
           fi
 
       - name: Format check
-        run: pnpm nx format:check --base=$NX_BASE --head=$NX_HEAD
+        run: pnpm nx format:check --base="$NX_BASE" --head="$NX_HEAD"
 
-      - name: Lint affected
-        run: pnpm nx affected --target=lint --base=$NX_BASE --head=$NX_HEAD --parallel=3
-
-      - name: Typecheck affected
-        run: pnpm nx affected --target=typecheck --base=$NX_BASE --head=$NX_HEAD --parallel=3
+      # One task graph instead of three sequential ones: as separate steps, the slowest lint task
+      # had to finish before the first typecheck started, leaving the runner idle at each boundary.
+      # `test` stays on its own because `-- --coverage` would be forwarded to every target.
+      - name: Lint, typecheck and build affected
+        run: pnpm nx affected --targets=lint,typecheck,build --base="$NX_BASE" --head="$NX_HEAD" --parallel=3
 
       - name: Unit test affected
-        run: pnpm nx affected --target=test --base=$NX_BASE --head=$NX_HEAD --exclude="*-e2e" --parallel=3 -- --coverage
-
-      - name: Build affected
-        run: pnpm nx affected --target=build --base=$NX_BASE --head=$NX_HEAD --parallel=3
+        run: pnpm nx affected --target=test --base="$NX_BASE" --head="$NX_HEAD" --exclude="*-e2e" --parallel=3 -- --coverage
 
   # `nx build` emits dist but never boots it, so runtime-only regressions slip
   # through every job above — an swc transpile target that breaks `class extends`,
