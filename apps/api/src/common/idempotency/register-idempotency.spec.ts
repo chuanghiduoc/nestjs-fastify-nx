@@ -447,7 +447,7 @@ describe('registerIdempotency', () => {
     const { app, callCount } = await buildApp(redis);
     const sessionCookie = { cookie: 'better-auth.session_token=test-session-1' };
 
-    await app.inject({
+    const first = await app.inject({
       method: 'POST',
       url: '/api/v1/echo',
       headers: { ...KEY_HEADER, ...sessionCookie, 'x-active-organization-id': 'org-a' },
@@ -462,6 +462,10 @@ describe('registerIdempotency', () => {
 
     expect(second.headers['idempotent-replayed']).toBe('true');
     expect(callCount()).toBe(1);
+    // The gap is that org-b receives org-a's response verbatim, so the body is what pins it —
+    // callCount alone would still pass if the replay returned something else.
+    expect(second.statusCode).toBe(first.statusCode);
+    expect(second.body).toBe(first.body);
   });
 
   it('returns 409 while an identical request is still in flight', async () => {
