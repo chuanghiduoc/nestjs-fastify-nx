@@ -31,6 +31,12 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
+        # Same trade as libs/testing's Testcontainers config: a CI database that is destroyed with
+        # the job has nothing to recover, so the WAL fsync on every TRUNCATE is pure cost.
+        # actionlint's service schema does not list `command` and flags it, but the runner does
+        # honour it — verified in the job log, which shows `docker create ... postgres:18-alpine
+        # postgres -c fsync=off …`. The redis-queue and minio services below rely on it too.
+        command: postgres -c fsync=off -c synchronous_commit=off -c full_page_writes=off
 
       redis-cache:
         image: redis:8-alpine
@@ -69,6 +75,13 @@ jobs:
       REDIS_CACHE_PORT: 6379
       REDIS_QUEUE_HOST: localhost
       REDIS_QUEUE_PORT: 6380
+      # The e2e global setup boots its own Postgres + Redis through Testcontainers unless all three
+      # are supplied. This job already runs both as service containers, so pointing the suite at
+      # them removes a duplicate container startup from every run. Nothing else is shared: the
+      # suite still deploys migrations, provisions the NOBYPASSRLS role and truncates per test.
+      E2E_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/nestjs_test_db
+      E2E_REDIS_HOST: localhost
+      E2E_REDIS_PORT: 6379
       # Better Auth replaces the legacy JWT setup; only one secret is needed.
       BETTER_AUTH_SECRET: integration-better-auth-secret-min-32-chars-long
       STORAGE_ENDPOINT: http://localhost:9000
@@ -108,7 +121,7 @@ jobs:
         # inferred @nx/vitest target runs vitest directly, which has no Jest-style
         # `--testPathPattern`. Only integration test files match; unit-only projects
         # match nothing and pass via `passWithNoTests`.
-        run: pnpm nx affected --target=test --base=$NX_BASE --head=$NX_HEAD --parallel=1 -- integration
+        run: pnpm nx affected --target=test --base="$NX_BASE" --head="$NX_HEAD" --parallel=1 -- integration
 
       - name: E2E tests
-        run: pnpm nx affected --target=e2e --base=$NX_BASE --head=$NX_HEAD --parallel=1
+        run: pnpm nx affected --target=e2e --base="$NX_BASE" --head="$NX_HEAD" --parallel=1
