@@ -2,7 +2,8 @@
   "audit_log": {
     "title_invalid_id": "Invalid AuditLog id",
     "invalid_id_empty": "id must be a non-empty string when provided",
-    "invalid_id_uuid": "id must be a valid UUID (audit_logs.id is a Postgres UUID column)"
+    "invalid_id_uuid": "id must be a valid UUID (audit_logs.id is a Postgres UUID column)",
+    "invalid_range": "occurredFrom must not be later than occurredUntil"
   },
   "upload": {
     "mime_not_allowed": "Mime type \"{contentType}\" is not allowed",
@@ -36,5 +37,44 @@
   },
   "pagination": {
     "invalid_cursor": "startingAfter is not a valid cursor"
+  },
+  "organizations": {
+    "not_found": "Organization not found",
+    "invalid_role_name": "Role name must be 2-50 lowercase letters, digits, hyphen or underscore, starting with a letter",
+    "reserved_role_name": "That role name is reserved by a built-in system role",
+    "empty_permissions": "A role must grant at least one permission",
+    "unknown_permission": "One or more permissions are outside the permission catalog",
+    "role_not_found": "Role not found",
+    "role_already_exists": "A role with this name already exists in the organization",
+    "role_in_use": "Role is still assigned to at least one member",
+    "team_not_found": "Team not found",
+    "team_name_taken": "A team with this name already exists in the organization",
+    "invitation_not_found": "Invitation not found",
+    "invitation_not_pending": "Only a pending invitation can be canceled"
+  },
+  "api_keys": {
+    "not_found": "API key not found",
+    "empty_scopes": "An API key must carry at least one scope",
+    "unknown_scope": "One or more scopes are outside the permission catalog",
+    "scope_exceeds_grant": "An API key cannot carry a permission its creator does not hold",
+    "expiry_in_past": "expiresAt must be in the future",
+    "invalid_credential": "API key is missing, revoked, or expired"
+  },
+  "notifications": {
+    "not_found": "Notification not found"
+  },
+  "feature_flags": {
+    "not_found": "Feature flag not found",
+    "key_taken": "A feature flag with this key already exists in the organization",
+    "invalid_key": "Feature flag key must be 2-100 lowercase letters, digits, dot, hyphen or underscore",
+    "invalid_rollout": "rolloutPercentage must be between 0 and 100"
+  },
+  "terms": {
+    "not_found": "Term not found",
+    "not_published": "That term version is not published",
+    "version_taken": "This version already exists for this term type"
+  },
+  "sessions": {
+    "not_found": "Session not found"
   }
 }

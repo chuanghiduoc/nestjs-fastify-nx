@@ -9,12 +9,23 @@ import { DatabaseModule } from '@nestjs-fastify-nx/infra-database';
 import { RedisQueueModule } from '@nestjs-fastify-nx/infra-redis';
 import { MessagingModule } from '@nestjs-fastify-nx/infra-messaging';
 import { StorageModule } from '@nestjs-fastify-nx/infra-storage';
-import { BetterAuthModule, BetterAuthGuard, RolesGuard } from '@nestjs-fastify-nx/infra-auth';
+import {
+  BetterAuthModule,
+  BetterAuthGuard,
+  ApiKeyGuard,
+  RolesGuard,
+} from '@nestjs-fastify-nx/infra-auth';
 import { AuthorizationModule, PermissionGuard } from '@nestjs-fastify-nx/infra-authorization';
 import { I18nInfraModule } from '@nestjs-fastify-nx/infra-i18n';
 import { UsersModule } from '@nestjs-fastify-nx/modules-users';
 import { AdminModule } from '@nestjs-fastify-nx/composition-admin';
 import { AuditLogModule } from '@nestjs-fastify-nx/modules-audit-log';
+import { OrganizationsModule } from '@nestjs-fastify-nx/modules-organizations';
+import { ApiKeysModule } from '@nestjs-fastify-nx/modules-api-keys';
+import { NotificationsModule } from '@nestjs-fastify-nx/modules-notifications';
+import { FeatureFlagsModule } from '@nestjs-fastify-nx/modules-feature-flags';
+import { TermsModule } from '@nestjs-fastify-nx/modules-terms';
+import { SessionsModule } from '@nestjs-fastify-nx/modules-sessions';
 import { LoggingModule } from '../common/logging/logging.module';
 import { HealthModule } from '../common/health/health.module';
 import { ErrorDocsModule } from '../common/errors/error-docs.module';
@@ -54,6 +65,12 @@ import { AppController } from './app.controller';
     UsersModule,
     AdminModule,
     AuditLogModule,
+    OrganizationsModule,
+    ApiKeysModule,
+    NotificationsModule,
+    FeatureFlagsModule,
+    TermsModule,
+    SessionsModule,
     UploadModule,
     GraphqlModule,
     WebsocketModule,
@@ -65,6 +82,9 @@ import { AppController } from './app.controller';
   controllers: [AppController],
   providers: [
     { provide: APP_GUARD, useClass: GqlThrottlerGuard },
+    // Before BetterAuthGuard: it verifies a presented API key and stamps the request, which lets
+    // the session guard skip cookie resolution for a machine caller.
+    { provide: APP_GUARD, useClass: ApiKeyGuard },
     { provide: APP_GUARD, useClass: BetterAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
     // After BetterAuthGuard: it needs the resolved session to build the principal. RolesGuard
