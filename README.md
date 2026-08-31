@@ -84,6 +84,8 @@ If you've ever shipped a Node service to production, you've written this code al
 - **Four runnable services** — `api`, `worker`, `scheduler`, `migration` — sharing a single Nx workspace and one pnpm lockfile.
 - **DDD + CQRS layout** with bounded contexts under `libs/modules/*`, infrastructure adapters under `libs/infra/*`, cross-cutting plumbing under `libs/core/*`.
 - **Better Auth (cookie sessions, scrypt hashing)** with WebSocket session reuse via a custom Socket.io adapter.
+- **Tenant self-service out of the box** — custom roles, teams, invitations, in-app notifications, feature flags with deterministic rollout, legal-terms acceptance, and session/device revocation, all behind the same permission model.
+- **API keys for machine-to-machine access** — SHA-256 digest at rest, scopes that can never exceed the issuer's own permissions, and routes that opt in explicitly ([ADR-0007](docs/adr/0007-api-key-authentication.md)).
 - **REST (OpenAPI/Swagger) + GraphQL (Mercurius) + Socket.io** all running on the same Fastify instance, with Redis pub/sub for cross-pod broadcast.
 - **BullMQ + Bull Board** UI mounted behind admin auth; transactional outbox pattern wires domain events to durable jobs.
 - **OpenTelemetry + Sentry + Prometheus `/metrics`** — traces, errors, and Prometheus-scrapeable metrics out of the box.
