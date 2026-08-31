@@ -6,8 +6,13 @@ import { AuditLog } from '../../../domain/entities/audit-log.entity';
 
 const EVT_ID = '00000000-0000-4000-8000-000000000001';
 
+const emptyPage = { items: [], hasMore: false };
+
 function buildHandler() {
-  const repository: AuditLogRepositoryPort = { append: vi.fn().mockResolvedValue(undefined) };
+  const repository: AuditLogRepositoryPort = {
+    append: vi.fn().mockResolvedValue(undefined),
+    findAllCursor: vi.fn().mockResolvedValue(emptyPage),
+  };
   return { handler: new RecordAuditLogHandler(repository), repository };
 }
 
@@ -58,6 +63,7 @@ describe('RecordAuditLogHandler', () => {
   it('propagates repository errors so the command bus surfaces them to the listener', async () => {
     const repository: AuditLogRepositoryPort = {
       append: vi.fn().mockRejectedValue(new Error('db down')),
+      findAllCursor: vi.fn().mockResolvedValue(emptyPage),
     };
     const handler = new RecordAuditLogHandler(repository);
 
