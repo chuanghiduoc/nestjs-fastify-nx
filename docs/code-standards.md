@@ -104,6 +104,26 @@ if (await this.users.exists(email)) {
 Pass `messageKey`/`title` as i18n keys, not literals: `GlobalExceptionFilter` only translates dotted
 strings, so a literal silently ships English to every locale.
 
+**Collect a module's exceptions in one file when more than one handler raises the same failure.**
+A module with several handlers that each answer `not_found` for the same aggregate ends up with the
+same twenty-line literal repeated, and the copies drift. Put small factories in
+`application/<context>-errors.ts` and import them:
+
+```typescript
+// libs/modules/organizations/src/application/organization-errors.ts
+export const roleInUse = () =>
+  conflict(
+    'role',
+    ERROR_CODES.ORGANIZATION_ROLE_IN_USE,
+    'Role is still assigned to at least one member',
+    I18N_KEYS.errors.organizations.role_in_use,
+  );
+```
+
+Keep the exception inline when exactly one handler raises it — a factory with one caller is
+indirection without a payoff. Examples: `organization-errors.ts`, `feature-flag-errors.ts`,
+`term-errors.ts`.
+
 ### Input Validation
 
 Use `class-validator` decorators on DTOs. The global `ProblemDetailsValidationPipe` automatically

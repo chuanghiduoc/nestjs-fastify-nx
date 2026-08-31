@@ -56,6 +56,34 @@ The API runs at `http://localhost:3000` by default.
 | `POST` | `/api/v1/upload/presign`      | session cookie    | issue a presigned POST policy      |
 | `POST` | `/api/v1/upload/confirm`      | session cookie    | confirm an upload                  |
 
+Tenant-facing endpoints, each gated by an organization permission rather than a platform role:
+
+| Method                  | Endpoint                                          | Permission                        |
+| ----------------------- | ------------------------------------------------- | --------------------------------- |
+| `GET`                   | `/api/v1/organizations/current`                   | `organization:read`               |
+| `GET`/`POST`            | `/api/v1/organizations/current/roles`             | `role:read` / `role:create`       |
+| `PATCH`/`DELETE`        | `/api/v1/organizations/current/roles/{role}`      | `role:update` / `role:delete`     |
+| `GET`/`POST`            | `/api/v1/organizations/current/teams`             | `team:read` / `team:create`       |
+| `PATCH`/`DELETE`        | `/api/v1/organizations/current/teams/{id}`        | `team:update` / `team:delete`     |
+| `GET`                   | `/api/v1/organizations/current/invitations`       | `invitation:read`                 |
+| `DELETE`                | `/api/v1/organizations/current/invitations/{id}`  | `invitation:cancel`               |
+| `GET`                   | `/api/v1/audit-logs`                              | `audit_log:read`                  |
+| `GET`/`POST`            | `/api/v1/api-keys`                                | `api_key:read` / `api_key:create` |
+| `DELETE`                | `/api/v1/api-keys/{id}`                           | `api_key:revoke`                  |
+| `GET`                   | `/api/v1/notifications`                           | `notification:read`               |
+| `POST`                  | `/api/v1/notifications/{id}/read`, `/read-all`    | `notification:update`             |
+| `GET`                   | `/api/v1/feature-flags`, `/evaluate`              | `feature_flag:read`               |
+| `POST`/`PATCH`/`DELETE` | `/api/v1/feature-flags[/{id}]`                    | `feature_flag:manage`             |
+| `GET`                   | `/api/v1/terms`, `/{type}/latest`, `/acceptances` | `term:read`                       |
+| `POST`                  | `/api/v1/terms/{id}/accept`                       | `term:accept`                     |
+| `POST`                  | `/api/v1/terms[/{id}/publish]`                    | `term:manage`                     |
+| `GET`/`DELETE`          | `/api/v1/sessions[/{id}]`                         | `session:read` / `session:revoke` |
+| `POST`                  | `/api/v1/sessions/revoke-others`                  | `session:revoke`                  |
+
+Two endpoints also accept an API key (`Authorization: Bearer sk_…` or `X-Api-Key`):
+`GET /api/v1/feature-flags` and `GET /api/v1/feature-flags/evaluate`. A route accepts a key only
+when it carries `@AllowApiKey()` — see [ADR-0007](adr/0007-api-key-authentication.md).
+
 Upload flow:
 
 ```text
@@ -111,18 +139,26 @@ send the cookie from the same origin; other clients should use `auth.token`.
 
 ## Where to find the code
 
-| Concern                                     | Location               |
-| ------------------------------------------- | ---------------------- |
-| HTTP bootstrap, CORS, Helmet, rate limiting | `apps/api/src/main.ts` |
-| Authentication, sessions, and role guards   | `libs/infra/auth`      |
-| User use cases and repositories             | `libs/modules/users`   |
-| Upload presign and confirmation             | `libs/modules/upload`  |
-| Prisma schema and migrations                | `prisma/`              |
-| Queue processing                            | `apps/worker`          |
-| Cron jobs and outbox relay                  | `apps/scheduler`       |
-| Database, Redis, and S3 adapters            | `libs/infra`           |
-| DTOs, errors, and OpenAPI contracts         | `libs/contracts`       |
-| Generated REST client                       | `libs/api-client`      |
+| Concern                                     | Location                             |
+| ------------------------------------------- | ------------------------------------ |
+| HTTP bootstrap, CORS, Helmet, rate limiting | `apps/api/src/main.ts`               |
+| Authentication, sessions, and role guards   | `libs/infra/auth`                    |
+| User use cases and repositories             | `libs/modules/users`                 |
+| Upload presign and confirmation             | `libs/modules/upload`                |
+| Roles, teams, invitations                   | `libs/modules/organizations`         |
+| Machine credentials                         | `libs/modules/api-keys`              |
+| In-app notifications                        | `libs/modules/notifications`         |
+| Feature flags                               | `libs/modules/feature-flags`         |
+| Legal terms and acceptance                  | `libs/modules/terms`                 |
+| Session listing and revocation              | `libs/modules/sessions`              |
+| Audit trail                                 | `libs/modules/audit-log`             |
+| Permission catalog and system roles         | `libs/shared/src/lib/permissions.ts` |
+| Prisma schema and migrations                | `prisma/`                            |
+| Queue processing                            | `apps/worker`                        |
+| Cron jobs and outbox relay                  | `apps/scheduler`                     |
+| Database, Redis, and S3 adapters            | `libs/infra`                         |
+| DTOs, errors, and OpenAPI contracts         | `libs/contracts`                     |
+| Generated REST client                       | `libs/api-client`                    |
 
 After changing a DTO or controller, run:
 
