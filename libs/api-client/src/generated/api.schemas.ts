@@ -298,6 +298,558 @@ export interface UserListItemResponseDto {
 }
 
 /**
+ * Event payload captured at record time, minus the fields promoted to columns.
+ */
+export type AuditLogResponseDtoMetadata = { [key: string]: unknown };
+
+export interface AuditLogResponseDto {
+  /** Audit entry id (UUID v7). */
+  id: string;
+  /**
+   * Organization the entry belongs to.
+   * @nullable
+   */
+  organizationId: string | null;
+  /**
+   * User the entry is attributed to, when the action had one.
+   * @nullable
+   */
+  userId: string | null;
+  /** Domain event name that produced the entry. */
+  action: string;
+  /**
+   * Resource label the action applied to.
+   * @nullable
+   */
+  resource: string | null;
+  /** Event payload captured at record time, minus the fields promoted to columns. */
+  metadata: AuditLogResponseDtoMetadata;
+  /**
+   * Client IP captured at record time.
+   * @nullable
+   */
+  ipAddress: string | null;
+  /**
+   * Client user agent captured at record time.
+   * @nullable
+   */
+  userAgent: string | null;
+  /** When the action occurred. */
+  createdAt: string;
+}
+
+export interface OrganizationResponseDto {
+  id: string;
+  name: string;
+  slug: string;
+  /** @nullable */
+  logo: string | null;
+  memberCount: number;
+  teamCount: number;
+  pendingInvitationCount: number;
+  createdAt: string;
+}
+
+export type CreateOrganizationRoleDtoPermissionsItem =
+  (typeof CreateOrganizationRoleDtoPermissionsItem)[keyof typeof CreateOrganizationRoleDtoPermissionsItem];
+
+export const CreateOrganizationRoleDtoPermissionsItem = {
+  'organization:read': 'organization:read',
+  'organization:update': 'organization:update',
+  'organization:delete': 'organization:delete',
+  'member:read': 'member:read',
+  'member:invite': 'member:invite',
+  'member:update': 'member:update',
+  'member:remove': 'member:remove',
+  'team:read': 'team:read',
+  'team:create': 'team:create',
+  'team:update': 'team:update',
+  'team:delete': 'team:delete',
+  'invitation:read': 'invitation:read',
+  'invitation:cancel': 'invitation:cancel',
+  'role:read': 'role:read',
+  'role:create': 'role:create',
+  'role:update': 'role:update',
+  'role:delete': 'role:delete',
+  'file:read': 'file:read',
+  'file:create': 'file:create',
+  'file:delete': 'file:delete',
+  'audit_log:read': 'audit_log:read',
+  'api_key:read': 'api_key:read',
+  'api_key:create': 'api_key:create',
+  'api_key:revoke': 'api_key:revoke',
+  'feature_flag:read': 'feature_flag:read',
+  'feature_flag:manage': 'feature_flag:manage',
+  'notification:read': 'notification:read',
+  'notification:update': 'notification:update',
+  'session:read': 'session:read',
+  'session:revoke': 'session:revoke',
+  'term:read': 'term:read',
+  'term:accept': 'term:accept',
+  'term:manage': 'term:manage',
+} as const;
+
+export interface CreateOrganizationRoleDto {
+  /** Role name, unique within the organization. Cannot shadow a system role. */
+  role: string;
+  /** Permissions the role grants. Every value must exist in the permission catalog. */
+  permissions: CreateOrganizationRoleDtoPermissionsItem[];
+}
+
+export type OrganizationRoleResponseDtoPermissionsItem =
+  (typeof OrganizationRoleResponseDtoPermissionsItem)[keyof typeof OrganizationRoleResponseDtoPermissionsItem];
+
+export const OrganizationRoleResponseDtoPermissionsItem = {
+  'organization:read': 'organization:read',
+  'organization:update': 'organization:update',
+  'organization:delete': 'organization:delete',
+  'member:read': 'member:read',
+  'member:invite': 'member:invite',
+  'member:update': 'member:update',
+  'member:remove': 'member:remove',
+  'team:read': 'team:read',
+  'team:create': 'team:create',
+  'team:update': 'team:update',
+  'team:delete': 'team:delete',
+  'invitation:read': 'invitation:read',
+  'invitation:cancel': 'invitation:cancel',
+  'role:read': 'role:read',
+  'role:create': 'role:create',
+  'role:update': 'role:update',
+  'role:delete': 'role:delete',
+  'file:read': 'file:read',
+  'file:create': 'file:create',
+  'file:delete': 'file:delete',
+  'audit_log:read': 'audit_log:read',
+  'api_key:read': 'api_key:read',
+  'api_key:create': 'api_key:create',
+  'api_key:revoke': 'api_key:revoke',
+  'feature_flag:read': 'feature_flag:read',
+  'feature_flag:manage': 'feature_flag:manage',
+  'notification:read': 'notification:read',
+  'notification:update': 'notification:update',
+  'session:read': 'session:read',
+  'session:revoke': 'session:revoke',
+  'term:read': 'term:read',
+  'term:accept': 'term:accept',
+  'term:manage': 'term:manage',
+} as const;
+
+export interface OrganizationRoleResponseDto {
+  /**
+   * Row id for a tenant-defined role; null for a built-in system role.
+   * @nullable
+   */
+  id: string | null;
+  /** Role name. */
+  role: string;
+  /** True for the built-in roles that ship with the product. */
+  system: boolean;
+  /** Permissions granted. */
+  permissions: OrganizationRoleResponseDtoPermissionsItem[];
+  /** @nullable */
+  createdAt: string | null;
+  /** @nullable */
+  updatedAt: string | null;
+}
+
+export type UpdateOrganizationRoleDtoPermissionsItem =
+  (typeof UpdateOrganizationRoleDtoPermissionsItem)[keyof typeof UpdateOrganizationRoleDtoPermissionsItem];
+
+export const UpdateOrganizationRoleDtoPermissionsItem = {
+  'organization:read': 'organization:read',
+  'organization:update': 'organization:update',
+  'organization:delete': 'organization:delete',
+  'member:read': 'member:read',
+  'member:invite': 'member:invite',
+  'member:update': 'member:update',
+  'member:remove': 'member:remove',
+  'team:read': 'team:read',
+  'team:create': 'team:create',
+  'team:update': 'team:update',
+  'team:delete': 'team:delete',
+  'invitation:read': 'invitation:read',
+  'invitation:cancel': 'invitation:cancel',
+  'role:read': 'role:read',
+  'role:create': 'role:create',
+  'role:update': 'role:update',
+  'role:delete': 'role:delete',
+  'file:read': 'file:read',
+  'file:create': 'file:create',
+  'file:delete': 'file:delete',
+  'audit_log:read': 'audit_log:read',
+  'api_key:read': 'api_key:read',
+  'api_key:create': 'api_key:create',
+  'api_key:revoke': 'api_key:revoke',
+  'feature_flag:read': 'feature_flag:read',
+  'feature_flag:manage': 'feature_flag:manage',
+  'notification:read': 'notification:read',
+  'notification:update': 'notification:update',
+  'session:read': 'session:read',
+  'session:revoke': 'session:revoke',
+  'term:read': 'term:read',
+  'term:accept': 'term:accept',
+  'term:manage': 'term:manage',
+} as const;
+
+export interface UpdateOrganizationRoleDto {
+  /** Replacement permission set — this is a full replace, not a merge. */
+  permissions: UpdateOrganizationRoleDtoPermissionsItem[];
+}
+
+export interface TeamResponseDto {
+  id: string;
+  name: string;
+  /** Number of members assigned to the team. */
+  memberCount: number;
+  createdAt: string;
+  /** @nullable */
+  updatedAt: string | null;
+}
+
+export interface CreateTeamDto {
+  /** Team name, unique within the organization. */
+  name: string;
+}
+
+export interface UpdateTeamDto {
+  /** Team name, unique within the organization. */
+  name: string;
+}
+
+export type InvitationResponseDtoStatus =
+  (typeof InvitationResponseDtoStatus)[keyof typeof InvitationResponseDtoStatus];
+
+export const InvitationResponseDtoStatus = {
+  pending: 'pending',
+  accepted: 'accepted',
+  rejected: 'rejected',
+  canceled: 'canceled',
+} as const;
+
+export interface InvitationResponseDto {
+  id: string;
+  email: string;
+  /**
+   * Role the invitee will receive.
+   * @nullable
+   */
+  role: string | null;
+  /** @nullable */
+  teamId: string | null;
+  status: InvitationResponseDtoStatus;
+  expiresAt: string;
+  /** User who sent the invitation. */
+  inviterId: string;
+  createdAt: string;
+}
+
+export type ApiKeyResponseDtoScopesItem =
+  (typeof ApiKeyResponseDtoScopesItem)[keyof typeof ApiKeyResponseDtoScopesItem];
+
+export const ApiKeyResponseDtoScopesItem = {
+  'organization:read': 'organization:read',
+  'organization:update': 'organization:update',
+  'organization:delete': 'organization:delete',
+  'member:read': 'member:read',
+  'member:invite': 'member:invite',
+  'member:update': 'member:update',
+  'member:remove': 'member:remove',
+  'team:read': 'team:read',
+  'team:create': 'team:create',
+  'team:update': 'team:update',
+  'team:delete': 'team:delete',
+  'invitation:read': 'invitation:read',
+  'invitation:cancel': 'invitation:cancel',
+  'role:read': 'role:read',
+  'role:create': 'role:create',
+  'role:update': 'role:update',
+  'role:delete': 'role:delete',
+  'file:read': 'file:read',
+  'file:create': 'file:create',
+  'file:delete': 'file:delete',
+  'audit_log:read': 'audit_log:read',
+  'api_key:read': 'api_key:read',
+  'api_key:create': 'api_key:create',
+  'api_key:revoke': 'api_key:revoke',
+  'feature_flag:read': 'feature_flag:read',
+  'feature_flag:manage': 'feature_flag:manage',
+  'notification:read': 'notification:read',
+  'notification:update': 'notification:update',
+  'session:read': 'session:read',
+  'session:revoke': 'session:revoke',
+  'term:read': 'term:read',
+  'term:accept': 'term:accept',
+  'term:manage': 'term:manage',
+} as const;
+
+export interface ApiKeyResponseDto {
+  id: string;
+  name: string;
+  /** Non-secret leading fragment of the key, for telling keys apart in a list. */
+  prefix: string;
+  scopes: ApiKeyResponseDtoScopesItem[];
+  /** @nullable */
+  createdById: string | null;
+  /** @nullable */
+  lastUsedAt: string | null;
+  /** @nullable */
+  expiresAt: string | null;
+  /** @nullable */
+  revokedAt: string | null;
+  createdAt: string;
+}
+
+export type CreateApiKeyDtoScopesItem =
+  (typeof CreateApiKeyDtoScopesItem)[keyof typeof CreateApiKeyDtoScopesItem];
+
+export const CreateApiKeyDtoScopesItem = {
+  'organization:read': 'organization:read',
+  'organization:update': 'organization:update',
+  'organization:delete': 'organization:delete',
+  'member:read': 'member:read',
+  'member:invite': 'member:invite',
+  'member:update': 'member:update',
+  'member:remove': 'member:remove',
+  'team:read': 'team:read',
+  'team:create': 'team:create',
+  'team:update': 'team:update',
+  'team:delete': 'team:delete',
+  'invitation:read': 'invitation:read',
+  'invitation:cancel': 'invitation:cancel',
+  'role:read': 'role:read',
+  'role:create': 'role:create',
+  'role:update': 'role:update',
+  'role:delete': 'role:delete',
+  'file:read': 'file:read',
+  'file:create': 'file:create',
+  'file:delete': 'file:delete',
+  'audit_log:read': 'audit_log:read',
+  'api_key:read': 'api_key:read',
+  'api_key:create': 'api_key:create',
+  'api_key:revoke': 'api_key:revoke',
+  'feature_flag:read': 'feature_flag:read',
+  'feature_flag:manage': 'feature_flag:manage',
+  'notification:read': 'notification:read',
+  'notification:update': 'notification:update',
+  'session:read': 'session:read',
+  'session:revoke': 'session:revoke',
+  'term:read': 'term:read',
+  'term:accept': 'term:accept',
+  'term:manage': 'term:manage',
+} as const;
+
+export interface CreateApiKeyDto {
+  /** Human-readable label for the key. */
+  name: string;
+  /** Permissions the key may exercise. Every scope must be in the catalog and must also be held by the caller — a key can never exceed its issuer. */
+  scopes: CreateApiKeyDtoScopesItem[];
+  /** Optional expiry. Omit for a key that never expires. */
+  expiresAt?: string;
+}
+
+export type IssuedApiKeyResponseDtoScopesItem =
+  (typeof IssuedApiKeyResponseDtoScopesItem)[keyof typeof IssuedApiKeyResponseDtoScopesItem];
+
+export const IssuedApiKeyResponseDtoScopesItem = {
+  'organization:read': 'organization:read',
+  'organization:update': 'organization:update',
+  'organization:delete': 'organization:delete',
+  'member:read': 'member:read',
+  'member:invite': 'member:invite',
+  'member:update': 'member:update',
+  'member:remove': 'member:remove',
+  'team:read': 'team:read',
+  'team:create': 'team:create',
+  'team:update': 'team:update',
+  'team:delete': 'team:delete',
+  'invitation:read': 'invitation:read',
+  'invitation:cancel': 'invitation:cancel',
+  'role:read': 'role:read',
+  'role:create': 'role:create',
+  'role:update': 'role:update',
+  'role:delete': 'role:delete',
+  'file:read': 'file:read',
+  'file:create': 'file:create',
+  'file:delete': 'file:delete',
+  'audit_log:read': 'audit_log:read',
+  'api_key:read': 'api_key:read',
+  'api_key:create': 'api_key:create',
+  'api_key:revoke': 'api_key:revoke',
+  'feature_flag:read': 'feature_flag:read',
+  'feature_flag:manage': 'feature_flag:manage',
+  'notification:read': 'notification:read',
+  'notification:update': 'notification:update',
+  'session:read': 'session:read',
+  'session:revoke': 'session:revoke',
+  'term:read': 'term:read',
+  'term:accept': 'term:accept',
+  'term:manage': 'term:manage',
+} as const;
+
+export interface IssuedApiKeyResponseDto {
+  id: string;
+  name: string;
+  /** Non-secret leading fragment of the key, for telling keys apart in a list. */
+  prefix: string;
+  scopes: IssuedApiKeyResponseDtoScopesItem[];
+  /** @nullable */
+  createdById: string | null;
+  /** @nullable */
+  lastUsedAt: string | null;
+  /** @nullable */
+  expiresAt: string | null;
+  /** @nullable */
+  revokedAt: string | null;
+  createdAt: string;
+  /** The raw key. Returned exactly once, here, and never retrievable again — store it now. */
+  key: string;
+}
+
+/**
+ * Type-specific payload.
+ */
+export type NotificationResponseDtoData = { [key: string]: unknown };
+
+export interface NotificationResponseDto {
+  id: string;
+  /** Notification type key. */
+  type: string;
+  title: string;
+  body: string;
+  /** Type-specific payload. */
+  data: NotificationResponseDtoData;
+  /** @nullable */
+  readAt: string | null;
+  createdAt: string;
+}
+
+export interface UnreadCountResponseDto {
+  /** Number of unread notifications for the caller. */
+  unread: number;
+}
+
+export interface MarkAllReadResponseDto {
+  /** How many notifications this call moved to read. */
+  marked: number;
+}
+
+export interface FeatureFlagResponseDto {
+  id: string;
+  key: string;
+  /** @nullable */
+  description: string | null;
+  enabled: boolean;
+  /**
+   * @minimum 0
+   * @maximum 100
+   */
+  rolloutPercentage: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * Every flag in the organization, resolved for the calling subject.
+ */
+export type EvaluatedFlagsResponseDtoFlags = { [key: string]: boolean };
+
+export interface EvaluatedFlagsResponseDto {
+  /** Every flag in the organization, resolved for the calling subject. */
+  flags: EvaluatedFlagsResponseDtoFlags;
+}
+
+export interface CreateFeatureFlagDto {
+  /** Stable key the client checks. Unique within the organization. */
+  key: string;
+  /**
+   * What the flag controls.
+   * @nullable
+   */
+  description?: string | null;
+  /** Master switch. Defaults to false. */
+  enabled?: boolean;
+  /**
+   * Share of subjects the flag is on for, 0–100. Bucketing is deterministic per subject, so a subject does not flip between requests. Defaults to 100.
+   * @minimum 0
+   * @maximum 100
+   */
+  rolloutPercentage?: number;
+}
+
+export interface UpdateFeatureFlagDto {
+  /** @nullable */
+  description?: string | null;
+  enabled?: boolean;
+  /**
+   * @minimum 0
+   * @maximum 100
+   */
+  rolloutPercentage?: number;
+}
+
+export type TermResponseDtoType = (typeof TermResponseDtoType)[keyof typeof TermResponseDtoType];
+
+export const TermResponseDtoType = {
+  terms_of_service: 'terms_of_service',
+  privacy_policy: 'privacy_policy',
+  cookie_policy: 'cookie_policy',
+} as const;
+
+export interface TermResponseDto {
+  id: string;
+  type: TermResponseDtoType;
+  version: string;
+  content: string;
+  /** @nullable */
+  publishedAt: string | null;
+  createdAt: string;
+}
+
+/**
+ * Which legal document this is.
+ */
+export type CreateTermDtoType = (typeof CreateTermDtoType)[keyof typeof CreateTermDtoType];
+
+export const CreateTermDtoType = {
+  terms_of_service: 'terms_of_service',
+  privacy_policy: 'privacy_policy',
+  cookie_policy: 'cookie_policy',
+} as const;
+
+export interface CreateTermDto {
+  /** Which legal document this is. */
+  type: CreateTermDtoType;
+  /** Version label, unique per type. */
+  version: string;
+  /** Document body. */
+  content: string;
+  /** Publish immediately. An unpublished version cannot be accepted. */
+  publish?: boolean;
+}
+
+export interface SessionResponseDto {
+  id: string;
+  /** @nullable */
+  ipAddress: string | null;
+  /**
+   * User agent captured at sign-in.
+   * @nullable
+   */
+  userAgent: string | null;
+  /** True for the session making this request. */
+  current: boolean;
+  expiresAt: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface RevokedSessionsResponseDto {
+  /** How many other sessions were signed out. */
+  revoked: number;
+}
+
+/**
  * Declared MIME type of the file the client intends to upload.
  */
 export type PresignUploadDtoContentType =
@@ -496,6 +1048,165 @@ export const AdminUsersListStatus = {
 
 export type AdminUsersList200 = ListResponseDto & {
   data?: UserListItemResponseDto[];
+};
+
+export type AuditLogsListParams = {
+  /**
+   * Items per page (1–100).
+   */
+  limit?: number;
+  /**
+   * Opaque cursor for the next page — pass the previous response's `lastCursor` value verbatim. The encoded format is `base64url(sortField.toISOString():id)` and clients MUST NOT construct it manually.
+   */
+  startingAfter?: string;
+  /**
+   * Exact domain event name to filter by, e.g. `users.registered`.
+   */
+  action?: string;
+  /**
+   * Exact resource label to filter by, e.g. `user` or `organization`.
+   */
+  resource?: string;
+  /**
+   * Restrict to entries recorded for a single acting user (UUID v7).
+   */
+  userId?: string;
+  /**
+   * Inclusive lower bound on when the entry was recorded (ISO 8601).
+   */
+  occurredFrom?: string;
+  /**
+   * Inclusive upper bound on when the entry was recorded (ISO 8601).
+   */
+  occurredUntil?: string;
+};
+
+export type AuditLogsList200 = ListResponseDto & {
+  data?: AuditLogResponseDto[];
+};
+
+export type TeamsListParams = {
+  /**
+   * Items per page (1–100).
+   */
+  limit?: number;
+  /**
+   * Opaque cursor for the next page — pass the previous response's `lastCursor` value verbatim. The encoded format is `base64url(sortField.toISOString():id)` and clients MUST NOT construct it manually.
+   */
+  startingAfter?: string;
+  /**
+   * Case-insensitive substring match on the team name.
+   */
+  search?: string;
+};
+
+export type TeamsList200 = ListResponseDto & {
+  data?: TeamResponseDto[];
+};
+
+export type InvitationsListParams = {
+  /**
+   * Items per page (1–100).
+   */
+  limit?: number;
+  /**
+   * Opaque cursor for the next page — pass the previous response's `lastCursor` value verbatim. The encoded format is `base64url(sortField.toISOString():id)` and clients MUST NOT construct it manually.
+   */
+  startingAfter?: string;
+  /**
+   * Filter by invitation status.
+   */
+  status?: InvitationsListStatus;
+  /**
+   * Filter by the invited email address.
+   */
+  email?: string;
+};
+
+export type InvitationsListStatus =
+  (typeof InvitationsListStatus)[keyof typeof InvitationsListStatus];
+
+export const InvitationsListStatus = {
+  pending: 'pending',
+  accepted: 'accepted',
+  rejected: 'rejected',
+  canceled: 'canceled',
+} as const;
+
+export type InvitationsList200 = ListResponseDto & {
+  data?: InvitationResponseDto[];
+};
+
+export type ApiKeysListParams = {
+  /**
+   * Items per page (1–100).
+   */
+  limit?: number;
+  /**
+   * Opaque cursor for the next page — pass the previous response's `lastCursor` value verbatim. The encoded format is `base64url(sortField.toISOString():id)` and clients MUST NOT construct it manually.
+   */
+  startingAfter?: string;
+  /**
+   * Include revoked keys in the listing. Defaults to false.
+   */
+  includeRevoked?: boolean;
+};
+
+export type ApiKeysList200 = ListResponseDto & {
+  data?: ApiKeyResponseDto[];
+};
+
+export type NotificationsListParams = {
+  /**
+   * Items per page (1–100).
+   */
+  limit?: number;
+  /**
+   * Opaque cursor for the next page — pass the previous response's `lastCursor` value verbatim. The encoded format is `base64url(sortField.toISOString():id)` and clients MUST NOT construct it manually.
+   */
+  startingAfter?: string;
+  /**
+   * Return only notifications that have not been read yet.
+   */
+  unreadOnly?: boolean;
+};
+
+export type NotificationsList200 = ListResponseDto & {
+  data?: NotificationResponseDto[];
+};
+
+export type FeatureFlagsListParams = {
+  /**
+   * Items per page (1–100).
+   */
+  limit?: number;
+  /**
+   * Opaque cursor for the next page — pass the previous response's `lastCursor` value verbatim. The encoded format is `base64url(sortField.toISOString():id)` and clients MUST NOT construct it manually.
+   */
+  startingAfter?: string;
+};
+
+export type FeatureFlagsList200 = ListResponseDto & {
+  data?: FeatureFlagResponseDto[];
+};
+
+export type SessionsListParams = {
+  /**
+   * Items per page (1–100).
+   */
+  limit?: number;
+  /**
+   * Opaque cursor for the next page — pass the previous response's `lastCursor` value verbatim. The encoded format is `base64url(sortField.toISOString():id)` and clients MUST NOT construct it manually.
+   */
+  startingAfter?: string;
+  /**
+   * Hide sessions that have already expired. Defaults to true.
+   */
+  activeOnly?: boolean;
+};
+
+export type SessionsList200 = ListResponseDto & {
+  data?: SessionResponseDto[];
 };
 
 export type SocialSignInBodyIdTokenUserName = {
