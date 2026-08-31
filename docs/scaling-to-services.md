@@ -4,23 +4,31 @@ How this codebase gets split into separately deployed services — and why it is
 
 ## Where the repo already stands
 
-| Property              | State                                                                                                    |
-| --------------------- | -------------------------------------------------------------------------------------------------------- |
-| Deployable units      | 4 (`api`, `worker`, `scheduler`, `migration`), each with its own Docker target and pruned `package.json` |
-| Bounded contexts      | 3 (`users`, `audit-log`, `upload`)                                                                       |
-| Cross-context imports | Blocked by `@nx/enforce-module-boundaries` — `scope:modules` cannot import another `scope:modules`       |
-| Table ownership       | Clean: each context's repository touches only its own tables                                             |
-| Cross-context FKs     | None. `StoredFile.userId` and `AuditLog.userId` deliberately carry **no** foreign key                    |
-| Cross-process events  | `outbox_events` + `OutboxRelayService`, at-least-once, with backoff                                      |
-| Event names           | `DOMAIN_EVENTS` in `@nestjs-fastify-nx/shared`, locked to the trigger SQL by `domain-events.spec.ts`     |
+| Property              | State                                                                                                                  |
+| --------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| Deployable units      | 4 (`api`, `worker`, `scheduler`, `migration`), each with its own Docker target and pruned `package.json`               |
+| Bounded contexts      | 9 (`users`, `audit-log`, `upload`, `organizations`, `api-keys`, `notifications`, `feature-flags`, `terms`, `sessions`) |
+| Cross-context imports | Blocked by `@nx/enforce-module-boundaries` — `scope:modules` cannot import another `scope:modules`                     |
+| Table ownership       | Clean: each context's repository touches only its own tables                                                           |
+| Cross-context FKs     | Only to the Better Auth core (`users`, `organizations`) — never between two feature contexts                           |
+| Cross-process events  | `outbox_events` + `OutboxRelayService`, at-least-once, with backoff                                                    |
+| Event names           | `DOMAIN_EVENTS` in `@nestjs-fastify-nx/shared`, locked to the trigger SQL by `domain-events.spec.ts`                   |
 
-The only foreign keys in the schema are `Session.userId → User` and `Account.userId → User` — all three
-tables belong to Better Auth, so they move together as one unit. Nothing else joins across contexts.
+Foreign keys fall into two groups. Better Auth's own tables (`sessions`, `accounts`, `members`,
+`invitations`, `teams`, `organization_roles`) reference `users`/`organizations` and move together as
+one unit. The newer feature tables (`api_keys`, `notifications`, `feature_flags`, `term_acceptances`)
+also reference that core, which is deliberate: the core is the last thing to be split, so a foreign
+key pointing _into_ it costs nothing until Stage 3.
+
+What matters is what is absent — **no feature context references another feature context**.
+`stored_files.userId` and `audit_logs.userId` carry no foreign key at all so the scheduler can still
+purge objects after a user row is gone.
 
 ## What is deliberately not done yet
 
 Splitting costs network failures, eventual consistency, per-service CI/CD and distributed tracing.
-With 3 contexts and 7 tables that trade is a loss. Split when one of these is true, not before:
+With 9 contexts sharing one database and one deploy, that trade is still a loss — the contexts grew,
+the coupling did not. Split when one of these is true, not before:
 
 - a context needs to scale on a different axis (upload is I/O bound, audit is write bound)
 - two or more teams block each other on release
@@ -46,6 +54,11 @@ Gains independent deploy, scaling and blast radius. Does not gain data isolation
 ## Stage 2 — separate data for an edge context
 
 `audit-log` and `upload` are the two candidates, because their tables have no inbound foreign key.
+`notifications` is a third: it is written only by a listener reacting to `organizations.*` events and
+read only by its owner, so it already behaves like a downstream consumer of the event stream.
+
+`api-keys` is explicitly **not** a candidate — verification sits on the authentication path of every
+machine request, so moving it across the network buys nothing and adds a hop to every call.
 
 Per context:
 

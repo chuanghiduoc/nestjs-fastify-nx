@@ -347,10 +347,13 @@ Full flow: [docs/deployment.md](docs/deployment.md).
 - [Creating a Module](docs/creating-a-module.md) — DDD/CQRS scaffold walkthrough
 - [Environment Variables](docs/environment.md) — every env var, defaults, validation
 - [Deployment](docs/deployment.md) — Docker, GHCR, Cosign verification, migrations
-- [Security Scanning](docs/security.md) — five-layer pipeline, local + CI parity
+- [Security](docs/security.md) — five-layer scan pipeline plus how API keys and session tokens are held
+- [Error Handling](docs/error-handling.md) — which error to throw, which status the client gets
 - [Troubleshooting](docs/troubleshooting.md) — known issues, debug tips
-- [Runbook](docs/runbook.md) — ops runbook: health, metrics, outbox, BullMQ, performance
+- [Runbook](docs/runbook.md) — ops runbook: outbox, DLQ, leaked API keys, missing notifications, backups
 - [Code Standards](docs/code-standards.md) — logging, error handling, DTOs, boundary rules
+- [Scaling to services](docs/scaling-to-services.md) — what is ready to split out, and in what order
+- [Architecture Decisions](docs/adr/README.md) — the decisions that are expensive to reverse
 - [API Reference](http://localhost:3000/docs) (Scalar, dev only)
 
 ## Contributing

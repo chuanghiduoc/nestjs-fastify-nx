@@ -38,7 +38,7 @@ Stop the stack:
 
 Three-layer design enforced by `@nx/enforce-module-boundaries`:
 
-1. **Bounded Contexts** (`libs/modules/*`) — DDD modules that never import each other. Examples: `users`, `audit-log`, `upload`.
+1. **Bounded Contexts** (`libs/modules/*`) — DDD modules that never import each other: `users`, `audit-log`, `upload`, `organizations`, `api-keys`, `notifications`, `feature-flags`, `terms`, `sessions`.
 2. **Composition Layer** (`libs/composition/*`) — cross-context features that depend on modules. Example: `admin` dashboard.
 3. **Platform Layer** (`libs/infra/*`, `libs/core/*`) — shared auth, database, messaging, observability. Used by everything above.
 
@@ -151,12 +151,23 @@ Enforced by ESLint + Lefthook + CI.
 
 ## Pull Request Checklist
 
-> **Note:** the Lefthook pre-commit hook runs only `lint-staged` + `typecheck` (fast). It does **not** run tests or build — Testcontainers-backed tests are too slow for every commit. Run the full gate yourself before pushing: `pnpm nx affected -t lint test build typecheck --base=origin/main`. CI is the real enforcement point, but running it locally avoids a red PR.
+> **Note:** the Lefthook pre-commit hook runs `lint-staged`, `typecheck` and a staged-only Gitleaks
+> scan (fast). It does **not** run tests or build — Testcontainers-backed tests are too slow for
+> every commit. Run the full gate yourself before pushing:
+> `pnpm nx affected -t lint test build typecheck --base=origin/main`. CI is the real enforcement
+> point, but running it locally avoids a red PR.
+>
+> **Coverage is enforced only in CI.** The local `nx test` target omits `--coverage`, so a project
+> can be green on your machine and still fail the PR on a 60% threshold. Add
+> `pnpm nx run-many -t test -- --coverage` before pushing when you have added files — note the flag
+> belongs to the `test` target alone, and passing it to a combined `lint test build` run fails the
+> other targets.
 
-- [ ] Tests added/updated (`pnpm nx test`)
+- [ ] Tests added/updated (`pnpm nx test`), coverage checked (`pnpm nx run-many -t test -- --coverage`)
 - [ ] Lint pass (`pnpm nx affected -t lint --base=origin/main`)
 - [ ] Build pass (`pnpm nx affected -t build --base=origin/main`)
-- [ ] API docs updated (if endpoints changed)
+- [ ] API docs updated (if endpoints changed) — and `pnpm codegen:full` re-run so `libs/api-client` matches
+- [ ] New permission added to `PERMISSIONS` reaches both authorization engines (parity spec is the check)
 - [ ] CHANGELOG.md updated (if user-facing)
 - [ ] No TODOs in code
 - [ ] Conventional commit (`feat(scope): description`)

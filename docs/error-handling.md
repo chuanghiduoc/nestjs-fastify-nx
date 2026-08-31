@@ -109,8 +109,8 @@ is the value to quote in a bug report — it appears on every log line for that 
 | Status | Raised by                                                                                                                 | Documented by                                     |
 | ------ | ------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------- |
 | `400`  | `DomainException({ kind: 'malformed' })`, malformed JSON, bad headers                                                     | `ApiCommonErrors` (always)                        |
-| `401`  | `BetterAuthGuard` — missing or invalid session cookie                                                                     | `ApiCommonErrors({ auth: true })`                 |
-| `403`  | `RolesGuard`, non-ACTIVE account, `DomainException({ kind: 'forbidden' })`                                                | `ApiCommonErrors` (implied by `auth`)             |
+| `401`  | `BetterAuthGuard` — missing or invalid session cookie; `ApiKeyGuard` — unknown, revoked or expired key                    | `ApiCommonErrors({ auth: true })`                 |
+| `403`  | `RolesGuard`, `PermissionGuard`, non-ACTIVE account, `DomainException({ kind: 'forbidden' })`                             | `ApiCommonErrors` (implied by `auth`)             |
 | `404`  | `DomainException({ kind: 'not_found' })`, unmatched route                                                                 | `ApiCommonErrors({ notFound: true })`             |
 | `409`  | `DomainException({ kind: 'conflict' })`, Prisma P2002/P2003, in-flight idempotent replay                                  | `ApiCommonErrors({ conflict: true })`             |
 | `413`  | `@fastify/multipart` / body limit                                                                                         | `ApiCommonErrors({ payloadTooLarge: true })`      |
@@ -128,6 +128,44 @@ document a richer one carrying a `checks` breakdown.
 
 Note: an unmatched **method** on an existing path answers `404`, not `405` — that is Fastify's
 router default and this project does not override it.
+
+## Domain codes by area
+
+`code` is the value a client keys its i18n and its retry logic off, so it must come from
+`ERROR_CODES` (`libs/contracts`) and never be an ad-hoc string. Every code below is documented at
+`GET /errors/<slug>` — the same URI the `type` member points at — and `error-catalog.spec.ts` fails
+if a code exists without a doc entry or the other way round.
+
+| Area             | Codes                                                                                                                   |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| Users            | `user_not_found`, `user_already_exists`, `organization_context_required`                                                |
+| Organizations    | `organization_not_found`, `organization_role_not_found`, `organization_role_already_exists`, `organization_role_in_use` |
+| Teams            | `team_not_found`, `team_name_taken`                                                                                     |
+| Invitations      | `invitation_not_found`, `invitation_not_pending`                                                                        |
+| API keys         | `api_key_not_found`, `api_key_invalid_credential`, `api_key_scope_exceeds_grant`                                        |
+| Notifications    | `notification_not_found`                                                                                                |
+| Feature flags    | `feature_flag_not_found`, `feature_flag_key_taken`                                                                      |
+| Terms            | `term_not_found`, `term_not_published`, `term_version_taken`                                                            |
+| Sessions         | `session_not_found`                                                                                                     |
+| Audit log        | `invalid_audit_log_id`                                                                                                  |
+| Pagination       | `invalid_cursor`                                                                                                        |
+| Upload / storage | `upload_*`, `storage_*`                                                                                                 |
+| Idempotency      | `idempotency_key_invalid`, `idempotency_key_conflict`, `idempotency_key_mismatch`                                       |
+
+Two of these carry a decision worth knowing:
+
+- **`api_key_scope_exceeds_grant` (422)** — a key may never carry a permission its issuer does not
+  hold, otherwise `api_key:create` silently becomes a grant of the entire catalog.
+- **`organization_role_in_use` (409)** — deleting a role that members still hold would strip their
+  permissions with no audit trail, so it is refused until they are reassigned.
+
+## Answering `404` where `403` would be truthful
+
+Several handlers return `not_found` for a resource the caller is simply not allowed to see: a
+notification addressed to another member, a session belonging to another user, a team in another
+organization. A distinguishable `403` would confirm that the id exists, which is itself a leak.
+Use `forbidden` when the caller may already know the resource exists (a permission they lack on
+their own organization); use `not_found` when the answer would otherwise reveal existence.
 
 ## Never leak internals
 

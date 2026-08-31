@@ -249,13 +249,32 @@ GET /api/v1/users/me → UsersController.getProfile (BetterAuthGuard)
   → guard validates `better-auth.session_token`, attaches user to request
   → QueryBus.execute(GetUserProfileQuery) → GetUserProfileHandler → UserRepository.findById()
 
-GET /api/v1/admin/users → AdminUsersController.list (BetterAuthGuard + RolesGuard)
-  → guards reject non-ADMIN sessions with 403
+GET /api/v1/admin/users → AdminUsersController.list (BetterAuthGuard + PermissionGuard)
+  → PermissionGuard resolves `member:read` for (user, active organization) and 403s without it
   → QueryBus.execute(ListUsersCursorQuery) → ListUsersCursorHandler (cursor-paginated)
+
+GET /api/v1/feature-flags (Authorization: Bearer sk_…) → FeatureFlagsController.list
+  → ApiKeyGuard verifies the digest, stamps req.apiKey, BetterAuthGuard steps aside
+  → PermissionGuard builds an api_key principal and checks `feature_flag:read` against its scopes
 ```
 
-Protected REST and GraphQL endpoints rely on `BetterAuthGuard` and
-`RolesGuard`, both wired globally as `APP_GUARD` providers in `AppModule`.
+### Guard chain
+
+Four `APP_GUARD` providers run in this order (`apps/api/src/app/app.module.ts`), and the order is
+load-bearing:
+
+| #   | Guard               | Answers                                                                      |
+| --- | ------------------- | ---------------------------------------------------------------------------- |
+| 1   | `GqlThrottlerGuard` | Is this caller over their rate budget?                                       |
+| 2   | `ApiKeyGuard`       | Was an API key presented, is it live, and does this route accept one?        |
+| 3   | `BetterAuthGuard`   | Is there a valid session cookie? Skipped entirely when step 2 verified a key |
+| 4   | `RolesGuard`        | Platform axis — does `User.role` satisfy `@Roles()`?                         |
+| 5   | `PermissionGuard`   | Organization axis — does the principal hold the `@RequirePermission()`?      |
+
+`ApiKeyGuard` must precede `BetterAuthGuard`: it is what lets a machine caller through without a
+cookie. `PermissionGuard` must come last because it needs the principal either of the two produced.
+Every one of them returns early on `context.getType() === 'ws'` — WebSocket frames are authorized at
+the socket.io layer instead.
 
 Sign-up traces the full event chain — note the Postgres trigger writes the
 outbox row inside Better Auth's own transaction, so the event can never be lost:

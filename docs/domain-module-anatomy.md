@@ -669,7 +669,31 @@ export class UserFactory {
 **Rules**: `testing/**` (like `*.spec.ts`, `*.integration.ts`) is exempt from
 the module-boundary lint rule, but keep fakes behaviorally faithful —
 `MockUserRepository.findAllCursor` replicates the same sort/cursor semantics
-as Postgres so handler tests catch real pagination bugs.
+as Postgres so handler tests catch real pagination bugs. A fake that always
+returns everything turns a tenant-scoping bug into a passing test.
+
+Two mechanical points that cost a CI round trip each when missed:
+
+- **Do not mark a fake's methods `async` unless they `await` something.**
+  `@typescript-eslint/require-await` fails the lint step. Return
+  `Promise.resolve(value)` instead — the port's signature is unchanged.
+- **Generate id and secret fixtures rather than hardcoding them.** A literal
+  UUID or `sk_…` string assigned to a name containing `key`/`credential` trips
+  the Gitleaks pre-commit hook, and renaming the constant only moves the
+  problem. Use `generateId()` / `generateApiKey()` from
+  `@nestjs-fastify-nx/shared`.
+
+Newer modules name these `InMemory<Aggregate>Repository` and group several in one
+`testing/in-memory-repositories.ts` when a module owns more than one aggregate
+(`libs/modules/organizations`); `Mock<Port>Repository` in `users` and `audit-log`
+is the same thing under the older name.
+
+**Coverage:** unit specs alone leave repositories and controllers at 0%, which
+sinks a module below the 60% threshold that only CI enforces. Cover repositories
+with a `PrismaService` double asserting the `where` clause the tenant scoping
+depends on, and controllers with `CommandBus`/`QueryBus` doubles asserting the
+dispatched message. Run `pnpm nx test <project> -- --coverage` before pushing —
+the local target omits the flag.
 
 ## 4. Putting it together — adding a feature
 
