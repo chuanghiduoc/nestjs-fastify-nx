@@ -11,20 +11,23 @@ datasource db {
 }
 
 model User {
-  id              String       @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  name            String       @default("")
-  email           String       @unique
-  emailVerified   Boolean      @default(false)
+  id              String           @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  name            String           @default("")
+  email           String           @unique
+  emailVerified   Boolean          @default(false)
   image           String?
-  role            String       @default("USER")
-  status          String       @default("ACTIVE")
-  createdAt       DateTime     @default(now())
-  updatedAt       DateTime     @updatedAt
+  role            String           @default("USER")
+  status          String           @default("ACTIVE")
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
   sessions        Session[]
   accounts        Account[]
   memberships     Member[]
   teamMembers     TeamMember[]
   sentInvitations Invitation[]
+  apiKeys         ApiKey[]
+  notifications   Notification[]
+  termAcceptances TermAcceptance[]
 
   // The @unique on email already creates a B-tree — a separate @@index([email])
   // would just duplicate writes for zero query benefit, so it is intentionally
@@ -117,6 +120,9 @@ model Organization {
   teams             Team[]
   organizationRoles OrganizationRole[]
   activeSessions    Session[]
+  apiKeys           ApiKey[]
+  notifications     Notification[]
+  featureFlags      FeatureFlag[]
 
   @@index([createdAt(sort: Desc), id(sort: Desc)], map: "organizations_createdAt_id_desc_idx")
   @@map("organizations")
@@ -291,4 +297,101 @@ model AuditLog {
   // Two-column index with createdAt last so it remains useful for range scans.
   @@index([resource, createdAt])
   @@map("audit_logs")
+}
+
+// Machine-to-machine credential. Only the SHA-256 digest of the raw key is stored — the raw value
+// is shown once at creation and is unrecoverable afterwards. `prefix` is the human-readable
+// fragment the UI lists so an operator can tell two keys apart without seeing either secret.
+model ApiKey {
+  id             String    @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  organizationId String    @db.Uuid
+  name           String
+  prefix         String
+  keyHash        String    @unique
+  scopes         String[]
+  createdById    String?   @db.Uuid
+  lastUsedAt     DateTime?
+  expiresAt      DateTime?
+  revokedAt      DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy    User?        @relation(fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, revokedAt])
+  @@index([organizationId, createdAt(sort: Desc), id(sort: Desc)], map: "api_keys_org_createdAt_id_desc_idx")
+  @@index([createdById])
+  @@map("api_keys")
+}
+
+model Notification {
+  id             String    @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  organizationId String    @db.Uuid
+  userId         String    @db.Uuid
+  type           String
+  title          String
+  body           String
+  data           Json      @default("{}")
+  readAt         DateTime?
+  createdAt      DateTime  @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, userId, createdAt(sort: Desc), id(sort: Desc)], map: "notifications_org_user_createdAt_id_desc_idx")
+  @@index([userId, readAt])
+  @@map("notifications")
+}
+
+// Scoped to one organization by design: a nullable organizationId would need a partial unique
+// index to keep a single global row per key, which Prisma cannot declare (see ADR-0004).
+model FeatureFlag {
+  id                String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  organizationId    String   @db.Uuid
+  key               String
+  description       String?
+  enabled           Boolean  @default(false)
+  rolloutPercentage Int      @default(0)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, key])
+  @@index([organizationId, createdAt(sort: Desc), id(sort: Desc)], map: "feature_flags_org_createdAt_id_desc_idx")
+  @@map("feature_flags")
+}
+
+// Platform-wide legal documents. Not tenant-scoped: every organization is served the same
+// published version, and acceptance is recorded per user.
+model Term {
+  id          String    @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  type        String
+  version     String
+  content     String
+  publishedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  acceptances TermAcceptance[]
+
+  @@unique([type, version])
+  @@index([type, publishedAt(sort: Desc)])
+  @@map("terms")
+}
+
+model TermAcceptance {
+  id         String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  termId     String   @db.Uuid
+  userId     String   @db.Uuid
+  acceptedAt DateTime @default(now())
+  ipAddress  String?
+
+  term Term @relation(fields: [termId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([termId, userId])
+  @@index([userId, acceptedAt(sort: Desc)])
+  @@map("term_acceptances")
 }

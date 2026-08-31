@@ -1,9 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '@nestjs-fastify-nx/infra-database';
 import {
-  ALL_PERMISSIONS,
   SYSTEM_ROLE_PERMISSIONS,
   isSystemRole,
+  parsePermissionStatements,
   type Permission,
   type ResourceType,
 } from '@nestjs-fastify-nx/shared';
@@ -18,32 +18,6 @@ import type {
   ResourceRef,
 } from '@nestjs-fastify-nx/core';
 import { decideAccess, decideFilter, type PolicyContext } from './access-policy';
-
-interface CustomRolePermissions {
-  readonly granted: readonly Permission[];
-  readonly unknown: readonly string[];
-}
-
-function parseCustomRolePermissions(raw: string): CustomRolePermissions {
-  const parsed: unknown = JSON.parse(raw);
-  if (!parsed || typeof parsed !== 'object') return { granted: [], unknown: [] };
-
-  const granted: Permission[] = [];
-  const unknown: string[] = [];
-  for (const [resource, actions] of Object.entries(parsed as Record<string, unknown>)) {
-    if (!Array.isArray(actions)) continue;
-    for (const action of actions) {
-      if (typeof action !== 'string') continue;
-      const candidate = `${resource}:${action}`;
-      if ((ALL_PERMISSIONS as readonly string[]).includes(candidate)) {
-        granted.push(candidate as Permission);
-      } else {
-        unknown.push(candidate);
-      }
-    }
-  }
-  return { granted, unknown };
-}
 
 @Injectable()
 export class PostgresPbacAdapter implements AuthorizationPort {
@@ -112,7 +86,7 @@ export class PostgresPbacAdapter implements AuthorizationPort {
 
     for (const customRole of customRoles) {
       try {
-        const { granted: valid, unknown } = parseCustomRolePermissions(customRole.permission);
+        const { granted: valid, unknown } = parsePermissionStatements(customRole.permission);
         for (const permission of valid) granted.add(permission);
         if (unknown.length > 0) {
           this.logger.warn(

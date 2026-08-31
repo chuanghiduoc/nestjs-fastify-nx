@@ -12,12 +12,16 @@ import { ERROR_CODES, I18N_KEYS } from '@nestjs-fastify-nx/contracts';
 import {
   IS_PUBLIC_KEY,
   requireOrganizationId,
+  type AuthenticatedApiKey,
   type AuthenticatedSession,
 } from '@nestjs-fastify-nx/infra-auth';
 import type { Permission } from '@nestjs-fastify-nx/shared';
 import { REQUIRED_PERMISSIONS_KEY } from './require-permission.decorator';
 
-type RequestWithUser = FastifyRequest & { user?: AuthenticatedSession };
+type RequestWithUser = FastifyRequest & {
+  user?: AuthenticatedSession;
+  apiKey?: AuthenticatedApiKey;
+};
 
 function forbidden(permission: Permission): DomainException {
   return new DomainException({
@@ -62,16 +66,7 @@ export class PermissionGuard implements CanActivate {
     ]);
     if (!required || required.length === 0) return true;
 
-    const user = this.getRequest(context).user;
-    if (!user) throw forbidden(required[0]);
-
-    // Distinct from a permission failure: the caller may well hold the permission, but no
-    // organization is selected so there is nothing to evaluate it against.
-    const principal: Principal = {
-      type: 'user',
-      userId: user.userId,
-      organizationId: requireOrganizationId(user),
-    };
+    const principal = this.resolvePrincipal(this.getRequest(context), required[0]);
 
     const decisions = await this.authorization.checkMany(
       principal,
@@ -82,6 +77,28 @@ export class PermissionGuard implements CanActivate {
     if (deniedIndex >= 0) throw forbidden(required[deniedIndex]);
 
     return true;
+  }
+
+  private resolvePrincipal(request: RequestWithUser, firstRequired: Permission): Principal {
+    if (request.apiKey) {
+      return {
+        type: 'api_key',
+        apiKeyId: request.apiKey.apiKeyId,
+        organizationId: request.apiKey.organizationId,
+        scopes: request.apiKey.scopes,
+      };
+    }
+
+    const user = request.user;
+    if (!user) throw forbidden(firstRequired);
+
+    // Distinct from a permission failure: the caller may well hold the permission, but no
+    // organization is selected so there is nothing to evaluate it against.
+    return {
+      type: 'user',
+      userId: user.userId,
+      organizationId: requireOrganizationId(user),
+    };
   }
 
   private getRequest(context: ExecutionContext): RequestWithUser {

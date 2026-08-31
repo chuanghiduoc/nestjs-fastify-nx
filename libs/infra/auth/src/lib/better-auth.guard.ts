@@ -45,6 +45,10 @@ export class BetterAuthGuard implements CanActivate {
 
     const request = this.getRequest(context);
 
+    // ApiKeyGuard runs first and only stamps this after verifying the key against a route that
+    // opted into machine access, so there is no session to resolve and nothing to revalidate.
+    if ((request as FastifyRequest & { apiKey?: unknown }).apiKey) return true;
+
     const session = await this.auth.api.getSession({
       // role/status are authorization inputs. Cookie-cache values may remain valid after an
       // admin deactivates or demotes a user, so always revalidate them here.

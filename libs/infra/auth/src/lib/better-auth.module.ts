@@ -13,6 +13,7 @@ import {
 import { createBetterAuth, type AuthMailDispatcher } from './better-auth.config';
 import { BETTER_AUTH_INSTANCE } from './better-auth-instance.token';
 import { BetterAuthGuard } from './better-auth.guard';
+import { ApiKeyGuard } from './api-key.guard';
 import { RolesGuard } from './roles.guard';
 
 const JOB_ID_FINGERPRINT_LENGTH = 32;
@@ -51,8 +52,9 @@ const JOB_ID_FINGERPRINT_LENGTH = 32;
       inject: [PrismaService, getQueueToken(QUEUE_NAMES.EMAIL_NOTIFICATION), I18nService],
     },
     BetterAuthGuard,
+    ApiKeyGuard,
     RolesGuard,
   ],
-  exports: [BETTER_AUTH_INSTANCE, BetterAuthGuard, RolesGuard],
+  exports: [BETTER_AUTH_INSTANCE, BetterAuthGuard, ApiKeyGuard, RolesGuard],
 })
 export class BetterAuthModule {}

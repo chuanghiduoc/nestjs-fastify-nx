@@ -2,7 +2,8 @@
   "audit_log": {
     "title_invalid_id": "ID nhật ký kiểm toán không hợp lệ",
     "invalid_id_empty": "id phải là chuỗi không rỗng khi được cung cấp",
-    "invalid_id_uuid": "id phải là UUID hợp lệ (cột audit_logs.id là kiểu UUID Postgres)"
+    "invalid_id_uuid": "id phải là UUID hợp lệ (cột audit_logs.id là kiểu UUID Postgres)",
+    "invalid_range": "occurredFrom không được lớn hơn occurredUntil"
   },
   "upload": {
     "mime_not_allowed": "Định dạng \"{contentType}\" không được phép",
@@ -36,5 +37,44 @@
   },
   "pagination": {
     "invalid_cursor": "startingAfter không phải là con trỏ hợp lệ"
+  },
+  "organizations": {
+    "not_found": "Không tìm thấy tổ chức",
+    "invalid_role_name": "Tên vai trò phải gồm 2-50 ký tự chữ thường, số, gạch ngang hoặc gạch dưới, bắt đầu bằng chữ cái",
+    "reserved_role_name": "Tên vai trò này đã được vai trò hệ thống sử dụng",
+    "empty_permissions": "Vai trò phải cấp ít nhất một quyền",
+    "unknown_permission": "Có quyền nằm ngoài danh mục quyền của hệ thống",
+    "role_not_found": "Không tìm thấy vai trò",
+    "role_already_exists": "Tổ chức đã có vai trò trùng tên này",
+    "role_in_use": "Vai trò vẫn đang được gán cho ít nhất một thành viên",
+    "team_not_found": "Không tìm thấy nhóm",
+    "team_name_taken": "Tổ chức đã có nhóm trùng tên này",
+    "invitation_not_found": "Không tìm thấy lời mời",
+    "invitation_not_pending": "Chỉ có thể huỷ lời mời đang ở trạng thái chờ"
+  },
+  "api_keys": {
+    "not_found": "Không tìm thấy API key",
+    "empty_scopes": "API key phải có ít nhất một phạm vi quyền",
+    "unknown_scope": "Có phạm vi quyền nằm ngoài danh mục quyền của hệ thống",
+    "scope_exceeds_grant": "API key không thể mang quyền mà người tạo không có",
+    "expiry_in_past": "expiresAt phải là thời điểm trong tương lai",
+    "invalid_credential": "API key không tồn tại, đã bị thu hồi hoặc đã hết hạn"
+  },
+  "notifications": {
+    "not_found": "Không tìm thấy thông báo"
+  },
+  "feature_flags": {
+    "not_found": "Không tìm thấy feature flag",
+    "key_taken": "Tổ chức đã có feature flag trùng key này",
+    "invalid_key": "Key của feature flag phải gồm 2-100 ký tự chữ thường, số, dấu chấm, gạch ngang hoặc gạch dưới",
+    "invalid_rollout": "rolloutPercentage phải nằm trong khoảng 0 đến 100"
+  },
+  "terms": {
+    "not_found": "Không tìm thấy điều khoản",
+    "not_published": "Phiên bản điều khoản này chưa được công bố",
+    "version_taken": "Phiên bản này đã tồn tại cho loại điều khoản đó"
+  },
+  "sessions": {
+    "not_found": "Không tìm thấy phiên đăng nhập"
   }
 }

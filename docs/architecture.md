@@ -11,9 +11,15 @@ nestjs-fastify-nx/
 │   └── migration/    # One-shot prisma migrate deploy + optional seed
 ├── libs/
 │   ├── modules/      # Bounded contexts (DDD)
-│   │   ├── users/        # scope:modules — user profile, session lookup
-│   │   ├── audit-log/    # scope:modules — domain-event listener writes audit rows
-│   │   └── upload/       # scope:modules — multipart handler, file processing
+│   │   ├── users/           # scope:modules — user profile, admin listing
+│   │   ├── audit-log/       # scope:modules — event listener writes rows; RLS-bound read API
+│   │   ├── upload/          # scope:modules — multipart handler, file processing
+│   │   ├── organizations/   # scope:modules — custom roles, teams, invitations, current org
+│   │   ├── api-keys/        # scope:modules — machine credentials (ADR-0007)
+│   │   ├── notifications/   # scope:modules — in-app notifications fed by domain events
+│   │   ├── feature-flags/   # scope:modules — per-organization flags, deterministic rollout
+│   │   ├── terms/           # scope:modules — legal documents + per-user acceptance
+│   │   └── sessions/        # scope:modules — the caller's own sessions: list and revoke
 │   ├── composition/   # Cross-cutting aggregators (scope:composition)
 │   │   └── admin/     # admin surface + Bull Board (scope:composition tag; composed into api)
 │   ├── infra/        # Adapters
@@ -58,6 +64,12 @@ flowchart TD
         users["users"]
         audit["audit-log"]
         upload["upload"]
+        orgs["organizations"]
+        apikeys["api-keys"]
+        notif["notifications"]
+        flags["feature-flags"]
+        terms["terms"]
+        sess["sessions"]
     end
 
     subgraph infra["libs/infra/ · scope:infra · adapters"]
@@ -92,7 +104,7 @@ flowchart TD
     classDef baseBox fill:#374151,stroke:#4b5563,color:#fff;
     class api,worker,scheduler,migration appBox;
     class comp compBox;
-    class users,audit,upload modBox;
+    class users,audit,upload,orgs,apikeys,notif,flags,terms,sess modBox;
     class infraAuth,database,redis,messaging,storage,observability infraBox;
     class core,contracts,shared baseBox;
 ```
@@ -165,6 +177,7 @@ flowchart TD
         direction LR
         m1["users"]
         m2["audit-log"]
+        m3["organizations"]
     end
 
     infra["scope:infra"]

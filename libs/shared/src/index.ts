@@ -18,7 +18,9 @@ export {
   DOMAIN_EVENTS,
   DOMAIN_EVENT_STREAMS,
   userEventPayloadSchema,
+  organizationEventPayloadSchema,
   type DomainEventType,
+  type OrganizationEventPayload,
   type UserEventPayload,
 } from './lib/domain-events';
 export {
@@ -59,7 +61,21 @@ export {
   SYSTEM_ROLE_PERMISSIONS,
   isSystemRole,
   resourceTypeOf,
+  groupPermissionsByResource,
+  parsePermissionStatements,
+  serializePermissionStatements,
+  type ParsedPermissionStatements,
   type Permission,
   type ResourceType,
   type SystemRole,
 } from './lib/permissions';
+export {
+  API_KEY_DISPLAY_PREFIX_LENGTH,
+  API_KEY_PREFIX,
+  API_KEY_SECRET_BYTES,
+  apiKeyDisplayPrefix,
+  generateApiKey,
+  hashApiKey,
+  looksLikeApiKey,
+  type GeneratedApiKey,
+} from './lib/api-key';

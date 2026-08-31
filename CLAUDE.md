@@ -99,7 +99,15 @@ apps/
 
 libs/
   modules/      bounded contexts (DDD per module — see below)
-    upload/     multipart handler (see HTTP_BODY_LIMIT_BYTES, UPLOAD_MAX_FILE_BYTES env)
+    users/          identity + admin listing
+    audit-log/      append-only trail; read API is cursor-paginated and RLS-bound
+    upload/         multipart handler (see HTTP_BODY_LIMIT_BYTES, UPLOAD_MAX_FILE_BYTES env)
+    organizations/  tenant self-service: custom roles, teams, invitations, current org
+    api-keys/       machine-to-machine credentials (see ADR-0007)
+    notifications/  in-app notifications, written by a listener on organizations.* events
+    feature-flags/  per-organization flags with deterministic percentage rollout
+    terms/          platform legal documents + per-user acceptance
+    sessions/       the caller's own sign-in sessions: list, revoke one, revoke others
   composition/  cross-cutting libs
     admin/      admin panel + Bull Board (scope:composition tag; composed into api)
   core/         auth, errors, events, outbox, validation
@@ -185,6 +193,11 @@ pnpm nx run api:e2e                # Testcontainers — Docker required. Set TES
 pnpm nx graph
 
 # Database (shortcuts wrap prisma; see package.json)
+# SINGLE migration by design: this is a boilerplate, so a fork runs one clean `20260501000000_init`
+# rather than replaying someone else's history. Schema changes made BEFORE the first release are
+# folded into that file (then verified with `prisma migrate diff --from-config-datasource
+# --to-schema prisma/schema.prisma --script`, which must print an empty migration against a
+# database built from init alone). Once a fork has deployed, switch to additive migrations.
 pnpm db:migrate --name <slug>      # prisma migrate dev (create + apply + regen)
 pnpm db:deploy                     # prisma migrate deploy (committed migrations only)
 pnpm db:seed                       # node prisma/seed.mjs
@@ -262,6 +275,12 @@ pnpm rm:project <name>             # remove a lib/app + clean refs/tags (nx work
   Putting `@Roles('ADMIN')` on a tenant endpoint is a bug in both directions: it locks out the organization owner (whose platform role is `USER`) **and** lets provider staff read another tenant's data. `GET /api/v1/admin/users` was exactly that before it moved to `member:read`; `users` has no RLS behind it, so the `memberships.some` join in `findAllCursor` is the only thing preventing a cross-tenant member listing — never drop it.
 
   Permission names live in `PERMISSIONS` (`@nestjs-fastify-nx/shared`) and are persisted in `organization_roles.permission`, so renaming one is a data migration. Roles resolve as system roles ∪ tenant-defined custom roles; the engine sits behind `AuthorizationPort` and both adapters must pass the shared conformance suite (see `docs/adr/0002-authorization-engine-port.md`).
+
+  **Two engines evaluate those permissions, and they must stay in step.** `/api/auth/organization/*` is governed by Better Auth's own access-control plugin (`organization-access-control.ts`); `/api/v1/*` is governed by `PostgresPbacAdapter` behind `PermissionGuard`. Both derive from `SYSTEM_ROLE_PERMISSIONS` and both read/write `organization_roles.permission` through the SAME helpers (`groupPermissionsByResource`, `parsePermissionStatements`, `serializePermissionStatements` in `@nestjs-fastify-nx/shared`) — never re-implement that JSON shape. `organization-access-control-parity.spec.ts` fails if an edit reaches one engine and not the other.
+
+  **Resource scope drives the filter, not just the permission.** `RESOURCE_SCOPES` in `access-policy.ts` classifies each resource type: `organization` (predicate on `organizationId`), `organization_self` (tenant **and** caller — notifications), `self` (caller only, no tenant column — sessions), `global` (platform-wide — terms). A new resource type must be added there or `decideFilter` will not compile.
+
+  **Tenant-facing routes reachable by a machine** carry `@AllowApiKey()` and read their tenant via `resolveOrganizationId(user, apiKey)`. A key presented to a route without that decorator is refused before the lookup — see `docs/adr/0007-api-key-authentication.md`.
 
 - **Auth = `@CurrentUser()` from `@nestjs-fastify-nx/infra-auth`**, returning `AuthenticatedSession` (REST + GraphQL). It lives in infra-auth, not per module, so any `scope:modules` lib shares it without a boundary violation. Do NOT reintroduce a per-module `current-user.decorator.ts` / `AuthenticatedUser` type, and do NOT read the user via `@Req() req: FastifyRequest & { user }`. GraphQL `me` is auth-required (mirrors REST `/users/me`); marking it `@Public()` would skip the guard and leave `req.user` unset, so it would return null even when signed in.
 - **`EVENT_PUBLISHER_DRIVER=outbox` is REQUIRED in production** (enforced by `env.validation.ts` in api + scheduler; set in `compose.prod.yml`). `inprocess` (EventEmitter2) loses domain events on crash/rollback. The driver only backs the `EVENT_PUBLISHER_PORT` provider — inert today since no producer calls `publishAll()` — so forcing outbox is future-proofing, not a behavior change.

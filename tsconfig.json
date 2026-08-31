@@ -67,6 +67,24 @@
     },
     {
       "path": "./libs/infra/authorization"
+    },
+    {
+      "path": "./libs/modules/feature-flags"
+    },
+    {
+      "path": "./libs/modules/notifications"
+    },
+    {
+      "path": "./libs/modules/organizations"
+    },
+    {
+      "path": "./libs/modules/api-keys"
+    },
+    {
+      "path": "./libs/modules/sessions"
+    },
+    {
+      "path": "./libs/modules/terms"
     }
   ]
 }

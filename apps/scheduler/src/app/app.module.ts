@@ -12,7 +12,8 @@ import {
   LivenessProbeService,
 } from '@nestjs-fastify-nx/infra-observability';
 import { UsersListenersModule } from '@nestjs-fastify-nx/modules-users';
-import { AuditLogModule } from '@nestjs-fastify-nx/modules-audit-log';
+import { AuditLogListenersModule } from '@nestjs-fastify-nx/modules-audit-log';
+import { NotificationsListenersModule } from '@nestjs-fastify-nx/modules-notifications';
 import { validateSchedulerConfig } from '../config/env.validation';
 import { BatchedPurgeRunner } from './tasks/batched-purge.runner';
 import { CleanupTask } from './tasks/cleanup.task';
@@ -42,7 +43,8 @@ import { VerificationCleanupTask } from './tasks/verification-cleanup.task';
     // because they pull in HTTP controllers + Better Auth guards that have
     // no place in this background worker.
     UsersListenersModule,
-    AuditLogModule,
+    AuditLogListenersModule,
+    NotificationsListenersModule,
   ],
   providers: [
     BatchedPurgeRunner,

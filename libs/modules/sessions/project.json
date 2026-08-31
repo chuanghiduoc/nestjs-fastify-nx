@@ -1,0 +1,9 @@
+{
+  "name": "modules-sessions",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "library",
+  "sourceRoot": "libs/modules/sessions/src",
+  "tags": ["scope:modules"],
+  "// targets": "to see all targets run: nx show project modules-sessions --web",
+  "targets": {}
+}

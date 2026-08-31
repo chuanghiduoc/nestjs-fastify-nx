@@ -12,6 +12,7 @@ the old file stays for the reasoning trail.
 | [0004](0004-deletion-model.md)                  | Deletion is three distinct mechanisms, not one flag                                  | Accepted |
 | [0005](0005-trusted-proxy-allow-list.md)        | Client IP resolution trusts an allow-list, not a hop count                           | Accepted |
 | [0006](0006-shared-e2e-application-instance.md) | The e2e suite shares one module registry, one application and one database container | Accepted |
+| [0007](0007-api-key-authentication.md)          | API keys are hashed bearer credentials, and routes opt into them                     | Accepted |
 
 ## Template
 
