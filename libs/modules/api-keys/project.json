@@ -1,0 +1,9 @@
+{
+  "name": "modules-api-keys",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "library",
+  "sourceRoot": "libs/modules/api-keys/src",
+  "tags": ["scope:modules"],
+  "// targets": "to see all targets run: nx show project modules-api-keys --web",
+  "targets": {}
+}
