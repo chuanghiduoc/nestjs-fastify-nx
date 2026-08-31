@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { HttpException, type CallHandler, type ExecutionContext } from '@nestjs/common';
 import { HEADERS_METADATA } from '@nestjs/common/constants';
 import type { ConfigService } from '@nestjs/config';
@@ -34,9 +34,21 @@ function handlerEmitting(value: unknown, afterMs = 0): CallHandler {
   } as unknown as CallHandler;
 }
 
-const tick = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+// Everything here is driven by the clock, and the late-capture window is exactly as long as the
+// timeout budget — so on a loaded CI runner a real-timer test can lose the race against the very
+// window it is asserting on. Virtual time makes the ordering exact instead of probable.
+// `advanceTimersByTimeAsync` is what lets the promise chains between timers settle.
+const advance = (ms: number) => vi.advanceTimersByTimeAsync(ms);
 
 describe('TimeoutInterceptor', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it('passes a fast handler through untouched', async () => {
     const interceptor = makeInterceptor(1000);
     const result = await firstValueFrom(
@@ -47,31 +59,42 @@ describe('TimeoutInterceptor', () => {
 
   it('throws a 504 request_timeout when the handler exceeds the budget', async () => {
     const interceptor = makeInterceptor(10);
-    try {
-      await firstValueFrom(interceptor.intercept(makeContext('http'), handlerEmitting('late', 50)));
-      expect.unreachable('handler should have timed out');
-    } catch (err) {
-      expect(err).toBeInstanceOf(HttpException);
-      const exception = err as HttpException;
-      expect(exception.getStatus()).toBe(504);
-      expect((exception.getResponse() as { code: string }).code).toBe('request_timeout');
-    }
+    const settled = firstValueFrom(
+      interceptor.intercept(makeContext('http'), handlerEmitting('late', 50)),
+    ).then(
+      () => expect.unreachable('handler should have timed out'),
+      (err: unknown) => err,
+    );
+
+    await advance(10);
+
+    const err = await settled;
+    expect(err).toBeInstanceOf(HttpException);
+    const exception = err as HttpException;
+    expect(exception.getStatus()).toBe(504);
+    expect((exception.getResponse() as { code: string }).code).toBe('request_timeout');
   });
 
   it('does not apply to WebSocket contexts', async () => {
     const interceptor = makeInterceptor(10);
-    const result = await firstValueFrom(
+    const settled = firstValueFrom(
       interceptor.intercept(makeContext('ws'), handlerEmitting('late', 50)),
     );
-    expect(result).toBe('late');
+
+    await advance(50);
+
+    expect(await settled).toBe('late');
   });
 
   it('is disabled when the timeout is 0', async () => {
     const interceptor = makeInterceptor(0);
-    const result = await firstValueFrom(
+    const settled = firstValueFrom(
       interceptor.intercept(makeContext('http'), handlerEmitting('late', 50)),
     );
-    expect(result).toBe('late');
+
+    await advance(50);
+
+    expect(await settled).toBe('late');
   });
 
   it('lets non-timeout errors propagate unchanged', async () => {
@@ -96,7 +119,10 @@ describe('TimeoutInterceptor', () => {
       const settled = firstValueFrom(
         interceptor.intercept(makeContext('http', request), handler),
       ).catch((e: unknown) => e);
-      const err = await settled; // resolves when the 504 fires (~50ms)
+
+      await advance(50); // the 504 fires here
+
+      const err = await settled;
       expect(err).toBeInstanceOf(HttpException);
       expect((err as HttpException).getStatus()).toBe(504);
       expect(completeLate).not.toHaveBeenCalled();
@@ -105,7 +131,7 @@ describe('TimeoutInterceptor', () => {
       // explicit content type (defaults to application/json inside completeLate).
       subject.next('late-result');
       subject.complete();
-      await tick(0);
+      await advance(0);
       expect(completeLate).toHaveBeenCalledWith(201, 'late-result', undefined);
     });
 
@@ -119,11 +145,13 @@ describe('TimeoutInterceptor', () => {
       const settled = firstValueFrom(
         interceptor.intercept(makeContext('http', request), handler),
       ).catch((e: unknown) => e);
+
+      await advance(50);
       await settled;
 
       subject.next('a,b,c');
       subject.complete();
-      await tick(0);
+      await advance(0);
       expect(completeLate).toHaveBeenCalledWith(201, 'a,b,c', 'text/csv');
     });
 
@@ -178,28 +206,32 @@ describe('TimeoutInterceptor', () => {
 
     it('hands the subscriber exactly one timeout error, then feeds a late value to the hook', async () => {
       const h = run(10);
-      await tick(20);
+
+      await advance(10); // budget lapses: the 504 goes out and the late window opens
       expect(h.errors).toEqual(['TIMEOUT']);
 
+      // Still inside the late window — the source has not been torn down, so the value is captured
+      // rather than delivered to the (already errored) subscriber.
       h.source.next('x');
-      await tick(0);
-      expect(h.received).toEqual([`late:x`]);
+      expect(h.received).toEqual(['late:x']);
     });
 
     it('stops capturing after the late window elapses', async () => {
       const h = run(10);
-      await tick(15);
-      await tick(15);
+
+      await advance(10); // budget lapses
+      await advance(10); // late window lapses and the source is unsubscribed
 
       h.source.next('too-late');
-      await tick(0);
       expect(h.errors).toEqual(['TIMEOUT']);
       expect(h.received).toEqual([]);
     });
 
     it('ignores a late error after the 504', async () => {
       const h = run(10);
-      await tick(20);
+
+      await advance(10);
+
       expect(() => h.source.error(new Error('boom'))).not.toThrow();
       expect(h.received).toEqual([]);
     });
