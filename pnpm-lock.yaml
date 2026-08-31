@@ -55,11 +55,11 @@ importers:
         specifier: ^3.1112.0
         version: 3.1116.0
       '@bull-board/api':
-        specifier: ^8.6.0
-        version: 8.6.0(@bull-board/ui@8.6.0(bullmq@6.2.0(ioredis@6.0.0)(pg@8.23.0)))(bullmq@6.2.0(ioredis@6.0.0)(pg@8.23.0))
+        specifier: ^9.4.0
+        version: 9.4.0(@bull-board/ui@9.4.0(bullmq@6.2.0(ioredis@6.0.0)(pg@8.23.0)))(bullmq@6.2.0(ioredis@6.0.0)(pg@8.23.0))
       '@bull-board/fastify':
-        specifier: ^8.6.0
-        version: 8.6.0(bullmq@6.2.0(ioredis@6.0.0)(pg@8.23.0))
+        specifier: ^9.4.0
+        version: 9.4.0(bullmq@6.2.0(ioredis@6.0.0)(pg@8.23.0))
       '@fastify/compress':
         specifier: ^9.2.0
         version: 9.2.0
@@ -1537,10 +1537,10 @@ packages:
   '@bufbuild/protobuf@2.12.0':
     resolution: {integrity: sha512-B/XlCaFIP8LOwzo+bz5uFzATYokcwCKQcghqnlfwSmM5eX/qTkvDBnDPs+gXtX/RyjxJ4DRikECcPJbyALA8FA==}
 
-  '@bull-board/api@8.6.0':
-    resolution: {integrity: sha512-tJLkYszUJhvDzTexLT+6/OEUYCWrR5QBKXk+SNlNsxHw8WClSRFEirXMrKwrei3LlMVxPV5lvbBOC7LNNymibQ==}
+  '@bull-board/api@9.4.0':
+    resolution: {integrity: sha512-poPku55iQd/VS65BUD8yn/uIHUruDwOVOiPEbThzjCd1nHAzEUEj/D+LWW1t9vzRsvN6xBr5jXlbJDapBnz7aw==}
     peerDependencies:
-      '@bull-board/ui': 8.6.0
+      '@bull-board/ui': 9.4.0
       bull: ^4.16.5
       bullmq: ^5.79.2 || ^6.0.0
     peerDependenciesMeta:
@@ -1549,11 +1549,11 @@ packages:
       bullmq:
         optional: true
 
-  '@bull-board/fastify@8.6.0':
-    resolution: {integrity: sha512-Th5ExBU8pe0MfkhSRSDAZ3Y/eMxdSeFnAoUQ98qJNjYtykaEVkTL0VyTozKRAHb1Dggg3K31VS1j1a7JwlTNfA==}
+  '@bull-board/fastify@9.4.0':
+    resolution: {integrity: sha512-N8kvvHfnCnohu44MglXT0LHlo5KncHd0tHNqE+Y9OEMfdRJseCKJujtb/FnzAgB+VRxsMI+Y8O9PN9x8g2+IsA==}
 
-  '@bull-board/ui@8.6.0':
-    resolution: {integrity: sha512-Qb/HYNU2JhRYKoyeJhXgeu1ZL4VK5RANmLC/cpzbtZPz5b9b260d0J0Af0L0zGdP6ORYg2XpPQKwrIy7n96AwQ==}
+  '@bull-board/ui@9.4.0':
+    resolution: {integrity: sha512-oRuCjMawEdpwFpHWWT6tzZLVqaqP+sK7xs1C1AhvTGm4pViNyPKwV7chtSExFOdVZuXJnJOl74WTXsHRfKMF3A==}
 
   '@colordx/core@5.5.0':
     resolution: {integrity: sha512-3PxTH8itZzltK0U9jTwVVnjLXvnDYuq3m+QXsHkENxWiPRh4WaoLcs1SQjqgZ55kS+QyirpH5BVwzP2gMVG6EQ==}
@@ -10572,17 +10572,17 @@ snapshots:
 
   '@bufbuild/protobuf@2.12.0': {}
 
-  '@bull-board/api@8.6.0(@bull-board/ui@8.6.0(bullmq@6.2.0(ioredis@6.0.0)(pg@8.23.0)))(bullmq@6.2.0(ioredis@6.0.0)(pg@8.23.0))':
+  '@bull-board/api@9.4.0(@bull-board/ui@9.4.0(bullmq@6.2.0(ioredis@6.0.0)(pg@8.23.0)))(bullmq@6.2.0(ioredis@6.0.0)(pg@8.23.0))':
     dependencies:
-      '@bull-board/ui': 8.6.0(bullmq@6.2.0(ioredis@6.0.0)(pg@8.23.0))
+      '@bull-board/ui': 9.4.0(bullmq@6.2.0(ioredis@6.0.0)(pg@8.23.0))
       redis-info: 3.1.0
     optionalDependencies:
       bullmq: 6.2.0(ioredis@6.0.0)(pg@8.23.0)
 
-  '@bull-board/fastify@8.6.0(bullmq@6.2.0(ioredis@6.0.0)(pg@8.23.0))':
+  '@bull-board/fastify@9.4.0(bullmq@6.2.0(ioredis@6.0.0)(pg@8.23.0))':
     dependencies:
-      '@bull-board/api': 8.6.0(@bull-board/ui@8.6.0(bullmq@6.2.0(ioredis@6.0.0)(pg@8.23.0)))(bullmq@6.2.0(ioredis@6.0.0)(pg@8.23.0))
-      '@bull-board/ui': 8.6.0(bullmq@6.2.0(ioredis@6.0.0)(pg@8.23.0))
+      '@bull-board/api': 9.4.0(@bull-board/ui@9.4.0(bullmq@6.2.0(ioredis@6.0.0)(pg@8.23.0)))(bullmq@6.2.0(ioredis@6.0.0)(pg@8.23.0))
+      '@bull-board/ui': 9.4.0(bullmq@6.2.0(ioredis@6.0.0)(pg@8.23.0))
       '@fastify/static': 10.1.3
       '@fastify/view': 12.0.0
       ejs: 6.0.1
@@ -10590,9 +10590,9 @@ snapshots:
       - bull
       - bullmq
 
-  '@bull-board/ui@8.6.0(bullmq@6.2.0(ioredis@6.0.0)(pg@8.23.0))':
+  '@bull-board/ui@9.4.0(bullmq@6.2.0(ioredis@6.0.0)(pg@8.23.0))':
     dependencies:
-      '@bull-board/api': 8.6.0(@bull-board/ui@8.6.0(bullmq@6.2.0(ioredis@6.0.0)(pg@8.23.0)))(bullmq@6.2.0(ioredis@6.0.0)(pg@8.23.0))
+      '@bull-board/api': 9.4.0(@bull-board/ui@9.4.0(bullmq@6.2.0(ioredis@6.0.0)(pg@8.23.0)))(bullmq@6.2.0(ioredis@6.0.0)(pg@8.23.0))
     transitivePeerDependencies:
       - bull
       - bullmq
