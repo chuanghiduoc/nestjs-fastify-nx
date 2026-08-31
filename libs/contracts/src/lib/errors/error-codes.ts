@@ -37,6 +37,30 @@ export const ERROR_CODES = {
   UPLOAD_COMMIT_FAILED: 'upload_commit_failed',
   UPLOAD_IN_PROGRESS: 'upload_in_progress',
 
+  ORGANIZATION_NOT_FOUND: 'organization_not_found',
+  ORGANIZATION_ROLE_NOT_FOUND: 'organization_role_not_found',
+  ORGANIZATION_ROLE_ALREADY_EXISTS: 'organization_role_already_exists',
+  ORGANIZATION_ROLE_IN_USE: 'organization_role_in_use',
+  TEAM_NOT_FOUND: 'team_not_found',
+  TEAM_NAME_TAKEN: 'team_name_taken',
+  INVITATION_NOT_FOUND: 'invitation_not_found',
+  INVITATION_NOT_PENDING: 'invitation_not_pending',
+
+  API_KEY_NOT_FOUND: 'api_key_not_found',
+  API_KEY_INVALID_CREDENTIAL: 'api_key_invalid_credential',
+  API_KEY_SCOPE_EXCEEDS_GRANT: 'api_key_scope_exceeds_grant',
+
+  NOTIFICATION_NOT_FOUND: 'notification_not_found',
+
+  FEATURE_FLAG_NOT_FOUND: 'feature_flag_not_found',
+  FEATURE_FLAG_KEY_TAKEN: 'feature_flag_key_taken',
+
+  TERM_NOT_FOUND: 'term_not_found',
+  TERM_NOT_PUBLISHED: 'term_not_published',
+  TERM_VERSION_TAKEN: 'term_version_taken',
+
+  SESSION_NOT_FOUND: 'session_not_found',
+
   // Storage adapter failures — raised by S3StorageAdapter, caught by handlers/processors.
   STORAGE_BODY_EMPTY: 'storage_body_empty',
   STORAGE_UPLOAD_FAILED: 'storage_upload_failed',

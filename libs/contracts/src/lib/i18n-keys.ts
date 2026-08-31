@@ -40,6 +40,7 @@ export const I18N_KEYS = {
       invalid_id_empty: 'errors.audit_log.invalid_id_empty',
       invalid_id_uuid: 'errors.audit_log.invalid_id_uuid',
       title_invalid_id: 'errors.audit_log.title_invalid_id',
+      invalid_range: 'errors.audit_log.invalid_range',
     },
     upload: {
       mime_not_allowed: 'errors.upload.mime_not_allowed',
@@ -56,6 +57,45 @@ export const I18N_KEYS = {
     },
     pagination: {
       invalid_cursor: 'errors.pagination.invalid_cursor',
+    },
+    organizations: {
+      not_found: 'errors.organizations.not_found',
+      invalid_role_name: 'errors.organizations.invalid_role_name',
+      reserved_role_name: 'errors.organizations.reserved_role_name',
+      empty_permissions: 'errors.organizations.empty_permissions',
+      unknown_permission: 'errors.organizations.unknown_permission',
+      role_not_found: 'errors.organizations.role_not_found',
+      role_already_exists: 'errors.organizations.role_already_exists',
+      role_in_use: 'errors.organizations.role_in_use',
+      team_not_found: 'errors.organizations.team_not_found',
+      team_name_taken: 'errors.organizations.team_name_taken',
+      invitation_not_found: 'errors.organizations.invitation_not_found',
+      invitation_not_pending: 'errors.organizations.invitation_not_pending',
+    },
+    api_keys: {
+      not_found: 'errors.api_keys.not_found',
+      empty_scopes: 'errors.api_keys.empty_scopes',
+      unknown_scope: 'errors.api_keys.unknown_scope',
+      scope_exceeds_grant: 'errors.api_keys.scope_exceeds_grant',
+      expiry_in_past: 'errors.api_keys.expiry_in_past',
+      invalid_credential: 'errors.api_keys.invalid_credential',
+    },
+    notifications: {
+      not_found: 'errors.notifications.not_found',
+    },
+    feature_flags: {
+      not_found: 'errors.feature_flags.not_found',
+      key_taken: 'errors.feature_flags.key_taken',
+      invalid_key: 'errors.feature_flags.invalid_key',
+      invalid_rollout: 'errors.feature_flags.invalid_rollout',
+    },
+    terms: {
+      not_found: 'errors.terms.not_found',
+      not_published: 'errors.terms.not_published',
+      version_taken: 'errors.terms.version_taken',
+    },
+    sessions: {
+      not_found: 'errors.sessions.not_found',
     },
     auth: {
       session_missing: 'errors.auth.session_missing',

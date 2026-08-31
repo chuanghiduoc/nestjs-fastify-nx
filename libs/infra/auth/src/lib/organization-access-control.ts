@@ -4,19 +4,9 @@ import {
   ALL_PERMISSIONS,
   SYSTEM_ROLES,
   SYSTEM_ROLE_PERMISSIONS,
-  type Permission,
+  groupPermissionsByResource as groupByResource,
   type SystemRole,
 } from '@nestjs-fastify-nx/shared';
-
-function groupByResource(permissions: readonly Permission[]): Record<string, string[]> {
-  const grouped: Record<string, string[]> = {};
-  for (const permission of permissions) {
-    const [resource, action] = permission.split(':');
-    if (!resource || !action) continue;
-    (grouped[resource] ??= []).push(action);
-  }
-  return grouped;
-}
 
 // Better Auth's own statements govern its organization endpoints; the application catalog governs
 // everything else. Merged so a tenant-defined role created through /organization/create-role can

@@ -8,6 +8,7 @@ export {
   toListResponse,
   toCursorListResponse,
 } from './lib/dto/list-response.dto';
+export { invalidCursorProblem } from './lib/dto/cursor-problem';
 export {
   ProblemDetailsDto,
   ValidationProblemDetailsDto,

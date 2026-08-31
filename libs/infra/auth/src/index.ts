@@ -10,3 +10,8 @@ export { Public, IS_PUBLIC_KEY } from './lib/public.decorator';
 export { CurrentUser } from './lib/current-user.decorator';
 export { requireOrganizationId } from './lib/require-organization';
 export { SESSION_COOKIE_BASE, sessionCookieName, usesSecureCookies } from './lib/session-cookie';
+export { ApiKeyGuard } from './lib/api-key.guard';
+export { AllowApiKey, ALLOW_API_KEY_KEY } from './lib/allow-api-key.decorator';
+export type { AuthenticatedApiKey } from './lib/api-key.types';
+export { CurrentApiKey } from './lib/current-api-key.decorator';
+export { resolveOrganizationId } from './lib/resolve-organization';
