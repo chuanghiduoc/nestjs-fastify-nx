@@ -9,7 +9,7 @@ import type { CqrsMetricsRecorder } from './cqrs-metrics-recorder.port';
 
 describe('CqrsInstrumentationInitializer', () => {
   afterEach(() => {
-    CqrsMetricsRecorderHolder.set(undefined);
+    CqrsMetricsRecorderHolder.reset();
   });
 
   it('attaches the traced prototypes to the existing bus singletons in place', () => {
@@ -36,8 +36,8 @@ describe('CqrsInstrumentationInitializer', () => {
     expect(CqrsMetricsRecorderHolder.get()).toBe(recorder);
   });
 
-  it('clears the holder when no metrics recorder is wired (e.g. scheduler app)', () => {
-    CqrsMetricsRecorderHolder.set({ recordCommand: vi.fn(), recordQuery: vi.fn() });
+  it('records undefined when no metrics recorder is wired (e.g. scheduler app)', () => {
+    CqrsMetricsRecorderHolder.reset();
     const commandBus = new CommandBus({} as ModuleRef);
     const queryBus = new QueryBus({} as ModuleRef);
 
@@ -45,5 +45,16 @@ describe('CqrsInstrumentationInitializer', () => {
     initializer.onModuleInit();
 
     expect(CqrsMetricsRecorderHolder.get()).toBeUndefined();
+  });
+
+  it('seals against a conflicting second initialization in the same process', () => {
+    CqrsMetricsRecorderHolder.reset();
+    const first: CqrsMetricsRecorder = { recordCommand: vi.fn(), recordQuery: vi.fn() };
+    CqrsMetricsRecorderHolder.set(first);
+
+    CqrsMetricsRecorderHolder.set(first);
+    expect(() =>
+      CqrsMetricsRecorderHolder.set({ recordCommand: vi.fn(), recordQuery: vi.fn() }),
+    ).toThrow(/already initialized/);
   });
 });

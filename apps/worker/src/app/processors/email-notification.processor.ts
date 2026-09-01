@@ -4,22 +4,15 @@ import { ConfigService } from '@nestjs/config';
 import type { Job } from 'bullmq';
 import type Redis from 'ioredis';
 import { createHash } from 'node:crypto';
-import { QUEUE_NAMES, positiveIntEnv } from '@nestjs-fastify-nx/shared';
+import {
+  QUEUE_NAMES,
+  positiveIntEnv,
+  type EmailNotificationPayload,
+} from '@nestjs-fastify-nx/shared';
 import { REDIS_QUEUE_CLIENT } from '@nestjs-fastify-nx/infra-redis';
 import type { WorkerEnvConfig } from '../../config/env.validation';
 import { MailAdapter } from '../mail/mail.adapter';
 import { applyWorkerConcurrency } from './apply-worker-concurrency';
-
-export interface EmailNotificationPayload {
-  to: string;
-  subject: string;
-  body: string;
-  templateId?: string;
-  variables?: Record<string, string>;
-  // Set by request-scoped producers so worker logs correlate to the origin. Outbox-originated jobs
-  // (e.g. welcome-email) leave it unset — they are traced by the outbox eventId embedded in the jobId.
-  correlationId?: string;
-}
 
 // Decorator options are evaluated while the import graph loads — i.e. BEFORE ConfigModule parses
 // .env — so these are a seed value only. `applyWorkerConcurrency` re-applies the validated

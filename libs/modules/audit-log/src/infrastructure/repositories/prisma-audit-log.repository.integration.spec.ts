@@ -1,4 +1,8 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
+import { ClsService } from 'nestjs-cls';
+import { AsyncLocalStorage } from 'node:async_hooks';
+import { REQUEST_CONTEXT_KEYS } from '@nestjs-fastify-nx/core';
+import { generateId } from '@nestjs-fastify-nx/shared';
 import {
   createTestContainers,
   DatabaseCleaner,
@@ -14,6 +18,7 @@ describe('PrismaAuditLogRepository (integration)', () => {
   let prismaService: PrismaService;
   let repository: PrismaAuditLogRepository;
   let cleaner: DatabaseCleaner;
+  let cls: ClsService;
 
   beforeAll(async () => {
     containers = await createTestContainers();
@@ -23,7 +28,8 @@ describe('PrismaAuditLogRepository (integration)', () => {
 
     deployTestMigrations(dbUrl);
 
-    prismaService = new PrismaService();
+    cls = new ClsService(new AsyncLocalStorage());
+    prismaService = new PrismaService(cls);
     await prismaService.onModuleInit();
 
     repository = new PrismaAuditLogRepository(prismaService);
@@ -97,5 +103,124 @@ describe('PrismaAuditLogRepository (integration)', () => {
       where: { userId: 'cccccccc-0000-0000-0000-000000000033' },
     });
     expect(rows).toHaveLength(2);
+  });
+
+  describe('findAllCursor', () => {
+    const ORG_ID = '019dd1a5-9235-70db-8d57-54ef90500001';
+    const OTHER_ORG_ID = '019dd1a5-9235-70db-8d57-54ef90500002';
+    const ACTOR_ID = '019dd1a5-9235-70db-8d57-54ef90500010';
+    const BASE_TIME = new Date('2026-08-01T00:00:00.000Z');
+
+    // audit_logs is behind row-level security, and the repository binds the tenant from the
+    // request context. Reads therefore have to run inside a CLS scope, exactly as they do in a
+    // real request.
+    function readAs<T>(organizationId: string, fn: () => Promise<T>): Promise<T> {
+      return cls.run(() => {
+        cls.set(REQUEST_CONTEXT_KEYS.organizationId, organizationId);
+        return fn();
+      });
+    }
+
+    async function seed(
+      minutesFromBase: number,
+      overrides: Partial<{ organizationId: string; action: string; resource: string }> = {},
+    ): Promise<AuditLog> {
+      const entry = AuditLog.create({
+        id: generateId(),
+        organizationId: overrides.organizationId ?? ORG_ID,
+        userId: ACTOR_ID,
+        action: overrides.action ?? 'users.registered',
+        resource: overrides.resource ?? 'user',
+        metadata: { source: 'integration' },
+        occurredAt: new Date(BASE_TIME.getTime() + minutesFromBase * 60_000),
+      });
+      await repository.append(entry);
+      return entry;
+    }
+
+    it('returns entries newest first and scoped to the organization', async () => {
+      await seed(0);
+      await seed(10);
+      await seed(5, { organizationId: OTHER_ORG_ID });
+
+      const result = await readAs(ORG_ID, () =>
+        repository.findAllCursor({ organizationId: ORG_ID, limit: 20 }),
+      );
+
+      expect(result.items).toHaveLength(2);
+      expect(result.items[0].createdAt.getTime()).toBeGreaterThan(
+        result.items[1].createdAt.getTime(),
+      );
+      expect(result.items.every((entry) => entry.organizationId === ORG_ID)).toBe(true);
+      expect(result.hasMore).toBe(false);
+    });
+
+    it('pages through entries without repeating one', async () => {
+      for (let index = 0; index < 5; index += 1) await seed(index);
+
+      const first = await readAs(ORG_ID, () =>
+        repository.findAllCursor({ organizationId: ORG_ID, limit: 2 }),
+      );
+      const last = first.items[first.items.length - 1];
+      const second = await readAs(ORG_ID, () =>
+        repository.findAllCursor({
+          organizationId: ORG_ID,
+          limit: 2,
+          startingAfter: { createdAt: last.createdAt, id: last.id },
+        }),
+      );
+
+      expect(first.hasMore).toBe(true);
+      expect(second.items).toHaveLength(2);
+      const firstIds = first.items.map((entry) => entry.id);
+      expect(second.items.some((entry) => firstIds.includes(entry.id))).toBe(false);
+    });
+
+    it('filters by action, resource and an inclusive time window', async () => {
+      await seed(0, { action: 'users.registered' });
+      await seed(10, { action: 'users.logged_in' });
+      await seed(20, { action: 'users.logged_in', resource: 'organization' });
+
+      const byAction = await readAs(ORG_ID, () =>
+        repository.findAllCursor({ organizationId: ORG_ID, limit: 20, action: 'users.logged_in' }),
+      );
+      const byResource = await readAs(ORG_ID, () =>
+        repository.findAllCursor({ organizationId: ORG_ID, limit: 20, resource: 'organization' }),
+      );
+      const byWindow = await readAs(ORG_ID, () =>
+        repository.findAllCursor({
+          organizationId: ORG_ID,
+          limit: 20,
+          occurredFrom: new Date(BASE_TIME.getTime() + 10 * 60_000),
+          occurredUntil: new Date(BASE_TIME.getTime() + 20 * 60_000),
+        }),
+      );
+
+      expect(byAction.items).toHaveLength(2);
+      expect(byResource.items).toHaveLength(1);
+      expect(byWindow.items).toHaveLength(2);
+    });
+
+    it('reconstitutes metadata as an object even when the column holds a scalar', async () => {
+      const id = generateId();
+      await prismaService.db.auditLog.create({
+        data: {
+          id,
+          organizationId: ORG_ID,
+          userId: ACTOR_ID,
+          action: 'users.registered',
+          resource: 'user',
+          metadata: 'not-an-object',
+          createdAt: BASE_TIME,
+        },
+      });
+
+      const result = await readAs(ORG_ID, () =>
+        repository.findAllCursor({ organizationId: ORG_ID, limit: 20 }),
+      );
+
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0].metadata).toEqual({});
+    });
   });
 }, 90_000);

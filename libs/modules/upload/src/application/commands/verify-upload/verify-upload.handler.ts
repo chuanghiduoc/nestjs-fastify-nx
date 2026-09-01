@@ -3,7 +3,6 @@ import { CommandHandler, type ICommandHandler } from '@nestjs/cqrs';
 import { isDomainException } from '@nestjs-fastify-nx/core';
 import { MALWARE_SCAN_OUTCOME, STORED_FILE_STATUS } from '@nestjs-fastify-nx/shared';
 import { STORAGE_PORT, type StoragePort } from '@nestjs-fastify-nx/infra-storage';
-import { assertMagicBytesMatch } from '../../../domain/entities/stored-file.entity';
 import {
   STORED_FILE_REPOSITORY,
   type StoredFileRepositoryPort,
@@ -13,6 +12,7 @@ import {
   type MalwareScannerPort,
 } from '../../../domain/ports/malware-scanner.port';
 import { UPLOAD_LIMITS, type UploadLimits } from '../../upload-limits';
+import { readHeadAndAssertMagicBytes } from '../../ports/read-magic-bytes';
 import { VerifyUploadCommand, type VerifyUploadOutcome } from './verify-upload.command';
 
 @CommandHandler(VerifyUploadCommand)
@@ -32,12 +32,16 @@ export class VerifyUploadHandler implements ICommandHandler<
   async execute(command: VerifyUploadCommand): Promise<VerifyUploadOutcome> {
     const { key, declaredContentType, bucket, correlationId } = command;
 
-    // Buffer.from: an adapter may hand back a Uint8Array, and the signature table indexes bytes.
-    const head = Buffer.from(await this.storage.readRange(key, this.limits.magicByteCount, bucket));
     try {
-      assertMagicBytesMatch(head, declaredContentType, key);
+      await readHeadAndAssertMagicBytes(
+        { storage: this.storage, limits: this.limits },
+        key,
+        declaredContentType,
+        bucket,
+      );
     } catch (err) {
-      const reason = isDomainException(err) ? err.code : 'signature check failed';
+      if (!isDomainException(err) || err.kind !== 'validation') throw err;
+      const reason = err.code;
       this.logger.warn(
         { key, declaredContentType, correlationId, reason },
         'upload-verification: signature rejected — deleting object',
@@ -98,8 +102,6 @@ export class VerifyUploadHandler implements ICommandHandler<
     return 'verified';
   }
 
-  // The object is deleted only after the row is claimed out of VERIFYING, so a duplicate job cannot
-  // delete a file another execution already promoted to READY.
   private async reject(
     key: string,
     bucket: string,
@@ -112,6 +114,11 @@ export class VerifyUploadHandler implements ICommandHandler<
       { failureReason },
     );
     if (!claimed) {
+      const record = await this.files.findByKey(key);
+      if (record?.status === STORED_FILE_STATUS.REJECTED) {
+        await this.storage.delete(key, bucket);
+        return 'rejected';
+      }
       this.logger.warn(
         { key },
         'upload-verification: reject skipped — record not in VERIFYING state',

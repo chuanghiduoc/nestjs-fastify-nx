@@ -35,14 +35,21 @@ function scrub(value: unknown, depth = 0, seen = new WeakSet<object>()): void {
   }
 }
 
+const PRODUCTION_SAMPLE_RATE_CAP = 0.1;
+const DEV_SAMPLE_RATE_CAP = 1;
+const DEFAULT_TRACES_SAMPLE_RATE = 0.01;
+
 export function startSentry(options: StartSentryOptions): boolean {
   const dsn = process.env['SENTRY_DSN'];
   if (!dsn) return false;
 
   const isProduction = process.env['NODE_ENV'] === 'production';
-  const cap = isProduction ? 0.1 : 1;
-  const parsed = Number(process.env['SENTRY_TRACES_SAMPLE_RATE'] ?? 0.01);
-  const tracesSampleRate = Math.max(0, Math.min(Number.isFinite(parsed) ? parsed : 0.01, cap));
+  const cap = isProduction ? PRODUCTION_SAMPLE_RATE_CAP : DEV_SAMPLE_RATE_CAP;
+  const parsed = Number(process.env['SENTRY_TRACES_SAMPLE_RATE'] ?? DEFAULT_TRACES_SAMPLE_RATE);
+  const tracesSampleRate = Math.max(
+    0,
+    Math.min(Number.isFinite(parsed) ? parsed : DEFAULT_TRACES_SAMPLE_RATE, cap),
+  );
 
   Sentry.init({
     dsn,
@@ -50,7 +57,7 @@ export function startSentry(options: StartSentryOptions): boolean {
     release: process.env['OTEL_SERVICE_VERSION'],
     initialScope: { tags: { service: options.serviceName } },
     tracesSampleRate,
-    profilesSampleRate: options.profiling ? Math.min(0.1, cap) : 0,
+    profilesSampleRate: options.profiling ? Math.min(PRODUCTION_SAMPLE_RATE_CAP, cap) : 0,
     integrations: options.profiling ? [nodeProfilingIntegration()] : undefined,
     sendDefaultPii: false,
     beforeSend(event) {

@@ -5,7 +5,7 @@ settings:
   excludeLinksFromLockfile: false
 
 overrides:
-  axios: '>=1.18.0'
+  axios: '>=1.20.0 <2'
   deepmerge-ts: '>=8.0.0 <9'
   fastify: '>=5.8.5'
   find-my-way: '>=9.7.0'
@@ -178,7 +178,7 @@ importers:
         specifier: ^8.3.0
         version: 8.3.0(socket.io-adapter@2.5.8)
       axios:
-        specifier: '>=1.18.0'
+        specifier: '>=1.20.0 <2'
         version: 1.20.0(debug@4.4.3(supports-color@7.2.0))(supports-color@7.2.0)
       better-auth:
         specifier: ^1.7.2
@@ -418,9 +418,27 @@ importers:
       '@nestjs-fastify-nx/infra-storage':
         specifier: workspace:*
         version: link:../../libs/infra/storage
+      '@nestjs-fastify-nx/modules-api-keys':
+        specifier: workspace:*
+        version: link:../../libs/modules/api-keys
       '@nestjs-fastify-nx/modules-audit-log':
         specifier: workspace:*
         version: link:../../libs/modules/audit-log
+      '@nestjs-fastify-nx/modules-feature-flags':
+        specifier: workspace:*
+        version: link:../../libs/modules/feature-flags
+      '@nestjs-fastify-nx/modules-notifications':
+        specifier: workspace:*
+        version: link:../../libs/modules/notifications
+      '@nestjs-fastify-nx/modules-organizations':
+        specifier: workspace:*
+        version: link:../../libs/modules/organizations
+      '@nestjs-fastify-nx/modules-sessions':
+        specifier: workspace:*
+        version: link:../../libs/modules/sessions
+      '@nestjs-fastify-nx/modules-terms':
+        specifier: workspace:*
+        version: link:../../libs/modules/terms
       '@nestjs-fastify-nx/modules-upload':
         specifier: workspace:*
         version: link:../../libs/modules/upload
@@ -459,6 +477,9 @@ importers:
       '@nestjs-fastify-nx/modules-audit-log':
         specifier: workspace:*
         version: link:../../libs/modules/audit-log
+      '@nestjs-fastify-nx/modules-notifications':
+        specifier: workspace:*
+        version: link:../../libs/modules/notifications
       '@nestjs-fastify-nx/modules-users':
         specifier: workspace:*
         version: link:../../libs/modules/users
@@ -619,6 +640,30 @@ importers:
         specifier: workspace:*
         version: link:../i18n
 
+  libs/modules/api-keys:
+    devDependencies:
+      '@nestjs-fastify-nx/contracts':
+        specifier: workspace:*
+        version: link:../../contracts
+      '@nestjs-fastify-nx/core':
+        specifier: workspace:*
+        version: link:../../core
+      '@nestjs-fastify-nx/infra-auth':
+        specifier: workspace:*
+        version: link:../../infra/auth
+      '@nestjs-fastify-nx/infra-authorization':
+        specifier: workspace:*
+        version: link:../../infra/authorization
+      '@nestjs-fastify-nx/infra-database':
+        specifier: workspace:*
+        version: link:../../infra/database
+      '@nestjs-fastify-nx/shared':
+        specifier: workspace:*
+        version: link:../../shared
+      '@nestjs-fastify-nx/testing':
+        specifier: workspace:*
+        version: link:../../testing
+
   libs/modules/audit-log:
     devDependencies:
       '@nestjs-fastify-nx/contracts':
@@ -627,12 +672,150 @@ importers:
       '@nestjs-fastify-nx/core':
         specifier: workspace:*
         version: link:../../core
+      '@nestjs-fastify-nx/infra-auth':
+        specifier: workspace:*
+        version: link:../../infra/auth
+      '@nestjs-fastify-nx/infra-authorization':
+        specifier: workspace:*
+        version: link:../../infra/authorization
       '@nestjs-fastify-nx/infra-database':
         specifier: workspace:*
         version: link:../../infra/database
       '@nestjs-fastify-nx/infra-i18n':
         specifier: workspace:*
         version: link:../../infra/i18n
+      '@nestjs-fastify-nx/infra-messaging':
+        specifier: workspace:*
+        version: link:../../infra/messaging
+      '@nestjs-fastify-nx/shared':
+        specifier: workspace:*
+        version: link:../../shared
+      '@nestjs-fastify-nx/testing':
+        specifier: workspace:*
+        version: link:../../testing
+
+  libs/modules/feature-flags:
+    devDependencies:
+      '@nestjs-fastify-nx/contracts':
+        specifier: workspace:*
+        version: link:../../contracts
+      '@nestjs-fastify-nx/core':
+        specifier: workspace:*
+        version: link:../../core
+      '@nestjs-fastify-nx/infra-auth':
+        specifier: workspace:*
+        version: link:../../infra/auth
+      '@nestjs-fastify-nx/infra-authorization':
+        specifier: workspace:*
+        version: link:../../infra/authorization
+      '@nestjs-fastify-nx/infra-database':
+        specifier: workspace:*
+        version: link:../../infra/database
+      '@nestjs-fastify-nx/infra-messaging':
+        specifier: workspace:*
+        version: link:../../infra/messaging
+      '@nestjs-fastify-nx/shared':
+        specifier: workspace:*
+        version: link:../../shared
+      '@nestjs-fastify-nx/testing':
+        specifier: workspace:*
+        version: link:../../testing
+
+  libs/modules/notifications:
+    devDependencies:
+      '@nestjs-fastify-nx/contracts':
+        specifier: workspace:*
+        version: link:../../contracts
+      '@nestjs-fastify-nx/core':
+        specifier: workspace:*
+        version: link:../../core
+      '@nestjs-fastify-nx/infra-auth':
+        specifier: workspace:*
+        version: link:../../infra/auth
+      '@nestjs-fastify-nx/infra-authorization':
+        specifier: workspace:*
+        version: link:../../infra/authorization
+      '@nestjs-fastify-nx/infra-database':
+        specifier: workspace:*
+        version: link:../../infra/database
+      '@nestjs-fastify-nx/infra-messaging':
+        specifier: workspace:*
+        version: link:../../infra/messaging
+      '@nestjs-fastify-nx/shared':
+        specifier: workspace:*
+        version: link:../../shared
+      '@nestjs-fastify-nx/testing':
+        specifier: workspace:*
+        version: link:../../testing
+
+  libs/modules/organizations:
+    devDependencies:
+      '@nestjs-fastify-nx/contracts':
+        specifier: workspace:*
+        version: link:../../contracts
+      '@nestjs-fastify-nx/core':
+        specifier: workspace:*
+        version: link:../../core
+      '@nestjs-fastify-nx/infra-auth':
+        specifier: workspace:*
+        version: link:../../infra/auth
+      '@nestjs-fastify-nx/infra-authorization':
+        specifier: workspace:*
+        version: link:../../infra/authorization
+      '@nestjs-fastify-nx/infra-database':
+        specifier: workspace:*
+        version: link:../../infra/database
+      '@nestjs-fastify-nx/shared':
+        specifier: workspace:*
+        version: link:../../shared
+      '@nestjs-fastify-nx/testing':
+        specifier: workspace:*
+        version: link:../../testing
+
+  libs/modules/sessions:
+    devDependencies:
+      '@nestjs-fastify-nx/contracts':
+        specifier: workspace:*
+        version: link:../../contracts
+      '@nestjs-fastify-nx/core':
+        specifier: workspace:*
+        version: link:../../core
+      '@nestjs-fastify-nx/infra-auth':
+        specifier: workspace:*
+        version: link:../../infra/auth
+      '@nestjs-fastify-nx/infra-authorization':
+        specifier: workspace:*
+        version: link:../../infra/authorization
+      '@nestjs-fastify-nx/infra-database':
+        specifier: workspace:*
+        version: link:../../infra/database
+      '@nestjs-fastify-nx/infra-messaging':
+        specifier: workspace:*
+        version: link:../../infra/messaging
+      '@nestjs-fastify-nx/shared':
+        specifier: workspace:*
+        version: link:../../shared
+      '@nestjs-fastify-nx/testing':
+        specifier: workspace:*
+        version: link:../../testing
+
+  libs/modules/terms:
+    devDependencies:
+      '@nestjs-fastify-nx/contracts':
+        specifier: workspace:*
+        version: link:../../contracts
+      '@nestjs-fastify-nx/core':
+        specifier: workspace:*
+        version: link:../../core
+      '@nestjs-fastify-nx/infra-auth':
+        specifier: workspace:*
+        version: link:../../infra/auth
+      '@nestjs-fastify-nx/infra-authorization':
+        specifier: workspace:*
+        version: link:../../infra/authorization
+      '@nestjs-fastify-nx/infra-database':
+        specifier: workspace:*
+        version: link:../../infra/database
       '@nestjs-fastify-nx/infra-messaging':
         specifier: workspace:*
         version: link:../../infra/messaging
@@ -3291,8 +3474,8 @@ packages:
   '@orval/zod@8.27.0':
     resolution: {integrity: sha512-8c4dlALfeGgM+gkjsDmrfhHaIgfAr5znGYpN7UazCrNUvHhbxVGUVi6yqYhM5+DDZwvaJvHaeP970B57cn0AKA==}
 
-  '@oxc-project/types@0.144.0':
-    resolution: {integrity: sha512-nuhZIOLuI6TFQ32I/WnUx+SCPY7SdSKwgnFHydAuoS1+Z4BRcaP+RRJmGzl9lw+0OFF7UmaESf7KQRXaNLHypg==}
+  '@oxc-project/types@0.146.0':
+    resolution: {integrity: sha512-XC0QsnnhVe7sLIWmYmdPw7x5P0h4W8vUU3Nv1ySgWXtvCz8NizoAEpGXA0sOYoJQV2Rl13LgURAHQ5cI5ILCSA==}
 
   '@oxc-resolver/binding-android-arm-eabi@11.24.2':
     resolution: {integrity: sha512-y09e0L0SRI2OA2tUIrjBgoV3eH5hvUKXNkJqXmNo5V2WxIjyC7I7aJfRLMEVpA8yi95f90gFDvO0VMgrDw+vwA==}
@@ -3645,92 +3828,98 @@ packages:
       '@types/react':
         optional: true
 
-  '@rolldown/binding-android-arm64@1.2.4':
-    resolution: {integrity: sha512-jHC2cnyKz5xU2fhECtFl8OZ83cYNt13GZQD+0uMJ/X3o+ijmd56okHhTUwxVSHPx1IRVIJEZ1/1pPzeLCU6XKA==}
+  '@rolldown/binding-android-arm-eabi@1.2.5':
+    resolution: {integrity: sha512-DLe/i+l8ynIBY7XEQ191TeZvCoowIGa18R+dIV30GW7DiOtp74i/xX8hs8GUjW5ARV7VZuie3d6AumSmCwbeRA==}
+    engines: {node: ^20.19.0 || >=22.12.0}
+    cpu: [arm]
+    os: [android]
+
+  '@rolldown/binding-android-arm64@1.2.5':
+    resolution: {integrity: sha512-zXcwKlQApYAOELHd8PwKDFkagYF9Wy4e0RJ+0qnzl9Pjnpj75TEG8ufv40p2J7kCEfwZAsNiuzRIyNNMWT38ig==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [arm64]
     os: [android]
 
-  '@rolldown/binding-darwin-arm64@1.2.4':
-    resolution: {integrity: sha512-Dc5mPD8F5F/FS8i01syd7FTF6yB2fVthH/TRkjwJkzUK6EpoxHtqvZQP5Zwq80/5z19TWYHIg1KOHboCgVx/aQ==}
+  '@rolldown/binding-darwin-arm64@1.2.5':
+    resolution: {integrity: sha512-dK4QakI42nzWgJT5sm4y4y/O//D4OxM75/cH28RLV+nzIN9AY+YsbuUVrUTjlLjXR6vpyxFbSsbmNuJ6BP9sww==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [arm64]
     os: [darwin]
 
-  '@rolldown/binding-darwin-x64@1.2.4':
-    resolution: {integrity: sha512-fpDm4oBo6SqLvWUYCmFhdde3U9KH2fRNNMeAnAPAIwxRL345xutL0EtEUcuoxsoazdJGv/MuDBQHlCDrtbvqOg==}
+  '@rolldown/binding-darwin-x64@1.2.5':
+    resolution: {integrity: sha512-fqSALaUu1Wjd1nK2uW2kJDWdLCc8lx1IcY+MTY26Aurfdx19anlzhqXOgCFbBFQnlFDTn4TC1/7Nz4Bl2mLP3A==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [x64]
     os: [darwin]
 
-  '@rolldown/binding-freebsd-x64@1.2.4':
-    resolution: {integrity: sha512-rSJoreDE/HoIzoaib6MTp5jQtCTdMHKIvItAKT/ImS6Y6Ww76oUaeMyp4Vc/fAgd/ehji068IxetHXAnqUwN9A==}
+  '@rolldown/binding-freebsd-x64@1.2.5':
+    resolution: {integrity: sha512-/vCnNxlkxs9tKxNDcyWUePpJ/PgTzxIaVhoM5SmG8UV+GR/IcPam4VYxi7GIMo7PSDuNqlJqvprqii9NqqVCMw==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [x64]
     os: [freebsd]
 
-  '@rolldown/binding-linux-arm-gnueabihf@1.2.4':
-    resolution: {integrity: sha512-/jm8OGHgn7oGaJu3i/qZI9spUGcJ+y/lk43ttQ/iO1tOd9NissG6o97bighBCiL+BKRngmcDuR6ikfwYdJmVuQ==}
+  '@rolldown/binding-linux-arm-gnueabihf@1.2.5':
+    resolution: {integrity: sha512-abk0NLA519LxRCszmbE0jYKuQ9YPocOXTiOXOo6Yr+YAT95VH+PtqYAjOJvGKt3viEd/x4qzabAlwd5bHOOARg==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [arm]
     os: [linux]
 
-  '@rolldown/binding-linux-arm64-gnu@1.2.4':
-    resolution: {integrity: sha512-tIP06BeD9EqvECBrPZ+sqdPlYrT+aYaAiu1wYziVx5elRK/ftm33JxVDy2bXGbr6J0CrtirCkR87/X5a2euEng==}
+  '@rolldown/binding-linux-arm64-gnu@1.2.5':
+    resolution: {integrity: sha512-Y7eALiJ8lr0M2HH103Js+g7V34wf6snlpZLAsHI90uLhr3PVlNsbFVAXJC9d/V6BnPyKtpSwI+NcB/RLxsQxuA==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [arm64]
     os: [linux]
     libc: [glibc]
 
-  '@rolldown/binding-linux-arm64-musl@1.2.4':
-    resolution: {integrity: sha512-Ql1Q0EQqVThvn9VAVlwNzsUvbSFtCMGjLpRRi4pk5i7NZZ4n5ISiLMjHYtus4VQ2PvkSw24zyaCVsiS+sXPj1w==}
+  '@rolldown/binding-linux-arm64-musl@1.2.5':
+    resolution: {integrity: sha512-xMvZgnbZg4YVnR/AX2b3oOPDTFYJvUVaJg5FedA/LuvexAtXibZQej4cnTkw3rjsJ/ggUROB64TdtETiim+FYA==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [arm64]
     os: [linux]
     libc: [musl]
 
-  '@rolldown/binding-linux-ppc64-gnu@1.2.4':
-    resolution: {integrity: sha512-GjbjXD4XXfN19D0LZNbmiCBUoDiRACsYHr0yaIbbn8aFsXjHZifcYqu/W5Er5X2X990WjHXFrxarn5chzItorQ==}
+  '@rolldown/binding-linux-ppc64-gnu@1.2.5':
+    resolution: {integrity: sha512-GRjeqTUDHTo5GwntsLaAMcBahG3nlpjftXWZLN73HiYQlhwEowvarFgQnRnQZtIp4keXX7quXFbG38uPZBa2EA==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [ppc64]
     os: [linux]
     libc: [glibc]
 
-  '@rolldown/binding-linux-s390x-gnu@1.2.4':
-    resolution: {integrity: sha512-p5WR0NOwaRmJ/B1b6IjEFLLivwEsf3PrdBIhRbhTCQisbo2SvHHpG4ELB/+FgQNnB88LTOF86upmJmbvZdQ2lw==}
+  '@rolldown/binding-linux-s390x-gnu@1.2.5':
+    resolution: {integrity: sha512-vLNTR45F2Uwc8AufkNXPmB4VliaXs+FvcheEogIzOXzO4l+LzieXF5A/TWxLy5HtqpsRCHUfd0lPVrrdgXdLHQ==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [s390x]
     os: [linux]
     libc: [glibc]
 
-  '@rolldown/binding-linux-x64-gnu@1.2.4':
-    resolution: {integrity: sha512-4/GyVjmhR+Tc6HLJvwc1sOhPqAZtySiSMesOZyX6JQ5XBxoTDEMKQzvo07NIK6nTon/SivlZqvhzvuVBNQhObQ==}
+  '@rolldown/binding-linux-x64-gnu@1.2.5':
+    resolution: {integrity: sha512-Mgj59/HTuYeK9Gz2MA+mBWKnHsAgkBSec15ZMb1st3oIfFbX7gCjOae7GydHhzcyQi9Z/7M1QuN9bR3oFqF0jQ==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [x64]
     os: [linux]
     libc: [glibc]
 
-  '@rolldown/binding-linux-x64-musl@1.2.4':
-    resolution: {integrity: sha512-l9eeLsCNvPpmSXUej0etw/J1eqV0Jj1D5G/xG6YTijmE6dkv6E2QezgWbTfQk63v952DPqrjOCoiqxq7Bw0YUQ==}
+  '@rolldown/binding-linux-x64-musl@1.2.5':
+    resolution: {integrity: sha512-mY8AP0/ichsbhAxGnLa3d3+MwV0EfgrPND2bplI3Ym8T6R2pJ0N87bvrKVwNXmdy3jnr6eQBecdqx/HMknBmpA==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [x64]
     os: [linux]
     libc: [musl]
 
-  '@rolldown/binding-openharmony-arm64@1.2.4':
-    resolution: {integrity: sha512-e0F355MSTMm3+UOqtV3L24gFUp2N5m1f8L/7d56deik6va+AXdrt9F8LbzGpeWGWRbZEDq4m8NVnJDeBtf9DZg==}
+  '@rolldown/binding-openharmony-arm64@1.2.5':
+    resolution: {integrity: sha512-8SLssA2oweAxyRgDp789ACfRb/3P+zNRJpzZxSizxF9m8NUDQ4+3xjo8ttjhVGGw6Qxb70oZiEtIjaKikCO7Yw==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [arm64]
     os: [openharmony]
 
-  '@rolldown/binding-win32-arm64-msvc@1.2.4':
-    resolution: {integrity: sha512-AWLi0uBRYh6QlE7OKhiz+phZC0qwtij2QZmhmOdsLdFn64m7oMpooE9ICE3lhm9xMb4SpDo2WbHcxX1iFLFtqw==}
+  '@rolldown/binding-win32-arm64-msvc@1.2.5':
+    resolution: {integrity: sha512-vGbruD5zquhoc8D9SViXgN2FBJtNdTyQ4DtG+SWiEGlJiAzoKcZ2xp+xuXCffhubVdt0NJlTZqkeRuERy7g8Cw==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [arm64]
     os: [win32]
 
-  '@rolldown/binding-win32-x64-msvc@1.2.4':
-    resolution: {integrity: sha512-UwSDJOg3dqCAejWdxclJjCsh3Qq4vLYMDxmyHqo1btz3stK2VqgwNd3mm5tuIwzSlGIQ/1H9Hr+Zn09mrezNqQ==}
+  '@rolldown/binding-win32-x64-msvc@1.2.5':
+    resolution: {integrity: sha512-e/SXpgISz+IoqVcSSI0rx/d/he8zqLex+/rCWpnHpmVfmPIUjag9H6P7zotf0gJHwPUhQxZ/mF8tr6acebT9yw==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [x64]
     os: [win32]
@@ -3750,6 +3939,10 @@ packages:
     resolution: {integrity: sha512-IAfnpIZnXY6ni+zyFMwWHBa5b/7yr4mCSvoTGR84oS9q4Quy2wjgafnr7CyfL65ney3iilBZHigZYLYqdqCu3Q==}
     engines: {node: '>=22'}
 
+  '@scalar/helpers@0.11.1':
+    resolution: {integrity: sha512-Knwbe0IYqFk0PPDoOKLasqglBHfyf9/zwWWqFsSNi/AtdjM29wSZXN6p8DFid6iB5B9epYH9YiSgJ6tpD00TEw==}
+    engines: {node: '>=22'}
+
   '@scalar/helpers@0.11.2':
     resolution: {integrity: sha512-IgHW/hIj1XAvsPIBKiOgmK87qbyDjaQQg9S/auXU4MUtvnwKKpOeIOJc0NC71FkMdr4Mok0SSVI748cmlptoXQ==}
     engines: {node: '>=22'}
@@ -3758,8 +3951,8 @@ packages:
     resolution: {integrity: sha512-5JawJ1L3+ddDoKefkXsklKs6CmmTIcPDmkJPpAkbRi9QQiU9MUONQ4VSi2z3ij+8Ka4neNhsXBNG4itPjurBLg==}
     engines: {node: '>=22'}
 
-  '@scalar/json-magic@0.13.0':
-    resolution: {integrity: sha512-K25TprVh4fusvKJlh4qnqh+cb4rpixv2xPTC2bqanhO9DXHQIesq7pnE0XONsfQJn3y9VjDefICIXHEXFqY3Pw==}
+  '@scalar/json-magic@0.13.2':
+    resolution: {integrity: sha512-T8rQw5u7+MSTDpUcd5ShX1taOUxpZMv2b/P6xsahdlv/u68VX/Bq/+uzuAf2xW8IIOy7BEP4MBggle/vMDgAXw==}
     engines: {node: '>=22'}
 
   '@scalar/json-magic@0.13.3':
@@ -3770,8 +3963,8 @@ packages:
     resolution: {integrity: sha512-3mOin8TlRqhH9CndcZeOGFicb+/WSPmclko7vnaTIIa8vqrwZ6ZtwLdsZQpU1xzM5NqMgumF35ii3KEPS7kNDA==}
     engines: {node: '>=22'}
 
-  '@scalar/openapi-parser@0.28.14':
-    resolution: {integrity: sha512-OECzu3Iu8fpkgFrtSmKJFwt9U6JWu9oYL0c9xWAzdAa+XQlmODiG6yw57AyOzetw6MKQUcgTEdxORuO37mWv6g==}
+  '@scalar/openapi-parser@0.28.16':
+    resolution: {integrity: sha512-zHEQExXo58Nk7/Tju4y4HLVJ+B5nnDmR7vPhhHLVinL0z99aGrd6S/8HREupVpfAsim326pfzIbSM+UOvEbnOw==}
     engines: {node: '>=22'}
 
   '@scalar/openapi-parser@0.29.0':
@@ -3784,10 +3977,6 @@ packages:
 
   '@scalar/openapi-types@0.9.5':
     resolution: {integrity: sha512-czrz/zkVm1oPzrpYo3hI/iymfiw1s4dgJiQtwNi2U77Sqf3EQOGKsif4VNRa5suWMYRuPaFx5EiFM1FNEV4Whg==}
-    engines: {node: '>=22'}
-
-  '@scalar/openapi-upgrader@0.2.13':
-    resolution: {integrity: sha512-bPTkDsthDXj/3bgO7RDmRra1OfwxG/uQio6LP0h9Z8NCCgoZQ4E+V7S6bwF/9TWxbMRlb9djRNpbXCTh/L3C5g==}
     engines: {node: '>=22'}
 
   '@scalar/openapi-upgrader@0.2.15':
@@ -4202,6 +4391,9 @@ packages:
 
   '@types/node@18.19.130':
     resolution: {integrity: sha512-GRaXQx6jGfL8sKfaIDD6OupbIHBr9jv7Jnaml9tB7l4v068PAOXqfcujMMo5PhbIs6ggR1XODELqahT2R8v0fg==}
+
+  '@types/node@26.2.0':
+    resolution: {integrity: sha512-5IviulTZeRNp2vAJ514cc/HUlY5nZ9fCbq9DMyC52BrhFZACo3nI0R7qBxhQmo/d27NFe96ur/b7Wwxklda+kg==}
 
   '@types/node@26.4.0':
     resolution: {integrity: sha512-faiGnoIrLH/V8cibOMEAZ8pMw6oXqSukl29ra4mN8GdaB2ZewzeaLj+INpV5N+Z1eKWzY+IzaIZH2EIR6YZRNQ==}
@@ -5984,6 +6176,9 @@ packages:
   es-module-lexer@2.3.1:
     resolution: {integrity: sha512-shc1dbU90Yl/xq1QrC7QRtfcwURZuVRfPhZbDoldJ1cn1gzDvBaBWlv0eFolj5+0znnPJz5TXLxsN77X/12KTA==}
 
+  es-module-lexer@2.3.2:
+    resolution: {integrity: sha512-poHGpORABojJJucnV9KbOavETW8lBVnphkW77ER5/BQ5Fz7oXSoCNek7IH3vR5nRjdsEz926ibFYX8KtLQmdyw==}
+
   es-object-atoms@1.1.1:
     resolution: {integrity: sha512-FGgH2h8zKNim9ljj7dankFPcICIK9Cp5bm+c2gQSYePhpaG5+esrLODihIorn+Pe6FGJzWhXQotPv73jTaldXA==}
     engines: {node: '>= 0.4'}
@@ -6385,8 +6580,8 @@ packages:
   get-them-args@1.3.2:
     resolution: {integrity: sha512-LRn8Jlk+DwZE4GTlDbT3Hikd1wSHgLMme/+7ddlqKd7ldwR6LjJgTVWzBnR01wnYGe4KgrXjg287RaI22UHmAw==}
 
-  get-tsconfig@4.14.2:
-    resolution: {integrity: sha512-XpwZALwwl/BaKTAyC6+c5T8y6kCg2jk+XGqOVrKIQmW49pNypYLMRjCUXqa28tQgJlhS2RlzP7sc+Rx7W6qsfw==}
+  get-tsconfig@4.14.3:
+    resolution: {integrity: sha512-++QEw4DIY7WGoukz+/+A/8dGYPT9l9yIadnmSgZ8Rjr3YVSVDipQSO9CdnJo9ePqFqUUqh+wk9uIaoiAwsiPkA==}
 
   giget@3.3.1:
     resolution: {integrity: sha512-r+mvuDjrjMpsdw46Kmeydb8bdHm7wOKw8wNBtTndkjbPjgAp5oUJUxRE76wZFknxIPokfWvep2qSXK37aXE6zg==}
@@ -8229,8 +8424,8 @@ packages:
   remeda@2.33.4:
     resolution: {integrity: sha512-ygHswjlc/opg2VrtiYvUOPLjxjtdKvjGz1/plDhkG66hjNjFr1xmfrs2ClNFo/E6TyUFiwYNh53bKV26oBoMGQ==}
 
-  remeda@2.40.0:
-    resolution: {integrity: sha512-Y8yxrbK8SbTao2+mTqJcjre3/eBH641nr88aAgYfOdbW5p4FH+1Jk3mMypnA+SoktEXBVA8id0o3XPbgHYvQ9Q==}
+  remeda@2.43.0:
+    resolution: {integrity: sha512-6V18zwONdwLwhzNjLY4KWW2b+nG7VXTi7yM+PtvsKyPug8JEPXjfV64hiXoATTbzU3e99i6uMVHkONj/iUaMUw==}
     engines: {node: '>=18.0.0'}
 
   require-directory@2.1.1:
@@ -8298,8 +8493,8 @@ packages:
   robust-predicates@3.0.3:
     resolution: {integrity: sha512-NS3levdsRIUOmiJ8FZWCP7LG3QpJyrs/TE0Zpf1yvZu8cAJJ6QMW92H1c7kWpdIHo8RvmLxN/o2JXTKHp74lUA==}
 
-  rolldown@1.2.4:
-    resolution: {integrity: sha512-rSr7irW0K7QRWzjdJXqZowkcRdDtjRduh43rBltnVKd0VFq839l1lJoDvGJb6gl7+4rTTCrPWu+YfujUL8Ug7w==}
+  rolldown@1.2.5:
+    resolution: {integrity: sha512-VD2IE5PUG4Oj8zz2VGykiYd5wbnjdIiSsNQb8Qu5B+noEp+A78mu2iVvpp27g8es14Tk9rofNs5Tku9iQCS4fA==}
     engines: {node: ^20.19.0 || >=22.12.0}
     hasBin: true
 
@@ -8859,8 +9054,8 @@ packages:
   tcp-port-used@1.0.3:
     resolution: {integrity: sha512-4CEQ3qRJYo+mtEbJ+OoQu3dF4TDkwaO3RDVC4UzP5cpAOIUWwuwPjD7sdxDFFqsMUjsXVVYBMlg/boAaloThMA==}
 
-  tdigest@0.1.3:
-    resolution: {integrity: sha512-zbRt+lT+/H4fRItHshczHErVCQnitJk8MfMT24MqFJf3YL7SJJPqGIGeuOdvxXxM/AHFzKBl7WoyaYwqO9s3Kw==}
+  tdigest@0.1.2:
+    resolution: {integrity: sha512-+G0LLgjjo9BZX2MfdvPfH+MKLCrxlXSYec5DaPYP1fe6Iyhf0/fSmJ0bFiZ1F8BT6cGXl2LpltQptzjXKWEkKA==}
 
   teex@1.0.1:
     resolution: {integrity: sha512-eYE6iEI62Ni1H8oIa7KlDU6uQBtqr4Eajni3wX7rpfXD8ysFx8z0+dri+KWEPWpBsxXfxu58x/0jvTVT1ekOSg==}
@@ -12715,7 +12910,7 @@ snapshots:
       fs-extra: 11.4.0
       jiti: 2.7.0
       jsesc: 3.1.0
-      remeda: 2.40.0
+      remeda: 2.43.0
       tinyglobby: 0.2.17
       typedoc: 0.28.20(@typescript/typescript6@6.0.2)
     transitivePeerDependencies:
@@ -12725,7 +12920,7 @@ snapshots:
   '@orval/effect@8.27.0(@typescript/typescript6@6.0.2)':
     dependencies:
       '@orval/core': 8.27.0(@typescript/typescript6@6.0.2)
-      remeda: 2.40.0
+      remeda: 2.43.0
     transitivePeerDependencies:
       - '@faker-js/faker'
       - supports-color
@@ -12763,7 +12958,7 @@ snapshots:
   '@orval/mock@8.27.0(@typescript/typescript6@6.0.2)':
     dependencies:
       '@orval/core': 8.27.0(@typescript/typescript6@6.0.2)
-      remeda: 2.40.0
+      remeda: 2.43.0
     transitivePeerDependencies:
       - '@faker-js/faker'
       - supports-color
@@ -12773,7 +12968,7 @@ snapshots:
     dependencies:
       '@orval/core': 8.27.0(@typescript/typescript6@6.0.2)
       '@orval/fetch': 8.27.0(@typescript/typescript6@6.0.2)
-      remeda: 2.40.0
+      remeda: 2.43.0
     transitivePeerDependencies:
       - '@faker-js/faker'
       - supports-color
@@ -12800,13 +12995,13 @@ snapshots:
     dependencies:
       '@orval/core': 8.27.0(@typescript/typescript6@6.0.2)
       jsesc: 3.1.0
-      remeda: 2.40.0
+      remeda: 2.43.0
     transitivePeerDependencies:
       - '@faker-js/faker'
       - supports-color
       - typescript
 
-  '@oxc-project/types@0.144.0': {}
+  '@oxc-project/types@0.146.0': {}
 
   '@oxc-resolver/binding-android-arm-eabi@11.24.2':
     optional: true
@@ -13056,7 +13251,7 @@ snapshots:
   '@prometheus-io/client@0.16.1':
     dependencies:
       '@opentelemetry/api': 1.9.1
-      tdigest: 0.1.3
+      tdigest: 0.1.2
 
   '@radix-ui/primitive@1.1.3': {}
 
@@ -13112,46 +13307,49 @@ snapshots:
     optionalDependencies:
       '@types/react': 19.2.18
 
-  '@rolldown/binding-android-arm64@1.2.4':
+  '@rolldown/binding-android-arm-eabi@1.2.5':
     optional: true
 
-  '@rolldown/binding-darwin-arm64@1.2.4':
+  '@rolldown/binding-android-arm64@1.2.5':
     optional: true
 
-  '@rolldown/binding-darwin-x64@1.2.4':
+  '@rolldown/binding-darwin-arm64@1.2.5':
     optional: true
 
-  '@rolldown/binding-freebsd-x64@1.2.4':
+  '@rolldown/binding-darwin-x64@1.2.5':
     optional: true
 
-  '@rolldown/binding-linux-arm-gnueabihf@1.2.4':
+  '@rolldown/binding-freebsd-x64@1.2.5':
     optional: true
 
-  '@rolldown/binding-linux-arm64-gnu@1.2.4':
+  '@rolldown/binding-linux-arm-gnueabihf@1.2.5':
     optional: true
 
-  '@rolldown/binding-linux-arm64-musl@1.2.4':
+  '@rolldown/binding-linux-arm64-gnu@1.2.5':
     optional: true
 
-  '@rolldown/binding-linux-ppc64-gnu@1.2.4':
+  '@rolldown/binding-linux-arm64-musl@1.2.5':
     optional: true
 
-  '@rolldown/binding-linux-s390x-gnu@1.2.4':
+  '@rolldown/binding-linux-ppc64-gnu@1.2.5':
     optional: true
 
-  '@rolldown/binding-linux-x64-gnu@1.2.4':
+  '@rolldown/binding-linux-s390x-gnu@1.2.5':
     optional: true
 
-  '@rolldown/binding-linux-x64-musl@1.2.4':
+  '@rolldown/binding-linux-x64-gnu@1.2.5':
     optional: true
 
-  '@rolldown/binding-openharmony-arm64@1.2.4':
+  '@rolldown/binding-linux-x64-musl@1.2.5':
     optional: true
 
-  '@rolldown/binding-win32-arm64-msvc@1.2.4':
+  '@rolldown/binding-openharmony-arm64@1.2.5':
     optional: true
 
-  '@rolldown/binding-win32-x64-msvc@1.2.4':
+  '@rolldown/binding-win32-arm64-msvc@1.2.5':
+    optional: true
+
+  '@rolldown/binding-win32-x64-msvc@1.2.5':
     optional: true
 
   '@rolldown/pluginutils@1.0.1': {}
@@ -13172,6 +13370,8 @@ snapshots:
 
   '@scalar/helpers@0.10.0': {}
 
+  '@scalar/helpers@0.11.1': {}
+
   '@scalar/helpers@0.11.2': {}
 
   '@scalar/json-magic@0.12.20':
@@ -13180,9 +13380,9 @@ snapshots:
       pathe: 2.0.3
       yaml: 2.9.0
 
-  '@scalar/json-magic@0.13.0':
+  '@scalar/json-magic@0.13.2':
     dependencies:
-      '@scalar/helpers': 0.10.0
+      '@scalar/helpers': 0.11.1
       pathe: 2.0.3
       yaml: 2.9.0
 
@@ -13201,12 +13401,12 @@ snapshots:
       ajv-formats: 3.0.1(ajv@8.20.0)
       yaml: 2.9.0
 
-  '@scalar/openapi-parser@0.28.14':
+  '@scalar/openapi-parser@0.28.16':
     dependencies:
-      '@scalar/helpers': 0.10.0
-      '@scalar/json-magic': 0.13.0
-      '@scalar/openapi-types': 0.9.4
-      '@scalar/openapi-upgrader': 0.2.13
+      '@scalar/helpers': 0.11.1
+      '@scalar/json-magic': 0.13.2
+      '@scalar/openapi-types': 0.9.5
+      '@scalar/openapi-upgrader': 0.2.15
       ajv: 8.20.0
       ajv-draft-04: 1.0.0(ajv@8.20.0)
       ajv-formats: 3.0.1(ajv@8.20.0)
@@ -13227,10 +13427,6 @@ snapshots:
   '@scalar/openapi-types@0.9.4': {}
 
   '@scalar/openapi-types@0.9.5': {}
-
-  '@scalar/openapi-upgrader@0.2.13':
-    dependencies:
-      '@scalar/openapi-types': 0.9.4
 
   '@scalar/openapi-upgrader@0.2.15':
     dependencies:
@@ -13683,6 +13879,10 @@ snapshots:
   '@types/node@18.19.130':
     dependencies:
       undici-types: 5.26.5
+
+  '@types/node@26.2.0':
+    dependencies:
+      undici-types: 8.3.0
 
   '@types/node@26.4.0':
     dependencies:
@@ -15473,6 +15673,8 @@ snapshots:
 
   es-module-lexer@2.3.1: {}
 
+  es-module-lexer@2.3.2: {}
+
   es-object-atoms@1.1.1:
     dependencies:
       es-errors: 1.3.0
@@ -15999,7 +16201,7 @@ snapshots:
 
   get-them-args@1.3.2: {}
 
-  get-tsconfig@4.14.2:
+  get-tsconfig@4.14.3:
     dependencies:
       resolve-pkg-maps: 1.0.0
 
@@ -16606,7 +16808,7 @@ snapshots:
 
   jest-worker@27.5.1:
     dependencies:
-      '@types/node': 26.4.0
+      '@types/node': 26.2.0
       merge-stream: 2.0.0
       supports-color: 8.1.1
 
@@ -17404,17 +17606,17 @@ snapshots:
       '@orval/swr': 8.27.0(@typescript/typescript6@6.0.2)
       '@orval/zod': 8.27.0(@typescript/typescript6@6.0.2)
       '@scalar/json-magic': 0.12.20
-      '@scalar/openapi-parser': 0.28.14
+      '@scalar/openapi-parser': 0.28.16
       '@scalar/openapi-types': 0.9.4
       chokidar: 5.0.0
       commander: 15.0.0
       execa: 9.6.1
       find-up: 8.0.0
       fs-extra: 11.4.0
-      get-tsconfig: 4.14.2
+      get-tsconfig: 4.14.3
       jiti: 2.7.0
       js-yaml: 4.3.1
-      remeda: 2.40.0
+      remeda: 2.43.0
       string-argv: 0.3.2
       typedoc: 0.28.20(@typescript/typescript6@6.0.2)
       typedoc-plugin-coverage: 4.0.3(typedoc@0.28.20(@typescript/typescript6@6.0.2))
@@ -18056,7 +18258,7 @@ snapshots:
 
   remeda@2.33.4: {}
 
-  remeda@2.40.0: {}
+  remeda@2.43.0: {}
 
   require-directory@2.1.1: {}
 
@@ -18109,25 +18311,26 @@ snapshots:
 
   robust-predicates@3.0.3: {}
 
-  rolldown@1.2.4:
+  rolldown@1.2.5:
     dependencies:
-      '@oxc-project/types': 0.144.0
+      '@oxc-project/types': 0.146.0
       '@rolldown/pluginutils': 1.0.1
     optionalDependencies:
-      '@rolldown/binding-android-arm64': 1.2.4
-      '@rolldown/binding-darwin-arm64': 1.2.4
-      '@rolldown/binding-darwin-x64': 1.2.4
-      '@rolldown/binding-freebsd-x64': 1.2.4
-      '@rolldown/binding-linux-arm-gnueabihf': 1.2.4
-      '@rolldown/binding-linux-arm64-gnu': 1.2.4
-      '@rolldown/binding-linux-arm64-musl': 1.2.4
-      '@rolldown/binding-linux-ppc64-gnu': 1.2.4
-      '@rolldown/binding-linux-s390x-gnu': 1.2.4
-      '@rolldown/binding-linux-x64-gnu': 1.2.4
-      '@rolldown/binding-linux-x64-musl': 1.2.4
-      '@rolldown/binding-openharmony-arm64': 1.2.4
-      '@rolldown/binding-win32-arm64-msvc': 1.2.4
-      '@rolldown/binding-win32-x64-msvc': 1.2.4
+      '@rolldown/binding-android-arm-eabi': 1.2.5
+      '@rolldown/binding-android-arm64': 1.2.5
+      '@rolldown/binding-darwin-arm64': 1.2.5
+      '@rolldown/binding-darwin-x64': 1.2.5
+      '@rolldown/binding-freebsd-x64': 1.2.5
+      '@rolldown/binding-linux-arm-gnueabihf': 1.2.5
+      '@rolldown/binding-linux-arm64-gnu': 1.2.5
+      '@rolldown/binding-linux-arm64-musl': 1.2.5
+      '@rolldown/binding-linux-ppc64-gnu': 1.2.5
+      '@rolldown/binding-linux-s390x-gnu': 1.2.5
+      '@rolldown/binding-linux-x64-gnu': 1.2.5
+      '@rolldown/binding-linux-x64-musl': 1.2.5
+      '@rolldown/binding-openharmony-arm64': 1.2.5
+      '@rolldown/binding-win32-arm64-msvc': 1.2.5
+      '@rolldown/binding-win32-x64-msvc': 1.2.5
 
   rou3@0.9.2: {}
 
@@ -18708,7 +18911,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  tdigest@0.1.3:
+  tdigest@0.1.2:
     dependencies:
       bintrees: 1.0.2
 
@@ -19028,7 +19231,7 @@ snapshots:
       lightningcss: 1.33.0
       picomatch: 4.0.5
       postcss: 8.5.26
-      rolldown: 1.2.4
+      rolldown: 1.2.5
       tinyglobby: 0.2.17
     optionalDependencies:
       '@types/node': 26.4.0
@@ -19050,7 +19253,7 @@ snapshots:
       '@vitest/snapshot': 4.1.11
       '@vitest/spy': 4.1.11
       '@vitest/utils': 4.1.11
-      es-module-lexer: 2.3.1
+      es-module-lexer: 2.3.2
       expect-type: 1.4.0
       magic-string: 0.30.21
       obug: 2.1.4
@@ -19126,7 +19329,7 @@ snapshots:
       browserslist: 4.28.7
       chrome-trace-event: 1.0.4
       enhanced-resolve: 5.24.5
-      es-module-lexer: 2.3.1
+      es-module-lexer: 2.3.2
       eslint-scope: 5.1.1
       events: 3.3.0
       glob-to-regexp: 0.4.1

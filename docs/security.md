@@ -20,10 +20,14 @@ Run the whole stack locally: `./scripts/security/scan-all.sh`.
 
 ### Gitleaks — secrets
 
-API keys, tokens, private keys committed to the repo. The pre-push hook scans the
-full history; CI scans the entire diff. There is deliberately no Gitleaks step on
-`pre-commit` — lefthook keeps that hook to `lint-staged` + `typecheck` so commits
-stay fast, and push is the last point before anything leaves the machine.
+API keys, tokens, private keys committed to the repo. Three layers, each catching
+what the previous one would have let past:
+
+| Hook         | Scope                       | Command                    |
+| ------------ | --------------------------- | -------------------------- |
+| `pre-commit` | Staged changes only (fast)  | `scan-secrets.sh --staged` |
+| `pre-push`   | Full history                | `scan-secrets.sh full`     |
+| CI           | Full history + SARIF upload | `secret-scan` job          |
 
 ```bash
 ./scripts/security/scan-secrets.sh           # full repo + history
@@ -31,7 +35,20 @@ stay fast, and push is the last point before anything leaves the machine.
 ./scripts/security/scan-secrets.sh --no-git  # filesystem only (skips .git)
 ```
 
-False positives go in `.gitleaksignore` (one fingerprint per line).
+**Test fixtures trip the `generic-api-key` rule.** The rule fires on a high-entropy literal
+assigned to a name containing `key`, `credential` and similar — a UUID v7 fixture is
+indistinguishable from a live secret to it, and renaming the constant only moves the problem.
+Generate the fixture instead of hardcoding it:
+
+```ts
+const RAW_KEY = generateApiKey().raw; // not 'sk_…'
+const ORG_ID = generateId(); // not '019dd1a5-…'
+```
+
+Both come from `@nestjs-fastify-nx/shared`, so the test is pinned to the real formats for free.
+Reserve `.gitleaksignore` (one fingerprint per line, and fingerprints embed line numbers, so they
+rot) for the cases where a literal is genuinely required — see the entry for
+`scripts/smoke-expanded.sh`.
 
 ### OSV-Scanner — dependency CVEs
 
@@ -164,6 +181,40 @@ are deployment-specific and intentionally not wired into this workflow — see
 | `OSV_VERSION`      | Pin OSV-Scanner image                  | `v2.0.2`         |
 | `COSIGN_VERSION`   | Pin Cosign image                       | `v2.4.1`         |
 | `COSIGN_IDENTITY`  | Expected signing identity for `verify` | (required)       |
+
+## Application credentials
+
+Scanning keeps secrets out of the repo; this section is about the ones the application issues
+itself.
+
+### API keys
+
+Machine-to-machine callers authenticate with a key rather than a session cookie. The properties
+that matter, all enforced in code and pinned by tests:
+
+- **Only a SHA-256 digest is stored.** The raw key is returned once, by `POST /api/v1/api-keys`,
+  and is unrecoverable afterwards. A database leak yields digests, not credentials.
+- **A key can never exceed its issuer.** Requested scopes are checked against the permissions the
+  calling member actually holds; anything beyond them is refused with
+  `api_key_scope_exceeds_grant`. Without this, `api_key:create` is a grant of the whole catalog.
+- **Routes opt in explicitly** with `@AllowApiKey()`. A key presented to any other route is
+  refused _before_ the database lookup, so the response cannot confirm the key exists and no
+  handler expecting a session is ever reached.
+- **Revocation is immediate** — `revokedAt` and `expiresAt` are evaluated on every request, with
+  no cache to invalidate.
+
+Rationale for SHA-256 rather than a slow KDF, and the alternatives rejected:
+[ADR-0007](adr/0007-api-key-authentication.md).
+
+Operationally: keys are organization-scoped, so revoking one never affects another tenant. To
+rotate, issue the new key, deploy it, then revoke the old one — there is no overlap window to
+configure because both are live until revoked.
+
+### Session tokens
+
+Never projected into any response. `GET /api/v1/sessions` returns id, IP, user agent and
+timestamps so a person can recognise their own devices, and deliberately omits `token` — a listing
+that included it would let one compromised response hand over every other device.
 
 ## Container hardening reference
 

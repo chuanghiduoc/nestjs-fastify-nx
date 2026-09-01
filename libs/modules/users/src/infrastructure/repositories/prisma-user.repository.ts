@@ -38,16 +38,12 @@ export class PrismaUserRepository implements UserRepositoryPort {
 
   constructor(private readonly prisma: PrismaService) {}
 
-  // Participate in the caller's interactive transaction when one is open, so a repository write commits
-  // atomically with the outbox row a command handler publishes in the SAME prisma.transaction(...) —
-  // mirrors OutboxPublisher. Outside a transaction this is the primary (writes) / replica (reads).
   private get writer() {
-    return this.prisma.currentTransaction ?? this.prisma.db;
+    return this.prisma.writeTarget();
   }
 
   private get reader() {
-    // Inside a transaction, read through it so uncommitted writes are visible; otherwise the replica.
-    return this.prisma.currentTransaction ?? this.prisma.dbRead;
+    return this.prisma.readTarget();
   }
 
   private mapToEntity(raw: UserRow): User {
@@ -142,9 +138,8 @@ export class PrismaUserRepository implements UserRepositoryPort {
   async findAllCursor(options: FindAllCursorOptions): Promise<FindAllCursorResult> {
     const { organizationId, startingAfter, limit, role, status, search } = options;
     const where: Prisma.UserWhereInput = {
-      memberships: { some: { organizationId } },
+      memberships: { some: { organizationId, ...(role ? { role } : {}) } },
     };
-    if (role) where.memberships = { some: { organizationId, role } };
     if (status) where.status = status;
     if (search) {
       const escapedSearch = escapeLikePattern(search);
@@ -179,15 +174,6 @@ export class PrismaUserRepository implements UserRepositoryPort {
       return { items, hasMore };
     } catch (err) {
       return this.handleError(err, 'findAllCursor');
-    }
-  }
-
-  async exists(email: string): Promise<boolean> {
-    try {
-      const count = await this.reader.user.count({ where: { email } });
-      return count > 0;
-    } catch (err) {
-      return this.handleError(err, 'exists');
     }
   }
 }

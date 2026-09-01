@@ -28,6 +28,11 @@ const DLQ_JOB_OPTIONS: JobsOptions = {
 
 // Transient retries are ignored — DLQ only receives jobs that exhausted their retry budget.
 // Idempotency via jobId: dlq__<originalJobId>; BullMQ deduplicates concurrent adds from multiple replicas.
+
+export function dlqJobIdFor(originalJobId: string): string {
+  return `dlq__${originalJobId}`;
+}
+
 export async function routeFailedJobToDlq(
   source: Queue,
   dlq: Queue,
@@ -61,7 +66,7 @@ export async function routeFailedJobToDlq(
 
     await dlq.add(job.name, envelope, {
       ...DLQ_JOB_OPTIONS,
-      jobId: `dlq__${envelope.originalJobId}`, // BullMQ rejects ':' in jobIds — '__' separator.
+      jobId: dlqJobIdFor(envelope.originalJobId),
     });
 
     logger.warn(

@@ -1,4 +1,5 @@
 import { generateId } from '@nestjs-fastify-nx/shared';
+import type { PlatformRole, UserStatusValue } from '@nestjs-fastify-nx/shared';
 import { Email } from '../value-objects/email.vo';
 
 export enum UserRole {
@@ -11,6 +12,12 @@ export enum UserStatus {
   INACTIVE = 'INACTIVE',
   BANNED = 'BANNED',
 }
+
+type AssertSameUnion<A, B> = [A] extends [B] ? ([B] extends [A] ? true : never) : never;
+const _roleParity: AssertSameUnion<`${UserRole}`, PlatformRole> = true;
+const _statusParity: AssertSameUnion<`${UserStatus}`, UserStatusValue> = true;
+void _roleParity;
+void _statusParity;
 
 interface UserProps {
   id: string;

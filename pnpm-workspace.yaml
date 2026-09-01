@@ -43,7 +43,11 @@ allowBuilds:
   unrs-resolver: false
 
 overrides:
-  axios: '>=1.18.0'
+  # An override replaces the ROOT dependency's range too, so this floor — not package.json's caret —
+  # is what pnpm resolves against: left at >=1.18.0 it happily kept a lockfile pinned to 1.19.0 while
+  # package.json declared ^1.20.0. Keep the floor in step with the root range, and capped below the
+  # next major per the policy documented in CLAUDE.md.
+  axios: '>=1.20.0 <2'
   # GHSA-ggr8-5vv4-36mx (high, prototype pollution). Reached only through @prisma/config, which
   # pins 7.x, so an update cannot resolve it. Capped below 9 per the cap-below-next-major policy.
   deepmerge-ts: '>=8.0.0 <9'

@@ -90,12 +90,38 @@ export interface TestAppContext {
   prisma: PrismaService;
 }
 
+// See docs/adr/0006-shared-e2e-application-instance.md for why the app is shared across specs
+// and how it is torn down.
+let sharedApp: Promise<TestAppContext> | undefined;
+let closingSharedApp: Promise<void> | undefined;
+let throttlerRedis: Redis | undefined;
+
+function closeSharedApp(): Promise<void> {
+  if (!sharedApp) return Promise.resolve();
+  closingSharedApp ??= sharedApp
+    .then((ctx) => ctx.app.close())
+    .catch(() => undefined)
+    .finally(() => {
+      sharedApp = undefined;
+    });
+  return closingSharedApp;
+}
+
+process.once('beforeExit', () => {
+  void Promise.allSettled([closeSharedApp(), closeThrottlerRedis()]);
+});
+
 // Mirrors main.ts (prefix, ProblemDetailsValidationPipe, Better Auth mount)
 // minus helmet/swagger/sentry/bull-board. Do NOT call useGlobalFilters here —
 // AppModule's APP_FILTER would wrap responses twice. Postgres + Redis are
 // spun up once by global-setup.ts and the connection info is read from the
 // E2E_DATABASE_URL / E2E_REDIS_HOST / E2E_REDIS_PORT env vars below.
-export async function createTestApp(): Promise<TestAppContext> {
+export function createTestApp(): Promise<TestAppContext> {
+  sharedApp ??= bootstrapTestApp();
+  return sharedApp;
+}
+
+async function bootstrapTestApp(): Promise<TestAppContext> {
   const dbUrl = process.env['E2E_DATABASE_URL'];
   const redisHost = process.env['E2E_REDIS_HOST'];
   const redisPort = process.env['E2E_REDIS_PORT'];
@@ -258,16 +284,19 @@ export async function createTestApp(): Promise<TestAppContext> {
 // spec that uploads a lot silently 429s whichever spec happens to run next. Clearing that db keeps
 // specs independent of execution order without weakening the limits the app actually ships.
 export async function resetRateLimitBudget(): Promise<void> {
-  const redis = new Redis({
+  throttlerRedis ??= new Redis({
     host: process.env['E2E_REDIS_HOST'],
     port: Number(process.env['E2E_REDIS_PORT']),
     db: 1,
   });
-  try {
-    await redis.flushdb();
-  } finally {
-    await redis.quit().catch(() => redis.disconnect());
-  }
+  await throttlerRedis.flushdb();
+}
+
+async function closeThrottlerRedis(): Promise<void> {
+  if (!throttlerRedis) return;
+  const redis = throttlerRedis;
+  throttlerRedis = undefined;
+  await redis.quit().catch(() => redis.disconnect());
 }
 
 export function cookieHeaderFromSetCookies(setCookieHeader: string | string[] | undefined): string {

@@ -61,6 +61,56 @@ describe('PrismaStoredFileRepository — compare-and-set', () => {
     });
   });
 
+  it('allows ID transition to REJECTED even if the record was soft-deleted', async () => {
+    const { repository, storedFile } = build();
+
+    await repository.transition('f1', STORED_FILE_STATUS.VERIFYING, STORED_FILE_STATUS.REJECTED, {
+      failureReason: 'Malware detected',
+    });
+
+    expect(storedFile.updateMany).toHaveBeenCalledWith({
+      where: { id: 'f1', status: STORED_FILE_STATUS.VERIFYING },
+      data: { status: STORED_FILE_STATUS.REJECTED, failureReason: 'Malware detected' },
+    });
+  });
+
+  it('allows transition to REJECTED even if the record was soft-deleted to ensure infected files are purged', async () => {
+    const { repository, storedFile } = build();
+
+    await repository.transitionByKey(
+      'k',
+      STORED_FILE_STATUS.VERIFYING,
+      STORED_FILE_STATUS.REJECTED,
+      {
+        failureReason: 'Malware detected',
+      },
+    );
+
+    expect(storedFile.updateMany).toHaveBeenCalledWith({
+      where: { key: 'k', status: STORED_FILE_STATUS.VERIFYING },
+      data: { status: STORED_FILE_STATUS.REJECTED, failureReason: 'Malware detected' },
+    });
+  });
+
+  // The exception is scoped to the two in-flight sources. Any other transition — including one that
+  // also lands on REJECTED — must keep the soft-delete predicate, or a caller could revive a row the
+  // owner already deleted.
+  it('keeps the soft-delete predicate for a REJECTED transition from any other status', async () => {
+    const { repository, storedFile } = build();
+
+    await repository.transition('f1', STORED_FILE_STATUS.READY, STORED_FILE_STATUS.REJECTED);
+    await repository.transitionByKey('k', STORED_FILE_STATUS.READY, STORED_FILE_STATUS.REJECTED);
+
+    expect(storedFile.updateMany).toHaveBeenNthCalledWith(1, {
+      where: { id: 'f1', status: STORED_FILE_STATUS.READY, deletedAt: null },
+      data: { status: STORED_FILE_STATUS.REJECTED },
+    });
+    expect(storedFile.updateMany).toHaveBeenNthCalledWith(2, {
+      where: { key: 'k', status: STORED_FILE_STATUS.READY, deletedAt: null },
+      data: { status: STORED_FILE_STATUS.REJECTED },
+    });
+  });
+
   // Deleting by id alone would remove a row another execution had already moved on from.
   it('deletes only while the row still holds the expected status', async () => {
     const { repository, storedFile } = build();

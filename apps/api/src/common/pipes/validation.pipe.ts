@@ -1,6 +1,10 @@
 import { HttpStatus, UnprocessableEntityException, ValidationPipe } from '@nestjs/common';
 import type { ValidationError, ValidationPipeOptions } from '@nestjs/common';
-import { ERROR_CODES, type ValidationErrorItemDto } from '@nestjs-fastify-nx/contracts';
+import {
+  ERROR_CODES,
+  validatorToCode,
+  type ValidationErrorItemDto,
+} from '@nestjs-fastify-nx/contracts';
 import { mapConstraintToI18nKey, VALIDATION_CONSTRAINT_KEYS } from '@nestjs-fastify-nx/infra-i18n';
 import { I18N_KEYS } from '@nestjs-fastify-nx/contracts';
 
@@ -75,56 +79,8 @@ function extractConstraintArgs(
   return undefined;
 }
 
-// class-validator decorator name → stable error code used by frontend for branching.
-// Mirrors VALIDATION_CONSTRAINT_KEYS in @nestjs-fastify-nx/infra-i18n — codes are short snake_case slugs, i18n keys are dotted paths.
-const VALIDATOR_TO_CODE: Record<string, string> = {
-  isDefined: 'required',
-  isNotEmpty: 'required',
-  isOptional: 'required',
-
-  isString: 'wrong_type',
-  isNumber: 'wrong_type',
-  isInt: 'wrong_type',
-  isBoolean: 'wrong_type',
-  isArray: 'wrong_type',
-  isObject: 'wrong_type',
-  isDate: 'wrong_type',
-  isEnum: 'invalid_enum_value',
-
-  isEmail: 'invalid_email',
-  isUrl: 'invalid_url',
-  isUuid: 'invalid_uuid',
-  isPhoneNumber: 'invalid_phone',
-  isMobilePhone: 'invalid_phone',
-  matches: 'pattern_mismatch',
-  isAlpha: 'pattern_mismatch',
-  isAlphanumeric: 'pattern_mismatch',
-  isAscii: 'pattern_mismatch',
-  isCreditCard: 'invalid_credit_card',
-  isHexColor: 'pattern_mismatch',
-  isJWT: 'pattern_mismatch',
-
-  min: 'out_of_range',
-  max: 'out_of_range',
-  isPositive: 'out_of_range',
-  isNegative: 'out_of_range',
-  minDate: 'out_of_range',
-  maxDate: 'out_of_range',
-
-  minLength: 'too_short',
-  maxLength: 'too_long',
-  length: 'wrong_length',
-  arrayMinSize: 'too_short',
-  arrayMaxSize: 'too_long',
-
-  isIn: 'invalid_enum_value',
-  isNotIn: 'forbidden_value',
-
-  whitelistValidation: 'unknown_field',
-};
-
 function mapValidatorToCode(rule: string): string {
-  return VALIDATOR_TO_CODE[rule] ?? 'invalid_value';
+  return validatorToCode(rule);
 }
 
 // Re-export so callers don't need to import both modules.

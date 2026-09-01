@@ -51,6 +51,12 @@ describe('PrismaUserRepository', () => {
       db,
       dbRead: db,
       currentTransaction: undefined,
+      writeTarget: vi.fn(function (this: { db: unknown }) {
+        return this.db;
+      }),
+      readTarget: vi.fn(function (this: { dbRead: unknown }) {
+        return this.dbRead;
+      }),
     } as unknown as PrismaService);
   });
 
@@ -110,12 +116,6 @@ describe('PrismaUserRepository', () => {
         take: 2,
       }),
     );
-  });
-
-  it('reports existence from the replica count', async () => {
-    db.user.count.mockResolvedValueOnce(1).mockResolvedValueOnce(0);
-    expect(await repository.exists(row.email)).toBe(true);
-    expect(await repository.exists('missing@example.com')).toBe(false);
   });
 
   it('translates a unique conflict and leaves every other failure alone', async () => {

@@ -104,6 +104,26 @@ if (await this.users.exists(email)) {
 Pass `messageKey`/`title` as i18n keys, not literals: `GlobalExceptionFilter` only translates dotted
 strings, so a literal silently ships English to every locale.
 
+**Collect a module's exceptions in one file when more than one handler raises the same failure.**
+A module with several handlers that each answer `not_found` for the same aggregate ends up with the
+same twenty-line literal repeated, and the copies drift. Put small factories in
+`application/<context>-errors.ts` and import them:
+
+```typescript
+// libs/modules/organizations/src/application/organization-errors.ts
+export const roleInUse = () =>
+  conflict(
+    'role',
+    ERROR_CODES.ORGANIZATION_ROLE_IN_USE,
+    'Role is still assigned to at least one member',
+    I18N_KEYS.errors.organizations.role_in_use,
+  );
+```
+
+Keep the exception inline when exactly one handler raises it — a factory with one caller is
+indirection without a payoff. Examples: `organization-errors.ts`, `feature-flag-errors.ts`,
+`term-errors.ts`.
+
 ### Input Validation
 
 Use `class-validator` decorators on DTOs. The global `ProblemDetailsValidationPipe` automatically
@@ -292,11 +312,21 @@ the status after the interceptor chain.
   key → `400 idempotency_key_invalid`.
 - Scope: the store key hashes the session token (or client IP for anonymous) with the
   key, so principals never read each other's cached response.
-- **Fail-open** on a Redis error (mirrors the throttler). Non-2xx responses release the
-  lock so the client may retry — safe because command handlers roll their transaction
-  back on error, leaving no committed side effect to duplicate.
+- **Fail-open** on a Redis error (mirrors the throttler). A **4xx** releases the lock so the
+  client may retry — it was rejected before the handler could commit anything. A **5xx keeps
+  the record pending until its TTL**, so a retry gets `409` instead: a 500 says nothing about
+  whether the mutation committed (a post-commit step, an in-process listener, or the response
+  mapping can throw after the write landed), and releasing the lock would invite the retry that
+  duplicates it. A `504` is the most visible case of the same uncertainty, not a special one.
 - **Invariant:** `IDEMPOTENCY_LOCK_TTL_SECONDS * 1000 > HTTP_REQUEST_TIMEOUT_MS` (validated
   on boot) so a finishing request always still owns its lock — preventing a lock-steal.
+- **Known gap — tenant context is outside the fingerprint.** The fingerprint covers
+  `method + url + body` only; the active organization lives server-side on the session row,
+  which the Fastify-layer plugin cannot see (it runs before the auth guard resolves the
+  membership). A retry sent after switching the active organization therefore replays the
+  previous organization's response instead of executing against the new one. Until this is
+  addressed (options: resolve the membership in the plugin, or add an org-changed marker to
+  the fingerprint), clients that switch organizations should rotate the Idempotency-Key.
 
 **Request timeout** — a global `TimeoutInterceptor` (`HTTP_REQUEST_TIMEOUT_MS`, default
 30s) aborts a handler that runs too long with `504 request_timeout`. WebSocket handlers

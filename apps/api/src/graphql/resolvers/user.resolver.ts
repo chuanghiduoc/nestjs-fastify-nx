@@ -45,25 +45,15 @@ export class UserResolver {
     if (!user) throw new Error('users query reached the resolver without a session');
 
     const result = await this.queryBus.execute(
-      new ListUsersCursorQuery(
-        requireOrganizationId(user),
-        args.limit,
-        args.startingAfter,
-        args.role,
-        args.status,
-        args.search,
-      ),
+      new ListUsersCursorQuery(requireOrganizationId(user), args.limit, {
+        startingAfter: args.startingAfter,
+        role: args.role,
+        status: args.status,
+        search: args.search,
+      }),
     );
     return {
-      data: result.data.map((u) => ({
-        id: u.id,
-        email: u.email,
-        name: u.name,
-        role: u.role,
-        status: u.status,
-        createdAt: u.createdAt,
-        updatedAt: u.updatedAt,
-      })),
+      data: result.data,
       hasMore: result.hasMore,
       lastCursor: result.lastCursor,
     };

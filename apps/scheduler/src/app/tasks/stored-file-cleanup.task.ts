@@ -13,6 +13,12 @@ interface CleanupCandidate {
   updatedAt: Date;
 }
 
+interface RetentionCandidate {
+  id: string;
+  key: string;
+  bucket: string;
+}
+
 @Injectable()
 export class StoredFileCleanupTask {
   private readonly logger = new Logger(StoredFileCleanupTask.name);
@@ -22,6 +28,7 @@ export class StoredFileCleanupTask {
     60,
   );
   private readonly verifyingStaleHours = positiveIntEnv('STORED_FILE_VERIFYING_STALE_HOURS', 24);
+  private readonly rejectedRetainHours = positiveIntEnv('STORED_FILE_REJECTED_RETAIN_HOURS', 72);
   // Grace floor so the orphan scan never claims a row still being written by an in-flight confirm()
   // whose owner was hard-deleted mid-flight — that would delete a row while confirm() finalizes the
   // object, orphaning a committed object and 500-ing the request.
@@ -29,6 +36,7 @@ export class StoredFileCleanupTask {
   // Recovery window for a user-initiated delete: the row and its object survive this long after
   // `deletedAt` so a mistaken delete stays reversible.
   private readonly purgeAfterDays = positiveIntEnv('STORED_FILE_PURGE_AFTER_DAYS', 30);
+  private readonly purgeMaxBatches = positiveIntEnv('STORED_FILE_PURGE_MAX_BATCHES', 200);
   // @nestjs/schedule does not serialize overlapping ticks. If a run outlasts its interval (e.g. slow
   // S3), the next tick would run concurrently and double the S3/DB work — these flags skip it.
   private cleanupRunning = false;
@@ -54,14 +62,15 @@ export class StoredFileCleanupTask {
     try {
       const finalizingCutoff = new Date(Date.now() - this.finalizingStaleMinutes * 60_000);
       const verifyingCutoff = new Date(Date.now() - this.verifyingStaleHours * 3_600_000);
+      const rejectedCutoff = new Date(Date.now() - this.rejectedRetainHours * 3_600_000);
 
       await this.processCandidates(
-        'REJECTED',
+        'REJECTED (retained)',
         () =>
           this.prisma.db.$queryRaw<CleanupCandidate[]>`
           SELECT id, key, bucket, status, "updatedAt"
             FROM stored_files
-           WHERE status = 'REJECTED'
+           WHERE status = 'REJECTED' AND "updatedAt" < ${rejectedCutoff}
            ORDER BY "updatedAt"
            LIMIT ${this.batchSize}`,
       );
@@ -140,33 +149,53 @@ export class StoredFileCleanupTask {
     this.purgeRunning = true;
     try {
       const cutoff = new Date(Date.now() - this.purgeAfterDays * 86_400_000);
-      const candidates = await this.prisma.db.$queryRaw<CleanupCandidate[]>`
-        SELECT id, key, bucket, status, "updatedAt"
-          FROM stored_files
-         WHERE "deletedAt" IS NOT NULL AND "deletedAt" < ${cutoff}
-         ORDER BY "deletedAt"
-         LIMIT ${this.batchSize}`;
+      let totalPurged = 0;
 
-      let purged = 0;
-      for (const candidate of candidates) {
-        try {
-          await this.storage.delete(candidate.key, candidate.bucket);
-          await this.prisma.db.storedFile.deleteMany({ where: { id: candidate.id } });
-          purged++;
-        } catch (err) {
+      for (let batch = 0; batch < this.purgeMaxBatches; batch++) {
+        const candidates = await this.prisma.db.$queryRaw<RetentionCandidate[]>`
+          SELECT id, key, bucket
+            FROM stored_files
+           WHERE "deletedAt" IS NOT NULL AND "deletedAt" < ${cutoff}
+           ORDER BY "deletedAt"
+           LIMIT ${this.batchSize}`;
+        if (candidates.length === 0) break;
+
+        const purged = await this.purgeBatch(candidates);
+        if (purged === 0) {
           this.logger.error(
-            { err, fileId: candidate.id, key: candidate.key },
-            'Stored-file retention purge failed',
+            { candidates: candidates.length },
+            'Stored-file retention purge made no progress; stopping this run',
           );
+          break;
         }
+        totalPurged += purged;
+
+        if (candidates.length < this.batchSize) break;
       }
 
-      if (purged > 0) this.logger.log(`Purged ${purged} soft-deleted stored file(s)`);
+      if (totalPurged > 0) this.logger.log(`Purged ${totalPurged} soft-deleted stored file(s)`);
     } catch (err) {
       this.logger.error({ err }, 'Stored-file retention purge scan failed');
     } finally {
       this.purgeRunning = false;
     }
+  }
+
+  private async purgeBatch(candidates: readonly RetentionCandidate[]): Promise<number> {
+    let purged = 0;
+    for (const candidate of candidates) {
+      try {
+        await this.storage.delete(candidate.key, candidate.bucket);
+        await this.prisma.db.storedFile.deleteMany({ where: { id: candidate.id } });
+        purged++;
+      } catch (err) {
+        this.logger.error(
+          { err, fileId: candidate.id, key: candidate.key },
+          'Stored-file retention purge failed',
+        );
+      }
+    }
+    return purged;
   }
 
   private async processCandidates(

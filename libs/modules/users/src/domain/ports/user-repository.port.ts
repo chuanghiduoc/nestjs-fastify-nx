@@ -25,5 +25,4 @@ export interface UserRepositoryPort {
   findByEmail(email: string): Promise<User | null>;
   findAllCursor(options: FindAllCursorOptions): Promise<FindAllCursorResult>;
   save(user: User): Promise<void>;
-  exists(email: string): Promise<boolean>;
 }

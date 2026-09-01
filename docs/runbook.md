@@ -547,7 +547,82 @@ Set `OUTBOX_PURGE_MAX_BATCHES` to at least that value and redeploy.
 
 **Escalation:** Surge of deletions correlated with a single IP range may indicate an automated probe. Tighten `/upload/presign` rate-limit (currently 10/min per session — see `PRESIGN_LIMIT` in `upload.controller.ts`) or add a global ban list.
 
-## 10. Backups
+## 10. Compromised or leaked API key
+
+**Symptom:** a key appears in a paste site, a client log, or an audit trail shows calls from an
+unexpected source.
+
+**Cause:** the raw key was captured somewhere after issuance. Only a SHA-256 digest is stored
+server-side, so the leak is always on the holder's side — a CI log, an env dump, a shared file.
+
+**Diagnostic:**
+
+```bash
+# Which keys exist for the tenant, and when each was last used
+psql "$DATABASE_URL" -c "SELECT id, name, prefix, \"lastUsedAt\", \"expiresAt\", \"revokedAt\"
+  FROM api_keys WHERE \"organizationId\" = '<org-uuid>' ORDER BY \"createdAt\" DESC;"
+```
+
+The `prefix` column is the non-secret leading fragment shown in the UI — match the leaked value's
+first characters against it to identify the key without ever handling the secret.
+
+**Action:**
+
+1. Revoke immediately — takes effect on the next request, there is no cache to invalidate:
+   `DELETE /api/v1/api-keys/{id}` (needs `api_key:revoke`), or as a break-glass measure
+   `UPDATE api_keys SET "revokedAt" = NOW() WHERE id = '<uuid>';`
+2. Issue a replacement and hand it to the integration owner. The raw value appears once, in the
+   creation response.
+3. Review what the key could reach: `SELECT scopes FROM api_keys WHERE id = '<uuid>';` — the blast
+   radius is exactly those scopes, and never more than the issuer held.
+4. Check `audit_logs` for the window between leak and revocation.
+
+**Escalation:** if several keys of one tenant leak together, the leak is upstream of any single key
+— treat the tenant's credential handling as compromised rather than rotating one at a time.
+
+**Prevention:** set `expiresAt` when issuing. An unbounded key is a credential nobody will ever
+remember to rotate.
+
+## 11. Notifications are not appearing
+
+**Symptom:** `GET /api/v1/notifications` stays empty although members are being added or their
+roles changed.
+
+**Cause:** notifications are written by `MembershipNotificationListener`, which subscribes to
+`organizations.member_added` / `organizations.member_role_updated`. Those events reach a listener
+only in the process the **outbox relay** runs in — the scheduler. If the scheduler is not running
+`NotificationsListenersModule`, nothing is ever written, and no error appears anywhere: the events
+are delivered to a process with no subscriber.
+
+**Diagnostic:**
+
+```bash
+# 1. Are the events being produced at all?
+psql "$DATABASE_URL" -c "SELECT \"eventType\", COUNT(*), MAX(\"createdAt\")
+  FROM outbox_events WHERE \"eventType\" LIKE 'organizations.%' GROUP BY 1;"
+
+# 2. Is the relay draining them? (processedAt NULL = still pending)
+psql "$DATABASE_URL" -c "SELECT COUNT(*) FROM outbox_events
+  WHERE \"processedAt\" IS NULL AND \"eventType\" LIKE 'organizations.%';"
+
+# 3. Is the scheduler loading the listener slice?
+docker compose logs scheduler | grep -i "NotificationsListenersModule\|MembershipNotificationListener"
+```
+
+**Action:**
+
+1. Events missing entirely → the Postgres triggers are the producer; see section 1 (outbox stuck)
+   and confirm the trigger exists on `members`.
+2. Events present but unprocessed → outbox relay problem, section 1.
+3. Events processed but no rows in `notifications` → the scheduler is not importing
+   `NotificationsListenersModule` (`apps/scheduler/src/app/app.module.ts`). This is the failure mode
+   that shipped once already: the listener lived only in `api`, where no relay runs.
+
+**Note:** a redelivered event is a no-op, not a duplicate — the notification id is derived from the
+outbox `eventId` and the repository treats the resulting primary-key collision as the idempotency
+signal.
+
+## 12. Backups
 
 **Reality check:** this repo does NOT schedule database backups. It ships `scripts/pg-backup.sh` (on-demand `pg_dump` in custom format) so the restore steps elsewhere in this runbook have something to restore from — but scheduling and off-host retention are the operator's responsibility. A backup on the same volume/host as the database it protects is not a backup.
 

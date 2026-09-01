@@ -76,7 +76,7 @@ export class NotificationGateway
   private revalidationAbort?: AbortController;
   private revalidateIntervalMs = 0;
   private revalidateConcurrency = 1;
-  private messageRateLimit: { max: number; windowMs: number } = { max: 60, windowMs: 10_000 };
+  private messageRateLimit!: { max: number; windowMs: number };
 
   constructor(
     private readonly config: ConfigService<WsRedisEnv, true>,

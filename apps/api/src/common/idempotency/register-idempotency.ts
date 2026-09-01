@@ -95,11 +95,9 @@ function shouldHandle(req: FastifyRequest): boolean {
 function sendProblem(
   req: FastifyRequest,
   reply: FastifyReply,
-  status: number,
-  code: string,
-  title: string,
-  detail: string,
+  problem: { status: number; code: string; title: string; detail: string },
 ): FastifyReply {
+  const { status, code, title, detail } = problem;
   // Reuse the id the request already carries (stamped by ClsMiddleware) — minting a second one here
   // would put an X-Request-Id on this 4xx that matches no log line.
   const { requestId } = ensureRequestIds(req.raw, req.headers);
@@ -139,14 +137,12 @@ export function registerIdempotency(fastify: FastifyInstance, options: Idempoten
 
     const key = req.headers[IDEMPOTENCY_HEADER] as string;
     if (key.length === 0 || key.length > MAX_KEY_LENGTH) {
-      return sendProblem(
-        req,
-        reply,
-        HttpStatus.BAD_REQUEST,
-        ERROR_CODES.IDEMPOTENCY_KEY_INVALID,
-        'Invalid Idempotency-Key',
-        `Idempotency-Key must be between 1 and ${MAX_KEY_LENGTH} characters.`,
-      );
+      return sendProblem(req, reply, {
+        status: HttpStatus.BAD_REQUEST,
+        code: ERROR_CODES.IDEMPOTENCY_KEY_INVALID,
+        title: 'Invalid Idempotency-Key',
+        detail: `Idempotency-Key must be between 1 and ${MAX_KEY_LENGTH} characters.`,
+      });
     }
 
     const storeKey = `idem:${sha256(`${extractPrincipal(req)}:${key}`)}`;
@@ -195,25 +191,21 @@ export function registerIdempotency(fastify: FastifyInstance, options: Idempoten
 
     const record = result.record;
     if (record.state === 'pending') {
-      return sendProblem(
-        req,
-        reply,
-        HttpStatus.CONFLICT,
-        ERROR_CODES.IDEMPOTENCY_KEY_CONFLICT,
-        'Idempotency-Key In Progress',
-        'A request with this Idempotency-Key is still being processed. Retry shortly.',
-      );
+      return sendProblem(req, reply, {
+        status: HttpStatus.CONFLICT,
+        code: ERROR_CODES.IDEMPOTENCY_KEY_CONFLICT,
+        title: 'Idempotency-Key In Progress',
+        detail: 'A request with this Idempotency-Key is still being processed. Retry shortly.',
+      });
     }
 
     if (record.fingerprint !== fingerprint) {
-      return sendProblem(
-        req,
-        reply,
-        HttpStatus.UNPROCESSABLE_ENTITY,
-        ERROR_CODES.IDEMPOTENCY_KEY_MISMATCH,
-        'Idempotency-Key Reused',
-        'This Idempotency-Key was already used with a different request payload.',
-      );
+      return sendProblem(req, reply, {
+        status: HttpStatus.UNPROCESSABLE_ENTITY,
+        code: ERROR_CODES.IDEMPOTENCY_KEY_MISMATCH,
+        title: 'Idempotency-Key Reused',
+        detail: 'This Idempotency-Key was already used with a different request payload.',
+      });
     }
 
     // Replay the stored response verbatim. This short-circuits before Nest, so x-request-id
@@ -233,43 +225,60 @@ export function registerIdempotency(fastify: FastifyInstance, options: Idempoten
     if (!ctx) return payload;
 
     try {
-      const status = reply.statusCode;
-      const isSuccess = status >= 200 && status < 300;
-      // Branch on status first: a 2xx is a completed mutation regardless of body shape. Gating on
-      // `typeof payload === 'string'` would send an empty-bodied success (204) down the failure
-      // path and release the lock, letting a retry re-run the side effect it already performed.
-      if (isSuccess) {
-        const body = replayableBody(payload);
-        if (body === undefined) {
-          // Streams/Buffers can't be captured for byte-exact replay without consuming them. Leave
-          // the record pending so a duplicate gets 409 rather than re-executing the mutation.
-          reportError(
-            `idempotency cannot replay a non-text ${status} body; leaving key pending until TTL`,
-          );
-        } else {
-          const completed = await store.complete(ctx.storeKey, ctx.ownerToken, {
-            fingerprint: ctx.fingerprint,
-            status,
-            contentType: String(reply.getHeader('content-type') ?? 'application/json'),
-            body,
-          });
-          if (!completed) {
-            reportError('idempotency completion skipped because request no longer owns the lock');
-          }
-        }
-      } else if (status === HttpStatus.GATEWAY_TIMEOUT) {
-        // Timeout cannot cancel the underlying promise. Retain the pending record until its TTL so
-        // a retry cannot overlap work that may still commit after the 504 reaches the client.
-      } else {
-        // Ordinary failures completed their handler path, so the same operation may retry.
-        await store.release(ctx.storeKey, ctx.ownerToken);
-      }
+      await finalizeIdempotentResponse(store, ctx, reply, payload, reportError);
     } catch (err) {
       reportError(`idempotency finalize failed: ${(err as Error).message}`);
     }
 
     return payload;
   });
+}
+
+async function finalizeIdempotentResponse(
+  store: IdempotencyStore,
+  ctx: IdempotencyContext,
+  reply: FastifyReply,
+  payload: unknown,
+  reportError: (message: string) => void,
+): Promise<void> {
+  const status = reply.statusCode;
+  const isSuccess = status >= 200 && status < 300;
+  if (isSuccess) {
+    await completeSuccessRecord(store, ctx, reply, payload, status, reportError);
+    return;
+  }
+  if (status >= HttpStatus.INTERNAL_SERVER_ERROR) {
+    return;
+  }
+  await store.release(ctx.storeKey, ctx.ownerToken);
+}
+
+async function completeSuccessRecord(
+  store: IdempotencyStore,
+  ctx: IdempotencyContext,
+  reply: FastifyReply,
+  payload: unknown,
+  status: number,
+  reportError: (message: string) => void,
+): Promise<void> {
+  const body = replayableBody(payload);
+  if (body === undefined) {
+    // Streams/Buffers can't be captured for byte-exact replay without consuming them. Leave
+    // the record pending so a duplicate gets 409 rather than re-executing the mutation.
+    reportError(
+      `idempotency cannot replay a non-text ${status} body; leaving key pending until TTL`,
+    );
+    return;
+  }
+  const completed = await store.complete(ctx.storeKey, ctx.ownerToken, {
+    fingerprint: ctx.fingerprint,
+    status,
+    contentType: String(reply.getHeader('content-type') ?? 'application/json'),
+    body,
+  });
+  if (!completed) {
+    reportError('idempotency completion skipped because request no longer owns the lock');
+  }
 }
 
 // An empty body (204 and friends) replays as an empty string. Anything not already text is not

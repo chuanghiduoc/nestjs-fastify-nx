@@ -6,12 +6,21 @@ export {
   type PageMeta,
   type PaginationOptions,
 } from './lib/pagination.types';
-export { QUEUE_NAMES, type QueueName } from './lib/queue-names';
+export { QUEUE_NAMES, BULL_JOB_NAMES, type QueueName } from './lib/queue-names';
+export { RETRIED_JOB_OPTIONS } from './lib/job-options';
+export {
+  EMAIL_TEMPLATES,
+  GENERIC_EMAIL_TEMPLATE,
+  type EmailNotificationPayload,
+  type EmailTemplate,
+} from './lib/email-contract';
 export {
   DOMAIN_EVENTS,
   DOMAIN_EVENT_STREAMS,
   userEventPayloadSchema,
+  organizationEventPayloadSchema,
   type DomainEventType,
+  type OrganizationEventPayload,
   type UserEventPayload,
 } from './lib/domain-events';
 export {
@@ -35,6 +44,14 @@ export { encodeCursor, decodeCursor, type DecodedCursor } from './lib/cursor-pag
 export { injectDatabasePassword } from './lib/db-password-file';
 export { withTimeout } from './lib/with-timeout';
 export { STORED_FILE_STATUS, type StoredFileStatus } from './lib/stored-file-status';
+export {
+  ALL_PLATFORM_ROLES,
+  PLATFORM_ROLES,
+  USER_STATUS,
+  isPlatformRole,
+  type PlatformRole,
+  type UserStatusValue,
+} from './lib/user-status';
 export { MALWARE_SCAN_OUTCOME, type MalwareScanOutcome } from './lib/malware-scan-outcome';
 export {
   ALL_PERMISSIONS,
@@ -44,7 +61,21 @@ export {
   SYSTEM_ROLE_PERMISSIONS,
   isSystemRole,
   resourceTypeOf,
+  groupPermissionsByResource,
+  parsePermissionStatements,
+  serializePermissionStatements,
+  type ParsedPermissionStatements,
   type Permission,
   type ResourceType,
   type SystemRole,
 } from './lib/permissions';
+export {
+  API_KEY_DISPLAY_PREFIX_LENGTH,
+  API_KEY_PREFIX,
+  API_KEY_SECRET_BYTES,
+  apiKeyDisplayPrefix,
+  generateApiKey,
+  hashApiKey,
+  looksLikeApiKey,
+  type GeneratedApiKey,
+} from './lib/api-key';

@@ -3,7 +3,14 @@ import { OnEvent } from '@nestjs/event-emitter';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import type { DomainEvent } from '@nestjs-fastify-nx/core';
-import { DOMAIN_EVENTS, QUEUE_NAMES, userEventPayloadSchema } from '@nestjs-fastify-nx/shared';
+import {
+  BULL_JOB_NAMES,
+  DOMAIN_EVENTS,
+  EMAIL_TEMPLATES,
+  QUEUE_NAMES,
+  RETRIED_JOB_OPTIONS,
+  userEventPayloadSchema,
+} from '@nestjs-fastify-nx/shared';
 
 @Injectable()
 export class UserRegisteredListener {
@@ -19,29 +26,26 @@ export class UserRegisteredListener {
   async handle(event: DomainEvent): Promise<void> {
     const parsed = userEventPayloadSchema.safeParse(event.payload);
     if (!parsed.success) {
-      // Throwing lets the outbox record lastError and retry; swallowing would drop the email
-      // silently and mark the row processed.
-      throw new Error(`users.registered payload is not deliverable (eventId=${event.eventId})`);
+      throw new Error(
+        `${DOMAIN_EVENTS.USERS_REGISTERED} payload is not deliverable (eventId=${event.eventId})`,
+      );
     }
 
     // BullMQ deduplicates on jobId — outbox redelivery never produces a second email.
     // BullMQ rejects ':' in jobIds — use '__' as separator.
-    const jobId = `welcome-email__${event.eventId}`;
+    const jobId = `${BULL_JOB_NAMES.WELCOME_EMAIL}__${event.eventId}`;
     await this.emailQueue.add(
-      'welcome-email',
+      BULL_JOB_NAMES.WELCOME_EMAIL,
       {
         to: parsed.data.email,
         subject: 'Welcome to the platform!',
         body: `Thank you for registering. Your account ID is ${event.aggregateId}.`,
-        templateId: 'welcome',
+        templateId: EMAIL_TEMPLATES.WELCOME,
         variables: { userId: event.aggregateId, email: parsed.data.email },
       },
       {
         jobId,
-        attempts: 3,
-        backoff: { type: 'exponential', delay: 5000 },
-        removeOnComplete: { age: 30 * 24 * 60 * 60, count: 10_000 },
-        removeOnFail: { age: 30 * 24 * 60 * 60, count: 1_000 },
+        ...RETRIED_JOB_OPTIONS,
       },
     );
 

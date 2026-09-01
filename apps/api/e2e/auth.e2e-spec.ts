@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import request from 'supertest';
 import { PrismaService } from '@nestjs-fastify-nx/infra-database';
 import {
@@ -17,10 +17,6 @@ describe('Auth E2E (Better Auth)', () => {
   beforeAll(async () => {
     ctx = await createTestApp();
   }, 60_000);
-
-  afterAll(async () => {
-    await ctx.app.close();
-  });
 
   beforeEach(async () => {
     await ctx.cleaner.truncateAll();

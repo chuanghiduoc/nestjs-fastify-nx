@@ -1,28 +1,34 @@
 import { describe, expect, it, vi } from 'vitest';
 import { RecordAuditLogHandler } from './record-audit-log.handler';
-import { RecordAuditLogCommand } from './record-audit-log.command';
+import { RecordAuditLogCommand, type RecordAuditLogInput } from './record-audit-log.command';
 import type { AuditLogRepositoryPort } from '../../../domain/ports/audit-log-repository.port';
 import { AuditLog } from '../../../domain/entities/audit-log.entity';
 
 const EVT_ID = '00000000-0000-4000-8000-000000000001';
 
+const emptyPage = { items: [], hasMore: false };
+
 function buildHandler() {
-  const repository: AuditLogRepositoryPort = { append: vi.fn().mockResolvedValue(undefined) };
+  const repository: AuditLogRepositoryPort = {
+    append: vi.fn().mockResolvedValue(undefined),
+    findAllCursor: vi.fn().mockResolvedValue(emptyPage),
+  };
   return { handler: new RecordAuditLogHandler(repository), repository };
 }
 
-function buildCommand(overrides: Partial<RecordAuditLogCommand> = {}): RecordAuditLogCommand {
-  return new RecordAuditLogCommand(
-    overrides.eventId ?? EVT_ID,
-    overrides.organizationId ?? null,
-    overrides.userId ?? 'user-123',
-    overrides.action ?? 'users.registered',
-    overrides.resource ?? 'user',
-    overrides.metadata ?? { email: 'a@example.com', eventId: EVT_ID },
-    overrides.ipAddress ?? '203.0.113.5',
-    overrides.userAgent ?? 'curl/8',
-    overrides.occurredAt ?? new Date('2026-04-28T10:00:00.000Z'),
-  );
+function buildCommand(overrides: Partial<RecordAuditLogInput> = {}): RecordAuditLogCommand {
+  return new RecordAuditLogCommand({
+    eventId: EVT_ID,
+    organizationId: null,
+    userId: 'user-123',
+    action: 'users.registered',
+    resource: 'user',
+    metadata: { email: 'a@example.com', eventId: EVT_ID },
+    ipAddress: '203.0.113.5',
+    userAgent: 'curl/8',
+    occurredAt: new Date('2026-04-28T10:00:00.000Z'),
+    ...overrides,
+  });
 }
 
 describe('RecordAuditLogHandler', () => {
@@ -57,6 +63,7 @@ describe('RecordAuditLogHandler', () => {
   it('propagates repository errors so the command bus surfaces them to the listener', async () => {
     const repository: AuditLogRepositoryPort = {
       append: vi.fn().mockRejectedValue(new Error('db down')),
+      findAllCursor: vi.fn().mockResolvedValue(emptyPage),
     };
     const handler = new RecordAuditLogHandler(repository);
 

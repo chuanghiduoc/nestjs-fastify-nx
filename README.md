@@ -84,6 +84,8 @@ If you've ever shipped a Node service to production, you've written this code al
 - **Four runnable services** — `api`, `worker`, `scheduler`, `migration` — sharing a single Nx workspace and one pnpm lockfile.
 - **DDD + CQRS layout** with bounded contexts under `libs/modules/*`, infrastructure adapters under `libs/infra/*`, cross-cutting plumbing under `libs/core/*`.
 - **Better Auth (cookie sessions, scrypt hashing)** with WebSocket session reuse via a custom Socket.io adapter.
+- **Tenant self-service out of the box** — custom roles, teams, invitations, in-app notifications, feature flags with deterministic rollout, legal-terms acceptance, and session/device revocation, all behind the same permission model.
+- **API keys for machine-to-machine access** — SHA-256 digest at rest, scopes that can never exceed the issuer's own permissions, and routes that opt in explicitly ([ADR-0007](docs/adr/0007-api-key-authentication.md)).
 - **REST (OpenAPI/Swagger) + GraphQL (Mercurius) + Socket.io** all running on the same Fastify instance, with Redis pub/sub for cross-pod broadcast.
 - **BullMQ + Bull Board** UI mounted behind admin auth; transactional outbox pattern wires domain events to durable jobs.
 - **OpenTelemetry + Sentry + Prometheus `/metrics`** — traces, errors, and Prometheus-scrapeable metrics out of the box.
@@ -345,10 +347,13 @@ Full flow: [docs/deployment.md](docs/deployment.md).
 - [Creating a Module](docs/creating-a-module.md) — DDD/CQRS scaffold walkthrough
 - [Environment Variables](docs/environment.md) — every env var, defaults, validation
 - [Deployment](docs/deployment.md) — Docker, GHCR, Cosign verification, migrations
-- [Security Scanning](docs/security.md) — five-layer pipeline, local + CI parity
+- [Security](docs/security.md) — five-layer scan pipeline plus how API keys and session tokens are held
+- [Error Handling](docs/error-handling.md) — which error to throw, which status the client gets
 - [Troubleshooting](docs/troubleshooting.md) — known issues, debug tips
-- [Runbook](docs/runbook.md) — ops runbook: health, metrics, outbox, BullMQ, performance
+- [Runbook](docs/runbook.md) — ops runbook: outbox, DLQ, leaked API keys, missing notifications, backups
 - [Code Standards](docs/code-standards.md) — logging, error handling, DTOs, boundary rules
+- [Scaling to services](docs/scaling-to-services.md) — what is ready to split out, and in what order
+- [Architecture Decisions](docs/adr/README.md) — the decisions that are expensive to reverse
 - [API Reference](http://localhost:3000/docs) (Scalar, dev only)
 
 ## Contributing

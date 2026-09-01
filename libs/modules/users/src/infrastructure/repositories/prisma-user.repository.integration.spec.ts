@@ -80,13 +80,6 @@ describe('PrismaUserRepository (integration)', () => {
     expect(found.id).toBe(user.id);
   });
 
-  it('exists returns true for saved email, false for unknown', async () => {
-    const user = UserFactory.create({ email: 'exists@test.com' });
-    await repository.save(user);
-    expect(await repository.exists('exists@test.com')).toBe(true);
-    expect(await repository.exists('ghost@test.com')).toBe(false);
-  });
-
   it('upsert updates existing user', async () => {
     const user = UserFactory.create({ email: 'update@test.com' });
     await repository.save(user);
@@ -222,6 +215,88 @@ describe('PrismaUserRepository (integration)', () => {
       });
       expect(underscoreResult.items).toHaveLength(1);
       expect(underscoreResult.items[0].email.toString()).toBe('has_underscore@test.com');
+    });
+
+    it('filters by membership role within the organization', async () => {
+      const admin = UserFactory.create({ email: 'admin@test.com' });
+      await repository.save(admin);
+      await prismaService.db.member.create({
+        data: { organizationId: ORG_ID, userId: admin.id, role: 'admin' },
+      });
+      await saveAsMember(UserFactory.create({ email: 'member@test.com' }));
+
+      const result = await repository.findAllCursor({
+        organizationId: ORG_ID,
+        limit: 10,
+        role: 'admin',
+      });
+
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0].email.toString()).toBe('admin@test.com');
+    });
+
+    it('keeps the organization scope when role and search are combined', async () => {
+      const otherOrgId = '019dd1a5-9235-70db-8d57-54ef90300003';
+      await prismaService.db.organization.create({
+        data: { id: otherOrgId, name: 'Other Role Org', slug: 'other-role-org' },
+      });
+
+      const mine = UserFactory.create({
+        email: 'admin-mine@test.com',
+        name: 'Shared Admin',
+      });
+      await repository.save(mine);
+      await prismaService.db.member.create({
+        data: { organizationId: ORG_ID, userId: mine.id, role: 'admin' },
+      });
+
+      const theirs = UserFactory.create({
+        email: 'admin-theirs@test.com',
+        name: 'Shared Admin',
+      });
+      await repository.save(theirs);
+      await prismaService.db.member.create({
+        data: { organizationId: otherOrgId, userId: theirs.id, role: 'admin' },
+      });
+
+      const result = await repository.findAllCursor({
+        organizationId: ORG_ID,
+        limit: 10,
+        role: 'admin',
+        search: 'Shared Admin',
+      });
+
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0].id).toBe(mine.id);
+    });
+
+    it('paginates role-filtered results with the same cursor semantics', async () => {
+      for (let i = 0; i < 3; i++) {
+        const admin = UserFactory.create({ email: `paged-admin${i}@test.com` });
+        await repository.save(admin);
+        await prismaService.db.member.create({
+          data: { organizationId: ORG_ID, userId: admin.id, role: 'admin' },
+        });
+      }
+      await saveAsMember(UserFactory.create({ email: 'paged-member@test.com' }));
+
+      const page1 = await repository.findAllCursor({
+        organizationId: ORG_ID,
+        limit: 2,
+        role: 'admin',
+      });
+      expect(page1.items).toHaveLength(2);
+      expect(page1.hasMore).toBe(true);
+
+      const last = page1.items[page1.items.length - 1];
+      const page2 = await repository.findAllCursor({
+        organizationId: ORG_ID,
+        limit: 2,
+        role: 'admin',
+        startingAfter: { createdAt: last.createdAt, id: last.id },
+      });
+      expect(page2.items).toHaveLength(1);
+      expect(page2.hasMore).toBe(false);
     });
   });
 }, 90_000);

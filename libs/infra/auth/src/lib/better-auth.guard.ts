@@ -14,6 +14,7 @@ import * as Sentry from '@sentry/nestjs';
 import { ClsService } from 'nestjs-cls';
 import { I18N_KEYS } from '@nestjs-fastify-nx/contracts';
 import { REQUEST_CONTEXT_KEYS, type RequestContextStore } from '@nestjs-fastify-nx/core';
+import { USER_STATUS } from '@nestjs-fastify-nx/shared';
 import { PrismaService } from '@nestjs-fastify-nx/infra-database';
 import { BETTER_AUTH_INSTANCE } from './better-auth-instance.token';
 import type { BetterAuthInstance } from './better-auth.config';
@@ -43,6 +44,10 @@ export class BetterAuthGuard implements CanActivate {
     if (isPublic) return true;
 
     const request = this.getRequest(context);
+
+    // ApiKeyGuard runs first and only stamps this after verifying the key against a route that
+    // opted into machine access, so there is no session to resolve and nothing to revalidate.
+    if ((request as FastifyRequest & { apiKey?: unknown }).apiKey) return true;
 
     const session = await this.auth.api.getSession({
       // role/status are authorization inputs. Cookie-cache values may remain valid after an
@@ -78,7 +83,7 @@ export class BetterAuthGuard implements CanActivate {
 
     // 403, not 401: the session is valid, so re-authenticating cannot help. Better Auth does not
     // check this custom `status` on sign-in, so 401 would loop an SPA through login forever.
-    if (user.status !== 'ACTIVE') {
+    if (user.status !== USER_STATUS.ACTIVE) {
       throw new ForbiddenException({
         messageKey: I18N_KEYS.errors.auth.account_inactive,
         message: 'Account is not active',
@@ -90,33 +95,7 @@ export class BetterAuthGuard implements CanActivate {
       activeTeamId?: string | null;
     };
 
-    let organizationId: string | undefined;
-    let teamId: string | undefined;
-    if (activeScope.activeOrganizationId) {
-      const membership = await this.prisma.db.member.findUnique({
-        where: {
-          organizationId_userId: {
-            organizationId: activeScope.activeOrganizationId,
-            userId: user.id,
-          },
-        },
-        select: { organizationId: true },
-      });
-      if (membership) {
-        organizationId = membership.organizationId;
-        if (activeScope.activeTeamId) {
-          const teamMembership = await this.prisma.db.teamMember.findFirst({
-            where: {
-              teamId: activeScope.activeTeamId,
-              userId: user.id,
-              team: { organizationId: membership.organizationId },
-            },
-            select: { teamId: true },
-          });
-          if (teamMembership) teamId = teamMembership.teamId;
-        }
-      }
-    }
+    const { organizationId, teamId } = await this.resolveActiveScope(activeScope, user.id);
 
     const authenticatedSession: AuthenticatedSession = {
       userId: user.id,
@@ -144,6 +123,39 @@ export class BetterAuthGuard implements CanActivate {
     Sentry.setUser({ id: user.id });
 
     return true;
+  }
+
+  private async resolveActiveScope(
+    activeScope: { activeOrganizationId?: string | null; activeTeamId?: string | null },
+    userId: string,
+  ): Promise<{ organizationId?: string; teamId?: string }> {
+    if (!activeScope.activeOrganizationId) return {};
+
+    const membership = await this.prisma.db.member.findUnique({
+      where: {
+        organizationId_userId: {
+          organizationId: activeScope.activeOrganizationId,
+          userId,
+        },
+      },
+      select: { organizationId: true },
+    });
+    if (!membership) return {};
+
+    const organizationId = membership.organizationId;
+    if (!activeScope.activeTeamId) return { organizationId };
+
+    const teamMembership = await this.prisma.db.teamMember.findFirst({
+      where: {
+        teamId: activeScope.activeTeamId,
+        userId,
+        team: { organizationId },
+      },
+      select: { teamId: true },
+    });
+    if (!teamMembership) return { organizationId };
+
+    return { organizationId, teamId: teamMembership.teamId };
   }
 
   private getRequest(context: ExecutionContext): FastifyRequest {

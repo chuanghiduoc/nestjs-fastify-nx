@@ -11,15 +11,8 @@ import { isDomainException, type DomainEvent } from '@nestjs-fastify-nx/core';
 import { positiveIntEnv, safeErrorSummary } from '@nestjs-fastify-nx/shared';
 import { EventBusService } from './event-bus.service';
 import { OUTBOX_SCHEMA_VERSION } from './outbox-schema-version';
+import { formatEnvelopeIssues, outboxEnvelopeSchema } from './outbox-envelope';
 import { OUTBOX_RELAY_LEADERSHIP, type OutboxRelayLeadership } from './outbox-relay-leadership';
-
-interface OutboxPayloadShape {
-  // Absent on rows written before envelope versioning — treated as version 1.
-  schemaVersion?: number;
-  eventId: string;
-  occurredAt: string;
-  payload: Record<string, unknown>;
-}
 
 interface OutboxRow {
   id: string;
@@ -31,25 +24,6 @@ interface OutboxRow {
 }
 
 const STUCK_CHECK_INTERVAL_MS = 60_000;
-
-function parsePayload(value: unknown): OutboxPayloadShape | null {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) return null;
-  const candidate = value as Partial<OutboxPayloadShape>;
-  if (
-    (candidate.schemaVersion !== undefined &&
-      (!Number.isInteger(candidate.schemaVersion) || candidate.schemaVersion < 1)) ||
-    typeof candidate.eventId !== 'string' ||
-    candidate.eventId.length === 0 ||
-    typeof candidate.occurredAt !== 'string' ||
-    Number.isNaN(Date.parse(candidate.occurredAt)) ||
-    typeof candidate.payload !== 'object' ||
-    candidate.payload === null ||
-    Array.isArray(candidate.payload)
-  ) {
-    return null;
-  }
-  return candidate as OutboxPayloadShape;
-}
 
 // Three-stage dispatch: CLAIM tx (FOR UPDATE SKIP LOCKED) → PUBLISH (no tx) → MARK tx (per-row).
 // Lock windows stay short and a poison-pill listener cannot roll back an entire batch.
@@ -232,13 +206,14 @@ export class OutboxRelayService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async dispatchOne(row: OutboxRow): Promise<boolean> {
-    const payload = parsePayload(row.payload);
-    if (!payload) {
-      const message = 'Invalid outbox payload envelope';
+    const parsed = outboxEnvelopeSchema.safeParse(row.payload);
+    if (!parsed.success) {
+      const message = `Invalid outbox payload envelope — ${formatEnvelopeIssues(parsed.error)}`;
       this.logger.error(`Outbox dispatch skipped for ${row.eventType} (id=${row.id}) - ${message}`);
-      await this.parkPermanently(row.id, message);
+      await this.parkPermanently(row.id, message.slice(0, 2_000));
       return false;
     }
+    const payload = parsed.data;
 
     // Reject envelopes newer than this relay understands rather than silently deserialising a shape
     // we cannot interpret. Retrying cannot help — only a relay deploy can — so park it.

@@ -4,19 +4,9 @@ import {
   ALL_PERMISSIONS,
   SYSTEM_ROLES,
   SYSTEM_ROLE_PERMISSIONS,
-  type Permission,
+  groupPermissionsByResource as groupByResource,
   type SystemRole,
 } from '@nestjs-fastify-nx/shared';
-
-function groupByResource(permissions: readonly Permission[]): Record<string, string[]> {
-  const grouped: Record<string, string[]> = {};
-  for (const permission of permissions) {
-    const [resource, action] = permission.split(':');
-    if (!resource || !action) continue;
-    (grouped[resource] ??= []).push(action);
-  }
-  return grouped;
-}
 
 // Better Auth's own statements govern its organization endpoints; the application catalog governs
 // everything else. Merged so a tenant-defined role created through /organization/create-role can
@@ -33,6 +23,7 @@ function roleFor(role: SystemRole) {
   // Owner and admin also administer the organization itself, which lives in Better Auth's own
   // statements; member-level roles get the application permissions only.
   const administers = role === SYSTEM_ROLES.OWNER || role === SYSTEM_ROLES.ADMIN;
+  const isOwner = role === SYSTEM_ROLES.OWNER;
   return organizationAccessControl.newRole({
     ...appPermissions,
     ...(administers
@@ -40,7 +31,7 @@ function roleFor(role: SystemRole) {
           member: [...(appPermissions['member'] ?? []), 'create', 'update', 'delete'],
           invitation: [...(appPermissions['invitation'] ?? []), 'create', 'cancel'],
           team: [...(appPermissions['team'] ?? []), 'create', 'update', 'delete'],
-          ac: ['create', 'read', 'update', 'delete'],
+          ac: isOwner ? ['create', 'read', 'update', 'delete'] : ['read'],
         }
       : {}),
   } as never);

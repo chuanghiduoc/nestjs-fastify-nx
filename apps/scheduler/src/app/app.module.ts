@@ -7,15 +7,19 @@ import { CqrsInstrumentationInitializer } from '@nestjs-fastify-nx/core';
 import { DatabaseModule } from '@nestjs-fastify-nx/infra-database';
 import { StorageModule } from '@nestjs-fastify-nx/infra-storage';
 import { OutboxRelayModule } from '@nestjs-fastify-nx/infra-messaging';
-import { buildPinoLoggerConfig } from '@nestjs-fastify-nx/infra-observability';
+import {
+  buildPinoLoggerConfig,
+  LivenessProbeService,
+} from '@nestjs-fastify-nx/infra-observability';
 import { UsersListenersModule } from '@nestjs-fastify-nx/modules-users';
-import { AuditLogModule } from '@nestjs-fastify-nx/modules-audit-log';
+import { AuditLogListenersModule } from '@nestjs-fastify-nx/modules-audit-log';
+import { NotificationsListenersModule } from '@nestjs-fastify-nx/modules-notifications';
 import { validateSchedulerConfig } from '../config/env.validation';
+import { BatchedPurgeRunner } from './tasks/batched-purge.runner';
 import { CleanupTask } from './tasks/cleanup.task';
 import { DlqMonitorTask } from './tasks/dlq-monitor.task';
 import { HeartbeatTask } from './tasks/heartbeat.task';
 import { OutboxCleanupTask } from './tasks/outbox-cleanup.task';
-import { SchedulerHealthService } from './health/scheduler-health.service';
 import { SchedulerLeadershipModule } from './leadership/scheduler-leadership.module';
 import { SessionCleanupTask } from './tasks/session-cleanup.task';
 import { StoredFileCleanupTask } from './tasks/stored-file-cleanup.task';
@@ -39,14 +43,20 @@ import { VerificationCleanupTask } from './tasks/verification-cleanup.task';
     // because they pull in HTTP controllers + Better Auth guards that have
     // no place in this background worker.
     UsersListenersModule,
-    AuditLogModule,
+    AuditLogListenersModule,
+    NotificationsListenersModule,
   ],
   providers: [
+    BatchedPurgeRunner,
     CleanupTask,
     DlqMonitorTask,
     HeartbeatTask,
     OutboxCleanupTask,
-    SchedulerHealthService,
+    {
+      provide: LivenessProbeService,
+      useFactory: () =>
+        new LivenessProbeService({ probeFile: '/tmp/scheduler-alive', name: 'Scheduler' }),
+    },
     SessionCleanupTask,
     StoredFileCleanupTask,
     VerificationCleanupTask,
