@@ -106,9 +106,18 @@ export function createProblemDetailsErrorHandler(): (error: unknown) => {
   };
 }
 
+// The scheme is case-insensitive per RFC 9110 §11.1, matching extractBearerToken — a client sending
+// `basic ` is the same caller as one sending `Basic `, and rejecting it would 401 a valid operator.
+const BASIC_SCHEME = 'basic ';
+
 export function parseBasicAuth(header: unknown): BasicCredentials | undefined {
-  if (typeof header !== 'string' || !header.startsWith('Basic ')) return undefined;
-  const decoded = Buffer.from(header.slice('Basic '.length), 'base64').toString();
+  if (
+    typeof header !== 'string' ||
+    header.slice(0, BASIC_SCHEME.length).toLowerCase() !== BASIC_SCHEME
+  ) {
+    return undefined;
+  }
+  const decoded = Buffer.from(header.slice(BASIC_SCHEME.length), 'base64').toString();
   const colonIdx = decoded.indexOf(':');
   return colonIdx === -1
     ? { user: decoded, password: '' }

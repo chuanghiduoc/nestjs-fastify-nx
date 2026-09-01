@@ -248,6 +248,21 @@ describe('parseBasicAuth', () => {
   it('does not throw on non-base64 garbage', () => {
     expect(() => parseBasicAuth('Basic !!!not-base64!!!')).not.toThrow();
   });
+
+  // RFC 9110 §11.1 — the scheme is case-insensitive, and extractBearerToken already honours that.
+  it('accepts the scheme in any case', () => {
+    const payload = Buffer.from('admin:secret').toString('base64');
+    for (const scheme of ['Basic', 'basic', 'BASIC', 'BaSiC']) {
+      expect(parseBasicAuth(`${scheme} ${payload}`)).toEqual({
+        user: 'admin',
+        password: 'secret',
+      });
+    }
+  });
+
+  it('still rejects a scheme that merely starts with the same letters', () => {
+    expect(parseBasicAuth(`Basically ${Buffer.from('a:b').toString('base64')}`)).toBeUndefined();
+  });
 });
 
 describe('recordAuthFailure', () => {
