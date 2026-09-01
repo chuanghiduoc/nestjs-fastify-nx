@@ -96,6 +96,20 @@ ensure_value() {
   GENERATED+=("$key")
 }
 
+# Like ensure_value, but also replaces a value still equal to the example's placeholder. Needed for
+# keys the production validators reject by literal value: the dev flow writes .env from .env.example
+# first, so ensure_value would find the forbidden default already present and leave it, and the prod
+# stack would then fail its env validation on boot.
+ensure_value_over_example() {
+  local key="$1" value="$2" current
+  current="$(env_value "$key")"
+  if [[ -n "$current" && "$current" != "$(example_value "$key")" && $FORCE -eq 0 ]]; then
+    return 0
+  fi
+  set_env_value "$key" "$value"
+  GENERATED+=("$key")
+}
+
 write_file() {
   local path="$1" content="$2"
   if [[ -f "$path" && $FORCE -eq 0 ]]; then
@@ -186,7 +200,7 @@ ensure_secret WORKER_DB_PASSWORD 24
 ensure_value SCHEDULER_DB_USER scheduler_user
 ensure_secret SCHEDULER_DB_PASSWORD 24
 
-ensure_value MINIO_ROOT_USER minio_admin
+ensure_value_over_example MINIO_ROOT_USER minio_admin
 ensure_secret MINIO_ROOT_PASSWORD 24
 ensure_value STORAGE_BUCKET uploads
 ensure_secret BULL_BOARD_PASSWORD 18
@@ -273,6 +287,9 @@ sec::ok "Production environment ready."
 [[ ${#GENERATED[@]} -gt 0 ]] && sec::log "Generated secrets in .env: ${GENERATED[*]}"
 [[ ${#WROTE[@]} -gt 0 ]] && sec::log "Wrote: ${WROTE[*]}"
 sec::warn "These files contain real credentials and are gitignored — never commit them."
-sec::log "Before exposing this stack, replace BETTER_AUTH_URL / FRONTEND_BASE_URL / CORS_ORIGINS"
-sec::log "and MAIL_* in .env.api and .env.worker with your real hosts."
+sec::warn "MAIL_DEFAULT_EMAIL is still the placeholder noreply@example.com. The api and worker"
+sec::warn "REJECT that literal value in production, so both will crash-loop on boot until you set a"
+sec::warn "real sender address in .env.api and .env.worker — no address can be generated for you."
+sec::log "Before exposing this stack, also replace BETTER_AUTH_URL / FRONTEND_BASE_URL /"
+sec::log "CORS_ORIGINS and MAIL_HOST in .env.api and .env.worker with your real hosts."
 sec::log "Next: ./scripts/build-prod.sh"
