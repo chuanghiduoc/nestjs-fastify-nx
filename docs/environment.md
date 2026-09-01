@@ -301,7 +301,7 @@ few seconds. If that Redis is unreachable the surface fails closed with `503`.
 | `TRUST_INBOUND_REQUEST_ID`       | `false`                                  | No       | Accept sanitized `X-Request-Id` from a trusted gateway; keep false for public callers                                                                                            |
 | `GRAFANA_ADMIN_PASSWORD`         | `admin`                                  | No       | Local Grafana admin password; must be replaced on shared/remote hosts                                                                                                            |
 | `SENTRY_DSN`                     | —                                        | No       | Sentry DSN; leave empty to disable                                                                                                                                               |
-| `SENTRY_TRACES_SAMPLE_RATE`      | `0.01` (api, scheduler) · `0.1` (worker) | No       | Sentry tracing sample rate. The api default is deliberately 1%: at 1k RPS, 0.1 burns ~26M traces/day                                                                             |
+| `SENTRY_TRACES_SAMPLE_RATE`      | `0.01` (api, scheduler) · `0.1` (worker) | No       | Sentry tracing sample rate. The api default is deliberately 1%: one transaction per request means 0.1 at 1k RPS bills ~8.6M traces/day                                           |
 | `SENTRY_ENVIRONMENT`             | `development`                            | No       | Reported Sentry environment tag                                                                                                                                                  |
 
 ## CI / Nx Cloud
