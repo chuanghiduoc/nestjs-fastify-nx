@@ -6,6 +6,7 @@ import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { FastifyAdapter } from '@nestjs/platform-fastify';
 import type { FastifyReply, FastifyRequest, RouteShorthandOptions } from 'fastify';
 import { toNodeHandler } from 'better-auth/node';
+import fastifyCookie from '@fastify/cookie';
 import fastifyRateLimit from '@fastify/rate-limit';
 import fastifyMultipart from '@fastify/multipart';
 import Redis from 'ioredis';
@@ -152,6 +153,8 @@ export async function createTestApp(): Promise<TestAppContext> {
   // global prefix. Without this, /api/auth/* hits no route and tests can't sign
   // up users.
   const fastify = app.getHttpAdapter().getInstance();
+
+  await fastify.register(fastifyCookie);
 
   // Mirror main.ts idempotency wiring against the E2E Redis (db=5) so Idempotency-Key replay is
   // exercised end-to-end. onClose quits the client when app.close() runs in afterAll.

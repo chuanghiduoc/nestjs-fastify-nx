@@ -95,8 +95,8 @@ export function startTracing(options: StartTracingOptions = {}): NodeSDK | null 
     ? basePropagator
     : injectOnly(basePropagator);
 
-  // Prometheus (prom-client pull, /metrics) is the metrics source of truth for the API. This OTLP
-  // push reader is opt-in — enable it only where there is no prom-client scrape endpoint (worker,
+  // Prometheus (@prometheus-io/client pull, /metrics) is the metrics source of truth for the API. This OTLP
+  // push reader is opt-in — enable it only where there is no Prometheus scrape endpoint (worker,
   // scheduler) so those processes still export runtime metrics. Leaving it on in the API would
   // double-count the same series across two pipelines.
   const metricsExportEnabled = bool(process.env['OTEL_METRICS_EXPORT_ENABLED']);

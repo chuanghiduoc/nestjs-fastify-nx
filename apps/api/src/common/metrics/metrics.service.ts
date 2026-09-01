@@ -1,5 +1,5 @@
 import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
-import { Counter, Gauge, Histogram, Registry, collectDefaultMetrics } from 'prom-client';
+import { Counter, Gauge, Histogram, Registry, collectDefaultMetrics } from '@prometheus-io/client';
 
 // Sized for HTTP API latencies; >5s lands in +Inf and triggers latency SLO alerts.
 const HTTP_DURATION_BUCKETS = [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5];
@@ -11,7 +11,7 @@ const JOB_DURATION_BUCKETS = [0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30];
 const CQRS_DURATION_BUCKETS = [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5];
 
 // Node default metrics (GC, event-loop lag, CPU) live on ONE process-global registry, collected
-// exactly once. prom-client installs a GC PerformanceObserver with no public handle to disconnect, so
+// exactly once. The client installs a GC PerformanceObserver with no public handle to disconnect, so
 // re-collecting them on every MetricsService lifecycle (e.g. repeated module init across tests) would
 // leak an observer each time. render() merges this with the instance registry so /metrics exposes both.
 let defaultMetricsRegistry: Registry | undefined;

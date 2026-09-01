@@ -8,6 +8,7 @@ import type { FastifyReply, FastifyRequest, RouteShorthandOptions } from 'fastif
 import { ConfigService } from '@nestjs/config';
 import { Logger } from 'nestjs-pino';
 import { fastifyHelmet } from '@fastify/helmet';
+import fastifyCookie from '@fastify/cookie';
 import fastifyRateLimit from '@fastify/rate-limit';
 import fastifyCompress from '@fastify/compress';
 import fastifyUnderPressure from '@fastify/under-pressure';
@@ -164,6 +165,8 @@ async function bootstrap() {
       return payload;
     });
   }
+
+  await fastify.register(fastifyCookie);
 
   // Idempotency-Key replay for mutating /api/v1/* writes (Stripe pattern). Registered before
   // @fastify/compress so its onSend hook stores the uncompressed JSON body. db=5 isolates the

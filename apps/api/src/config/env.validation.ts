@@ -186,9 +186,9 @@ const envSchema = z
       .string()
       .default('false')
       .transform((v) => v === 'true'),
-    // Push OTLP metrics from this process. Keep false in the API — prom-client (/metrics) is the
+    // Push OTLP metrics from this process. Keep false in the API — @prometheus-io/client (/metrics) is the
     // metrics source of truth, so enabling both would double-count. Enable only in processes with no
-    // prom-client scrape endpoint (worker, scheduler). Read by startTracing() via process.env.
+    // Prometheus scrape endpoint (worker, scheduler). Read by startTracing() via process.env.
     OTEL_METRICS_EXPORT_ENABLED: z
       .string()
       .default('false')

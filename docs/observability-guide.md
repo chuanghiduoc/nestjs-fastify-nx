@@ -31,7 +31,7 @@ UIs (SSH-tunnel them on a remote host):
 | Grafana    | http://localhost:3001  | dashboards (admin / admin)    |
 
 > Metric export is a **separate** flag from tracing. `OTEL_METRICS_EXPORT_ENABLED` pushes OTLP
-> metrics and must stay **off in the API** (prom-client `/metrics` is the source of truth — two
+> metrics and must stay **off in the API** (`@prometheus-io/client` `/metrics` is the source of truth — two
 > pipelines double-count). Turn it on only for worker/scheduler, which have no scrape endpoint.
 
 ## 2. Explore
