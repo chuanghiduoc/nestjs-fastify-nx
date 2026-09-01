@@ -8,6 +8,7 @@ import type { FastifyReply, FastifyRequest, RouteShorthandOptions } from 'fastif
 import { ConfigService } from '@nestjs/config';
 import { Logger } from 'nestjs-pino';
 import { fastifyHelmet } from '@fastify/helmet';
+import fastifyCookie from '@fastify/cookie';
 import fastifyRateLimit from '@fastify/rate-limit';
 import fastifyCompress from '@fastify/compress';
 import fastifyUnderPressure from '@fastify/under-pressure';
@@ -165,6 +166,8 @@ async function bootstrap() {
       return payload;
     });
   }
+
+  await fastify.register(fastifyCookie);
 
   if (config.get('IDEMPOTENCY_ENABLED', { infer: true })) {
     const idempotencyRedis = createApiRedis(

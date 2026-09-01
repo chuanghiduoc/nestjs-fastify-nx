@@ -1,6 +1,5 @@
 import { createHash } from 'node:crypto';
 import { HttpStatus } from '@nestjs/common';
-import { parse as parseCookie } from 'cookie';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type Redis from 'ioredis';
 import { ERROR_CODES } from '@nestjs-fastify-nx/contracts';
@@ -58,9 +57,8 @@ function canonicalize(value: unknown): unknown {
 // Authenticated requests scope by session token, anonymous ones by client IP. Two principals thus
 // never collide on — nor replay — each other's cached response for the same key.
 function extractPrincipal(req: FastifyRequest): string {
-  const cookieHeader = req.headers.cookie;
-  if (typeof cookieHeader === 'string') {
-    const parsed = parseCookie(cookieHeader);
+  const parsed = req.cookies;
+  if (parsed) {
     // Better Auth uses the `__Secure-` cookie in production (HTTPS) and the bare name in dev. Prefer
     // `__Secure-`, and use `||` (not `??`) so an empty leftover cookie value (`...session_token=`)
     // does NOT shadow a real token and silently drop the request to IP scope — which would let two
@@ -125,6 +123,12 @@ function sendProblem(
 // encapsulation would scope the hooks away from Nest's root-registered routes). Register this
 // BEFORE @fastify/compress so the onSend hook stores the uncompressed JSON body.
 export function registerIdempotency(fastify: FastifyInstance, options: IdempotencyOptions): void {
+  // Without @fastify/cookie, req.cookies is undefined and every browser session silently falls back
+  // to IP scope — two users behind one NAT would then share an idempotency keyspace. Fail at boot.
+  if (typeof fastify.parseCookie !== 'function') {
+    throw new Error('registerIdempotency requires @fastify/cookie to be registered first');
+  }
+
   const store = new IdempotencyStore(options.redis, options.lockTtlSeconds, options.ttlSeconds);
   const reportError = options.onError ?? ((): void => undefined);
 

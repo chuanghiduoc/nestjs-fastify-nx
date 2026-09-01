@@ -61,6 +61,11 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB is required}
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
+    # `deploy.resources` is what Swarm reads; `mem_limit`/`cpus` is what plain `docker compose up`
+    # enforces. Compose rejects the file outright when a service carries distinct values for the two,
+    # so every production override below restates its limits in both forms — keep them in lockstep.
+    mem_limit: 1g
+    cpus: 1.0
     deploy:
       resources:
         limits:
@@ -73,6 +78,8 @@ services:
   redis-cache:
     <<: *app-logging
     ports: !override []
+    mem_limit: 256m
+    cpus: 0.5
     deploy:
       resources:
         limits:
@@ -82,6 +89,8 @@ services:
   redis-queue:
     <<: *app-logging
     ports: !override []
+    mem_limit: 256m
+    cpus: 0.5
     deploy:
       resources:
         limits:

@@ -121,7 +121,7 @@ are required for a local end-to-end run.
 
 ## Metrics (Prometheus)
 
-**Source of truth is the `prom-client` pull endpoint** (`/metrics`), guarded by `MetricsIpAllowGuard`
+**Source of truth is the `@prometheus-io/client` pull endpoint** (`/metrics`), guarded by `MetricsIpAllowGuard`
 (`METRICS_ALLOW_CIDRS`, reads `socket.remoteAddress`, fails closed) — the standard Prometheus scrape
 model for Kubernetes. The OTLP metric push in `start-tracing` is **off in the API**
 (`OTEL_METRICS_EXPORT_ENABLED=false`) so the same series aren't counted by two pipelines; enable it

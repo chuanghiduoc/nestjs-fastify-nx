@@ -306,7 +306,7 @@ export function createBetterAuth(
 export type BetterAuthInstance = ReturnType<typeof createBetterAuth>;
 
 // FRONTEND_BASE_URL required in production — falling back to API origin means email links 404 in a browser.
-function resolveFrontendBase(): string {
+export function resolveFrontendBase(): string {
   const raw = process.env['FRONTEND_BASE_URL']?.trim();
   if (raw) return raw.replace(/\/+$/, '');
 
@@ -318,7 +318,11 @@ function resolveFrontendBase(): string {
     );
   }
 
-  const apiOrigin = process.env['BETTER_AUTH_URL']?.replace(/\/+$/, '') ?? '';
+  // BETTER_AUTH_URL is optional outside production and ships empty in .env.example, so this cannot
+  // just read it: an empty origin makes every email link relative, which no mail client can follow
+  // and which assertHttpLink rejects outright. Fall through to this process's own origin instead.
+  const configured = process.env['BETTER_AUTH_URL']?.trim().replace(/\/+$/, '');
+  const apiOrigin = configured || `http://localhost:${process.env['PORT']?.trim() || '3000'}`;
   logger.warn(
     `FRONTEND_BASE_URL not set; falling back to API origin "${apiOrigin}" for dev. ` +
       'Email reset/verify/delete links will 404 in a browser — configure the SPA host before going live.',
@@ -337,7 +341,7 @@ ${body}
 
 // Links are the only interpolation that is a URL rather than translated copy.
 function linkParagraph(link: string): string {
-  const escaped = escapeHtml(link);
+  const escaped = escapeHtml(assertHttpLink(link));
   return `<a href="${escaped}">${escaped}</a>`;
 }
 
@@ -448,9 +452,29 @@ async function renderAccountDeletionEmail(
   return emailLayout([hello, warning, confirm, linkParagraph(ctx.link), notYou]);
 }
 
-// The link is built from FRONTEND_BASE_URL (operator-controlled) plus an encodeURIComponent'd token,
-// so it cannot currently carry markup — escaping it anyway keeps every interpolation in these
-// templates uniformly escaped, so a future link source can't quietly become an injection point.
+const EMAIL_LINK_PROTOCOLS = new Set(['http:', 'https:']);
+
+// escapeHtml guards the href's quoting, NOT its scheme: `javascript:...` contains none of the five
+// escaped characters and would survive intact. FRONTEND_BASE_URL is operator-controlled, so the
+// scheme is the one part of an email link that no escaping downstream can make safe — reject it
+// here instead. The link carries a single-use token, so it must never reach the message.
+export function assertHttpLink(link: string): string {
+  let protocol: string;
+  try {
+    protocol = new URL(link).protocol;
+  } catch {
+    throw new Error('Refusing to embed an unparseable link in an email — check FRONTEND_BASE_URL');
+  }
+  if (!EMAIL_LINK_PROTOCOLS.has(protocol)) {
+    throw new Error(
+      `Refusing to embed a "${protocol}" link in an email — check FRONTEND_BASE_URL (http/https only)`,
+    );
+  }
+  return link;
+}
+
+// Escapes the five characters that can break out of HTML text or a quoted attribute. Scheme safety
+// for hrefs is assertHttpLink's job, not this function's.
 function escapeHtml(s: string): string {
   return s
     .replace(/&/g, '&amp;')

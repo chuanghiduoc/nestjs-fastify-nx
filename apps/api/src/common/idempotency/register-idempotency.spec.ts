@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import Fastify, { type FastifyInstance } from 'fastify';
+import fastifyCookie from '@fastify/cookie';
 import type Redis from 'ioredis';
 import { registerIdempotency, serializeReplayBody } from './register-idempotency';
 
@@ -59,6 +60,7 @@ async function buildApp(redis: Redis): Promise<AppSetup> {
   const errors: string[] = [];
   let calls = 0;
   const app = Fastify();
+  await app.register(fastifyCookie);
 
   app.post('/api/v1/echo', async (req) => {
     calls += 1;
@@ -475,6 +477,7 @@ describe('registerIdempotency', () => {
       release = resolve;
     });
     const app = Fastify();
+    await app.register(fastifyCookie);
     app.post('/api/v1/slow', async () => {
       await gate;
       return { ok: true };
@@ -587,6 +590,20 @@ describe('registerIdempotency', () => {
     expect(res.statusCode).toBe(200);
     expect(callCount()).toBe(1);
     expect(errors.some((message) => message.includes('acquire failed'))).toBe(true);
+  });
+});
+
+describe('@fastify/cookie prerequisite', () => {
+  it('throws at registration when the cookie plugin is missing instead of degrading to IP scope', async () => {
+    const app = Fastify();
+    expect(() =>
+      registerIdempotency(app, {
+        redis: {} as unknown as Redis,
+        ttlSeconds: 3600,
+        lockTtlSeconds: 60,
+      }),
+    ).toThrow(/@fastify\/cookie/);
+    await app.close();
   });
 });
 

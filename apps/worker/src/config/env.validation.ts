@@ -125,7 +125,7 @@ const workerEnvSchema = z
       .string()
       .default('false')
       .transform((v) => v === 'true'),
-    // The worker has no prom-client /metrics endpoint, so OTLP push is how its runtime metrics leave
+    // The worker has no /metrics scrape endpoint, so OTLP push is how its runtime metrics leave
     // the process — enable this (OTEL_METRICS_EXPORT_ENABLED=true) when OTEL_ENABLED is on in prod.
     OTEL_METRICS_EXPORT_ENABLED: z
       .string()
