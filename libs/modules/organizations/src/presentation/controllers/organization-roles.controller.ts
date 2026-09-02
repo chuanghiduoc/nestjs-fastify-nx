@@ -90,7 +90,12 @@ export class OrganizationRolesController {
     @Body() dto: CreateOrganizationRoleDto,
   ): Promise<OrganizationRoleDto> {
     return this.commandBus.execute(
-      new CreateOrganizationRoleCommand(requireOrganizationId(user), dto.role, dto.permissions),
+      new CreateOrganizationRoleCommand({
+        organizationId: requireOrganizationId(user),
+        actorUserId: user.userId,
+        role: dto.role,
+        permissions: dto.permissions,
+      }),
     );
   }
 
@@ -111,7 +116,12 @@ export class OrganizationRolesController {
     @Body() dto: UpdateOrganizationRoleDto,
   ): Promise<OrganizationRoleDto> {
     return this.commandBus.execute(
-      new UpdateOrganizationRoleCommand(requireOrganizationId(user), role, dto.permissions),
+      new UpdateOrganizationRoleCommand({
+        organizationId: requireOrganizationId(user),
+        actorUserId: user.userId,
+        role,
+        permissions: dto.permissions,
+      }),
     );
   }
 

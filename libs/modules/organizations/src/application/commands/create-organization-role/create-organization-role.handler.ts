@@ -1,5 +1,6 @@
 import { Inject } from '@nestjs/common';
 import { CommandHandler, type ICommandHandler } from '@nestjs/cqrs';
+import { AUTHORIZATION_PORT, type AuthorizationPort } from '@nestjs-fastify-nx/core';
 import { ORGANIZATION_ROLE_REPOSITORY } from '../../../domain/ports/organization-role-repository.port';
 import type { OrganizationRoleRepositoryPort } from '../../../domain/ports/organization-role-repository.port';
 import { OrganizationRole } from '../../../domain/entities/organization-role.entity';
@@ -14,13 +15,21 @@ export class CreateOrganizationRoleHandler implements ICommandHandler<
 > {
   constructor(
     @Inject(ORGANIZATION_ROLE_REPOSITORY) private readonly roles: OrganizationRoleRepositoryPort,
+    @Inject(AUTHORIZATION_PORT) private readonly authorization: AuthorizationPort,
   ) {}
 
   async execute(command: CreateOrganizationRoleCommand): Promise<OrganizationRoleDto> {
+    const grantedToActor = await this.authorization.permissionsFor({
+      type: 'user',
+      userId: command.actorUserId,
+      organizationId: command.organizationId,
+    });
+
     const role = OrganizationRole.create({
       organizationId: command.organizationId,
       role: command.role,
       permissions: command.permissions,
+      grantedToActor,
     });
 
     if (await this.roles.findByName(command.organizationId, role.role)) {

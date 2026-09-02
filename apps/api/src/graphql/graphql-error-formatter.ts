@@ -6,8 +6,19 @@ import type { MercuriusContext } from 'mercurius';
 import type { ExecutionResult } from 'graphql';
 
 const MASKED_MESSAGE = 'Internal server error';
+const MERCURIUS_REQUEST_ERROR_CODE_PREFIX = 'MER_ERR_GQL_';
 
 type Execution = ExecutionResult & Required<Pick<ExecutionResult, 'errors'>>;
+
+function isMercuriusClientError(original: Error): boolean {
+  const { code, statusCode } = original as Error & { code?: unknown; statusCode?: unknown };
+  return (
+    typeof code === 'string' &&
+    code.startsWith(MERCURIUS_REQUEST_ERROR_CODE_PREFIX) &&
+    typeof statusCode === 'number' &&
+    statusCode < HttpStatus.INTERNAL_SERVER_ERROR
+  );
+}
 
 // Same rule GlobalExceptionFilter applies to REST. A GraphQL-level error (syntax, validation) has
 // no originalError and only describes the client's own query, so it is not internal.
@@ -17,6 +28,7 @@ function isInternalFailure(error: GraphQLError): boolean {
   // A domain failure is raised for the client to act on and never denotes an internal fault, so it
   // is readable here without being an HttpException — the transport, not the domain, owns status.
   if (isDomainException(original)) return false;
+  if (isMercuriusClientError(original)) return false;
   if (original instanceof HttpException) {
     return original.getStatus() >= HttpStatus.INTERNAL_SERVER_ERROR;
   }

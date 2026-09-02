@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { DomainException } from '@nestjs-fastify-nx/core';
 import { ForbiddenException, HttpException } from '@nestjs/common';
-import { GraphQLError } from 'graphql';
+import { GraphQLError, Source } from 'graphql';
 import type { MercuriusContext } from 'mercurius';
 import { createGraphqlErrorFormatter } from './graphql-error-formatter';
 
@@ -90,6 +90,42 @@ describe('createGraphqlErrorFormatter', () => {
     expect(messagesOf(format(validation))).toEqual([
       'Cannot query field "nope" on type "UserType".',
     ]);
+  });
+
+  it('unwraps a mercurius validation error into a 400 carrying the client-facing messages', () => {
+    const nested = [
+      new GraphQLError('Cannot query field "nope" on type "UserType".', {
+        positions: [8],
+        source: new Source('{ me { nope } }'),
+      }),
+    ];
+    const wrapped = new GraphQLError('Graphql validation error', {
+      originalError: Object.assign(new Error('Graphql validation error'), {
+        code: 'MER_ERR_GQL_VALIDATION',
+        statusCode: 400,
+        errors: nested,
+      }),
+    });
+
+    const result = format(wrapped);
+
+    expect(result.statusCode).toBe(400);
+    expect(messagesOf(result)).toEqual(['Cannot query field "nope" on type "UserType".']);
+    expect(result.response.errors?.[0]?.locations).toEqual([{ line: 1, column: 9 }]);
+  });
+
+  it('still masks a mercurius error that reports a server-side status', () => {
+    const wrapped = new GraphQLError('schema build failed at /app/schema.ts', {
+      originalError: Object.assign(new Error('schema build failed at /app/schema.ts'), {
+        code: 'MER_ERR_INVALID_OPTS',
+        statusCode: 500,
+      }),
+    });
+
+    const result = format(wrapped);
+
+    expect(messagesOf(result)).toEqual(['Internal server error']);
+    expect(JSON.stringify(result)).not.toContain('schema.ts');
   });
 
   it('preserves path so a masked error still says which field failed', () => {

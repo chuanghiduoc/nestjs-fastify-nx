@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { DomainException } from '@nestjs-fastify-nx/core';
 import { generateId } from '@nestjs-fastify-nx/shared';
 import { Term, TERM_TYPE } from '../domain/entities/term.entity';
+import type { TermRepositoryPort } from '../domain/ports/term-repository.port';
 import { InMemoryTermRepository } from '../testing/in-memory-term-repository';
 import { ListPublishedTermsHandler } from './queries/list-published-terms/list-published-terms.handler';
 import { GetLatestTermHandler } from './queries/get-latest-term/get-latest-term.handler';
@@ -16,6 +17,18 @@ import { AcceptTermHandler } from './commands/accept-term/accept-term.handler';
 import { AcceptTermCommand } from './commands/accept-term/accept-term.command';
 
 const USER_ID = '019dd1a5-9235-70db-8d57-54ef91300001';
+
+function bindAll(repository: InMemoryTermRepository): TermRepositoryPort {
+  return {
+    findPublished: () => repository.findPublished(),
+    findLatestPublished: (type) => repository.findLatestPublished(type),
+    findById: (id) => repository.findById(id),
+    create: (term) => repository.create(term),
+    publish: (id, publishedAt) => repository.publish(id, publishedAt),
+    recordAcceptance: (input) => repository.recordAcceptance(input),
+    findAcceptances: (userId) => repository.findAcceptances(userId),
+  };
+}
 
 describe('Term entity', () => {
   it('rejects a malformed version label', () => {
@@ -151,6 +164,30 @@ describe('term handlers', () => {
     );
 
     expect(republished.publishedAt).toEqual(publishedAt);
+  });
+
+  it('reports the stored date when a concurrent publish won the compare-and-set', async () => {
+    const draft = Term.create({
+      type: TERM_TYPE.TERMS_OF_SERVICE,
+      version: 'v1',
+      content: 'body',
+    });
+    repository.seed(draft);
+    const winnerPublishedAt = new Date('2026-08-01T00:00:00.000Z');
+    const racingRepository: TermRepositoryPort = {
+      ...bindAll(repository),
+      publish: async (id, publishedAt) => {
+        await repository.publish(id, winnerPublishedAt);
+        expect(publishedAt).not.toEqual(winnerPublishedAt);
+        return false;
+      },
+    };
+
+    const published = await new PublishTermHandler(racingRepository).execute(
+      new PublishTermCommand(draft.id),
+    );
+
+    expect(published.publishedAt).toEqual(winnerPublishedAt);
   });
 
   it('answers not_found when publishing an unknown id', async () => {

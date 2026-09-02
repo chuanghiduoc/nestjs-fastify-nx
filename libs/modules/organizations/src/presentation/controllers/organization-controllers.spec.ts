@@ -80,6 +80,7 @@ describe('OrganizationRolesController', () => {
     expect(commandBus.execute).toHaveBeenCalledWith(
       expect.objectContaining({
         organizationId: ORG_ID,
+        actorUserId: SESSION.userId,
         role: 'auditor',
         permissions: [PERMISSIONS.AUDIT_LOG_READ],
       }),
@@ -95,7 +96,12 @@ describe('OrganizationRolesController', () => {
     await controller.update(SESSION, 'auditor', dto);
 
     expect(commandBus.execute).toHaveBeenCalledWith(
-      expect.objectContaining({ organizationId: ORG_ID, role: 'auditor' }),
+      expect.objectContaining({
+        organizationId: ORG_ID,
+        actorUserId: SESSION.userId,
+        role: 'auditor',
+        permissions: [PERMISSIONS.FILE_READ],
+      }),
     );
   });
 

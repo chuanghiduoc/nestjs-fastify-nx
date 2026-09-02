@@ -3,6 +3,7 @@ import * as Sentry from '@sentry/nestjs';
 import type { FastifyError, FastifyInstance } from 'fastify';
 import { ERROR_CODES } from '@nestjs-fastify-nx/contracts';
 import { sanitizeUrlForLogging } from '@nestjs-fastify-nx/shared';
+import { GRAPHQL_PATH } from '../http/global-prefix';
 import { ensureRequestIds, sanitizeClientId, type RequestIdCarrier } from '../logging/request-id';
 import {
   buildProblemDetails,
@@ -40,6 +41,14 @@ export function applyFastifyProblemDetailsHook(fastify: FastifyInstance): void {
     }
 
     const source = parseSerializedError(payload);
+
+    // Only a body Mercurius actually shaped may skip normalization. Anything else raised on the
+    // GraphQL route is library or parser output and still needs the 5xx masking below.
+    if (request.routeOptions?.url === GRAPHQL_PATH && isGraphqlErrorEnvelope(source)) {
+      done();
+      return;
+    }
+
     const status = reply.statusCode;
     reply.header('content-type', PROBLEM_CONTENT_TYPE);
 
@@ -112,6 +121,10 @@ export function applyFastifyProblemDetailsHook(fastify: FastifyInstance): void {
       ),
     );
   });
+}
+
+function isGraphqlErrorEnvelope(source: Record<string, unknown> | undefined): boolean {
+  return Array.isArray(source?.['errors']);
 }
 
 function parseSerializedError(payload: unknown): Record<string, unknown> | undefined {

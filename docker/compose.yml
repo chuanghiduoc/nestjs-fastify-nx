@@ -22,8 +22,16 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
       POSTGRES_DB: ${POSTGRES_DB:-nestjs_db}
-      TZ: ${TZ:-UTC}
-      PGTZ: ${TZ:-UTC}
+      # Pinned to UTC on purpose, independent of the app-level TZ. Every DateTime column is
+      # TIMESTAMP(3) without time zone and Prisma writes UTC wall-clock into it, while trigger
+      # predicates and retention purges compare those columns against NOW() cast in the SESSION
+      # timezone. A non-UTC PGTZ would shift sign-out detection and purge cutoffs by the offset.
+      TZ: UTC
+      PGTZ: UTC
+    # TZ/PGTZ only decide what initdb bakes into postgresql.conf, so a cluster whose volume was
+    # first created under another zone would keep it. The server flag pins the running session
+    # timezone for existing volumes too.
+    command: ['postgres', '-c', 'timezone=UTC']
     volumes:
       # Mount at the parent — Postgres 18+ official image recommends this layout
       # so `pg_upgrade --link` works across major-version bumps.

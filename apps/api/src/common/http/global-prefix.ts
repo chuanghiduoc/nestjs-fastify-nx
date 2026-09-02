@@ -4,4 +4,8 @@ export const GLOBAL_PREFIX = 'api';
 
 // `metrics` is scraped by Prometheus at a fixed path; `errors/*` is where the RFC 9457 `type` URIs
 // in error bodies already point. Both would break if the prefix were applied.
-export const GLOBAL_PREFIX_EXCLUDES = ['metrics', 'errors', 'errors/:slug'] as const;
+export const GRAPHQL_PATH = '/graphql';
+
+const GRAPHQL_ROUTE = GRAPHQL_PATH.slice(1);
+
+export const GLOBAL_PREFIX_EXCLUDES = ['metrics', 'errors', 'errors/:slug', GRAPHQL_ROUTE] as const;

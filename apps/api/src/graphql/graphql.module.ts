@@ -6,6 +6,7 @@ import { NoSchemaIntrospectionCustomRule } from 'graphql';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { UsersModule } from '@nestjs-fastify-nx/modules-users';
 import type { EnvConfig } from '../config/env.validation';
+import { GRAPHQL_PATH } from '../common/http/global-prefix';
 import { createGraphqlErrorFormatter } from './graphql-error-formatter';
 import { UserResolver } from './resolvers/user.resolver';
 
@@ -25,7 +26,7 @@ export const GRAPHQL_MAX_QUERY_DEPTH = 10;
         return {
           autoSchemaFile: true,
           graphiql: isProduction ? false : 'graphiql',
-          path: '/graphql',
+          path: GRAPHQL_PATH,
           context: (req: FastifyRequest, reply: FastifyReply) => ({ req, reply }),
           validationRules: isProduction ? [NoSchemaIntrospectionCustomRule] : [],
           queryDepth: GRAPHQL_MAX_QUERY_DEPTH,

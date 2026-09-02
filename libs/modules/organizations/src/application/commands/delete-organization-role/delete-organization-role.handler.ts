@@ -15,10 +15,19 @@ export class DeleteOrganizationRoleHandler implements ICommandHandler<
   ) {}
 
   async execute(command: DeleteOrganizationRoleCommand): Promise<void> {
-    const holders = await this.roles.countMembersHolding(command.organizationId, command.role);
-    if (holders > 0) throw roleInUse();
+    const outcome = await this.roles.deleteUnlessHeld(command.organizationId, command.role);
 
-    const deleted = await this.roles.delete(command.organizationId, command.role);
-    if (!deleted) throw roleNotFound();
+    switch (outcome) {
+      case 'deleted':
+        return;
+      case 'in_use':
+        throw roleInUse();
+      case 'not_found':
+        throw roleNotFound();
+      default: {
+        const unhandled: never = outcome;
+        throw new Error(`Unhandled role deletion outcome: ${String(unhandled)}`);
+      }
+    }
   }
 }

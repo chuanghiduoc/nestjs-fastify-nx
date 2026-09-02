@@ -1,6 +1,7 @@
 import {
   PERMISSIONS,
   RESOURCE_TYPES,
+  resourceTypeOf,
   type Permission,
   type ResourceType,
 } from '@nestjs-fastify-nx/shared';
@@ -14,6 +15,13 @@ import type {
 export const OWNER_SCOPED_PERMISSIONS: readonly Permission[] = [
   PERMISSIONS.FILE_READ,
   PERMISSIONS.FILE_DELETE,
+];
+
+export const MEMBERSHIP_INDEPENDENT_PERMISSIONS: readonly Permission[] = [
+  PERMISSIONS.SESSION_READ,
+  PERMISSIONS.SESSION_REVOKE,
+  PERMISSIONS.TERM_READ,
+  PERMISSIONS.TERM_ACCEPT,
 ];
 
 export const DENIAL_REASONS = {
@@ -39,23 +47,53 @@ const RESOURCE_SCOPES: Record<ResourceType, ResourceScope> = {
   [RESOURCE_TYPES.TERM]: 'global',
 };
 
+export function scopeOf(permission: Permission): ResourceScope {
+  return RESOURCE_SCOPES[resourceTypeOf(permission)];
+}
+
+export function requiresMembership(permission: Permission): boolean {
+  const scope = scopeOf(permission);
+  return scope === 'organization' || scope === 'organization_self';
+}
+
 export interface PolicyContext {
   readonly principal: Principal;
   readonly permissions: readonly Permission[];
   readonly isMember: boolean;
 }
 
+function holdsMembershipIndependentGrant(principal: Principal, permission: Permission): boolean {
+  return principal.type === 'user' && MEMBERSHIP_INDEPENDENT_PERMISSIONS.includes(permission);
+}
+
+function holds(context: PolicyContext, permission: Permission): boolean {
+  return (
+    context.permissions.includes(permission) ||
+    holdsMembershipIndependentGrant(context.principal, permission)
+  );
+}
+
+export function decideWithoutOrganization(
+  permissions: readonly Permission[],
+): readonly AccessDecision[] {
+  return permissions.map((permission) =>
+    !requiresMembership(permission) && MEMBERSHIP_INDEPENDENT_PERMISSIONS.includes(permission)
+      ? { allowed: true }
+      : { allowed: false, reason: DENIAL_REASONS.permissionNotGranted },
+  );
+}
+
 export function decideAccess(
   context: PolicyContext,
   requests: readonly CheckRequest[],
 ): readonly AccessDecision[] {
-  const { principal, permissions, isMember } = context;
-
-  if (principal.type === 'user' && !isMember) {
-    return requests.map(() => ({ allowed: false, reason: DENIAL_REASONS.notAMember }));
-  }
+  const { principal, isMember } = context;
+  const nonMember = principal.type === 'user' && !isMember;
 
   return requests.map((request) => {
+    if (nonMember && requiresMembership(request.permission)) {
+      return { allowed: false, reason: DENIAL_REASONS.notAMember };
+    }
     if (
       request.resource?.organizationId &&
       principal.type !== 'system' &&
@@ -63,9 +101,10 @@ export function decideAccess(
     ) {
       return { allowed: false, reason: DENIAL_REASONS.crossOrganization };
     }
-    if (permissions.includes(request.permission)) return { allowed: true };
+    if (holds(context, request.permission)) return { allowed: true };
     if (
       principal.type === 'user' &&
+      isMember &&
       request.resource?.ownerId === principal.userId &&
       OWNER_SCOPED_PERMISSIONS.includes(request.permission)
     ) {
@@ -80,12 +119,19 @@ export function decideFilter(
   permission: Permission,
   resourceType: ResourceType,
 ): AccessFilter {
-  const { principal, permissions, isMember } = context;
+  const { principal, isMember } = context;
+
+  // A permission only ever authorizes its own resource type. Without this the membership-independent
+  // grant would answer for a type it says nothing about, and a caller with no organization would get
+  // an unscoped predicate back.
+  if (resourceTypeOf(permission) !== resourceType) return { kind: 'none' };
 
   if (principal.type === 'system') return { kind: 'all' };
-  if (principal.type === 'user' && !isMember) return { kind: 'none' };
+  if (principal.type === 'user' && !isMember && requiresMembership(permission)) {
+    return { kind: 'none' };
+  }
 
-  if (permissions.includes(permission)) {
+  if (holds(context, permission)) {
     if (resourceType === RESOURCE_TYPES.ORGANIZATION) {
       return { kind: 'predicate', where: { id: principal.organizationId } };
     }
@@ -108,7 +154,7 @@ export function decideFilter(
     }
   }
 
-  if (principal.type === 'user' && OWNER_SCOPED_PERMISSIONS.includes(permission)) {
+  if (principal.type === 'user' && isMember && OWNER_SCOPED_PERMISSIONS.includes(permission)) {
     return {
       kind: 'predicate',
       where: { organizationId: principal.organizationId, userId: principal.userId },

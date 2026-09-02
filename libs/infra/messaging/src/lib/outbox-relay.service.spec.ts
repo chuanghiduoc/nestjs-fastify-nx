@@ -380,6 +380,25 @@ describe('OutboxRelayService', () => {
     expect(await first).toBe(1);
   });
 
+  it('starts polling only at application bootstrap, once @OnEvent subscribers are registered', async () => {
+    vi.useFakeTimers();
+    try {
+      const { prisma } = buildPrisma({ claim: () => [] });
+      const relay = new OutboxRelayService(prisma, buildBus());
+
+      await vi.advanceTimersByTimeAsync(120_000);
+      expect(prisma.transaction).not.toHaveBeenCalled();
+
+      relay.onApplicationBootstrap();
+      await vi.advanceTimersByTimeAsync(60_000);
+      await relay.onModuleDestroy();
+
+      expect(prisma.transaction).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('contains scheduled tick failures so a database outage cannot crash the process', async () => {
     vi.useFakeTimers();
     try {
@@ -393,7 +412,7 @@ describe('OutboxRelayService', () => {
         'error',
       );
 
-      relay.onModuleInit();
+      relay.onApplicationBootstrap();
       await vi.advanceTimersByTimeAsync(60_000);
       await relay.onModuleDestroy();
 

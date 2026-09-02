@@ -6,7 +6,10 @@ import {
   serializePermissionStatements,
 } from '@nestjs-fastify-nx/shared';
 import { OrganizationRole } from '../../domain/entities/organization-role.entity';
-import type { OrganizationRoleRepositoryPort } from '../../domain/ports/organization-role-repository.port';
+import type {
+  OrganizationRoleRepositoryPort,
+  RoleDeletionOutcome,
+} from '../../domain/ports/organization-role-repository.port';
 import { roleAlreadyExists } from '../../application/organization-errors';
 
 type OrganizationRoleRow = {
@@ -18,6 +21,12 @@ type OrganizationRoleRow = {
   updatedAt: Date | null;
 };
 
+type DeleteUnlessHeldRow = {
+  found: boolean;
+  holders: number;
+  deleted: boolean;
+};
+
 function toEntity(row: OrganizationRoleRow): OrganizationRole {
   return OrganizationRole.reconstitute({
     id: row.id,
@@ -27,6 +36,14 @@ function toEntity(row: OrganizationRoleRow): OrganizationRole {
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   });
+}
+
+function toDeletionOutcome(row: DeleteUnlessHeldRow | undefined): RoleDeletionOutcome {
+  if (!row || !row.found) return 'not_found';
+  if (row.deleted) return 'deleted';
+  // Not deleted with no holders means a concurrent request removed the row between the snapshot the
+  // count came from and the delete — absent, not in use.
+  return row.holders > 0 ? 'in_use' : 'not_found';
 }
 
 @Injectable()
@@ -74,23 +91,30 @@ export class PrismaOrganizationRoleRepository implements OrganizationRoleReposit
     });
   }
 
-  async delete(organizationId: string, role: string): Promise<boolean> {
-    const { count } = await this.prisma
-      .writeTarget()
-      .organizationRole.deleteMany({ where: { organizationId, role } });
-    return count > 0;
-  }
-
-  // Better Auth stores several roles as a comma-separated list in one column, so an equality
-  // predicate would miss "owner,auditor". Splitting in SQL keeps the count on the index instead of
-  // streaming every membership row into the process.
-  async countMembersHolding(organizationId: string, role: string): Promise<number> {
-    const rows = await this.prisma.readTarget().$queryRaw<Array<{ count: number }>>`
-      SELECT COUNT(*)::int AS count
-        FROM "members"
-       WHERE "organizationId" = ${organizationId}::uuid
-         AND ${role} = ANY(string_to_array(regexp_replace("role", '\s', '', 'g'), ','))
+  async deleteUnlessHeld(organizationId: string, role: string): Promise<RoleDeletionOutcome> {
+    const rows = await this.prisma.writeTarget().$queryRaw<DeleteUnlessHeldRow[]>`
+      WITH target AS (
+        SELECT "id"
+          FROM "organization_roles"
+         WHERE "organizationId" = ${organizationId}::uuid
+           AND "role" = ${role}
+      ),
+      holders AS (
+        SELECT COUNT(*)::int AS "count"
+          FROM "members"
+         WHERE "organizationId" = ${organizationId}::uuid
+           AND ${role} = ANY(string_to_array(regexp_replace("role", '\\s', '', 'g'), ','))
+      ),
+      deleted AS (
+        DELETE FROM "organization_roles"
+         WHERE "id" IN (SELECT "id" FROM target)
+           AND (SELECT "count" FROM holders) = 0
+        RETURNING "id"
+      )
+      SELECT EXISTS (SELECT 1 FROM target) AS "found",
+             (SELECT "count" FROM holders) AS "holders",
+             EXISTS (SELECT 1 FROM deleted) AS "deleted"
     `;
-    return rows[0]?.count ?? 0;
+    return toDeletionOutcome(rows[0]);
   }
 }

@@ -120,6 +120,72 @@ describe('RedisLeaderLease', () => {
     expect(redis.eval).not.toHaveBeenCalled();
   });
 
+  describe('stop racing an in-flight tick', () => {
+    function deferred<T>() {
+      let resolve!: (value: T) => void;
+      const promise = new Promise<T>((r) => {
+        resolve = r;
+      });
+      return { promise, resolve };
+    }
+
+    it('releases a lease acquired by a tick that completed after stop', async () => {
+      const redis = redisMock();
+      const acquire = deferred<'OK'>();
+      vi.mocked(redis.set).mockReturnValueOnce(acquire.promise as never);
+      vi.mocked(redis.eval).mockResolvedValue(1 as never);
+      const lease = new RedisLeaderLease({ redis, key: 'k' });
+
+      const ticking = lease.tick();
+      const stopping = lease.stop();
+      acquire.resolve('OK');
+      await Promise.all([ticking, stopping]);
+
+      expect(redis.eval).toHaveBeenCalledTimes(1);
+      expect(redis.eval).toHaveBeenCalledWith(
+        expect.stringContaining('del'),
+        1,
+        'k',
+        expect.any(String),
+      );
+      expect(lease.isLeader()).toBe(false);
+    });
+
+    it('waits for an in-flight renew before releasing so the release cannot be overtaken', async () => {
+      const redis = redisMock();
+      vi.mocked(redis.set).mockResolvedValueOnce('OK');
+      const lease = new RedisLeaderLease({ redis, key: 'k' });
+      await lease.tick();
+
+      const renew = deferred<number>();
+      vi.mocked(redis.eval).mockReturnValueOnce(renew.promise as never);
+      vi.mocked(redis.eval).mockResolvedValueOnce(1 as never);
+
+      const ticking = lease.tick();
+      const stopping = lease.stop();
+      renew.resolve(1);
+      await Promise.all([ticking, stopping]);
+
+      const calls = vi.mocked(redis.eval).mock.calls.map((call) => String(call[0]));
+      expect(calls).toHaveLength(2);
+      expect(calls[0]).toContain('pexpire');
+      expect(calls[1]).toContain('del');
+      expect(lease.isLeader()).toBe(false);
+    });
+
+    it('ignores a tick issued after stop', async () => {
+      const redis = redisMock();
+      const lease = new RedisLeaderLease({ redis, key: 'k' });
+      await lease.stop();
+
+      await lease.tick();
+
+      expect(redis.set).not.toHaveBeenCalled();
+      expect(redis.eval).not.toHaveBeenCalled();
+      expect(lease.isLeader()).toBe(false);
+    });
+  });
+
   describe('onLeadershipLost', () => {
     it('fires on every true → false transition', async () => {
       const redis = redisMock();

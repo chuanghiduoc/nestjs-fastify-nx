@@ -25,10 +25,24 @@ function resolvePrismaCli(): string {
   return join(dirname(resolveFrom.resolve('prisma/package.json')), 'build', 'index.js');
 }
 
+export function buildMigrationEnv(
+  baseEnv: NodeJS.ProcessEnv,
+  databaseUrl: string,
+): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {
+    ...baseEnv,
+    DATABASE_URL: databaseUrl,
+    DATABASE_DIRECT_URL: databaseUrl,
+    PRISMA_HIDE_UPDATE_MESSAGE: 'true',
+  };
+  delete env['DB_PASSWORD_FILE'];
+  return env;
+}
+
 export function deployTestMigrations(databaseUrl: string): void {
   execFileSync(process.execPath, [resolvePrismaCli(), 'migrate', 'deploy'], {
     cwd: resolveWorkspaceRoot(),
-    env: { ...process.env, DATABASE_URL: databaseUrl, PRISMA_HIDE_UPDATE_MESSAGE: 'true' },
+    env: buildMigrationEnv(process.env, databaseUrl),
     stdio: 'inherit',
   });
 }

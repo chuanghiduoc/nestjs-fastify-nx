@@ -56,7 +56,9 @@ The API runs at `http://localhost:3000` by default.
 | `POST` | `/api/v1/upload/presign`      | session cookie    | issue a presigned POST policy      |
 | `POST` | `/api/v1/upload/confirm`      | session cookie    | confirm an upload                  |
 
-Tenant-facing endpoints, each gated by an organization permission rather than a platform role:
+Tenant-facing endpoints, each gated by an organization permission rather than a platform role
+(creating or publishing legal documents is the one back-office exception: it is gated by the
+platform `ADMIN` role because a term binds every tenant):
 
 | Method                  | Endpoint                                          | Permission                        |
 | ----------------------- | ------------------------------------------------- | --------------------------------- |
@@ -76,7 +78,7 @@ Tenant-facing endpoints, each gated by an organization permission rather than a 
 | `POST`/`PATCH`/`DELETE` | `/api/v1/feature-flags[/{id}]`                    | `feature_flag:manage`             |
 | `GET`                   | `/api/v1/terms`, `/{type}/latest`, `/acceptances` | `term:read`                       |
 | `POST`                  | `/api/v1/terms/{id}/accept`                       | `term:accept`                     |
-| `POST`                  | `/api/v1/terms[/{id}/publish]`                    | `term:manage`                     |
+| `POST`                  | `/api/v1/terms[/{id}/publish]`                    | platform `ADMIN` (`User.role`)    |
 | `GET`/`DELETE`          | `/api/v1/sessions[/{id}]`                         | `session:read` / `session:revoke` |
 | `POST`                  | `/api/v1/sessions/revoke-others`                  | `session:revoke`                  |
 

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { Mock } from 'vitest';
-import { isDomainException } from '@nestjs-fastify-nx/core';
+import { DomainException, isDomainException } from '@nestjs-fastify-nx/core';
+import { ERROR_CODES } from '@nestjs-fastify-nx/contracts';
 import { STORED_FILE_STATUS } from '@nestjs-fastify-nx/shared';
 import type { ObjectMetadata, StoragePort } from '@nestjs-fastify-nx/infra-storage';
 import { StoredFile, type StoredFileProps } from '../../../domain/entities/stored-file.entity';
@@ -151,6 +152,22 @@ describe('ConfirmUploadHandler — staged object validation', () => {
       code: 'upload_magic_bytes_unknown',
     });
     expect(storage.delete).toHaveBeenCalledWith(SOURCE_KEY);
+  });
+
+  it('keeps the staged object when reading its head fails transiently', async () => {
+    const { handler, storage, files, verification } = build();
+    storage.head.mockResolvedValue(validMeta());
+    const outage = new DomainException({
+      kind: 'unavailable',
+      code: ERROR_CODES.STORAGE_READ_FAILED,
+      violations: [],
+    });
+    storage.readRange.mockRejectedValue(outage);
+
+    await expect(handler.execute(command())).rejects.toBe(outage);
+    expect(storage.delete).not.toHaveBeenCalled();
+    expect(files.create).not.toHaveBeenCalled();
+    expect(verification.dispatch).not.toHaveBeenCalled();
   });
 
   it('reports a missing staged object as not found', async () => {

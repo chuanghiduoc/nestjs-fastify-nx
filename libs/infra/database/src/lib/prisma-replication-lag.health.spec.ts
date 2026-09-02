@@ -46,15 +46,26 @@ describe('PrismaReplicationLagHealthIndicator', () => {
     expect(result['replication_lag']).toMatchObject({ lag: 0.42 });
   });
 
-  it('treats null lag_seconds as 0 when replica has no transactions replayed yet', async () => {
+  it('reports down when a replica has replayed no WAL since startup (null lag)', async () => {
     const indicator = makeIndicator(
       makePrisma({ queryResult: [{ lag_seconds: null, is_replica: true }] }),
     );
 
     const result = await indicator.isHealthy('replication_lag');
 
-    expect(result['replication_lag'].status).toBe('up');
-    expect(result['replication_lag']).toMatchObject({ lag: 0 });
+    expect(result['replication_lag'].status).toBe('down');
+    expect(result['replication_lag']).toMatchObject({
+      lag: null,
+      message: expect.stringContaining('has not replayed any WAL'),
+    });
+  });
+
+  it('reports down when the probe returns no row at all', async () => {
+    const indicator = makeIndicator(makePrisma({ queryResult: [] }));
+
+    const result = await indicator.isHealthy('replication_lag');
+
+    expect(result['replication_lag'].status).toBe('down');
   });
 
   it('reports down when is_replica is false (promoted node)', async () => {

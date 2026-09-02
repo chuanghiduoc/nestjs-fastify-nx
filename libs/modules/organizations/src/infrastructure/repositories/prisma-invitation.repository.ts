@@ -8,6 +8,7 @@ import type {
   InvitationRepositoryPort,
   InvitationStatus,
 } from '../../domain/ports/invitation-repository.port';
+import { pendingInvitationWhere } from './pending-invitation.where';
 
 type InvitationRow = {
   id: string;
@@ -25,6 +26,10 @@ function toRecord(row: InvitationRow): InvitationRecord {
   return { ...row, status: row.status as InvitationStatus };
 }
 
+function statusWhere(status: InvitationStatus, now: Date): Prisma.InvitationWhereInput {
+  return status === 'pending' ? pendingInvitationWhere(now) : { status };
+}
+
 @Injectable()
 export class PrismaInvitationRepository implements InvitationRepositoryPort {
   constructor(private readonly prisma: PrismaService) {}
@@ -32,8 +37,10 @@ export class PrismaInvitationRepository implements InvitationRepositoryPort {
   async findAllCursor(options: FindInvitationsCursorOptions): Promise<FindInvitationsCursorResult> {
     const { organizationId, startingAfter, limit, status, email } = options;
 
-    const where: Prisma.InvitationWhereInput = { organizationId };
-    if (status) where.status = status;
+    const where: Prisma.InvitationWhereInput = {
+      organizationId,
+      ...(status ? statusWhere(status, new Date()) : {}),
+    };
     if (email) where.email = email.toLowerCase();
     if (startingAfter) {
       where.AND = [

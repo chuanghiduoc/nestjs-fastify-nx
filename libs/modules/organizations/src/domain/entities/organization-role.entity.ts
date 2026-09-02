@@ -23,6 +23,7 @@ export interface CreateOrganizationRoleInput {
   organizationId: string;
   role: string;
   permissions: readonly string[];
+  grantedToActor: readonly Permission[];
 }
 
 function invalid(path: string, code: string, message: string, messageKey: string): never {
@@ -78,6 +79,36 @@ function assertKnownPermissions(permissions: readonly string[]): readonly Permis
   return [...new Set(permissions)] as Permission[];
 }
 
+function assertWithinActorGrant(
+  permissions: readonly Permission[],
+  grantedToActor: readonly Permission[],
+): readonly Permission[] {
+  const held = new Set<string>(grantedToActor);
+  const escalating = permissions.filter((permission) => !held.has(permission));
+  if (escalating.length > 0) {
+    throw new DomainException({
+      kind: 'forbidden',
+      code: ERROR_CODES.FORBIDDEN,
+      title: I18N_KEYS.common.forbidden,
+      violations: [
+        {
+          path: 'permissions',
+          code: 'permission_exceeds_grant',
+          message: `permissions exceed the caller's own grant: ${escalating.join(', ')}`,
+        },
+      ],
+    });
+  }
+  return permissions;
+}
+
+function resolveGrantablePermissions(
+  permissions: readonly string[],
+  grantedToActor: readonly Permission[],
+): readonly Permission[] {
+  return assertWithinActorGrant(assertKnownPermissions(permissions), grantedToActor);
+}
+
 export class OrganizationRole {
   private constructor(private readonly props: OrganizationRoleProps) {}
 
@@ -87,7 +118,7 @@ export class OrganizationRole {
       id: input.id ?? generateId(),
       organizationId: input.organizationId,
       role: input.role,
-      permissions: assertKnownPermissions(input.permissions),
+      permissions: resolveGrantablePermissions(input.permissions, input.grantedToActor),
       createdAt: new Date(),
       updatedAt: null,
     });
@@ -97,10 +128,13 @@ export class OrganizationRole {
     return new OrganizationRole(raw);
   }
 
-  withPermissions(permissions: readonly string[]): OrganizationRole {
+  withPermissions(
+    permissions: readonly string[],
+    grantedToActor: readonly Permission[],
+  ): OrganizationRole {
     return new OrganizationRole({
       ...this.props,
-      permissions: assertKnownPermissions(permissions),
+      permissions: resolveGrantablePermissions(permissions, grantedToActor),
       updatedAt: new Date(),
     });
   }

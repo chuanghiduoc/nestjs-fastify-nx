@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import Fastify, { type FastifyInstance } from 'fastify';
 import fastifyCookie from '@fastify/cookie';
 import type Redis from 'ioredis';
+import { generateApiKey } from '@nestjs-fastify-nx/shared';
 import { registerIdempotency, serializeReplayBody } from './register-idempotency';
 
 // Minimal in-memory stand-in for the two ioredis commands the store uses. This is NOT a database
@@ -372,6 +373,93 @@ describe('registerIdempotency', () => {
         ...KEY_HEADER,
         cookie: 'better-auth.session_token=user-a',
         authorization: 'Bearer unrelated',
+      },
+      payload: { a: 1 },
+    });
+
+    expect(replay.headers['idempotent-replayed']).toBe('true');
+    expect(callCount()).toBe(1);
+  });
+
+  it('scopes x-api-key machine callers independently for tenants behind the same IP', async () => {
+    const { app, callCount } = await buildApp(redis);
+
+    const first = await app.inject({
+      method: 'POST',
+      url: '/api/v1/echo',
+      headers: { ...KEY_HEADER, 'x-api-key': generateApiKey().raw },
+      payload: { a: 1 },
+    });
+    const second = await app.inject({
+      method: 'POST',
+      url: '/api/v1/echo',
+      headers: { ...KEY_HEADER, 'x-api-key': generateApiKey().raw },
+      payload: { a: 1 },
+    });
+
+    expect(first.json().calls).toBe(1);
+    expect(second.json().calls).toBe(2);
+    expect(second.headers['idempotent-replayed']).toBeUndefined();
+    expect(callCount()).toBe(2);
+  });
+
+  it('replays for the same x-api-key', async () => {
+    const { app, callCount } = await buildApp(redis);
+    const apiKey = generateApiKey().raw;
+
+    await app.inject({
+      method: 'POST',
+      url: '/api/v1/echo',
+      headers: { ...KEY_HEADER, 'x-api-key': apiKey },
+      payload: { a: 1 },
+    });
+    const replay = await app.inject({
+      method: 'POST',
+      url: '/api/v1/echo',
+      headers: { ...KEY_HEADER, 'x-api-key': apiKey },
+      payload: { a: 1 },
+    });
+
+    expect(replay.headers['idempotent-replayed']).toBe('true');
+    expect(callCount()).toBe(1);
+  });
+
+  it('ignores an x-api-key that is not shaped like a key, matching ApiKeyGuard', async () => {
+    const { app, callCount } = await buildApp(redis);
+
+    await app.inject({
+      method: 'POST',
+      url: '/api/v1/echo',
+      headers: { ...KEY_HEADER, 'x-api-key': 'not-a-key' },
+      payload: { a: 1 },
+    });
+    const replay = await app.inject({
+      method: 'POST',
+      url: '/api/v1/echo',
+      headers: KEY_HEADER,
+      payload: { a: 1 },
+    });
+
+    expect(replay.headers['idempotent-replayed']).toBe('true');
+    expect(callCount()).toBe(1);
+  });
+
+  it('prefers the session cookie over an x-api-key when both are present', async () => {
+    const { app, callCount } = await buildApp(redis);
+
+    await app.inject({
+      method: 'POST',
+      url: '/api/v1/echo',
+      headers: { ...KEY_HEADER, cookie: 'better-auth.session_token=user-a' },
+      payload: { a: 1 },
+    });
+    const replay = await app.inject({
+      method: 'POST',
+      url: '/api/v1/echo',
+      headers: {
+        ...KEY_HEADER,
+        cookie: 'better-auth.session_token=user-a',
+        'x-api-key': generateApiKey().raw,
       },
       payload: { a: 1 },
     });

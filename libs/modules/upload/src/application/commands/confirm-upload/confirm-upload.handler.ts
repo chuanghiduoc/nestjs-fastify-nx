@@ -1,6 +1,6 @@
 import { Inject, Logger } from '@nestjs/common';
 import { CommandHandler, type ICommandHandler } from '@nestjs/cqrs';
-import { DomainException } from '@nestjs-fastify-nx/core';
+import { DomainException, isDomainException } from '@nestjs-fastify-nx/core';
 import { ERROR_CODES, I18N_KEYS } from '@nestjs-fastify-nx/contracts';
 import { generateId, STORED_FILE_STATUS } from '@nestjs-fastify-nx/shared';
 import {
@@ -28,6 +28,10 @@ import {
   type UploadVerificationDispatcher,
 } from '../../ports/upload-verification.dispatcher';
 import { ConfirmUploadCommand } from './confirm-upload.command';
+
+function isPolicyViolation(err: unknown): boolean {
+  return isDomainException(err) && err.kind === 'validation';
+}
 
 @CommandHandler(ConfirmUploadCommand)
 export class ConfirmUploadHandler implements ICommandHandler<
@@ -74,7 +78,7 @@ export class ConfirmUploadHandler implements ICommandHandler<
         meta.bucket,
       );
     } catch (err) {
-      await this.safeDelete(sourceKey);
+      if (isPolicyViolation(err)) await this.safeDelete(sourceKey);
       throw err;
     }
   }

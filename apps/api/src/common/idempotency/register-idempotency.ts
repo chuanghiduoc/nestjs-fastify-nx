@@ -3,7 +3,7 @@ import { HttpStatus } from '@nestjs/common';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type Redis from 'ioredis';
 import { ERROR_CODES } from '@nestjs-fastify-nx/contracts';
-import { sanitizeUrlForLogging } from '@nestjs-fastify-nx/shared';
+import { hashApiKey, looksLikeApiKey, sanitizeUrlForLogging } from '@nestjs-fastify-nx/shared';
 import { buildProblemDetails, PROBLEM_CONTENT_TYPE } from '../filters/problem-details.helper';
 import { extractBearerToken } from '../http/bearer-token';
 import { ensureRequestIds } from '../logging/request-id';
@@ -18,6 +18,7 @@ export interface IdempotencyOptions {
 }
 
 const IDEMPOTENCY_HEADER = 'idempotency-key';
+const API_KEY_HEADER = 'x-api-key';
 const REPLAYED_HEADER = 'idempotent-replayed';
 const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 const SCOPED_PATH_PREFIX = '/api/v1/';
@@ -76,7 +77,15 @@ function extractPrincipal(req: FastifyRequest): string {
   const bearer = extractBearerToken(req.headers.authorization);
   if (bearer) return `b:${bearer}`;
 
+  const apiKey = extractApiKeyHeader(req.headers[API_KEY_HEADER]);
+  if (apiKey) return `k:${hashApiKey(apiKey)}`;
+
   return `ip:${req.ip}`;
+}
+
+function extractApiKeyHeader(header: string | string[] | undefined): string | undefined {
+  const value = Array.isArray(header) ? header[0] : header;
+  return typeof value === 'string' && looksLikeApiKey(value) ? value : undefined;
 }
 
 // Method + full URL (query included) + body. Detects a key reused for a different operation.

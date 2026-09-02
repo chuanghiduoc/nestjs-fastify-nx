@@ -1,8 +1,12 @@
+import 'reflect-metadata';
 import { describe, expect, it, vi } from 'vitest';
+import { ForbiddenException, type ExecutionContext } from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
 import type { CommandBus, QueryBus } from '@nestjs/cqrs';
 import type { FastifyRequest } from 'fastify';
 import { Prisma, type PrismaService } from '@nestjs-fastify-nx/infra-database';
-import type { AuthenticatedSession } from '@nestjs-fastify-nx/infra-auth';
+import { RolesGuard, type AuthenticatedSession } from '@nestjs-fastify-nx/infra-auth';
+import { REQUIRED_PERMISSIONS_KEY } from '@nestjs-fastify-nx/infra-authorization';
 import { generateId } from '@nestjs-fastify-nx/shared';
 import { Term, TERM_TYPE } from './domain/entities/term.entity';
 import { PrismaTermRepository } from './infrastructure/repositories/prisma-term.repository';
@@ -141,6 +145,50 @@ describe('PrismaTermRepository', () => {
     const acceptances = await repository.findAcceptances(USER_ID);
 
     expect(acceptances[0]).toMatchObject({ type: TERM_TYPE.PRIVACY_POLICY, version: 'v2' });
+  });
+});
+
+describe('TermsController platform gating', () => {
+  function contextFor(
+    handler: (...args: never[]) => unknown,
+    user: AuthenticatedSession,
+  ): ExecutionContext {
+    return {
+      getHandler: () => handler,
+      getClass: () => TermsController,
+      getType: () => 'http',
+      switchToHttp: () => ({ getRequest: () => ({ user }) }),
+    } as unknown as ExecutionContext;
+  }
+
+  const guard = new RolesGuard(new Reflector());
+  const platformAdmin: AuthenticatedSession = { ...SESSION, role: 'ADMIN' };
+
+  it.each([
+    ['create', TermsController.prototype.create],
+    ['publish', TermsController.prototype.publish],
+  ])('refuses %s to a tenant owner without the platform ADMIN role', (_name, handler) => {
+    expect(() => guard.canActivate(contextFor(handler, SESSION))).toThrow(ForbiddenException);
+    expect(Reflect.getMetadata(REQUIRED_PERMISSIONS_KEY, handler)).toBeUndefined();
+  });
+
+  it.each([
+    ['create', TermsController.prototype.create],
+    ['publish', TermsController.prototype.publish],
+  ])('admits %s to a platform ADMIN', (_name, handler) => {
+    expect(guard.canActivate(contextFor(handler, platformAdmin))).toBe(true);
+  });
+
+  it('keeps the read and accept routes on the organization axis', () => {
+    for (const handler of [
+      TermsController.prototype.list,
+      TermsController.prototype.acceptances,
+      TermsController.prototype.latest,
+      TermsController.prototype.accept,
+    ]) {
+      expect(guard.canActivate(contextFor(handler, SESSION))).toBe(true);
+      expect(Reflect.getMetadata(REQUIRED_PERMISSIONS_KEY, handler)).toBeDefined();
+    }
   });
 });
 

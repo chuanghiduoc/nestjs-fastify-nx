@@ -1,4 +1,5 @@
 /// <reference types="vitest/globals" />
+import { randomUUID } from 'node:crypto';
 import { describe, it, expect, vi } from 'vitest';
 import Fastify from 'fastify';
 import { applyFastifyProblemDetailsHook } from './fastify-error-handler';
@@ -182,6 +183,62 @@ describe('applyFastifyProblemDetailsHook', () => {
       expect(res.json().requestId).toBe('caller-supplied-id-123');
     } finally {
       delete process.env['TRUST_INBOUND_REQUEST_ID'];
+      await app.close();
+    }
+  });
+
+  it('leaves a GraphQL 400 error envelope intact while still stamping request ids', async () => {
+    const app = Fastify();
+    applyFastifyProblemDetailsHook(app);
+    const envelope = {
+      data: null,
+      errors: [
+        {
+          message: 'Cannot query field "nope" on type "UserType".',
+          locations: [{ line: 1, column: 8 }],
+        },
+      ],
+    };
+    app.post('/graphql', async (_request, reply) => reply.status(400).send(envelope));
+    app.post('/rest', async (_request, reply) => reply.status(400).send(envelope));
+
+    try {
+      const graphql = await app.inject({ method: 'POST', url: '/graphql' });
+      expect(graphql.statusCode).toBe(400);
+      expect(graphql.json()).toEqual(envelope);
+      expect(graphql.headers['content-type']).toMatch(/application\/json/);
+      expect(graphql.headers['x-request-id']).toMatch(/^[a-f0-9]{32}$/);
+      expect(graphql.headers['x-correlation-id']).toBe(graphql.headers['x-request-id']);
+
+      const rest = await app.inject({ method: 'POST', url: '/rest' });
+      expect(rest.statusCode).toBe(400);
+      expect(rest.headers['content-type']).toMatch(/application\/problem\+json/);
+      expect(rest.json()).toMatchObject({ status: 400, code: 'bad_request', title: 'Bad Request' });
+      expect(rest.json()).not.toHaveProperty('errors');
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('masks a GraphQL 5xx that never reached the Mercurius formatter', async () => {
+    const app = Fastify();
+    applyFastifyProblemDetailsHook(app);
+    const secret = `connect ECONNREFUSED postgres://app:${randomUUID()}@db:5432`;
+    app.post('/graphql', async (_request, reply) =>
+      reply.status(500).send({ statusCode: 500, error: 'Internal Server Error', message: secret }),
+    );
+
+    try {
+      const res = await app.inject({ method: 'POST', url: '/graphql' });
+      expect(res.statusCode).toBe(500);
+      expect(res.headers['content-type']).toMatch(/application\/problem\+json/);
+      expect(res.payload).not.toContain(secret);
+      expect(res.json()).toMatchObject({
+        status: 500,
+        title: 'Internal Server Error',
+        detail: 'Internal Server Error',
+      });
+    } finally {
       await app.close();
     }
   });

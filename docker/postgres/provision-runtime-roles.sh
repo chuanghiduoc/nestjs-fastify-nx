@@ -59,9 +59,11 @@ ALTER DEFAULT PRIVILEGES FOR ROLE :"admin_user" IN SCHEMA public
 ALTER DEFAULT PRIVILEGES FOR ROLE :"admin_user" IN SCHEMA public
   GRANT USAGE, SELECT ON SEQUENCES TO :"api_user";
 -- Without these the scheduler silently loses access to every table added by a later migration:
--- the GRANTs above only cover tables that existed when this script ran.
+-- the GRANTs above only cover tables that existed when this script ran. MAINTAIN is included so
+-- the weekly VACUUM ANALYZE also covers the monthly audit_logs partitions created afterwards by
+-- ensure_audit_log_partition (owned by the admin role); without it VACUUM skips them with a warning.
 ALTER DEFAULT PRIVILEGES FOR ROLE :"admin_user" IN SCHEMA public
-  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO :"scheduler_user";
+  GRANT SELECT, INSERT, UPDATE, DELETE, MAINTAIN ON TABLES TO :"scheduler_user";
 ALTER DEFAULT PRIVILEGES FOR ROLE :"admin_user" IN SCHEMA public
   GRANT USAGE, SELECT ON SEQUENCES TO :"scheduler_user";
 SQL

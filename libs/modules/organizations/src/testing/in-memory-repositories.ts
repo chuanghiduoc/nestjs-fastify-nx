@@ -1,6 +1,9 @@
 import type { OrganizationRole } from '../domain/entities/organization-role.entity';
 import type { Team } from '../domain/entities/team.entity';
-import type { OrganizationRoleRepositoryPort } from '../domain/ports/organization-role-repository.port';
+import type {
+  OrganizationRoleRepositoryPort,
+  RoleDeletionOutcome,
+} from '../domain/ports/organization-role-repository.port';
 import type {
   FindTeamsCursorOptions,
   FindTeamsCursorResult,
@@ -50,12 +53,12 @@ export class InMemoryOrganizationRoleRepository implements OrganizationRoleRepos
     return Promise.resolve();
   }
 
-  delete(organizationId: string, role: string): Promise<boolean> {
-    return Promise.resolve(this.roles.delete(this.key(organizationId, role)));
-  }
-
-  countMembersHolding(organizationId: string, role: string): Promise<number> {
-    return Promise.resolve(this.holders.get(this.key(organizationId, role)) ?? 0);
+  deleteUnlessHeld(organizationId: string, role: string): Promise<RoleDeletionOutcome> {
+    const key = this.key(organizationId, role);
+    if (!this.roles.has(key)) return Promise.resolve('not_found');
+    if ((this.holders.get(key) ?? 0) > 0) return Promise.resolve('in_use');
+    this.roles.delete(key);
+    return Promise.resolve('deleted');
   }
 }
 
@@ -111,9 +114,13 @@ export class InMemoryInvitationRepository implements InvitationRepositoryPort {
   }
 
   findAllCursor(options: FindInvitationsCursorOptions): Promise<FindInvitationsCursorResult> {
+    const now = new Date();
     const matching = [...this.invitations.values()]
       .filter((invitation) => invitation.organizationId === options.organizationId)
       .filter((invitation) => (options.status ? invitation.status === options.status : true))
+      .filter((invitation) =>
+        options.status === 'pending' ? invitation.expiresAt.getTime() > now.getTime() : true,
+      )
       .filter((invitation) =>
         options.email ? invitation.email === options.email.toLowerCase() : true,
       )

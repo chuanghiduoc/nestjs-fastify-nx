@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { CommandBus } from '@nestjs/cqrs';
 import type { DomainEvent } from '@nestjs-fastify-nx/core';
+import { generateId } from '@nestjs-fastify-nx/shared';
 import { AuditLogListener } from './audit-log.listener';
 import { RecordAuditLogCommand } from '../commands/record-audit-log/record-audit-log.command';
 
@@ -106,7 +107,7 @@ describe('AuditLogListener', () => {
     const ORG_ID = '00000000-0000-4000-8000-0000000000a1';
     const MEMBER_ID = '00000000-0000-4000-8000-0000000000a2';
 
-    it('does not treat the affected member as the event actor', async () => {
+    it('attributes the entry to the affected member so the userId filter can find it', async () => {
       const { listener, commandBus } = buildListener();
       const event: DomainEvent = {
         eventId: EVT_ORG_MEMBER_ADDED,
@@ -121,7 +122,7 @@ describe('AuditLogListener', () => {
 
       const command = dispatchedCommand(commandBus);
       expect(command.organizationId).toBe(ORG_ID);
-      expect(command.userId).toBeNull();
+      expect(command.userId).toBe(MEMBER_ID);
       expect(command.resource).toBe('organization');
       expect(command.metadata).toEqual({
         role: 'owner',
@@ -149,6 +150,24 @@ describe('AuditLogListener', () => {
       const command = dispatchedCommand(commandBus);
       expect(command.organizationId).toBe(ORG_ID);
       expect(command.userId).toBeNull();
+    });
+
+    it('leaves userId null when the payload carries no member', async () => {
+      const { listener, commandBus } = buildListener();
+      const event: DomainEvent = {
+        eventId: generateId(),
+        eventType: 'organizations.created',
+        occurredAt: new Date('2026-08-20T12:00:00.000Z'),
+        aggregateId: ORG_ID,
+        organizationId: ORG_ID,
+        payload: { name: 'Acme', slug: 'acme', userId: 42 },
+      };
+
+      await listener.handleOrganizationEvent(event);
+
+      const command = dispatchedCommand(commandBus);
+      expect(command.userId).toBeNull();
+      expect(command.metadata).not.toHaveProperty('memberUserId');
     });
   });
 });

@@ -9,12 +9,20 @@ const log = (msg: string): void => {
   console.log(`[migration] ${new Date().toISOString()} ${msg}`);
 };
 
+const isScalar = (value: unknown): value is string | number =>
+  typeof value === 'string' || typeof value === 'number';
+
+const describeError = (err: unknown): string => {
+  if (!(err instanceof Error)) return String(err);
+  const { code, status } = err as Error & { code?: unknown; status?: unknown };
+  const parts = [err.message];
+  if (isScalar(code)) parts.push(`code=${code}`);
+  if (isScalar(status)) parts.push(`exitStatus=${status}`);
+  return parts.join(' ');
+};
+
 const fail = (msg: string, err: unknown): never => {
-  const detail =
-    err && typeof err === 'object' && typeof (err as { name?: unknown }).name === 'string'
-      ? (err as { name: string }).name
-      : 'Error';
-  console.error(`[migration] ${new Date().toISOString()} ${msg}\n${detail}`);
+  console.error(`[migration] ${new Date().toISOString()} ${msg}\n${describeError(err)}`);
   process.exit(1);
 };
 

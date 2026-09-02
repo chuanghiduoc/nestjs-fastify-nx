@@ -62,6 +62,15 @@ describe('validateConfig', () => {
     expect(result.UPLOAD_MAX_FILE_BYTES).toBe(20_971_520);
   });
 
+  it('accepts the largest UPLOAD_MAX_FILE_BYTES the stored_files.size column can hold', () => {
+    const result = validateConfig({ ...baseDevEnv, UPLOAD_MAX_FILE_BYTES: '2147483647' });
+    expect(result.UPLOAD_MAX_FILE_BYTES).toBe(2_147_483_647);
+  });
+
+  it('rejects an UPLOAD_MAX_FILE_BYTES that overflows the stored_files.size column', () => {
+    expect(() => validateConfig({ ...baseDevEnv, UPLOAD_MAX_FILE_BYTES: '2147483648' })).toThrow();
+  });
+
   it('coerces boolean THROTTLER_ENABLED from string', () => {
     const result = validateConfig({ ...baseDevEnv, THROTTLER_ENABLED: 'false' });
     expect(result.THROTTLER_ENABLED).toBe(false);

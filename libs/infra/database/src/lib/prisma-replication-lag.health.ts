@@ -48,7 +48,14 @@ export class PrismaReplicationLagHealthIndicator {
       });
     }
 
-    const lag = rows[0]?.lag_seconds ?? 0;
+    const lag = rows[0]?.lag_seconds;
+    if (lag === null || lag === undefined) {
+      return indicator.down({
+        lag: null,
+        threshold: this.lagThresholdSeconds,
+        message: 'Replica has not replayed any WAL since startup — replication may be disconnected',
+      });
+    }
 
     if (lag > this.lagThresholdSeconds) {
       return indicator.down({
