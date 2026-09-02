@@ -2,8 +2,8 @@ import {
   Inject,
   Injectable,
   Logger,
+  OnApplicationBootstrap,
   OnModuleDestroy,
-  OnModuleInit,
   Optional,
 } from '@nestjs/common';
 import { PrismaService } from '@nestjs-fastify-nx/infra-database';
@@ -28,7 +28,7 @@ const STUCK_CHECK_INTERVAL_MS = 60_000;
 // Three-stage dispatch: CLAIM tx (FOR UPDATE SKIP LOCKED) → PUBLISH (no tx) → MARK tx (per-row).
 // Lock windows stay short and a poison-pill listener cannot roll back an entire batch.
 @Injectable()
-export class OutboxRelayService implements OnModuleInit, OnModuleDestroy {
+export class OutboxRelayService implements OnApplicationBootstrap, OnModuleDestroy {
   private readonly logger = new Logger(OutboxRelayService.name);
   private readonly pollIntervalMs = positiveIntEnv('OUTBOX_POLL_INTERVAL_MS', 1_000);
   private readonly batchSize = positiveIntEnv('OUTBOX_BATCH_SIZE', 50);
@@ -60,7 +60,7 @@ export class OutboxRelayService implements OnModuleInit, OnModuleDestroy {
     private readonly leadership?: OutboxRelayLeadership,
   ) {}
 
-  onModuleInit(): void {
+  onApplicationBootstrap(): void {
     this.timer = setInterval(() => {
       if (this.inFlight) return;
       this.inFlight = this.tick()

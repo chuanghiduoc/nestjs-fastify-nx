@@ -75,6 +75,30 @@ export function describeAuthorizationConformance(harness: ConformanceHarness): v
       expect(decision.reason).toBe(DENIAL_REASONS.notAMember);
     });
 
+    it('keeps self-service permissions for a principal with no membership', async () => {
+      const decisions = await authorization.checkMany(
+        userPrincipal(CONFORMANCE_IDS.outsider, CONFORMANCE_IDS.orgA),
+        [
+          { permission: PERMISSIONS.SESSION_READ },
+          { permission: PERMISSIONS.SESSION_REVOKE },
+          { permission: PERMISSIONS.TERM_READ },
+          { permission: PERMISSIONS.TERM_ACCEPT },
+          { permission: PERMISSIONS.TERM_MANAGE },
+        ],
+      );
+      expect(decisions.map((d) => d.allowed)).toEqual([true, true, true, true, false]);
+    });
+
+    it('scopes a self resource to a principal with no membership', async () => {
+      const filter = await authorization.filter(
+        userPrincipal(CONFORMANCE_IDS.outsider, CONFORMANCE_IDS.orgA),
+        PERMISSIONS.SESSION_READ,
+        RESOURCE_TYPES.SESSION,
+      );
+
+      expect(applyAccessFilter({}, filter)).toEqual({ userId: CONFORMANCE_IDS.outsider });
+    });
+
     it('reports non-membership ahead of a cross-organization resource', async () => {
       const decision = await authorization.check(
         userPrincipal(CONFORMANCE_IDS.outsider, CONFORMANCE_IDS.orgA),

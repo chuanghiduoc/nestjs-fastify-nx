@@ -86,6 +86,22 @@ export function safeErrorSummary(error: unknown): string {
   return safe.code ? `${safe.type} (${safe.code})` : safe.type;
 }
 
+const SENSITIVE_TEXT_KEYS =
+  'access_token|refresh_token|session_token|token|secret|password|api[-_]?key';
+const JSON_SENSITIVE_MEMBER = new RegExp(
+  `("(?:${SENSITIVE_TEXT_KEYS})"\\s*:\\s*)"(?:[^"\\\\]|\\\\.)*"`,
+  'gi',
+);
+const BARE_SENSITIVE_ASSIGNMENT = new RegExp(
+  `\\b(?:${SENSITIVE_TEXT_KEYS})\\s*[:=]\\s*[^\\s,;]+`,
+  'gi',
+);
+
+function redactAfterFirstSeparator(match: string): string {
+  const separatorAt = match.search(/[:=]/);
+  return `${match.slice(0, separatorAt + 1)}[REDACTED]`;
+}
+
 /** Defense in depth for third-party telemetry SDKs that accept only rendered strings. */
 export function sanitizeSensitiveText(value: string): string {
   return value
@@ -95,10 +111,7 @@ export function sanitizeSensitiveText(value: string): string {
       /([?&](?:access_token|refresh_token|session_token|token|code|secret|password|api[-_]?key|email)=)[^&#\s]*/gi,
       '$1[REDACTED]',
     )
-    .replace(
-      /\b(?:access_token|refresh_token|session_token|token|secret|password|api[-_]?key)\s*[:=]\s*[^\s,;]+/gi,
-      (match) =>
-        `${match.slice(0, Math.max(match.indexOf('='), match.indexOf(':')) + 1)}[REDACTED]`,
-    )
+    .replace(JSON_SENSITIVE_MEMBER, '$1"[REDACTED]"')
+    .replace(BARE_SENSITIVE_ASSIGNMENT, redactAfterFirstSeparator)
     .replace(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g, '[REDACTED_EMAIL]');
 }

@@ -1,7 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 import { Prisma } from '@nestjs-fastify-nx/infra-database';
 import type { PrismaService } from '@nestjs-fastify-nx/infra-database';
-import { PERMISSIONS, generateId, serializePermissionStatements } from '@nestjs-fastify-nx/shared';
+import {
+  ALL_PERMISSIONS,
+  PERMISSIONS,
+  generateId,
+  serializePermissionStatements,
+} from '@nestjs-fastify-nx/shared';
 import { OrganizationRole } from '../../domain/entities/organization-role.entity';
 import { Team } from '../../domain/entities/team.entity';
 import { PrismaOrganizationRoleRepository } from './prisma-organization-role.repository';
@@ -55,6 +60,7 @@ describe('PrismaOrganizationRoleRepository', () => {
     });
     const role = OrganizationRole.create({
       organizationId: ORG_ID,
+      grantedToActor: ALL_PERMISSIONS,
       role: 'auditor',
       permissions: [PERMISSIONS.AUDIT_LOG_READ],
     });
@@ -71,6 +77,7 @@ describe('PrismaOrganizationRoleRepository', () => {
     });
     const role = OrganizationRole.create({
       organizationId: ORG_ID,
+      grantedToActor: ALL_PERMISSIONS,
       role: 'auditor',
       permissions: [PERMISSIONS.AUDIT_LOG_READ],
     });
@@ -78,39 +85,44 @@ describe('PrismaOrganizationRoleRepository', () => {
     await expect(new PrismaOrganizationRoleRepository(prisma).create(role)).rejects.toBe(failure);
   });
 
-  it('reports whether the delete matched a row', async () => {
-    const deleteMany = vi.fn().mockResolvedValueOnce({ count: 1 }).mockResolvedValueOnce({
-      count: 0,
-    });
-    const repository = new PrismaOrganizationRoleRepository(
-      prismaDouble('organizationRole', { deleteMany }),
-    );
+  function deletionDouble(rows: unknown[]) {
+    const queryRaw = vi.fn().mockResolvedValue(rows);
+    const prisma = { writeTarget: () => ({ $queryRaw: queryRaw }) } as unknown as PrismaService;
+    return { queryRaw, repository: new PrismaOrganizationRoleRepository(prisma) };
+  }
 
-    expect(await repository.delete(ORG_ID, 'auditor')).toBe(true);
-    expect(await repository.delete(ORG_ID, 'auditor')).toBe(false);
+  it('reports a role that was deleted', async () => {
+    const { repository } = deletionDouble([{ found: true, holders: 0, deleted: true }]);
+
+    expect(await repository.deleteUnlessHeld(ORG_ID, 'auditor')).toBe('deleted');
   });
 
-  it('counts holders through a comma-aware SQL predicate', async () => {
-    const queryRaw = vi.fn().mockResolvedValue([{ count: 2 }]);
-    const prisma = { readTarget: () => ({ $queryRaw: queryRaw }) } as unknown as PrismaService;
+  it('reports a role a member still holds as in use', async () => {
+    const { repository } = deletionDouble([{ found: true, holders: 2, deleted: false }]);
 
-    const count = await new PrismaOrganizationRoleRepository(prisma).countMembersHolding(
-      ORG_ID,
-      'auditor',
-    );
-
-    expect(count).toBe(2);
-    expect(queryRaw).toHaveBeenCalledTimes(1);
+    expect(await repository.deleteUnlessHeld(ORG_ID, 'auditor')).toBe('in_use');
   });
 
-  it('treats an empty count result as zero holders', async () => {
-    const prisma = {
-      readTarget: () => ({ $queryRaw: vi.fn().mockResolvedValue([]) }),
-    } as unknown as PrismaService;
+  it('reports a role that does not exist as not found', async () => {
+    const { repository } = deletionDouble([{ found: false, holders: 0, deleted: false }]);
 
-    expect(
-      await new PrismaOrganizationRoleRepository(prisma).countMembersHolding(ORG_ID, 'auditor'),
-    ).toBe(0);
+    expect(await repository.deleteUnlessHeld(ORG_ID, 'ghost')).toBe('not_found');
+  });
+
+  it('treats an empty result as not found', async () => {
+    const { repository } = deletionDouble([]);
+
+    expect(await repository.deleteUnlessHeld(ORG_ID, 'ghost')).toBe('not_found');
+  });
+
+  it('sends Postgres a whitespace regex, not the letter s, when splitting the role column', async () => {
+    const { queryRaw, repository } = deletionDouble([{ found: true, holders: 1, deleted: false }]);
+
+    await repository.deleteUnlessHeld(ORG_ID, 'sales');
+
+    const [strings, ...values] = queryRaw.mock.calls[0] as [readonly string[], ...unknown[]];
+    expect(strings.join('?')).toContain(String.raw`regexp_replace("role", '\s', '', 'g')`);
+    expect(values).toEqual([ORG_ID, 'sales', ORG_ID, 'sales']);
   });
 });
 
@@ -253,6 +265,27 @@ describe('PrismaInvitationRepository', () => {
     });
   });
 
+  it('hides expired invitations behind the pending filter', async () => {
+    const findMany = vi.fn().mockResolvedValue([]);
+    const repository = new PrismaInvitationRepository(prismaDouble('invitation', { findMany }));
+
+    await repository.findAllCursor({ organizationId: ORG_ID, limit: 10, status: 'pending' });
+
+    expect(findMany.mock.calls[0][0].where).toMatchObject({
+      status: 'pending',
+      expiresAt: { gt: expect.any(Date) },
+    });
+  });
+
+  it('applies no expiry predicate to a non-pending status', async () => {
+    const findMany = vi.fn().mockResolvedValue([]);
+    const repository = new PrismaInvitationRepository(prismaDouble('invitation', { findMany }));
+
+    await repository.findAllCursor({ organizationId: ORG_ID, limit: 10, status: 'accepted' });
+
+    expect(findMany.mock.calls[0][0].where).toEqual({ organizationId: ORG_ID, status: 'accepted' });
+  });
+
   it('cancels only a row that is still pending', async () => {
     const updateMany = vi.fn().mockResolvedValue({ count: 0 });
     const repository = new PrismaInvitationRepository(prismaDouble('invitation', { updateMany }));
@@ -291,6 +324,18 @@ describe('PrismaOrganizationRepository', () => {
     const summary = await new PrismaOrganizationRepository(prisma).findSummary(ORG_ID);
 
     expect(summary).toMatchObject({ memberCount: 4, teamCount: 2, pendingInvitationCount: 1 });
+  });
+
+  it('counts only pending invitations that have not expired', async () => {
+    const findUnique = vi.fn().mockResolvedValue(null);
+    const prisma = prismaDouble('organization', { findUnique });
+
+    await new PrismaOrganizationRepository(prisma).findSummary(ORG_ID);
+
+    expect(findUnique.mock.calls[0][0].include._count.select.invitations.where).toMatchObject({
+      status: 'pending',
+      expiresAt: { gt: expect.any(Date) },
+    });
   });
 
   it('returns null when the organization is gone', async () => {

@@ -4,6 +4,7 @@ import type {
   OrganizationRepositoryPort,
   OrganizationSummary,
 } from '../../domain/ports/organization-repository.port';
+import { pendingInvitationWhere } from './pending-invitation.where';
 
 @Injectable()
 export class PrismaOrganizationRepository implements OrganizationRepositoryPort {
@@ -17,7 +18,7 @@ export class PrismaOrganizationRepository implements OrganizationRepositoryPort 
           select: {
             members: true,
             teams: true,
-            invitations: { where: { status: 'pending' } },
+            invitations: { where: pendingInvitationWhere(new Date()) },
           },
         },
       },

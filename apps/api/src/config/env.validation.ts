@@ -5,6 +5,8 @@ import { stripEmptyEnvStrings } from '@nestjs-fastify-nx/shared';
 import pkg from '../../package.json';
 import { isCompilableTrustedProxyList, parseTrustedProxies } from '../common/http/trusted-proxies';
 
+const STORED_FILE_SIZE_COLUMN_MAX_BYTES = 2_147_483_647;
+
 const envSchema = z
   .object({
     // Service identity — exposed at `GET /`. Defaults derive from the build; override via env.
@@ -233,7 +235,12 @@ const envSchema = z
       .transform((v) => v === 'true'),
 
     HTTP_BODY_LIMIT_BYTES: z.coerce.number().int().min(1024).default(1_048_576),
-    UPLOAD_MAX_FILE_BYTES: z.coerce.number().int().min(1024).default(10_485_760),
+    UPLOAD_MAX_FILE_BYTES: z.coerce
+      .number()
+      .int()
+      .min(1024)
+      .max(STORED_FILE_SIZE_COLUMN_MAX_BYTES)
+      .default(10_485_760),
 
     // Caps handler execution time (504 on breach). 0 disables — set that only when a fronting
     // gateway already enforces its own timeout. Must stay below IDEMPOTENCY_LOCK_TTL_SECONDS so a

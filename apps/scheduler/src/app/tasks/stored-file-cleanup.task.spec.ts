@@ -142,6 +142,42 @@ describe('StoredFileCleanupTask', () => {
       expect(storage.delete).toHaveBeenCalledWith('files/user/file.png', 'uploads');
     });
 
+    it('continues with the remaining candidates and scans when a claim update fails', async () => {
+      const first = makeCandidate({ id: '019dd1a7-443a-7dd2-a546-2169d81d7001', key: 'a.png' });
+      const second = makeCandidate({ id: '019dd1a7-443a-7dd2-a546-2169d81d7002', key: 'b.png' });
+      const third = makeCandidate({ id: '019dd1a7-443a-7dd2-a546-2169d81d7003', key: 'c.png' });
+      const queryRaw = vi
+        .fn()
+        .mockResolvedValueOnce([]) // REJECTED
+        .mockResolvedValueOnce([first, second]) // FINALIZING (stale)
+        .mockResolvedValueOnce([third]); // VERIFYING (stale)
+      const { task, prisma, storage } = buildTask({ queryRaw });
+      (prisma.db.storedFile.updateMany as ReturnType<typeof vi.fn>)
+        .mockRejectedValueOnce(new Error('connection reset'))
+        .mockResolvedValue({ count: 1 });
+
+      await expect(task.cleanup()).resolves.toBeUndefined();
+
+      expect(prisma.db.$queryRaw).toHaveBeenCalledTimes(3);
+      expect(storage.delete).not.toHaveBeenCalledWith('a.png', 'uploads');
+      expect(storage.delete).toHaveBeenCalledWith('b.png', 'uploads');
+      expect(storage.delete).toHaveBeenCalledWith('c.png', 'uploads');
+    });
+
+    it('keeps the row when the object delete fails after the claim', async () => {
+      const queryRaw = vi
+        .fn()
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([makeCandidate()]);
+      const { task, prisma, storage } = buildTask({ queryRaw });
+      (storage.delete as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('s3 down'));
+
+      await expect(task.cleanup()).resolves.toBeUndefined();
+
+      expect(prisma.db.storedFile.delete).not.toHaveBeenCalled();
+    });
+
     it('bounds the REJECTED scan by a retention cutoff like every other scan', async () => {
       const queryRaw = vi.fn().mockResolvedValue([]);
       const { task } = buildTask({ queryRaw });

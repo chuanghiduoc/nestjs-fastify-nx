@@ -111,4 +111,50 @@ describe('PermissionGuard', () => {
       (err: unknown) => isDomainException(err) && err.code === 'organization_context_required',
     );
   });
+
+  describe('caller without an active organization', () => {
+    it('may still manage their own sessions and read global terms', async () => {
+      const spy = vi.spyOn(authorization, 'checkMany');
+      const guard = build({ permissions: [PERMISSIONS.SESSION_READ, PERMISSIONS.TERM_READ] });
+
+      await expect(
+        guard.canActivate(contextFor(session({ organizationId: undefined }))),
+      ).resolves.toBe(true);
+      expect(spy).not.toHaveBeenCalled();
+    });
+
+    it('is refused a global permission that is not self-service', async () => {
+      const guard = build({ permissions: [PERMISSIONS.TERM_MANAGE] });
+
+      await expect(
+        guard.canActivate(contextFor(session({ organizationId: undefined }))),
+      ).rejects.toSatisfy((err: unknown) => isDomainException(err) && err.kind === 'forbidden');
+    });
+
+    it('still needs an organization when any declared permission is tenant-bound', async () => {
+      const guard = build({ permissions: [PERMISSIONS.SESSION_READ, PERMISSIONS.FILE_CREATE] });
+
+      await expect(
+        guard.canActivate(contextFor(session({ organizationId: undefined }))),
+      ).rejects.toSatisfy(
+        (err: unknown) => isDomainException(err) && err.code === 'organization_context_required',
+      );
+    });
+  });
+
+  describe('caller removed from their active organization', () => {
+    beforeEach(() => authorization.reset());
+
+    it('may still revoke their own sessions', async () => {
+      const guard = build({ permissions: [PERMISSIONS.SESSION_REVOKE] });
+      await expect(guard.canActivate(contextFor(session()))).resolves.toBe(true);
+    });
+
+    it('is still refused tenant-bound permissions', async () => {
+      const guard = build({ permissions: [PERMISSIONS.FILE_READ] });
+      await expect(guard.canActivate(contextFor(session()))).rejects.toSatisfy(
+        (err: unknown) => isDomainException(err) && err.kind === 'forbidden',
+      );
+    });
+  });
 });

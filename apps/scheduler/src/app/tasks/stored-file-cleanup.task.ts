@@ -212,51 +212,11 @@ export class StoredFileCleanupTask {
 
     let deleted = 0;
     for (const candidate of candidates) {
-      // Never recover VERIFYING directly to READY: doing so bypasses the malware scanner. A HEAD
-      // failure still skips cleanup because deleting a possibly live object would be destructive.
-      if (
-        candidate.status === STORED_FILE_STATUS.FINALIZING ||
-        candidate.status === STORED_FILE_STATUS.VERIFYING
-      ) {
-        try {
-          const meta = await this.storage.head(candidate.key, candidate.bucket);
-          if (meta) {
-            this.logger.warn(
-              { status: candidate.status, fileId: candidate.id, key: candidate.key },
-              'Deleting stale unverified object',
-            );
-          }
-        } catch (err) {
-          this.logger.warn(
-            { err, status: candidate.status, fileId: candidate.id, key: candidate.key },
-            'Skipping stored-file cleanup because HEAD failed',
-          );
-          continue;
-        }
-      }
-
-      const claimed = await this.prisma.db.storedFile.updateMany({
-        where: {
-          id: candidate.id,
-          status: candidate.status,
-          updatedAt: candidate.updatedAt,
-        },
-        data: {
-          status: STORED_FILE_STATUS.REJECTED,
-          ...(candidate.status === STORED_FILE_STATUS.REJECTED
-            ? {}
-            : { failureReason: 'Lifecycle cleanup' }),
-        },
-      });
-      if (claimed.count === 0) continue;
-
       try {
-        await this.storage.delete(candidate.key, candidate.bucket);
-        await this.prisma.db.storedFile.delete({ where: { id: candidate.id } });
-        deleted++;
+        if (await this.reclaimCandidate(candidate)) deleted++;
       } catch (err) {
         this.logger.error(
-          { err, fileId: candidate.id, key: candidate.key },
+          { err, scan: label, fileId: candidate.id, key: candidate.key },
           'Stored-file cleanup failed',
         );
       }
@@ -264,4 +224,54 @@ export class StoredFileCleanupTask {
 
     if (deleted > 0) this.logger.log(`Deleted ${deleted} ${label} stored file(s)`);
   }
+
+  private async reclaimCandidate(candidate: CleanupCandidate): Promise<boolean> {
+    if (isUnverified(candidate.status) && !(await this.confirmUnverifiedObject(candidate))) {
+      return false;
+    }
+
+    const claimed = await this.prisma.db.storedFile.updateMany({
+      where: {
+        id: candidate.id,
+        status: candidate.status,
+        updatedAt: candidate.updatedAt,
+      },
+      data: {
+        status: STORED_FILE_STATUS.REJECTED,
+        ...(candidate.status === STORED_FILE_STATUS.REJECTED
+          ? {}
+          : { failureReason: 'Lifecycle cleanup' }),
+      },
+    });
+    if (claimed.count === 0) return false;
+
+    await this.storage.delete(candidate.key, candidate.bucket);
+    await this.prisma.db.storedFile.delete({ where: { id: candidate.id } });
+    return true;
+  }
+
+  // Never recover VERIFYING directly to READY: doing so bypasses the malware scanner. A HEAD
+  // failure still skips cleanup because deleting a possibly live object would be destructive.
+  private async confirmUnverifiedObject(candidate: CleanupCandidate): Promise<boolean> {
+    try {
+      const meta = await this.storage.head(candidate.key, candidate.bucket);
+      if (meta) {
+        this.logger.warn(
+          { status: candidate.status, fileId: candidate.id, key: candidate.key },
+          'Deleting stale unverified object',
+        );
+      }
+      return true;
+    } catch (err) {
+      this.logger.warn(
+        { err, status: candidate.status, fileId: candidate.id, key: candidate.key },
+        'Skipping stored-file cleanup because HEAD failed',
+      );
+      return false;
+    }
+  }
+}
+
+function isUnverified(status: string): boolean {
+  return status === STORED_FILE_STATUS.FINALIZING || status === STORED_FILE_STATUS.VERIFYING;
 }

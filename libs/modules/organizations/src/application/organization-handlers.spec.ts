@@ -1,6 +1,12 @@
-import { beforeEach, describe, expect, it } from 'vitest';
-import { DomainException } from '@nestjs-fastify-nx/core';
-import { PERMISSIONS, SYSTEM_ROLES, generateId } from '@nestjs-fastify-nx/shared';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { DomainException, type AuthorizationPort } from '@nestjs-fastify-nx/core';
+import {
+  ALL_PERMISSIONS,
+  PERMISSIONS,
+  SYSTEM_ROLES,
+  generateId,
+  type Permission,
+} from '@nestjs-fastify-nx/shared';
 import { OrganizationRole } from '../domain/entities/organization-role.entity';
 import { Team } from '../domain/entities/team.entity';
 import {
@@ -35,6 +41,18 @@ import { GetCurrentOrganizationQuery } from './queries/get-current-organization/
 const ORG_ID = '019dd1a5-9235-70db-8d57-54ef90700001';
 const OTHER_ORG_ID = '019dd1a5-9235-70db-8d57-54ef90700002';
 const INVITER_ID = '019dd1a5-9235-70db-8d57-54ef90700003';
+const ACTOR_ID = generateId();
+const ONE_DAY_MS = 86_400_000;
+
+function authorizationHolding(permissions: readonly Permission[]): AuthorizationPort {
+  return {
+    permissionsFor: vi.fn().mockResolvedValue(permissions),
+  } as unknown as AuthorizationPort;
+}
+
+function roleCommand(role: string, permissions: readonly string[]) {
+  return { organizationId: ORG_ID, actorUserId: ACTOR_ID, role, permissions };
+}
 
 describe('organization role handlers', () => {
   let roles: InMemoryOrganizationRoleRepository;
@@ -47,6 +65,7 @@ describe('organization role handlers', () => {
     await roles.create(
       OrganizationRole.create({
         organizationId: ORG_ID,
+        grantedToActor: ALL_PERMISSIONS,
         role: 'auditor',
         permissions: [PERMISSIONS.AUDIT_LOG_READ],
       }),
@@ -68,6 +87,7 @@ describe('organization role handlers', () => {
     await roles.create(
       OrganizationRole.create({
         organizationId: OTHER_ORG_ID,
+        grantedToActor: ALL_PERMISSIONS,
         role: 'auditor',
         permissions: [PERMISSIONS.AUDIT_LOG_READ],
       }),
@@ -81,8 +101,11 @@ describe('organization role handlers', () => {
   });
 
   it('creates a custom role', async () => {
-    const created = await new CreateOrganizationRoleHandler(roles).execute(
-      new CreateOrganizationRoleCommand(ORG_ID, 'auditor', [PERMISSIONS.AUDIT_LOG_READ]),
+    const created = await new CreateOrganizationRoleHandler(
+      roles,
+      authorizationHolding(ALL_PERMISSIONS),
+    ).execute(
+      new CreateOrganizationRoleCommand(roleCommand('auditor', [PERMISSIONS.AUDIT_LOG_READ])),
     );
 
     expect(created.system).toBe(false);
@@ -91,13 +114,13 @@ describe('organization role handlers', () => {
   });
 
   it('refuses a duplicate role name with a conflict', async () => {
-    const handler = new CreateOrganizationRoleHandler(roles);
+    const handler = new CreateOrganizationRoleHandler(roles, authorizationHolding(ALL_PERMISSIONS));
     await handler.execute(
-      new CreateOrganizationRoleCommand(ORG_ID, 'auditor', [PERMISSIONS.AUDIT_LOG_READ]),
+      new CreateOrganizationRoleCommand(roleCommand('auditor', [PERMISSIONS.AUDIT_LOG_READ])),
     );
 
     const second = handler.execute(
-      new CreateOrganizationRoleCommand(ORG_ID, 'auditor', [PERMISSIONS.MEMBER_READ]),
+      new CreateOrganizationRoleCommand(roleCommand('auditor', [PERMISSIONS.MEMBER_READ])),
     );
 
     await expect(second).rejects.toBeInstanceOf(DomainException);
@@ -108,22 +131,25 @@ describe('organization role handlers', () => {
     await roles.create(
       OrganizationRole.create({
         organizationId: ORG_ID,
+        grantedToActor: ALL_PERMISSIONS,
         role: 'auditor',
         permissions: [PERMISSIONS.AUDIT_LOG_READ, PERMISSIONS.MEMBER_READ],
       }),
     );
 
-    const updated = await new UpdateOrganizationRoleHandler(roles).execute(
-      new UpdateOrganizationRoleCommand(ORG_ID, 'auditor', [PERMISSIONS.FILE_READ]),
-    );
+    const updated = await new UpdateOrganizationRoleHandler(
+      roles,
+      authorizationHolding(ALL_PERMISSIONS),
+    ).execute(new UpdateOrganizationRoleCommand(roleCommand('auditor', [PERMISSIONS.FILE_READ])));
 
     expect(updated.permissions).toEqual([PERMISSIONS.FILE_READ]);
   });
 
   it('answers not_found when updating a role that does not exist', async () => {
-    const execute = new UpdateOrganizationRoleHandler(roles).execute(
-      new UpdateOrganizationRoleCommand(ORG_ID, 'ghost', [PERMISSIONS.FILE_READ]),
-    );
+    const execute = new UpdateOrganizationRoleHandler(
+      roles,
+      authorizationHolding(ALL_PERMISSIONS),
+    ).execute(new UpdateOrganizationRoleCommand(roleCommand('ghost', [PERMISSIONS.FILE_READ])));
 
     await expect(execute).rejects.toMatchObject({ kind: 'not_found' });
   });
@@ -132,6 +158,7 @@ describe('organization role handlers', () => {
     await roles.create(
       OrganizationRole.create({
         organizationId: ORG_ID,
+        grantedToActor: ALL_PERMISSIONS,
         role: 'auditor',
         permissions: [PERMISSIONS.AUDIT_LOG_READ],
       }),
@@ -148,6 +175,7 @@ describe('organization role handlers', () => {
     await roles.create(
       OrganizationRole.create({
         organizationId: ORG_ID,
+        grantedToActor: ALL_PERMISSIONS,
         role: 'auditor',
         permissions: [PERMISSIONS.AUDIT_LOG_READ],
       }),
@@ -168,6 +196,62 @@ describe('organization role handlers', () => {
     );
 
     await expect(execute).rejects.toMatchObject({ kind: 'not_found' });
+  });
+
+  it('refuses to create a role granting a permission the actor does not hold', async () => {
+    const handler = new CreateOrganizationRoleHandler(
+      roles,
+      authorizationHolding([PERMISSIONS.ROLE_CREATE, PERMISSIONS.AUDIT_LOG_READ]),
+    );
+
+    const execute = handler.execute(
+      new CreateOrganizationRoleCommand(
+        roleCommand('escalator', [PERMISSIONS.AUDIT_LOG_READ, PERMISSIONS.ORGANIZATION_DELETE]),
+      ),
+    );
+
+    await expect(execute).rejects.toMatchObject({ kind: 'forbidden' });
+    expect(await roles.findByName(ORG_ID, 'escalator')).toBeNull();
+  });
+
+  it('resolves the actor grant for the organization being edited', async () => {
+    const authorization = authorizationHolding(ALL_PERMISSIONS);
+
+    await new CreateOrganizationRoleHandler(roles, authorization).execute(
+      new CreateOrganizationRoleCommand(roleCommand('auditor', [PERMISSIONS.AUDIT_LOG_READ])),
+    );
+
+    expect(authorization.permissionsFor).toHaveBeenCalledWith({
+      type: 'user',
+      userId: ACTOR_ID,
+      organizationId: ORG_ID,
+    });
+  });
+
+  it('refuses to widen an existing role beyond the actor grant', async () => {
+    await roles.create(
+      OrganizationRole.create({
+        organizationId: ORG_ID,
+        grantedToActor: ALL_PERMISSIONS,
+        role: 'auditor',
+        permissions: [PERMISSIONS.AUDIT_LOG_READ],
+      }),
+    );
+    const handler = new UpdateOrganizationRoleHandler(
+      roles,
+      authorizationHolding([PERMISSIONS.ROLE_UPDATE, PERMISSIONS.AUDIT_LOG_READ]),
+    );
+
+    const execute = handler.execute(
+      new UpdateOrganizationRoleCommand(
+        roleCommand('auditor', [PERMISSIONS.AUDIT_LOG_READ, PERMISSIONS.MEMBER_REMOVE]),
+      ),
+    );
+
+    await expect(execute).rejects.toMatchObject({ kind: 'forbidden' });
+    expect((await roles.findByName(ORG_ID, 'auditor'))?.permissions).toEqual([
+      PERMISSIONS.AUDIT_LOG_READ,
+    ]);
   });
 });
 
@@ -256,7 +340,11 @@ describe('team handlers', () => {
 describe('invitation handlers', () => {
   let invitations: InMemoryInvitationRepository;
 
-  function seedInvitation(status: 'pending' | 'accepted', organizationId = ORG_ID) {
+  function seedInvitation(
+    status: 'pending' | 'accepted',
+    organizationId = ORG_ID,
+    expiresAt = new Date(Date.now() + ONE_DAY_MS),
+  ) {
     const record = {
       id: generateId(),
       organizationId,
@@ -264,7 +352,7 @@ describe('invitation handlers', () => {
       role: 'member',
       teamId: null,
       status,
-      expiresAt: new Date('2026-12-31T00:00:00.000Z'),
+      expiresAt,
       inviterId: INVITER_ID,
       createdAt: new Date('2026-08-01T00:00:00.000Z'),
     } as const;
@@ -296,6 +384,17 @@ describe('invitation handlers', () => {
     );
 
     expect(result.data.map((invitation) => invitation.status)).toEqual(['accepted']);
+  });
+
+  it('hides an expired invitation behind the pending filter', async () => {
+    seedInvitation('pending', ORG_ID, new Date(Date.now() - ONE_DAY_MS));
+    const live = seedInvitation('pending');
+
+    const result = await new ListInvitationsHandler(invitations).execute(
+      new ListInvitationsQuery(ORG_ID, 20, { status: 'pending' }),
+    );
+
+    expect(result.data.map((invitation) => invitation.id)).toEqual([live.id]);
   });
 
   it('cancels a pending invitation', async () => {

@@ -186,6 +186,39 @@ describe('applyFastifyProblemDetailsHook', () => {
     }
   });
 
+  it('leaves a GraphQL 400 error envelope intact while still stamping request ids', async () => {
+    const app = Fastify();
+    applyFastifyProblemDetailsHook(app);
+    const envelope = {
+      data: null,
+      errors: [
+        {
+          message: 'Cannot query field "nope" on type "UserType".',
+          locations: [{ line: 1, column: 8 }],
+        },
+      ],
+    };
+    app.post('/graphql', async (_request, reply) => reply.status(400).send(envelope));
+    app.post('/rest', async (_request, reply) => reply.status(400).send(envelope));
+
+    try {
+      const graphql = await app.inject({ method: 'POST', url: '/graphql' });
+      expect(graphql.statusCode).toBe(400);
+      expect(graphql.json()).toEqual(envelope);
+      expect(graphql.headers['content-type']).toMatch(/application\/json/);
+      expect(graphql.headers['x-request-id']).toMatch(/^[a-f0-9]{32}$/);
+      expect(graphql.headers['x-correlation-id']).toBe(graphql.headers['x-request-id']);
+
+      const rest = await app.inject({ method: 'POST', url: '/rest' });
+      expect(rest.statusCode).toBe(400);
+      expect(rest.headers['content-type']).toMatch(/application\/problem\+json/);
+      expect(rest.json()).toMatchObject({ status: 400, code: 'bad_request', title: 'Bad Request' });
+      expect(rest.json()).not.toHaveProperty('errors');
+    } finally {
+      await app.close();
+    }
+  });
+
   it('leaves a successful response untouched', async () => {
     const app = Fastify();
     applyFastifyProblemDetailsHook(app);

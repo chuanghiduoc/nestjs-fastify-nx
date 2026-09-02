@@ -43,8 +43,10 @@ export interface RedisLeaderLeaseOptions {
  */
 export class RedisLeaderLease {
   private readonly token = randomUUID();
+  private readonly inFlightTicks = new Set<Promise<void>>();
   private timer?: NodeJS.Timeout;
   private leader = false;
+  private stopped = false;
 
   constructor(private readonly options: RedisLeaderLeaseOptions) {}
 
@@ -53,6 +55,7 @@ export class RedisLeaderLease {
   }
 
   async start(): Promise<void> {
+    this.stopped = false;
     await this.tick();
     this.timer = setInterval(() => void this.tick(), LEASE_RENEW_INTERVAL_MS);
     // Never keep the event loop alive just for the renew timer.
@@ -60,12 +63,12 @@ export class RedisLeaderLease {
   }
 
   async stop(): Promise<void> {
+    this.stopped = true;
     if (this.timer) clearInterval(this.timer);
     this.timer = undefined;
+    await Promise.allSettled([...this.inFlightTicks]);
     try {
-      if (this.leader) {
-        await this.options.redis.eval(RELEASE_SCRIPT, 1, this.options.key, this.token);
-      }
+      if (this.leader) await this.release();
     } catch (err) {
       // The lease self-expires via TTL — a failed release costs at most LEASE_TTL_MS of downtime
       // before a successor can take over.
@@ -76,6 +79,17 @@ export class RedisLeaderLease {
   }
 
   async tick(): Promise<void> {
+    if (this.stopped) return;
+    const run = this.runTick();
+    this.inFlightTicks.add(run);
+    try {
+      await run;
+    } finally {
+      this.inFlightTicks.delete(run);
+    }
+  }
+
+  private async runTick(): Promise<void> {
     try {
       if (this.leader) {
         const renewed = await this.options.redis.eval(
@@ -85,7 +99,7 @@ export class RedisLeaderLease {
           this.token,
           String(LEASE_TTL_MS),
         );
-        if (renewed === 1) return;
+        if (this.stopped || renewed === 1) return;
         this.setLeader(false);
       }
 
@@ -96,6 +110,10 @@ export class RedisLeaderLease {
         LEASE_TTL_MS,
         'NX',
       );
+      if (this.stopped) {
+        if (acquired === 'OK') await this.release();
+        return;
+      }
       this.setLeader(acquired === 'OK');
     } catch (err) {
       // Fail closed: drop leadership so a healthy replica takes over and we never double-write
@@ -103,6 +121,10 @@ export class RedisLeaderLease {
       this.setLeader(false);
       this.options.onError?.(`leader election tick failed: ${safeErrorSummary(err)}`);
     }
+  }
+
+  private async release(): Promise<void> {
+    await this.options.redis.eval(RELEASE_SCRIPT, 1, this.options.key, this.token);
   }
 
   private setLeader(next: boolean): void {

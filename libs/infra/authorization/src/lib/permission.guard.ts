@@ -5,9 +5,9 @@ import type { FastifyRequest } from 'fastify';
 import {
   DomainException,
   AUTHORIZATION_PORT,
+  type AccessDecision,
   type AuthorizationPort,
 } from '@nestjs-fastify-nx/core';
-import type { Principal } from '@nestjs-fastify-nx/core';
 import { ERROR_CODES, I18N_KEYS } from '@nestjs-fastify-nx/contracts';
 import {
   IS_PUBLIC_KEY,
@@ -17,6 +17,7 @@ import {
 } from '@nestjs-fastify-nx/infra-auth';
 import type { Permission } from '@nestjs-fastify-nx/shared';
 import { REQUIRED_PERMISSIONS_KEY } from './require-permission.decorator';
+import { decideWithoutOrganization, requiresMembership } from './access-policy';
 
 type RequestWithUser = FastifyRequest & {
   user?: AuthenticatedSession;
@@ -66,12 +67,7 @@ export class PermissionGuard implements CanActivate {
     ]);
     if (!required || required.length === 0) return true;
 
-    const principal = this.resolvePrincipal(this.getRequest(context), required[0]);
-
-    const decisions = await this.authorization.checkMany(
-      principal,
-      required.map((permission) => ({ permission })),
-    );
+    const decisions = await this.decide(this.getRequest(context), required);
 
     const deniedIndex = decisions.findIndex((decision) => !decision.allowed);
     if (deniedIndex >= 0) throw forbidden(required[deniedIndex]);
@@ -79,26 +75,35 @@ export class PermissionGuard implements CanActivate {
     return true;
   }
 
-  private resolvePrincipal(request: RequestWithUser, firstRequired: Permission): Principal {
+  private async decide(
+    request: RequestWithUser,
+    required: readonly Permission[],
+  ): Promise<readonly AccessDecision[]> {
+    const requests = required.map((permission) => ({ permission }));
+
     if (request.apiKey) {
-      return {
-        type: 'api_key',
-        apiKeyId: request.apiKey.apiKeyId,
-        organizationId: request.apiKey.organizationId,
-        scopes: request.apiKey.scopes,
-      };
+      return this.authorization.checkMany(
+        {
+          type: 'api_key',
+          apiKeyId: request.apiKey.apiKeyId,
+          organizationId: request.apiKey.organizationId,
+          scopes: request.apiKey.scopes,
+        },
+        requests,
+      );
     }
 
     const user = request.user;
-    if (!user) throw forbidden(firstRequired);
+    if (!user) throw forbidden(required[0]);
 
-    // Distinct from a permission failure: the caller may well hold the permission, but no
-    // organization is selected so there is nothing to evaluate it against.
-    return {
-      type: 'user',
-      userId: user.userId,
-      organizationId: requireOrganizationId(user),
-    };
+    if (!user.organizationId && required.every((permission) => !requiresMembership(permission))) {
+      return decideWithoutOrganization(required);
+    }
+
+    return this.authorization.checkMany(
+      { type: 'user', userId: user.userId, organizationId: requireOrganizationId(user) },
+      requests,
+    );
   }
 
   private getRequest(context: ExecutionContext): RequestWithUser {

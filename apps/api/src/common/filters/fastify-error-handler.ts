@@ -3,6 +3,7 @@ import * as Sentry from '@sentry/nestjs';
 import type { FastifyError, FastifyInstance } from 'fastify';
 import { ERROR_CODES } from '@nestjs-fastify-nx/contracts';
 import { sanitizeUrlForLogging } from '@nestjs-fastify-nx/shared';
+import { GRAPHQL_PATH } from '../http/global-prefix';
 import { ensureRequestIds, sanitizeClientId, type RequestIdCarrier } from '../logging/request-id';
 import {
   buildProblemDetails,
@@ -34,7 +35,7 @@ export function applyFastifyProblemDetailsHook(fastify: FastifyInstance): void {
     if (!reply.getHeader('x-request-id')) reply.header('x-request-id', requestId);
     if (!reply.getHeader('x-correlation-id')) reply.header('x-correlation-id', correlationId);
 
-    if (reply.statusCode < 400) {
+    if (reply.statusCode < 400 || request.routeOptions?.url === GRAPHQL_PATH) {
       done();
       return;
     }

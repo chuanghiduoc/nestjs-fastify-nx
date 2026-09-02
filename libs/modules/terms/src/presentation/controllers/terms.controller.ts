@@ -22,9 +22,9 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { ApiCommonErrors, ListResponseDto, toListResponse } from '@nestjs-fastify-nx/contracts';
-import { CurrentUser, type AuthenticatedSession } from '@nestjs-fastify-nx/infra-auth';
+import { CurrentUser, Roles, type AuthenticatedSession } from '@nestjs-fastify-nx/infra-auth';
 import { RequirePermission } from '@nestjs-fastify-nx/infra-authorization';
-import { PERMISSIONS } from '@nestjs-fastify-nx/shared';
+import { PERMISSIONS, PLATFORM_ROLES } from '@nestjs-fastify-nx/shared';
 import { ListPublishedTermsQuery } from '../../application/queries/list-published-terms/list-published-terms.query';
 import { GetLatestTermQuery } from '../../application/queries/get-latest-term/get-latest-term.query';
 import { ListMyTermAcceptancesQuery } from '../../application/queries/list-my-term-acceptances/list-my-term-acceptances.query';
@@ -105,7 +105,7 @@ export class TermsController {
   }
 
   @Post()
-  @RequirePermission(PERMISSIONS.TERM_MANAGE)
+  @Roles(PLATFORM_ROLES.ADMIN)
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({
     summary: 'Create a new version of a legal document',
@@ -126,7 +126,7 @@ export class TermsController {
   }
 
   @Post(':id/publish')
-  @RequirePermission(PERMISSIONS.TERM_MANAGE)
+  @Roles(PLATFORM_ROLES.ADMIN)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Publish a draft version',

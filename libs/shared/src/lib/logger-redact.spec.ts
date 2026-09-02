@@ -42,4 +42,22 @@ describe('logging sanitizers', () => {
     expect(rendered).not.toContain('reset-secret');
     expect(rendered).not.toContain('a@example.com');
   });
+
+  it('redacts JSON-shaped secrets regardless of key casing and whitespace', () => {
+    const rendered = sanitizeSensitiveText(
+      '{"Password" : "hunter2", "token":"abc\\"def", "apiKey": "k1", "name": "x:y"}',
+    );
+    expect(rendered).not.toContain('hunter2');
+    expect(rendered).not.toContain('abc');
+    expect(rendered).not.toContain('k1');
+    expect(rendered).toContain('"Password" : "[REDACTED]"');
+    expect(rendered).toContain('"name": "x:y"');
+  });
+
+  it('redacts everything after the first separator when the value itself contains one', () => {
+    expect(sanitizeSensitiveText('password=abc:def secret: x=y')).toBe(
+      'password=[REDACTED] secret:[REDACTED]',
+    );
+    expect(sanitizeSensitiveText('token:a=b=c')).toBe('token:[REDACTED]');
+  });
 });
