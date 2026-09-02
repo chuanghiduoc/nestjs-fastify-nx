@@ -109,6 +109,12 @@ describe('PrismaOrganizationRoleRepository', () => {
     expect(await repository.deleteUnlessHeld(ORG_ID, 'ghost')).toBe('not_found');
   });
 
+  it('reports a role a concurrent request already deleted as not found', async () => {
+    const { repository } = deletionDouble([{ found: true, holders: 0, deleted: false }]);
+
+    expect(await repository.deleteUnlessHeld(ORG_ID, 'auditor')).toBe('not_found');
+  });
+
   it('treats an empty result as not found', async () => {
     const { repository } = deletionDouble([]);
 

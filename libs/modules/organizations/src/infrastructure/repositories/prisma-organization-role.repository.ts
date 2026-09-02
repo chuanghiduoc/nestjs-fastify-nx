@@ -41,7 +41,9 @@ function toEntity(row: OrganizationRoleRow): OrganizationRole {
 function toDeletionOutcome(row: DeleteUnlessHeldRow | undefined): RoleDeletionOutcome {
   if (!row || !row.found) return 'not_found';
   if (row.deleted) return 'deleted';
-  return 'in_use';
+  // Not deleted with no holders means a concurrent request removed the row between the snapshot the
+  // count came from and the delete — absent, not in use.
+  return row.holders > 0 ? 'in_use' : 'not_found';
 }
 
 @Injectable()

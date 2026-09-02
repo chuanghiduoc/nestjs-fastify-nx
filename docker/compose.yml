@@ -28,6 +28,10 @@ services:
       # timezone. A non-UTC PGTZ would shift sign-out detection and purge cutoffs by the offset.
       TZ: UTC
       PGTZ: UTC
+    # TZ/PGTZ only decide what initdb bakes into postgresql.conf, so a cluster whose volume was
+    # first created under another zone would keep it. The server flag pins the running session
+    # timezone for existing volumes too.
+    command: ['postgres', '-c', 'timezone=UTC']
     volumes:
       # Mount at the parent — Postgres 18+ official image recommends this layout
       # so `pg_upgrade --link` works across major-version bumps.

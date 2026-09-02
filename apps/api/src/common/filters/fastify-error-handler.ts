@@ -35,12 +35,20 @@ export function applyFastifyProblemDetailsHook(fastify: FastifyInstance): void {
     if (!reply.getHeader('x-request-id')) reply.header('x-request-id', requestId);
     if (!reply.getHeader('x-correlation-id')) reply.header('x-correlation-id', correlationId);
 
-    if (reply.statusCode < 400 || request.routeOptions?.url === GRAPHQL_PATH) {
+    if (reply.statusCode < 400) {
       done();
       return;
     }
 
     const source = parseSerializedError(payload);
+
+    // Only a body Mercurius actually shaped may skip normalization. Anything else raised on the
+    // GraphQL route is library or parser output and still needs the 5xx masking below.
+    if (request.routeOptions?.url === GRAPHQL_PATH && isGraphqlErrorEnvelope(source)) {
+      done();
+      return;
+    }
+
     const status = reply.statusCode;
     reply.header('content-type', PROBLEM_CONTENT_TYPE);
 
@@ -113,6 +121,10 @@ export function applyFastifyProblemDetailsHook(fastify: FastifyInstance): void {
       ),
     );
   });
+}
+
+function isGraphqlErrorEnvelope(source: Record<string, unknown> | undefined): boolean {
+  return Array.isArray(source?.['errors']);
 }
 
 function parseSerializedError(payload: unknown): Record<string, unknown> | undefined {

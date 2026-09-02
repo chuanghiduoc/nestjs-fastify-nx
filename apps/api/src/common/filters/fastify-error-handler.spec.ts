@@ -1,4 +1,5 @@
 /// <reference types="vitest/globals" />
+import { randomUUID } from 'node:crypto';
 import { describe, it, expect, vi } from 'vitest';
 import Fastify from 'fastify';
 import { applyFastifyProblemDetailsHook } from './fastify-error-handler';
@@ -214,6 +215,29 @@ describe('applyFastifyProblemDetailsHook', () => {
       expect(rest.headers['content-type']).toMatch(/application\/problem\+json/);
       expect(rest.json()).toMatchObject({ status: 400, code: 'bad_request', title: 'Bad Request' });
       expect(rest.json()).not.toHaveProperty('errors');
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('masks a GraphQL 5xx that never reached the Mercurius formatter', async () => {
+    const app = Fastify();
+    applyFastifyProblemDetailsHook(app);
+    const secret = `connect ECONNREFUSED postgres://app:${randomUUID()}@db:5432`;
+    app.post('/graphql', async (_request, reply) =>
+      reply.status(500).send({ statusCode: 500, error: 'Internal Server Error', message: secret }),
+    );
+
+    try {
+      const res = await app.inject({ method: 'POST', url: '/graphql' });
+      expect(res.statusCode).toBe(500);
+      expect(res.headers['content-type']).toMatch(/application\/problem\+json/);
+      expect(res.payload).not.toContain(secret);
+      expect(res.json()).toMatchObject({
+        status: 500,
+        title: 'Internal Server Error',
+        detail: 'Internal Server Error',
+      });
     } finally {
       await app.close();
     }

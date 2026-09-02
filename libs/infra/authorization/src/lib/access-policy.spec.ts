@@ -133,6 +133,15 @@ describe('decideFilter for a caller who is no longer a member', () => {
       decideFilter(removedMember(), PERMISSIONS.NOTIFICATION_READ, RESOURCE_TYPES.NOTIFICATION),
     ).toEqual({ kind: 'none' });
   });
+
+  it('refuses a resource type the permission does not govern', () => {
+    expect(
+      decideFilter(removedMember(), PERMISSIONS.SESSION_READ, RESOURCE_TYPES.ORGANIZATION),
+    ).toEqual({ kind: 'none' });
+    expect(decideFilter(removedMember(), PERMISSIONS.TERM_READ, RESOURCE_TYPES.FILE)).toEqual({
+      kind: 'none',
+    });
+  });
 });
 
 describe('decideWithoutOrganization', () => {

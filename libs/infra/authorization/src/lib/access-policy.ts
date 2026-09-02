@@ -121,6 +121,11 @@ export function decideFilter(
 ): AccessFilter {
   const { principal, isMember } = context;
 
+  // A permission only ever authorizes its own resource type. Without this the membership-independent
+  // grant would answer for a type it says nothing about, and a caller with no organization would get
+  // an unscoped predicate back.
+  if (resourceTypeOf(permission) !== resourceType) return { kind: 'none' };
+
   if (principal.type === 'system') return { kind: 'all' };
   if (principal.type === 'user' && !isMember && requiresMembership(permission)) {
     return { kind: 'none' };
