@@ -43,14 +43,13 @@ updates:
       # TS 7 in its supported-versions range (see docs/troubleshooting.md).
       - dependency-name: typescript
         update-types: [version-update:semver-major]
-      # NestJS 12 is not installable here yet. Four packages in the tree still cap their
-      # `@nestjs/common`/`@nestjs/core` peer at ^11 at their latest release — @nx/nest@23.2.0
-      # (`>=10.0.0 <12.0.0`), @sentry/nestjs@10.73.0, @nestjs/throttler@6.5.0 and
-      # @nest-lab/throttler-storage-redis@1.2.0 — and `strictPeerDependencies: true` makes the
-      # install fail outright with ERR_PNPM_PEER_DEP_ISSUES. The scope covers @nestjs/graphql 14
-      # and @nestjs/mercurius 14 too, which peer on `@nestjs/common ^12`. See CLAUDE.md's
-      # dependency hold-back record; lift this once all four declare ^12 support.
-      - dependency-name: '@nestjs/*'
+      # @nestjs/event-emitter 12.0.0 re-exports the emitter as `typeof eventemitter2.EventEmitter2`
+      # from a default import, but eventemitter2@6.4.9 — the exact version it pins, and the latest
+      # published — declares `export default EventEmitter2`, the class rather than a namespace. The
+      # re-export resolves to an error type and fails infra-messaging:lint on
+      # @typescript-eslint/no-unsafe-*. Typings only; runtime is fine. Held at 3.x, which exposes
+      # the same emitAsync/@OnEvent surface. Lift once upstream fixes the declaration.
+      - dependency-name: '@nestjs/event-emitter'
         update-types: [version-update:semver-major]
     groups:
       production-dependencies:

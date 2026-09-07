@@ -19,6 +19,35 @@ blockExoticSubdeps: true
 # both moved here.
 strictPeerDependencies: true
 autoInstallPeers: true
+
+# NestJS 12 ships the framework packages as native ESM but keeps a `require` condition in the
+# exports map, so CommonJS consumers keep working on Node >= 22.12 (this repo is on 24). Four
+# packages have not refreshed their peer metadata for that release; each is exercised end-to-end by
+# the CI gate and the e2e suite, so the allowance is verified rather than assumed. Drop each entry
+# as its package ships a `^12` range.
+peerDependencyRules:
+  allowedVersions:
+    # Build-time only: @nx/nest contributes generators and the webpack/eslint plugin wiring. It
+    # never loads @nestjs/core at runtime, so its `>=10.0.0 <12.0.0` peer is advisory here.
+    '@nx/nest>@nestjs/common': '12'
+    '@nx/nest>@nestjs/core': '12'
+    # CJS packages that only consume the stable decorator/DI surface.
+    '@sentry/nestjs>@nestjs/common': '12'
+    '@sentry/nestjs>@nestjs/core': '12'
+    '@nestjs/throttler>@nestjs/common': '12'
+    '@nestjs/throttler>@nestjs/core': '12'
+    '@nest-lab/throttler-storage-redis>@nestjs/common': '12'
+    '@nest-lab/throttler-storage-redis>@nestjs/core': '12'
+    # @nestjs/event-emitter is held at 3.x on purpose. Its 12.0.0 release re-exports the emitter as
+    # `typeof eventemitter2.EventEmitter2` from a default import, but eventemitter2@6.4.9 (the exact
+    # version 12.0.0 itself pins, and the latest published) declares `export default EventEmitter2`
+    # — the class, not a namespace. The re-export therefore resolves to an error type, `skipLibCheck`
+    # hides the TS2339 at typecheck, and @typescript-eslint/no-unsafe-* correctly fails
+    # infra-messaging:lint. Runtime is unaffected (require('eventemitter2').EventEmitter2 is a
+    # function), so this is a typings-only upstream defect with no released fix. 3.1.0 exposes the
+    # same emitAsync/@OnEvent surface this repo uses, with working types.
+    '@nestjs/event-emitter>@nestjs/common': '12'
+    '@nestjs/event-emitter>@nestjs/core': '12'
 # Docker builds run `pnpm install --offline`; verifyDepsBeforeRun would trigger a
 # network install on every `pnpm run`/`pnpm nx` and break the offline layer.
 verifyDepsBeforeRun: false
