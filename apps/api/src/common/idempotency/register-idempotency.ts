@@ -1,11 +1,12 @@
 import { createHash } from 'node:crypto';
-import { HttpStatus } from '@nestjs/common';
+import { HttpStatus, type NestInterceptor } from '@nestjs/common';
+import { of } from 'rxjs';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type Redis from 'ioredis';
 import { ERROR_CODES } from '@nestjs-fastify-nx/contracts';
-import { hashApiKey, looksLikeApiKey, sanitizeUrlForLogging } from '@nestjs-fastify-nx/shared';
+import { sanitizeUrlForLogging } from '@nestjs-fastify-nx/shared';
+import type { AuthenticatedSession, AuthenticatedApiKey } from '@nestjs-fastify-nx/infra-auth';
 import { buildProblemDetails, PROBLEM_CONTENT_TYPE } from '../filters/problem-details.helper';
-import { extractBearerToken } from '../http/bearer-token';
 import { ensureRequestIds } from '../logging/request-id';
 import { IdempotencyStore, type AcquireResult } from './idempotency-store';
 
@@ -18,7 +19,6 @@ export interface IdempotencyOptions {
 }
 
 const IDEMPOTENCY_HEADER = 'idempotency-key';
-const API_KEY_HEADER = 'x-api-key';
 const REPLAYED_HEADER = 'idempotent-replayed';
 const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 const SCOPED_PATH_PREFIX = '/api/v1/';
@@ -55,37 +55,22 @@ function canonicalize(value: unknown): unknown {
   );
 }
 
-// Authenticated requests scope by session token, anonymous ones by client IP. Two principals thus
-// never collide on — nor replay — each other's cached response for the same key.
-function extractPrincipal(req: FastifyRequest): string {
-  const parsed = req.cookies;
-  if (parsed) {
-    // Better Auth uses the `__Secure-` cookie in production (HTTPS) and the bare name in dev. Prefer
-    // `__Secure-`, and use `||` (not `??`) so an empty leftover cookie value (`...session_token=`)
-    // does NOT shadow a real token and silently drop the request to IP scope — which would let two
-    // users behind the same NAT collide on idempotency records.
-    const token =
-      parsed['__Secure-better-auth.session_token'] || parsed['better-auth.session_token'];
-    if (token) return `s:${token}`;
+// Only identities stamped by the guards are trusted; raw cookies/headers are not principals.
+function extractPrincipal(req: FastifyRequest): string | undefined {
+  const authenticated = req as FastifyRequest & {
+    user?: AuthenticatedSession;
+    apiKey?: AuthenticatedApiKey;
+  };
+  if (authenticated.apiKey) {
+    const { apiKeyId, organizationId } = authenticated.apiKey;
+    return JSON.stringify(['api-key', apiKeyId, organizationId]);
   }
-
-  // Non-browser clients authenticate with `Authorization: Bearer <session-token>` (Better Auth's
-  // bearer plugin, enabled in better-auth.config.ts). Without this branch every bearer client falls
-  // back to IP scope, so two of them behind one NAT/egress gateway share a keyspace — a colliding
-  // Idempotency-Key would then replay one user's stored response to the other. Parsing goes through
-  // the shared helper so this agrees with the plugin on the case-insensitive scheme.
-  const bearer = extractBearerToken(req.headers.authorization);
-  if (bearer) return `b:${bearer}`;
-
-  const apiKey = extractApiKeyHeader(req.headers[API_KEY_HEADER]);
-  if (apiKey) return `k:${hashApiKey(apiKey)}`;
-
-  return `ip:${req.ip}`;
-}
-
-function extractApiKeyHeader(header: string | string[] | undefined): string | undefined {
-  const value = Array.isArray(header) ? header[0] : header;
-  return typeof value === 'string' && looksLikeApiKey(value) ? value : undefined;
+  if (authenticated.user) {
+    const { sessionId, userId, organizationId } = authenticated.user;
+    return JSON.stringify(['session', sessionId, userId, organizationId ?? null]);
+  }
+  // Public writes have no verified identity and must not share an IP-based response cache.
+  return undefined;
 }
 
 // Method + full URL (query included) + body. Detects a key reused for a different operation.
@@ -110,8 +95,7 @@ function sendProblem(
   // Reuse the id the request already carries (stamped by ClsMiddleware) — minting a second one here
   // would put an X-Request-Id on this 4xx that matches no log line.
   const { requestId } = ensureRequestIds(req.raw, req.headers);
-  // Same builder the global filter uses — this plugin runs before the Nest pipeline, so nothing
-  // else would give it the shared shape.
+  // Match the shared exception filter's problem response shape.
   return reply
     .status(status)
     .header('content-type', PROBLEM_CONTENT_TYPE)
@@ -131,30 +115,31 @@ function sendProblem(
 // Adds the idempotency hooks directly to the root Fastify instance (NOT via register(), whose
 // encapsulation would scope the hooks away from Nest's root-registered routes). Register this
 // BEFORE @fastify/compress so the onSend hook stores the uncompressed JSON body.
-export function registerIdempotency(fastify: FastifyInstance, options: IdempotencyOptions): void {
-  // Without @fastify/cookie, req.cookies is undefined and every browser session silently falls back
-  // to IP scope — two users behind one NAT would then share an idempotency keyspace. Fail at boot.
-  if (typeof fastify.parseCookie !== 'function') {
-    throw new Error('registerIdempotency requires @fastify/cookie to be registered first');
-  }
-
+// Install the returned interceptor globally on Nest; it owns acquisition/replay after guards.
+export function registerIdempotency(
+  fastify: FastifyInstance,
+  options: IdempotencyOptions,
+): NestInterceptor {
   const store = new IdempotencyStore(options.redis, options.lockTtlSeconds, options.ttlSeconds);
   const reportError = options.onError ?? ((): void => undefined);
 
-  fastify.addHook('preHandler', async (req, reply) => {
+  const acquire = async (req: FastifyRequest, reply: FastifyReply): Promise<void> => {
     if (!shouldHandle(req)) return;
+    const principal = extractPrincipal(req);
+    if (!principal) return;
 
     const key = req.headers[IDEMPOTENCY_HEADER] as string;
     if (key.length === 0 || key.length > MAX_KEY_LENGTH) {
-      return sendProblem(req, reply, {
+      await sendProblem(req, reply, {
         status: HttpStatus.BAD_REQUEST,
         code: ERROR_CODES.IDEMPOTENCY_KEY_INVALID,
         title: 'Invalid Idempotency-Key',
         detail: `Idempotency-Key must be between 1 and ${MAX_KEY_LENGTH} characters.`,
       });
+      return;
     }
 
-    const storeKey = `idem:${sha256(`${extractPrincipal(req)}:${key}`)}`;
+    const storeKey = `idem:${sha256(JSON.stringify([principal, key]))}`;
     const fingerprint = buildFingerprint(req);
 
     let result: AcquireResult;
@@ -200,34 +185,35 @@ export function registerIdempotency(fastify: FastifyInstance, options: Idempoten
 
     const record = result.record;
     if (record.state === 'pending') {
-      return sendProblem(req, reply, {
+      await sendProblem(req, reply, {
         status: HttpStatus.CONFLICT,
         code: ERROR_CODES.IDEMPOTENCY_KEY_CONFLICT,
         title: 'Idempotency-Key In Progress',
         detail: 'A request with this Idempotency-Key is still being processed. Retry shortly.',
       });
+      return;
     }
 
     if (record.fingerprint !== fingerprint) {
-      return sendProblem(req, reply, {
+      await sendProblem(req, reply, {
         status: HttpStatus.UNPROCESSABLE_ENTITY,
         code: ERROR_CODES.IDEMPOTENCY_KEY_MISMATCH,
         title: 'Idempotency-Key Reused',
         detail: 'This Idempotency-Key was already used with a different request payload.',
       });
+      return;
     }
 
-    // Replay the stored response verbatim. This short-circuits before Nest, so x-request-id
-    // (normally set by CorrelationIdMiddleware) must be stamped here.
+    // Replay only after all Nest guards have accepted this request.
     const { requestId, correlationId } = ensureRequestIds(req.raw, req.headers);
-    return reply
+    await reply
       .status(record.status ?? 200)
       .header('content-type', record.contentType ?? 'application/json')
       .header(REPLAYED_HEADER, 'true')
       .header('x-request-id', requestId)
       .header('x-correlation-id', correlationId)
       .send(record.body);
-  });
+  };
 
   fastify.addHook('onSend', async (req, reply, payload) => {
     const ctx = (req as RequestWithIdempotency).idempotency;
@@ -241,6 +227,16 @@ export function registerIdempotency(fastify: FastifyInstance, options: Idempoten
 
     return payload;
   });
+
+  return {
+    async intercept(context, next) {
+      if (context.getType() !== 'http') return next.handle();
+      const http = context.switchToHttp();
+      const reply = http.getResponse<FastifyReply>();
+      await acquire(http.getRequest<FastifyRequest>(), reply);
+      return reply.sent ? of(undefined) : next.handle();
+    },
+  };
 }
 
 async function finalizeIdempotentResponse(

@@ -11,6 +11,7 @@ import {
 import { Logger, Inject } from '@nestjs/common';
 import type { OnApplicationShutdown } from '@nestjs/common';
 import { setMaxListeners } from 'node:events';
+import type { IncomingMessage } from 'node:http';
 import type { Server, Socket } from 'socket.io';
 import { createAdapter } from '@socket.io/redis-adapter';
 import Redis from 'ioredis';
@@ -58,6 +59,13 @@ const wsCorsOrigin: (
 
 @WebSocketGateway({
   cors: { origin: wsCorsOrigin, credentials: true },
+  allowRequest: (
+    req: IncomingMessage,
+    callback: (error: string | null, allowed: boolean) => void,
+  ) =>
+    wsCorsOrigin(req.headers.origin, (error, allowed) =>
+      callback(error?.message ?? null, !error && allowed === true),
+    ),
   path: '/ws',
 })
 export class NotificationGateway

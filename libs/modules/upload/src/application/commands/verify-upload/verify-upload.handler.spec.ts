@@ -19,14 +19,16 @@ const LIMITS: UploadLimits = {
 };
 
 function build() {
+  const close = vi.fn();
   const storage: { readRange: Mock; read: Mock; readStream: Mock; head: Mock; delete: Mock } = {
     readRange: vi.fn().mockResolvedValue(PNG_HEADER),
     read: vi.fn().mockResolvedValue(PNG_HEADER),
-    readStream: vi.fn().mockImplementation(async () =>
-      (async function* () {
+    readStream: vi.fn().mockImplementation(async () => ({
+      async *[Symbol.asyncIterator]() {
         yield PNG_HEADER;
-      })(),
-    ),
+      },
+      close,
+    })),
     head: vi.fn().mockResolvedValue({
       contentType: 'image/png',
       size: PNG_HEADER.length,
@@ -46,12 +48,28 @@ function build() {
     scanner as unknown as MalwareScannerPort,
     LIMITS,
   );
-  return { handler, storage, files, scanner };
+  return { handler, storage, files, scanner, close };
 }
 
 const command = () => new VerifyUploadCommand(KEY, 'image/png', 'uploads', 'corr-1');
 
 describe('VerifyUploadHandler', () => {
+  it.each(['clean', 'infected', 'unscannable'])(
+    'closes an unconsumed stream after a %s verdict',
+    async (verdict) => {
+      const { handler, scanner, close } = build();
+      scanner.scan.mockResolvedValue(verdict);
+      await handler.execute(command());
+      expect(close).toHaveBeenCalledOnce();
+    },
+  );
+
+  it('closes the stream when scanning throws', async () => {
+    const { handler, scanner, close } = build();
+    scanner.scan.mockRejectedValue(new Error('scanner unavailable'));
+    await expect(handler.execute(command())).rejects.toThrow('scanner unavailable');
+    expect(close).toHaveBeenCalledOnce();
+  });
   it('promotes a clean object whose signature matches', async () => {
     const { handler, files, storage } = build();
 

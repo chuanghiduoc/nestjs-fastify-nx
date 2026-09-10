@@ -56,7 +56,12 @@ export class TimeoutInterceptor implements NestInterceptor {
 
     // Fast path (unchanged): non-idempotent requests get a 504 on timeout and the orphaned work is
     // discarded (rxjs timeout() unsubscribes the source).
-    if (!request?.idempotency) {
+    // The idempotency interceptor acquires inside this interceptor's source subscription.
+    // Select late capture from the header too, then read the acquired context at completion.
+    if (
+      !request ||
+      (!request.idempotency && typeof request.headers['idempotency-key'] !== 'string')
+    ) {
       return next.handle().pipe(
         timeout(this.timeoutMs),
         catchError((err: unknown) => throwError(() => this.mapError(err))),

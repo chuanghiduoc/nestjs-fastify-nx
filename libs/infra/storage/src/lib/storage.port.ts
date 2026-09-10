@@ -39,6 +39,11 @@ export interface PresignUploadOptions {
 
 export const STORAGE_PORT = Symbol('STORAGE_PORT');
 
+export interface StorageReadStream extends AsyncIterable<Uint8Array> {
+  // The caller must close even when it never starts iterating (e.g. a skipped scan).
+  close(): void;
+}
+
 export interface StoragePort {
   upload(key: string, body: Buffer, options?: UploadOptions): Promise<StoredFile>;
   presignUpload(key: string, options: PresignUploadOptions): Promise<PresignedUpload>;
@@ -61,5 +66,5 @@ export interface StoragePort {
   read(key: string, bucket?: string): Promise<Buffer>;
   // The same bytes as `read`, streamed. Uploads are capped in the hundreds of megabytes upward,
   // so the scanner consumes this instead: one 10 GB object would otherwise be one 10 GB Buffer.
-  readStream(key: string, bucket?: string): Promise<AsyncIterable<Uint8Array>>;
+  readStream(key: string, bucket?: string): Promise<StorageReadStream>;
 }

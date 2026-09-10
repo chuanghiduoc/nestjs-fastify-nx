@@ -1,6 +1,7 @@
 import { Logger } from '@nestjs/common';
 import { betterAuth } from 'better-auth';
 import type { BetterAuthOptions } from 'better-auth';
+import { APIError, createAuthMiddleware, getAuthoritativeSessionFromCtx } from 'better-auth/api';
 import { prismaAdapter } from 'better-auth/adapters/prisma';
 import { bearer, openAPI, organization } from 'better-auth/plugins';
 import type { PrismaClient } from '@nestjs-fastify-nx/infra-database';
@@ -131,7 +132,28 @@ export function createBetterAuth(
     logger.log(`Social login enabled: ${enabledProviders.join(', ')}`);
   }
 
+  const assertActiveUser = async (userId: string): Promise<void> => {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { status: true },
+    });
+    if (user?.status !== USER_STATUS.ACTIVE) {
+      throw new APIError('FORBIDDEN', { message: 'Account is not active' });
+    }
+  };
+
   return betterAuth({
+    hooks: {
+      before: createAuthMiddleware(async (ctx) => {
+        // Disabled accounts must still be able to clear their session.
+        if (ctx.path === '/sign-out') return;
+        // Server-side guards need the session status to render their own transport-specific
+        // denial. HTTP get-session still enforces status here, including cached cookies.
+        if (ctx.path === '/get-session' && !ctx.request) return;
+        const session = await getAuthoritativeSessionFromCtx(ctx);
+        if (session) await assertActiveUser(session.user.id);
+      }),
+    },
     ...(secret ? { secret } : {}),
     ...(baseURL ? { baseURL } : {}),
     database: prismaAdapter(prisma, { provider: 'postgresql' }),
@@ -185,6 +207,7 @@ export function createBetterAuth(
       session: {
         create: {
           before: async (session) => {
+            await assertActiveUser(session.userId);
             const organizationId = await ensurePersonalOrganization(prisma, session.userId);
             return { data: { ...session, activeOrganizationId: organizationId } };
           },

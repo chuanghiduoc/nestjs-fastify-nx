@@ -183,12 +183,14 @@ async function bootstrap() {
     fastify.addHook('onClose', async () => {
       await idempotencyRedis.quit().catch(() => idempotencyRedis.disconnect());
     });
-    registerIdempotency(fastify, {
-      redis: idempotencyRedis,
-      ttlSeconds: config.get('IDEMPOTENCY_TTL_SECONDS', { infer: true }),
-      lockTtlSeconds: config.get('IDEMPOTENCY_LOCK_TTL_SECONDS', { infer: true }),
-      onError: (message) => app.get(Logger).warn(message),
-    });
+    app.useGlobalInterceptors(
+      registerIdempotency(fastify, {
+        redis: idempotencyRedis,
+        ttlSeconds: config.get('IDEMPOTENCY_TTL_SECONDS', { infer: true }),
+        lockTtlSeconds: config.get('IDEMPOTENCY_LOCK_TTL_SECONDS', { infer: true }),
+        onError: (message) => app.get(Logger).warn(message),
+      }),
+    );
   }
 
   // Normalize parser/plugin failures that surface before Nest's exception filter into RFC 9457
