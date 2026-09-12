@@ -112,7 +112,7 @@ services:
   # the same one-shot the dev stack runs, so the orphan-expiry rule is applied identically.
   minio-init:
     <<: *app-logging
-    image: minio/mc:RELEASE.2025-05-21T01-59-54Z
+    image: quay.io/minio/mc:RELEASE.2025-05-21T01-59-54Z
     restart: 'no'
     depends_on:
       minio:

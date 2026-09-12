@@ -10,7 +10,7 @@ services:
   # One-shot: creates the STORAGE_BUCKET and its orphan-expiry lifecycle rule if
   # absent. Runs after minio is healthy; restarts on failure until mc connects.
   minio-init:
-    image: minio/mc:RELEASE.2025-05-21T01-59-54Z
+    image: quay.io/minio/mc:RELEASE.2025-05-21T01-59-54Z
     restart: 'no'
     depends_on:
       minio:
