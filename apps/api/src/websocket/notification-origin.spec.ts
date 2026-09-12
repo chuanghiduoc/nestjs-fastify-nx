@@ -9,12 +9,19 @@ describe('WebSocket handshake origin enforcement', () => {
   afterEach(() => vi.unstubAllEnvs());
 
   it.each([
-    ['https://untrusted.example', 400],
-    ['https://trusted.example', 101],
-    [undefined, 101],
-  ])('checks the actual WebSocket upgrade from %s', async (origin, expected) => {
-    vi.stubEnv('NODE_ENV', 'production');
-    vi.stubEnv('CORS_ORIGINS', 'https://trusted.example');
+    ['production', 'https://trusted.example', 'https://untrusted.example', 400],
+    ['production', 'https://trusted.example', 'https://trusted.example', 101],
+    ['production', 'https://trusted.example', undefined, 101],
+    ['production', '', 'http://localhost:5173', 400],
+    ['development', '', 'https://untrusted.example', 400],
+    ['development', '', 'http://localhost:5173', 101],
+    ['development', '', 'http://127.0.0.1:4200', 101],
+    ['development', '', undefined, 101],
+    ['development', 'https://trusted.example', 'http://localhost:5173', 400],
+    ['development', ' https://trusted.example , ', 'https://trusted.example', 101],
+  ])('checks %s upgrade with allowlist %s from %s', async (mode, origins, origin, expected) => {
+    vi.stubEnv('NODE_ENV', mode);
+    vi.stubEnv('CORS_ORIGINS', origins);
     const options = Reflect.getMetadata(
       GATEWAY_OPTIONS,
       NotificationGateway,

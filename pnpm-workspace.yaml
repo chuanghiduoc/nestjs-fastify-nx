@@ -100,7 +100,9 @@ overrides:
   fast-xml-builder: '>=1.2.0'
   hono: '4.12.27'
   immutable: '5.1.8'
-  svgo: '4.0.2'
+  # Patched floors for OSV findings; keep resolutions within the current major.
+  svgo: '>=4.1.0 <5'
+  smol-toml: '>=1.7.1 <2'
   # Security floor (>=7.29.4) but capped below 8: 8.x demands @babel/core ^8 while the toolchain
   # (nx → @babel/preset-env 7.x) pins @babel/core 7, so an open >= let pnpm jump to 8.0.1 and fail
   # strictPeerDependencies on any lockfile-updating install. 7.29.7 carries the same fix.
@@ -118,7 +120,7 @@ overrides:
   form-data: '>=4.0.6'
   multer: '>=2.2.0'
   launch-editor: '>=2.14.1'
-  js-yaml: '^4.3.0'
+  js-yaml: '>=4.3.2 <5'
   http-proxy-middleware: '^3.0.6'
   '@opentelemetry/core': '>=2.8.0'
   undici: '>=8.5.0'

@@ -28,6 +28,7 @@ import {
   wsData,
 } from './ws-auth.adapter';
 import { BoundedConcurrencyLimiter, jitterDelay } from './bounded-concurrency';
+import { DEV_ALLOWED_ORIGINS } from '../common/http/cors-origins';
 
 interface WsRedisEnv {
   REDIS_CACHE_HOST: string;
@@ -54,7 +55,7 @@ const wsCorsOrigin: (
   const isProd = process.env['NODE_ENV'] === 'production';
   if (!origin) return cb(null, true); // same-origin / non-browser
   if (wsOrigins.length > 0) return cb(null, wsOrigins.includes(origin));
-  return cb(null, !isProd); // dev: allow all; prod: require explicit allowlist
+  return cb(null, !isProd && DEV_ALLOWED_ORIGINS.includes(origin));
 };
 
 @WebSocketGateway({
