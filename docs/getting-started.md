@@ -46,10 +46,13 @@ curl http://localhost:3000/api/v1/health/live
 # Install dependencies
 pnpm install
 
-# Unit + integration tests (uses Testcontainers — Docker required)
+# Unit tests
 pnpm nx run-many --target=test --all
 
-# E2E tests
+# Integration tests (Testcontainers — Docker required; bypass cache to exercise databases)
+pnpm nx run-many --target=test --parallel=2 --skip-nx-cache -- integration
+
+# E2E tests (Docker required)
 pnpm nx run api:e2e
 ```
 

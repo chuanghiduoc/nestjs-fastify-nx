@@ -19,6 +19,7 @@ import type {
   PresignedUpload,
   PresignUploadOptions,
   StoragePort,
+  StorageReadStream,
   StoredFile,
   UploadOptions,
 } from './storage.port';
@@ -104,12 +105,20 @@ function assertByteArray(body: unknown): { transformToByteArray: () => Promise<U
   return candidate as { transformToByteArray: () => Promise<Uint8Array> };
 }
 
-function assertStream(body: unknown): AsyncIterable<Uint8Array> {
-  const candidate = body as AsyncIterable<Uint8Array> | undefined;
-  if (!candidate?.[Symbol.asyncIterator]) {
+function assertStream(body: unknown): StorageReadStream {
+  const candidate = body as (AsyncIterable<Uint8Array> & { destroy(): void }) | undefined;
+  if (
+    typeof candidate?.[Symbol.asyncIterator] !== 'function' ||
+    typeof candidate.destroy !== 'function'
+  ) {
     throw new Error('S3 GetObject returned no streamable body');
   }
-  return candidate;
+  return {
+    [Symbol.asyncIterator]: () => candidate[Symbol.asyncIterator](),
+    close: () => {
+      candidate.destroy();
+    },
+  };
 }
 
 function encodeCopySource(bucket: string, key: string): string {
@@ -448,7 +457,7 @@ export class S3StorageAdapter implements StoragePort, OnModuleInit, OnModuleDest
     }
   }
 
-  async readStream(key: string, bucket?: string): Promise<AsyncIterable<Uint8Array>> {
+  async readStream(key: string, bucket?: string): Promise<StorageReadStream> {
     try {
       const res = await this.client.send(
         new GetObjectCommand({ Bucket: bucket ?? this.bucket, Key: key }),

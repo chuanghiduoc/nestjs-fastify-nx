@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { Readable } from 'node:stream';
 import type { ConfigService } from '@nestjs/config';
 import type { DomainErrorKind } from '@nestjs-fastify-nx/core';
 import { DomainException } from '@nestjs-fastify-nx/core';
@@ -82,6 +83,29 @@ function mockSend(adapter: S3StorageAdapter): ReturnType<typeof vi.fn> {
 }
 
 describe('S3StorageAdapter', () => {
+  it('closes an S3 response before iteration starts', async () => {
+    const storage = new S3StorageAdapter(makeConfigService());
+    const body = Readable.from([Buffer.from('payload')]);
+    mockSend(storage).mockResolvedValue({ Body: body });
+    const stream = await storage.readStream('key');
+    stream.close();
+    stream.close();
+    expect(body.destroyed).toBe(true);
+    storage.onModuleDestroy();
+  });
+
+  it('streams the original object bytes and supports closing after consumption', async () => {
+    const storage = new S3StorageAdapter(makeConfigService());
+    const body = Readable.from([Buffer.from('first'), Buffer.from('second')]);
+    mockSend(storage).mockResolvedValue({ Body: body });
+    const stream = await storage.readStream('key');
+    const chunks: Uint8Array[] = [];
+    for await (const chunk of stream) chunks.push(chunk);
+    stream.close();
+    expect(Buffer.concat(chunks).toString()).toBe('firstsecond');
+    expect(body.destroyed).toBe(true);
+    storage.onModuleDestroy();
+  });
   let adapter: S3StorageAdapter;
   const originalNodeEnv = process.env['NODE_ENV'];
 

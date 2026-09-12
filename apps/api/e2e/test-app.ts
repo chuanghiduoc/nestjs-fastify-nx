@@ -75,9 +75,14 @@ const e2eStorageStub: StoragePort = {
   read: async (key) => e2eObjects.get(key)?.body ?? Buffer.alloc(0),
   readStream: async (key) => {
     const body = e2eObjects.get(key)?.body ?? Buffer.alloc(0);
-    return (async function* () {
-      yield body;
-    })();
+    return {
+      async *[Symbol.asyncIterator]() {
+        yield body;
+      },
+      close() {
+        /* In-memory data has no external resource. */
+      },
+    };
   },
 };
 
@@ -188,11 +193,13 @@ async function bootstrapTestApp(): Promise<TestAppContext> {
   fastify.addHook('onClose', async () => {
     await idempotencyRedis.quit().catch(() => idempotencyRedis.disconnect());
   });
-  registerIdempotency(fastify, {
-    redis: idempotencyRedis,
-    ttlSeconds: 86_400,
-    lockTtlSeconds: 60,
-  });
+  app.useGlobalInterceptors(
+    registerIdempotency(fastify, {
+      redis: idempotencyRedis,
+      ttlSeconds: 86_400,
+      lockTtlSeconds: 60,
+    }),
+  );
 
   // Register rate-limit + multipart mirroring main.ts so 429 and 413 edge cases
   // are exercised in e2e. Uses in-memory store (no Redis needed in tests).

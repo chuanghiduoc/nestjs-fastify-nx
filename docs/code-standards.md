@@ -298,20 +298,20 @@ Rules for producers that call `queue.add('email-notification', payload, { jobId:
 
 Two cross-cutting resilience layers wrap every HTTP request.
 
-**Idempotency-Key (Stripe pattern)** — a Fastify plugin (`register-idempotency.ts`,
-wired in `main.ts` before `@fastify/compress`) guards mutating `/api/v1/*` requests
-that carry an `Idempotency-Key` header. It runs at the Fastify layer, not as a Nest
-interceptor, because `preHandler`/`onSend` have native access to the final status +
-serialized body — a Nest interceptor cannot replay the exact response since Nest sets
-the status after the interceptor chain.
+**Idempotency-Key (Stripe pattern)** — `register-idempotency.ts` returns a global Nest
+interceptor for authenticated mutating `/api/v1/*` requests. Acquisition and replay run
+after authentication and authorization guards on every request, including retries.
+A Fastify `onSend` hook, registered before `@fastify/compress`, captures the final status
+and uncompressed serialized body for exact replay.
 
 - First request wins an atomic `SET NX` lock (Redis cache DB 5), runs, and its 2xx
   response is stored and replayed byte-for-byte on retries (`Idempotent-Replayed: true`).
 - Concurrent duplicate → `409 idempotency_key_conflict`; key reused with a different
   body (fingerprint = `method + url + body`) → `422 idempotency_key_mismatch`; malformed
   key → `400 idempotency_key_invalid`.
-- Scope: the store key hashes the session token (or client IP for anonymous) with the
-  key, so principals never read each other's cached response.
+- Scope: the store key hashes verified session ID + user ID + active organization, or
+  verified API-key ID + organization, together with the client key. Raw credentials and
+  IP addresses never select the cache scope. Anonymous writes bypass idempotency.
 - **Fail-open** on a Redis error (mirrors the throttler). A **4xx** releases the lock so the
   client may retry — it was rejected before the handler could commit anything. A **5xx keeps
   the record pending until its TTL**, so a retry gets `409` instead: a 500 says nothing about
@@ -320,13 +320,8 @@ the status after the interceptor chain.
   duplicates it. A `504` is the most visible case of the same uncertainty, not a special one.
 - **Invariant:** `IDEMPOTENCY_LOCK_TTL_SECONDS * 1000 > HTTP_REQUEST_TIMEOUT_MS` (validated
   on boot) so a finishing request always still owns its lock — preventing a lock-steal.
-- **Known gap — tenant context is outside the fingerprint.** The fingerprint covers
-  `method + url + body` only; the active organization lives server-side on the session row,
-  which the Fastify-layer plugin cannot see (it runs before the auth guard resolves the
-  membership). A retry sent after switching the active organization therefore replays the
-  previous organization's response instead of executing against the new one. Until this is
-  addressed (options: resolve the membership in the plugin, or add an org-changed marker to
-  the fingerprint), clients that switch organizations should rotate the Idempotency-Key.
+- Switching active organizations selects a separate verified cache scope; responses from
+  the previous organization are never replayed into the new one.
 
 **Request timeout** — a global `TimeoutInterceptor` (`HTTP_REQUEST_TIMEOUT_MS`, default
 30s) aborts a handler that runs too long with `504 request_timeout`. WebSocket handlers

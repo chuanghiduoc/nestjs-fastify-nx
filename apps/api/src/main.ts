@@ -28,6 +28,7 @@ import { REDIS_DB, createApiRedis } from './common/redis/api-redis.factory';
 import { redisFixedWindowIncr } from './common/rate-limit/redis-fixed-window';
 import { flushBufferedReplyHeaders } from './common/http/flush-reply-headers';
 import { resolveTrustedProxies } from './common/http/trusted-proxies';
+import { DEV_ALLOWED_ORIGINS } from './common/http/cors-origins';
 import { GLOBAL_PREFIX, GLOBAL_PREFIX_EXCLUDES } from './common/http/global-prefix';
 import { applyFastifyProblemDetailsHook } from './common/filters/fastify-error-handler';
 import { buildProblemDetails } from './common/filters/problem-details.helper';
@@ -94,15 +95,6 @@ async function bootstrap() {
   // Register CORS before any direct Fastify routes (Better Auth/Bull Board). Fastify hooks are
   // order-sensitive; registering this near the end would leave earlier routes without CORS headers.
   const corsOrigins = config.get('CORS_ORIGINS', { infer: true });
-  const DEV_ALLOWED_ORIGINS = [
-    'http://localhost:3000',
-    'http://localhost:4200',
-    'http://localhost:5173',
-    'http://localhost:8080',
-    'http://127.0.0.1:3000',
-    'http://127.0.0.1:4200',
-    'http://127.0.0.1:5173',
-  ];
   // Prod defaults to an empty allow-list (deny) rather than reflecting the request origin: with
   // credentials:true, reflecting arbitrary origins would open credentialed cross-site requests (CSRF).
   app.enableCors({
@@ -183,12 +175,14 @@ async function bootstrap() {
     fastify.addHook('onClose', async () => {
       await idempotencyRedis.quit().catch(() => idempotencyRedis.disconnect());
     });
-    registerIdempotency(fastify, {
-      redis: idempotencyRedis,
-      ttlSeconds: config.get('IDEMPOTENCY_TTL_SECONDS', { infer: true }),
-      lockTtlSeconds: config.get('IDEMPOTENCY_LOCK_TTL_SECONDS', { infer: true }),
-      onError: (message) => app.get(Logger).warn(message),
-    });
+    app.useGlobalInterceptors(
+      registerIdempotency(fastify, {
+        redis: idempotencyRedis,
+        ttlSeconds: config.get('IDEMPOTENCY_TTL_SECONDS', { infer: true }),
+        lockTtlSeconds: config.get('IDEMPOTENCY_LOCK_TTL_SECONDS', { infer: true }),
+        onError: (message) => app.get(Logger).warn(message),
+      }),
+    );
   }
 
   // Normalize parser/plugin failures that surface before Nest's exception filter into RFC 9457

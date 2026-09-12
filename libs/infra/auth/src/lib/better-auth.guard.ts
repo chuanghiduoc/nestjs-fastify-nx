@@ -81,8 +81,8 @@ export class BetterAuthGuard implements CanActivate {
       status: string;
     };
 
-    // 403, not 401: the session is valid, so re-authenticating cannot help. Better Auth does not
-    // check this custom `status` on sign-in, so 401 would loop an SPA through login forever.
+    // 403, not 401: the session is valid, so re-authenticating cannot help. Raw Better Auth routes
+    // enforce status in their hooks; internal session reads leave this transport's denial to us.
     if (user.status !== USER_STATUS.ACTIVE) {
       throw new ForbiddenException({
         messageKey: I18N_KEYS.errors.auth.account_inactive,

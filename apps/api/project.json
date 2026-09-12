@@ -40,7 +40,7 @@
       "executor": "nx:run-commands",
       "dependsOn": ["codegen-build"],
       "cache": true,
-      "inputs": ["sharedGlobals", "{workspaceRoot}/dist/apps/api-codegen/**/*"],
+      "inputs": ["sharedGlobals", { "dependentTasksOutputFiles": "dist/apps/api-codegen/**/*" }],
       "outputs": ["{workspaceRoot}/dist/swagger"],
       "options": {
         "command": "node dist/apps/api-codegen/main.js"

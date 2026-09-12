@@ -13,7 +13,7 @@ function makeContext(type: 'http' | 'ws', request?: unknown): ExecutionContext {
   return {
     getType: () => type,
     getHandler: () => (): undefined => undefined,
-    switchToHttp: () => ({ getRequest: () => request ?? { method: 'GET' } }),
+    switchToHttp: () => ({ getRequest: () => request ?? { method: 'GET', headers: {} } }),
   } as unknown as ExecutionContext;
 }
 
@@ -107,6 +107,33 @@ describe('TimeoutInterceptor', () => {
   });
 
   describe('idempotent request late-completion', () => {
+    it('captures when a downstream interceptor acquires the context after timeout setup', async () => {
+      const completeLate = vi.fn().mockResolvedValue(undefined);
+      const request: {
+        method: string;
+        headers: Record<string, string>;
+        idempotency?: { completeLate: typeof completeLate };
+      } = {
+        method: 'POST',
+        headers: { 'idempotency-key': 'key' },
+      };
+      const subject = new Subject<unknown>();
+      const interceptor = makeInterceptor(50);
+      const settled = firstValueFrom(
+        interceptor.intercept(makeContext('http', request), {
+          handle: () => {
+            request.idempotency = { completeLate };
+            return subject.asObservable();
+          },
+        }),
+      ).catch((error: unknown) => error);
+      await advance(50);
+      expect(await settled).toBeInstanceOf(HttpException);
+      subject.next('late-result');
+      subject.complete();
+      await advance(0);
+      expect(completeLate).toHaveBeenCalledWith(201, 'late-result', undefined);
+    });
     it('records the late 2xx completion after the 504 so a retry can replay it', async () => {
       const completeLate = vi.fn().mockResolvedValue(undefined);
       const request = { method: 'POST', idempotency: { completeLate } };

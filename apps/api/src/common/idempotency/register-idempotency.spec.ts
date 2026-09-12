@@ -2,7 +2,8 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import Fastify, { type FastifyInstance } from 'fastify';
 import fastifyCookie from '@fastify/cookie';
 import type Redis from 'ioredis';
-import { generateApiKey } from '@nestjs-fastify-nx/shared';
+import type { ExecutionContext, NestInterceptor } from '@nestjs/common';
+import { lastValueFrom, of } from 'rxjs';
 import { registerIdempotency, serializeReplayBody } from './register-idempotency';
 
 // Minimal in-memory stand-in for the two ioredis commands the store uses. This is NOT a database
@@ -57,6 +58,28 @@ interface AppSetup {
   errors: string[];
 }
 
+// Supplies verified identities at the interceptor boundary; Nest E2E covers real guards.
+function installTestInterceptor(app: FastifyInstance, interceptor: NestInterceptor): void {
+  app.addHook('preHandler', async (req, reply) => {
+    const identity = req as typeof req & { user?: object; apiKey?: object };
+    if (!req.headers['x-test-anonymous']) {
+      identity.user = {
+        sessionId: req.headers['x-test-session-id'] ?? 'session-1',
+        userId: 'user-1',
+        organizationId: req.headers['x-test-organization-id'] ?? 'org-1',
+      };
+      if (req.headers['x-test-api-key-id']) {
+        identity.apiKey = { apiKeyId: req.headers['x-test-api-key-id'], organizationId: 'org-1' };
+      }
+    }
+    const context = {
+      getType: () => 'http',
+      switchToHttp: () => ({ getRequest: () => req, getResponse: () => reply }),
+    } as unknown as ExecutionContext;
+    await lastValueFrom(await interceptor.intercept(context, { handle: () => of(undefined) }));
+  });
+}
+
 async function buildApp(redis: Redis): Promise<AppSetup> {
   const errors: string[] = [];
   let calls = 0;
@@ -97,12 +120,15 @@ async function buildApp(redis: Redis): Promise<AppSetup> {
       .send(Buffer.from('binary-payload'));
   });
 
-  registerIdempotency(app, {
-    redis,
-    ttlSeconds: 3600,
-    lockTtlSeconds: 60,
-    onError: (message) => errors.push(message),
-  });
+  installTestInterceptor(
+    app,
+    registerIdempotency(app, {
+      redis,
+      ttlSeconds: 3600,
+      lockTtlSeconds: 60,
+      onError: (message) => errors.push(message),
+    }),
+  );
 
   await app.ready();
   return { app, callCount: () => calls, errors };
@@ -218,267 +244,66 @@ describe('registerIdempotency', () => {
     expect(callCount()).toBe(2);
   });
 
-  it('scopes secure production session cookies independently for users behind the same IP', async () => {
+  it.each(['x-test-session-id', 'x-test-api-key-id', 'x-test-organization-id'])(
+    'separates verified principals by %s',
+    async (header) => {
+      const { app, callCount } = await buildApp(redis);
+      const first = await app.inject({
+        method: 'POST',
+        url: '/api/v1/echo',
+        headers: { ...KEY_HEADER, [header]: 'a' },
+        payload: { a: 1 },
+      });
+      const second = await app.inject({
+        method: 'POST',
+        url: '/api/v1/echo',
+        headers: { ...KEY_HEADER, [header]: 'b' },
+        payload: { a: 1 },
+      });
+      expect(first.statusCode).toBe(200);
+      expect(second.statusCode).toBe(200);
+      expect(second.headers['idempotent-replayed']).toBeUndefined();
+      expect(callCount()).toBe(2);
+    },
+  );
+
+  it('ignores unverified credentials when determining the authenticated scope', async () => {
     const { app, callCount } = await buildApp(redis);
-
-    const first = await app.inject({
+    await app.inject({
       method: 'POST',
       url: '/api/v1/echo',
-      headers: { ...KEY_HEADER, cookie: '__Secure-better-auth.session_token=user-a' },
-      payload: { a: 1 },
+      headers: {
+        ...KEY_HEADER,
+        cookie: 'better-auth.session_token=forged-a',
+        authorization: 'Bearer a',
+      },
+      payload: {},
     });
-    const second = await app.inject({
+    const replay = await app.inject({
       method: 'POST',
       url: '/api/v1/echo',
-      headers: { ...KEY_HEADER, cookie: '__Secure-better-auth.session_token=user-b' },
-      payload: { a: 1 },
+      headers: {
+        ...KEY_HEADER,
+        cookie: 'better-auth.session_token=forged-b',
+        authorization: 'Bearer b',
+      },
+      payload: {},
     });
+    expect(replay.headers['idempotent-replayed']).toBe('true');
+    expect(callCount()).toBe(1);
+  });
 
-    expect(first.json().calls).toBe(1);
-    expect(second.json().calls).toBe(2);
+  it('does not cache anonymous writes even with credential-shaped headers', async () => {
+    const { app, callCount } = await buildApp(redis);
+    const headers = {
+      ...KEY_HEADER,
+      'x-test-anonymous': 'true',
+      cookie: 'better-auth.session_token=forged',
+    };
+    await app.inject({ method: 'POST', url: '/api/v1/echo', headers, payload: {} });
+    const second = await app.inject({ method: 'POST', url: '/api/v1/echo', headers, payload: {} });
     expect(second.headers['idempotent-replayed']).toBeUndefined();
     expect(callCount()).toBe(2);
-  });
-
-  it('extracts the session token from a cookie header carrying several unrelated cookies', async () => {
-    const { app, callCount } = await buildApp(redis);
-    const multiCookieHeader = 'theme=dark; better-auth.session_token=user-a; locale=en-US; other=1';
-
-    const first = await app.inject({
-      method: 'POST',
-      url: '/api/v1/echo',
-      headers: { ...KEY_HEADER, cookie: multiCookieHeader },
-      payload: { a: 1 },
-    });
-    // Same principal, same key/payload -> replay, proving the plain (non-secure) variant was
-    // parsed correctly out of a header with noisy surrounding cookies.
-    const second = await app.inject({
-      method: 'POST',
-      url: '/api/v1/echo',
-      headers: { ...KEY_HEADER, cookie: multiCookieHeader },
-      payload: { a: 1 },
-    });
-
-    expect(first.json().calls).toBe(1);
-    expect(second.headers['idempotent-replayed']).toBe('true');
-    expect(callCount()).toBe(1);
-  });
-
-  it('prefers the `__Secure-` cookie variant when both it and other cookies are present', async () => {
-    const { app, callCount } = await buildApp(redis);
-
-    const first = await app.inject({
-      method: 'POST',
-      url: '/api/v1/echo',
-      headers: {
-        ...KEY_HEADER,
-        cookie: 'theme=dark; __Secure-better-auth.session_token=user-a; locale=en-US',
-      },
-      payload: { a: 1 },
-    });
-    const second = await app.inject({
-      method: 'POST',
-      url: '/api/v1/echo',
-      headers: {
-        ...KEY_HEADER,
-        cookie: 'theme=dark; __Secure-better-auth.session_token=user-b; locale=en-US',
-      },
-      payload: { a: 1 },
-    });
-
-    // Different session tokens must scope to different principals even though every other cookie
-    // on the request is identical.
-    expect(first.json().calls).toBe(1);
-    expect(second.json().calls).toBe(2);
-    expect(callCount()).toBe(2);
-  });
-
-  // Better Auth's bearer plugin lets non-browser clients authenticate without a cookie. Scoping
-  // them by IP would collapse every bearer client behind one NAT into a shared keyspace, where a
-  // colliding key replays one user's stored response to another.
-  it('scopes bearer-authenticated clients independently for users behind the same IP', async () => {
-    const { app, callCount } = await buildApp(redis);
-
-    const first = await app.inject({
-      method: 'POST',
-      url: '/api/v1/echo',
-      headers: { ...KEY_HEADER, authorization: 'Bearer token-a' },
-      payload: { a: 1 },
-    });
-    const second = await app.inject({
-      method: 'POST',
-      url: '/api/v1/echo',
-      headers: { ...KEY_HEADER, authorization: 'Bearer token-b' },
-      payload: { a: 1 },
-    });
-
-    expect(first.json().calls).toBe(1);
-    expect(second.json().calls).toBe(2);
-    expect(second.headers['idempotent-replayed']).toBeUndefined();
-    expect(callCount()).toBe(2);
-  });
-
-  it('replays for the same bearer token', async () => {
-    const { app, callCount } = await buildApp(redis);
-    const headers = { ...KEY_HEADER, authorization: 'Bearer token-a' };
-
-    await app.inject({ method: 'POST', url: '/api/v1/echo', headers, payload: { a: 1 } });
-    const replay = await app.inject({
-      method: 'POST',
-      url: '/api/v1/echo',
-      headers,
-      payload: { a: 1 },
-    });
-
-    expect(replay.headers['idempotent-replayed']).toBe('true');
-    expect(callCount()).toBe(1);
-  });
-
-  // Better Auth matches the scheme case-insensitively, so a lowercase-scheme client authenticates
-  // as itself and must land in its own idempotency scope rather than falling back to IP.
-  it('scopes a lowercase bearer scheme the same as a capitalised one', async () => {
-    const { app, callCount } = await buildApp(redis);
-
-    await app.inject({
-      method: 'POST',
-      url: '/api/v1/echo',
-      headers: { ...KEY_HEADER, authorization: 'Bearer token-a' },
-      payload: { a: 1 },
-    });
-    const replay = await app.inject({
-      method: 'POST',
-      url: '/api/v1/echo',
-      headers: { ...KEY_HEADER, authorization: 'bearer token-a' },
-      payload: { a: 1 },
-    });
-
-    expect(replay.headers['idempotent-replayed']).toBe('true');
-    expect(callCount()).toBe(1);
-  });
-
-  it('prefers the session cookie over a bearer header when both are present', async () => {
-    const { app, callCount } = await buildApp(redis);
-
-    await app.inject({
-      method: 'POST',
-      url: '/api/v1/echo',
-      headers: { ...KEY_HEADER, cookie: 'better-auth.session_token=user-a' },
-      payload: { a: 1 },
-    });
-    // Same cookie principal, different bearer — must still resolve to the cookie's scope and replay.
-    const replay = await app.inject({
-      method: 'POST',
-      url: '/api/v1/echo',
-      headers: {
-        ...KEY_HEADER,
-        cookie: 'better-auth.session_token=user-a',
-        authorization: 'Bearer unrelated',
-      },
-      payload: { a: 1 },
-    });
-
-    expect(replay.headers['idempotent-replayed']).toBe('true');
-    expect(callCount()).toBe(1);
-  });
-
-  it('scopes x-api-key machine callers independently for tenants behind the same IP', async () => {
-    const { app, callCount } = await buildApp(redis);
-
-    const first = await app.inject({
-      method: 'POST',
-      url: '/api/v1/echo',
-      headers: { ...KEY_HEADER, 'x-api-key': generateApiKey().raw },
-      payload: { a: 1 },
-    });
-    const second = await app.inject({
-      method: 'POST',
-      url: '/api/v1/echo',
-      headers: { ...KEY_HEADER, 'x-api-key': generateApiKey().raw },
-      payload: { a: 1 },
-    });
-
-    expect(first.json().calls).toBe(1);
-    expect(second.json().calls).toBe(2);
-    expect(second.headers['idempotent-replayed']).toBeUndefined();
-    expect(callCount()).toBe(2);
-  });
-
-  it('replays for the same x-api-key', async () => {
-    const { app, callCount } = await buildApp(redis);
-    const apiKey = generateApiKey().raw;
-
-    await app.inject({
-      method: 'POST',
-      url: '/api/v1/echo',
-      headers: { ...KEY_HEADER, 'x-api-key': apiKey },
-      payload: { a: 1 },
-    });
-    const replay = await app.inject({
-      method: 'POST',
-      url: '/api/v1/echo',
-      headers: { ...KEY_HEADER, 'x-api-key': apiKey },
-      payload: { a: 1 },
-    });
-
-    expect(replay.headers['idempotent-replayed']).toBe('true');
-    expect(callCount()).toBe(1);
-  });
-
-  it('ignores an x-api-key that is not shaped like a key, matching ApiKeyGuard', async () => {
-    const { app, callCount } = await buildApp(redis);
-
-    await app.inject({
-      method: 'POST',
-      url: '/api/v1/echo',
-      headers: { ...KEY_HEADER, 'x-api-key': 'not-a-key' },
-      payload: { a: 1 },
-    });
-    const replay = await app.inject({
-      method: 'POST',
-      url: '/api/v1/echo',
-      headers: KEY_HEADER,
-      payload: { a: 1 },
-    });
-
-    expect(replay.headers['idempotent-replayed']).toBe('true');
-    expect(callCount()).toBe(1);
-  });
-
-  it('prefers the session cookie over an x-api-key when both are present', async () => {
-    const { app, callCount } = await buildApp(redis);
-
-    await app.inject({
-      method: 'POST',
-      url: '/api/v1/echo',
-      headers: { ...KEY_HEADER, cookie: 'better-auth.session_token=user-a' },
-      payload: { a: 1 },
-    });
-    const replay = await app.inject({
-      method: 'POST',
-      url: '/api/v1/echo',
-      headers: {
-        ...KEY_HEADER,
-        cookie: 'better-auth.session_token=user-a',
-        'x-api-key': generateApiKey().raw,
-      },
-      payload: { a: 1 },
-    });
-
-    expect(replay.headers['idempotent-replayed']).toBe('true');
-    expect(callCount()).toBe(1);
-  });
-
-  it('falls back to IP scope for a malformed cookie header instead of throwing', async () => {
-    const { app } = await buildApp(redis);
-
-    const res = await app.inject({
-      method: 'POST',
-      url: '/api/v1/echo',
-      headers: { ...KEY_HEADER, cookie: ';;;===garbage;;' },
-      payload: { a: 1 },
-    });
-
-    expect(res.statusCode).toBe(200);
   });
 
   it('keeps the lock on 504 because timed-out handler work may still be running', async () => {
@@ -533,31 +358,6 @@ describe('registerIdempotency', () => {
     expect(res.json().code).toBe('idempotency_key_mismatch');
   });
 
-  it('replays across an active-organization switch because tenant context is outside the fingerprint', async () => {
-    const { app, callCount } = await buildApp(redis);
-    const sessionCookie = { cookie: 'better-auth.session_token=test-session-1' };
-
-    const first = await app.inject({
-      method: 'POST',
-      url: '/api/v1/echo',
-      headers: { ...KEY_HEADER, ...sessionCookie, 'x-active-organization-id': 'org-a' },
-      payload: { a: 1 },
-    });
-    const second = await app.inject({
-      method: 'POST',
-      url: '/api/v1/echo',
-      headers: { ...KEY_HEADER, ...sessionCookie, 'x-active-organization-id': 'org-b' },
-      payload: { a: 1 },
-    });
-
-    expect(second.headers['idempotent-replayed']).toBe('true');
-    expect(callCount()).toBe(1);
-    // The gap is that org-b receives org-a's response verbatim, so the body is what pins it —
-    // callCount alone would still pass if the replay returned something else.
-    expect(second.statusCode).toBe(first.statusCode);
-    expect(second.body).toBe(first.body);
-  });
-
   it('returns 409 while an identical request is still in flight', async () => {
     const errors: string[] = [];
     let release!: () => void;
@@ -570,12 +370,15 @@ describe('registerIdempotency', () => {
       await gate;
       return { ok: true };
     });
-    registerIdempotency(app, {
-      redis,
-      ttlSeconds: 3600,
-      lockTtlSeconds: 60,
-      onError: (message) => errors.push(message),
-    });
+    installTestInterceptor(
+      app,
+      registerIdempotency(app, {
+        redis,
+        ttlSeconds: 3600,
+        lockTtlSeconds: 60,
+        onError: (message) => errors.push(message),
+      }),
+    );
     await app.ready();
 
     const inFlight = app.inject({
@@ -678,20 +481,6 @@ describe('registerIdempotency', () => {
     expect(res.statusCode).toBe(200);
     expect(callCount()).toBe(1);
     expect(errors.some((message) => message.includes('acquire failed'))).toBe(true);
-  });
-});
-
-describe('@fastify/cookie prerequisite', () => {
-  it('throws at registration when the cookie plugin is missing instead of degrading to IP scope', async () => {
-    const app = Fastify();
-    expect(() =>
-      registerIdempotency(app, {
-        redis: {} as unknown as Redis,
-        ttlSeconds: 3600,
-        lockTtlSeconds: 60,
-      }),
-    ).toThrow(/@fastify\/cookie/);
-    await app.close();
   });
 });
 

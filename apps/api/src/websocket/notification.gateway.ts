@@ -11,6 +11,7 @@ import {
 import { Logger, Inject } from '@nestjs/common';
 import type { OnApplicationShutdown } from '@nestjs/common';
 import { setMaxListeners } from 'node:events';
+import type { IncomingMessage } from 'node:http';
 import type { Server, Socket } from 'socket.io';
 import { createAdapter } from '@socket.io/redis-adapter';
 import Redis from 'ioredis';
@@ -27,6 +28,7 @@ import {
   wsData,
 } from './ws-auth.adapter';
 import { BoundedConcurrencyLimiter, jitterDelay } from './bounded-concurrency';
+import { DEV_ALLOWED_ORIGINS } from '../common/http/cors-origins';
 
 interface WsRedisEnv {
   REDIS_CACHE_HOST: string;
@@ -53,11 +55,18 @@ const wsCorsOrigin: (
   const isProd = process.env['NODE_ENV'] === 'production';
   if (!origin) return cb(null, true); // same-origin / non-browser
   if (wsOrigins.length > 0) return cb(null, wsOrigins.includes(origin));
-  return cb(null, !isProd); // dev: allow all; prod: require explicit allowlist
+  return cb(null, !isProd && DEV_ALLOWED_ORIGINS.includes(origin));
 };
 
 @WebSocketGateway({
   cors: { origin: wsCorsOrigin, credentials: true },
+  allowRequest: (
+    req: IncomingMessage,
+    callback: (error: string | null, allowed: boolean) => void,
+  ) =>
+    wsCorsOrigin(req.headers.origin, (error, allowed) =>
+      callback(error?.message ?? null, !error && allowed === true),
+    ),
   path: '/ws',
 })
 export class NotificationGateway

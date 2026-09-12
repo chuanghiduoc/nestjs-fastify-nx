@@ -35,7 +35,10 @@
       "default",
       "!{projectRoot}/vite.e2e.config.*",
       "!{projectRoot}/**/e2e/**/*",
-      "{workspaceRoot}/vitest.shared.ts"
+      "{workspaceRoot}/vitest.shared.ts",
+      "{workspaceRoot}/prisma/schema.prisma",
+      "{workspaceRoot}/prisma.config.ts",
+      "{workspaceRoot}/prisma/migrations/**/*"
     ],
     "e2eTest": [
       "default",
@@ -75,7 +78,12 @@
     },
     "lint": {
       "cache": true,
-      "inputs": ["default", "{workspaceRoot}/eslint.config.mjs", "{workspaceRoot}/.prettierrc"],
+      "inputs": [
+        "default",
+        "^default",
+        "{workspaceRoot}/eslint.config.mjs",
+        "{workspaceRoot}/.prettierrc"
+      ],
       "options": {
         "args": "--max-warnings=0"
       }

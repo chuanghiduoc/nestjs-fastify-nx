@@ -53,9 +53,13 @@ export class VerifyUploadHandler implements ICommandHandler<
     // materialising all of it would take the worker down with it. The size goes along so a scanner
     // that cannot handle the object says so before the transfer starts.
     const meta = await this.storage.head(key, bucket);
-    const verdict = await this.scanner.scan(await this.storage.readStream(key, bucket), {
-      sizeBytes: meta?.size,
-    });
+    const content = await this.storage.readStream(key, bucket);
+    let verdict: Awaited<ReturnType<MalwareScannerPort['scan']>>;
+    try {
+      verdict = await this.scanner.scan(content, { sizeBytes: meta?.size });
+    } finally {
+      content.close();
+    }
     if (verdict === 'infected') {
       this.logger.warn(
         { key, declaredContentType, correlationId },

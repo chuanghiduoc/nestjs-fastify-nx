@@ -4,6 +4,7 @@ export type {
   PresignedUpload,
   PresignUploadOptions,
   StoragePort,
+  StorageReadStream,
   StoredFile,
   UploadOptions,
 } from './lib/storage.port';

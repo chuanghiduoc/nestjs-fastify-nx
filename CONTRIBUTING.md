@@ -114,24 +114,27 @@ Full walkthrough: [docs/creating-a-module.md](./docs/creating-a-module.md)
 
 ## Daily Commands
 
-| Task                 | Command                                           |
-| -------------------- | ------------------------------------------------- |
-| Hot-reload dev       | `./scripts/dev.sh` (infra in Docker, app on host) |
-| Start dev server     | `pnpm nx serve api`                               |
-| Watch + rebuild      | `pnpm nx watch -p api -- pnpm nx run api:build`   |
-| Scaffold module      | `pnpm gen:module <name>`                          |
-| Scaffold composition | `pnpm gen:composition <name>`                     |
-| Remove a project     | `pnpm rm:project <name>`                          |
-| Run tests for module | `pnpm nx test modules-payments`                   |
-| Run all tests        | `pnpm nx affected -t test --base=origin/main`     |
-| Check lint           | `pnpm nx affected -t lint --base=origin/main`     |
-| Create migration     | `pnpm db:migrate --name add_field`                |
-| View DB              | `pnpm db:studio`                                  |
-| Seed DB              | `pnpm db:seed`                                    |
-| Codegen OpenAPI      | `pnpm codegen:full`                               |
-| Inspect workspace    | `pnpm graph`                                      |
-| Clean cache          | `pnpm clean` (reset + wipe dist/tmp)              |
-| Health check         | `./scripts/doctor.sh`                             |
+| Task                 | Command                                                                      |
+| -------------------- | ---------------------------------------------------------------------------- |
+| Hot-reload dev       | `./scripts/dev.sh` (infra in Docker, app on host)                            |
+| Start dev server     | `pnpm nx serve api`                                                          |
+| Watch + rebuild      | `pnpm nx watch -p api -- pnpm nx run api:build`                              |
+| Scaffold module      | `pnpm gen:module <name>`                                                     |
+| Scaffold composition | `pnpm gen:composition <name>`                                                |
+| Remove a project     | `pnpm rm:project <name>`                                                     |
+| Run tests for module | `pnpm nx test modules-payments`                                              |
+| Affected unit tests  | `pnpm nx affected -t test --base=origin/main`                                |
+| All unit tests       | `pnpm nx run-many --target=test --all`                                       |
+| Integration tests    | `pnpm nx run-many --target=test --parallel=2 --skip-nx-cache -- integration` |
+| API E2E tests        | `pnpm nx run api:e2e --skip-nx-cache`                                        |
+| Check lint           | `pnpm nx affected -t lint --base=origin/main`                                |
+| Create migration     | `pnpm db:migrate --name add_field`                                           |
+| View DB              | `pnpm db:studio`                                                             |
+| Seed DB              | `pnpm db:seed`                                                               |
+| Codegen OpenAPI      | `pnpm codegen:full`                                                          |
+| Inspect workspace    | `pnpm graph`                                                                 |
+| Clean cache          | `pnpm clean` (reset + wipe dist/tmp)                                         |
+| Health check         | `./scripts/doctor.sh`                                                        |
 
 ## Code Standards
 
