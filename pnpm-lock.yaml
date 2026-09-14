@@ -121,7 +121,7 @@ importers:
         version: 12.0.1(@fastify/static@10.1.3)(@nestjs/common@12.0.1(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@12.0.1)(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)
       '@nestjs/terminus':
         specifier: ^12.0.0
-        version: 12.0.0(@grpc/grpc-js@1.14.4)(@grpc/proto-loader@0.8.1)(@nestjs/common@12.0.1(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@12.0.1)(@nestjs/swagger@12.0.1(@fastify/static@10.1.3)(@nestjs/common@12.0.1(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@12.0.1)(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2))(@prisma/client@7.10.0(@typescript/typescript6@6.0.2)(prisma@7.10.0(@types/node@26.4.1)(@types/react@19.2.18)(@typescript/typescript6@6.0.2)(magicast@0.5.4)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)))(reflect-metadata@0.2.2)(rxjs@7.8.2)
+        version: 12.0.0(@grpc/grpc-js@1.14.4)(@grpc/proto-loader@0.8.1)(@nestjs/common@12.0.1(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@12.0.1)(@nestjs/swagger@12.0.1(@fastify/static@10.1.3)(@nestjs/common@12.0.1(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@12.0.1)(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2))(@prisma/client@7.10.0(@typescript/typescript6@6.0.2)(prisma@7.10.0(@types/node@26.4.1)(@types/react@19.2.18)(@typescript/typescript6@6.0.2)(magicast@0.5.5)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)))(reflect-metadata@0.2.2)(rxjs@7.8.2)
       '@nestjs/throttler':
         specifier: ^6.5.0
         version: 6.5.0(@nestjs/common@12.0.1(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@12.0.1)(reflect-metadata@0.2.2)
@@ -163,7 +163,7 @@ importers:
         version: 7.10.0
       '@prisma/client':
         specifier: ^7.10.0
-        version: 7.10.0(@typescript/typescript6@6.0.2)(prisma@7.10.0(@types/node@26.4.1)(@types/react@19.2.18)(@typescript/typescript6@6.0.2)(magicast@0.5.4)(react-dom@19.2.5(react@19.2.5))(react@19.2.5))
+        version: 7.10.0(@typescript/typescript6@6.0.2)(prisma@7.10.0(@types/node@26.4.1)(@types/react@19.2.18)(@typescript/typescript6@6.0.2)(magicast@0.5.5)(react-dom@19.2.5(react@19.2.5))(react@19.2.5))
       '@prometheus-io/client':
         specifier: ^0.16.1
         version: 0.16.1
@@ -184,7 +184,7 @@ importers:
         version: 1.20.0(debug@4.4.3(supports-color@7.2.0))(supports-color@7.2.0)
       better-auth:
         specifier: ^1.7.2
-        version: 1.7.2(@opentelemetry/api@1.9.1)(@prisma/client@7.10.0(@typescript/typescript6@6.0.2)(prisma@7.10.0(@types/node@26.4.1)(@types/react@19.2.18)(@typescript/typescript6@6.0.2)(magicast@0.5.4)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)))(mysql2@3.24.2(@types/node@26.4.1))(pg@8.23.0)(prisma@7.10.0(@types/node@26.4.1)(@types/react@19.2.18)(@typescript/typescript6@6.0.2)(magicast@0.5.4)(react-dom@19.2.5(react@19.2.5))(react@19.2.5))(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(vitest@5.0.0)
+        version: 1.7.2(@opentelemetry/api@1.9.1)(@prisma/client@7.10.0(@typescript/typescript6@6.0.2)(prisma@7.10.0(@types/node@26.4.1)(@types/react@19.2.18)(@typescript/typescript6@6.0.2)(magicast@0.5.5)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)))(mysql2@3.24.2(@types/node@26.4.1))(pg@8.23.0)(prisma@7.10.0(@types/node@26.4.1)(@types/react@19.2.18)(@typescript/typescript6@6.0.2)(magicast@0.5.5)(react-dom@19.2.5(react@19.2.5))(react@19.2.5))(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(vitest@5.0.0)
       bullmq:
         specifier: ^6.3.2
         version: 6.3.2(ioredis@6.0.0)(pg@8.23.0)
@@ -232,7 +232,7 @@ importers:
         version: 11.0.0
       prisma:
         specifier: ^7.10.0
-        version: 7.10.0(@types/node@26.4.1)(@types/react@19.2.18)(@typescript/typescript6@6.0.2)(magicast@0.5.4)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
+        version: 7.10.0(@types/node@26.4.1)(@types/react@19.2.18)(@typescript/typescript6@6.0.2)(magicast@0.5.5)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
       proxy-addr:
         specifier: ^2.0.7
         version: 2.0.7
@@ -7433,11 +7433,14 @@ packages:
   magic-string@1.0.0:
     resolution: {integrity: sha512-CGvjzMN08iv6w1mm4/x3Gh1hLb4VnyRUA15FFpl6CsCIGGoe36k7kY5KNz9QDbSBN5I/fWHM6ZlIkUTa5xdUEA==}
 
-  magic-string@1.3.1:
-    resolution: {integrity: sha512-rm91zr2Ou+XueDTohjQQjdQEcYM6zVi8KVUCG8Ec3vHwUEKrhSdCNyfuIywkA6hcCAteIn0ZOtAHA6eGpiX+Pg==}
+  magic-string@1.2.3:
+    resolution: {integrity: sha512-Bpb0W2TbLKOZ7vJnOUnVRGq3WL2p+ISV29M6hYPL1AFCpyKZpdr5ytiXoTSSxRVhg8YW7f65+6gbG8WG6PCa/g==}
 
   magicast@0.5.4:
     resolution: {integrity: sha512-llBEhWm1SacoRwgHUoQJYtwp4PBLF4faQi5TCpIGyGs9n4y5+juI0tDgyKIfpqxckRHaHzouUEph3THklWh03w==}
+
+  magicast@0.5.5:
+    resolution: {integrity: sha512-UicdXN8zQ3JHlxVq+28afMXPr1z7WNY6+7EJnzTdQWkTAlMLF5fNCCKxJHBQwGaNGR11581EiQmQzx73+MvszA==}
 
   make-dir@4.0.0:
     resolution: {integrity: sha512-hXdUTZYIVOt1Ex//jAQi+wTZZpUpwBj/0QsOzqegb3rGMMeJiSEu5xLHnYfBrRV4RH2+OCSOO95Is/7x1WJ4bw==}
@@ -10714,13 +10717,13 @@ snapshots:
       '@better-auth/core': 1.7.2(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(@opentelemetry/api@1.9.1)(better-call@1.4.0(zod@4.4.3))(jose@6.2.9)(kysely@0.29.5)(nanostores@1.5.0)
       '@better-auth/utils': 0.4.2
 
-  '@better-auth/prisma-adapter@1.7.2(@better-auth/core@1.7.2(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(@opentelemetry/api@1.9.1)(better-call@1.4.0(zod@4.4.3))(jose@6.2.9)(kysely@0.29.5)(nanostores@1.5.0))(@better-auth/utils@0.4.2)(@prisma/client@7.10.0(@typescript/typescript6@6.0.2)(prisma@7.10.0(@types/node@26.4.1)(@types/react@19.2.18)(@typescript/typescript6@6.0.2)(magicast@0.5.4)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)))(prisma@7.10.0(@types/node@26.4.1)(@types/react@19.2.18)(@typescript/typescript6@6.0.2)(magicast@0.5.4)(react-dom@19.2.5(react@19.2.5))(react@19.2.5))':
+  '@better-auth/prisma-adapter@1.7.2(@better-auth/core@1.7.2(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(@opentelemetry/api@1.9.1)(better-call@1.4.0(zod@4.4.3))(jose@6.2.9)(kysely@0.29.5)(nanostores@1.5.0))(@better-auth/utils@0.4.2)(@prisma/client@7.10.0(@typescript/typescript6@6.0.2)(prisma@7.10.0(@types/node@26.4.1)(@types/react@19.2.18)(@typescript/typescript6@6.0.2)(magicast@0.5.5)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)))(prisma@7.10.0(@types/node@26.4.1)(@types/react@19.2.18)(@typescript/typescript6@6.0.2)(magicast@0.5.5)(react-dom@19.2.5(react@19.2.5))(react@19.2.5))':
     dependencies:
       '@better-auth/core': 1.7.2(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(@opentelemetry/api@1.9.1)(better-call@1.4.0(zod@4.4.3))(jose@6.2.9)(kysely@0.29.5)(nanostores@1.5.0)
       '@better-auth/utils': 0.4.2
     optionalDependencies:
-      '@prisma/client': 7.10.0(@typescript/typescript6@6.0.2)(prisma@7.10.0(@types/node@26.4.1)(@types/react@19.2.18)(@typescript/typescript6@6.0.2)(magicast@0.5.4)(react-dom@19.2.5(react@19.2.5))(react@19.2.5))
-      prisma: 7.10.0(@types/node@26.4.1)(@types/react@19.2.18)(@typescript/typescript6@6.0.2)(magicast@0.5.4)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
+      '@prisma/client': 7.10.0(@typescript/typescript6@6.0.2)(prisma@7.10.0(@types/node@26.4.1)(@types/react@19.2.18)(@typescript/typescript6@6.0.2)(magicast@0.5.5)(react-dom@19.2.5(react@19.2.5))(react@19.2.5))
+      prisma: 7.10.0(@types/node@26.4.1)(@types/react@19.2.18)(@typescript/typescript6@6.0.2)(magicast@0.5.5)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
 
   '@better-auth/telemetry@1.7.2(@better-auth/core@1.7.2(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(@opentelemetry/api@1.9.1)(better-call@1.4.0(zod@4.4.3))(jose@6.2.9)(kysely@0.29.5)(nanostores@1.5.0))(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)':
     dependencies:
@@ -11754,7 +11757,7 @@ snapshots:
       class-transformer: 0.5.1
       class-validator: 0.15.1
 
-  '@nestjs/terminus@12.0.0(@grpc/grpc-js@1.14.4)(@grpc/proto-loader@0.8.1)(@nestjs/common@12.0.1(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@12.0.1)(@nestjs/swagger@12.0.1(@fastify/static@10.1.3)(@nestjs/common@12.0.1(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@12.0.1)(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2))(@prisma/client@7.10.0(@typescript/typescript6@6.0.2)(prisma@7.10.0(@types/node@26.4.1)(@types/react@19.2.18)(@typescript/typescript6@6.0.2)(magicast@0.5.4)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)))(reflect-metadata@0.2.2)(rxjs@7.8.2)':
+  '@nestjs/terminus@12.0.0(@grpc/grpc-js@1.14.4)(@grpc/proto-loader@0.8.1)(@nestjs/common@12.0.1(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@12.0.1)(@nestjs/swagger@12.0.1(@fastify/static@10.1.3)(@nestjs/common@12.0.1(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@12.0.1)(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2))(@prisma/client@7.10.0(@typescript/typescript6@6.0.2)(prisma@7.10.0(@types/node@26.4.1)(@types/react@19.2.18)(@typescript/typescript6@6.0.2)(magicast@0.5.5)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)))(reflect-metadata@0.2.2)(rxjs@7.8.2)':
     dependencies:
       '@nestjs/common': 12.0.1(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2)
       '@nestjs/core': 12.0.1(@nestjs/common@12.0.1(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/websockets@12.0.1)(reflect-metadata@0.2.2)(rxjs@7.8.2)
@@ -11764,7 +11767,7 @@ snapshots:
       '@grpc/grpc-js': 1.14.4
       '@grpc/proto-loader': 0.8.1
       '@nestjs/swagger': 12.0.1(@fastify/static@10.1.3)(@nestjs/common@12.0.1(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@12.0.1)(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)
-      '@prisma/client': 7.10.0(@typescript/typescript6@6.0.2)(prisma@7.10.0(@types/node@26.4.1)(@types/react@19.2.18)(@typescript/typescript6@6.0.2)(magicast@0.5.4)(react-dom@19.2.5(react@19.2.5))(react@19.2.5))
+      '@prisma/client': 7.10.0(@typescript/typescript6@6.0.2)(prisma@7.10.0(@types/node@26.4.1)(@types/react@19.2.18)(@typescript/typescript6@6.0.2)(magicast@0.5.5)(react-dom@19.2.5(react@19.2.5))(react@19.2.5))
 
   '@nestjs/testing@12.0.1(@nestjs/common@12.0.1(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@12.0.1)':
     dependencies:
@@ -13194,16 +13197,16 @@ snapshots:
 
   '@prisma/client-runtime-utils@7.10.0': {}
 
-  '@prisma/client@7.10.0(@typescript/typescript6@6.0.2)(prisma@7.10.0(@types/node@26.4.1)(@types/react@19.2.18)(@typescript/typescript6@6.0.2)(magicast@0.5.4)(react-dom@19.2.5(react@19.2.5))(react@19.2.5))':
+  '@prisma/client@7.10.0(@typescript/typescript6@6.0.2)(prisma@7.10.0(@types/node@26.4.1)(@types/react@19.2.18)(@typescript/typescript6@6.0.2)(magicast@0.5.5)(react-dom@19.2.5(react@19.2.5))(react@19.2.5))':
     dependencies:
       '@prisma/client-runtime-utils': 7.10.0
     optionalDependencies:
-      prisma: 7.10.0(@types/node@26.4.1)(@types/react@19.2.18)(@typescript/typescript6@6.0.2)(magicast@0.5.4)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
+      prisma: 7.10.0(@types/node@26.4.1)(@types/react@19.2.18)(@typescript/typescript6@6.0.2)(magicast@0.5.5)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
       typescript: '@typescript/typescript6@6.0.2'
 
-  '@prisma/config@7.10.0(magicast@0.5.4)':
+  '@prisma/config@7.10.0(magicast@0.5.5)':
     dependencies:
-      c12: 3.3.4(magicast@0.5.4)
+      c12: 3.3.4(magicast@0.5.5)
       deepmerge-ts: 8.0.1
       effect: 3.20.0
       empathic: 2.0.0
@@ -14331,7 +14334,7 @@ snapshots:
       '@jridgewell/trace-mapping': 0.3.31
       '@vitest/spy': 5.0.0
       estree-walker: 3.0.3
-      magic-string: 1.3.1
+      magic-string: 1.2.3
     optionalDependencies:
       vite: 8.2.2(@types/node@26.4.1)(esbuild@0.28.2)(jiti@2.7.0)(less@4.8.1)(sass-embedded@1.104.0)(sass@1.104.0)(terser@5.51.2)(yaml@2.9.1)
 
@@ -14776,14 +14779,14 @@ snapshots:
     dependencies:
       tweetnacl: 0.14.5
 
-  better-auth@1.7.2(@opentelemetry/api@1.9.1)(@prisma/client@7.10.0(@typescript/typescript6@6.0.2)(prisma@7.10.0(@types/node@26.4.1)(@types/react@19.2.18)(@typescript/typescript6@6.0.2)(magicast@0.5.4)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)))(mysql2@3.24.2(@types/node@26.4.1))(pg@8.23.0)(prisma@7.10.0(@types/node@26.4.1)(@types/react@19.2.18)(@typescript/typescript6@6.0.2)(magicast@0.5.4)(react-dom@19.2.5(react@19.2.5))(react@19.2.5))(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(vitest@5.0.0):
+  better-auth@1.7.2(@opentelemetry/api@1.9.1)(@prisma/client@7.10.0(@typescript/typescript6@6.0.2)(prisma@7.10.0(@types/node@26.4.1)(@types/react@19.2.18)(@typescript/typescript6@6.0.2)(magicast@0.5.5)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)))(mysql2@3.24.2(@types/node@26.4.1))(pg@8.23.0)(prisma@7.10.0(@types/node@26.4.1)(@types/react@19.2.18)(@typescript/typescript6@6.0.2)(magicast@0.5.5)(react-dom@19.2.5(react@19.2.5))(react@19.2.5))(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(vitest@5.0.0):
     dependencies:
       '@better-auth/core': 1.7.2(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(@opentelemetry/api@1.9.1)(better-call@1.4.0(zod@4.4.3))(jose@6.2.9)(kysely@0.29.5)(nanostores@1.5.0)
       '@better-auth/drizzle-adapter': 1.7.2(@better-auth/core@1.7.2(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(@opentelemetry/api@1.9.1)(better-call@1.4.0(zod@4.4.3))(jose@6.2.9)(kysely@0.29.5)(nanostores@1.5.0))(@better-auth/utils@0.4.2)
       '@better-auth/kysely-adapter': 1.7.2(@better-auth/core@1.7.2(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(@opentelemetry/api@1.9.1)(better-call@1.4.0(zod@4.4.3))(jose@6.2.9)(kysely@0.29.5)(nanostores@1.5.0))(@better-auth/utils@0.4.2)(kysely@0.29.5)
       '@better-auth/memory-adapter': 1.7.2(@better-auth/core@1.7.2(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(@opentelemetry/api@1.9.1)(better-call@1.4.0(zod@4.4.3))(jose@6.2.9)(kysely@0.29.5)(nanostores@1.5.0))(@better-auth/utils@0.4.2)
       '@better-auth/mongo-adapter': 1.7.2(@better-auth/core@1.7.2(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(@opentelemetry/api@1.9.1)(better-call@1.4.0(zod@4.4.3))(jose@6.2.9)(kysely@0.29.5)(nanostores@1.5.0))(@better-auth/utils@0.4.2)
-      '@better-auth/prisma-adapter': 1.7.2(@better-auth/core@1.7.2(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(@opentelemetry/api@1.9.1)(better-call@1.4.0(zod@4.4.3))(jose@6.2.9)(kysely@0.29.5)(nanostores@1.5.0))(@better-auth/utils@0.4.2)(@prisma/client@7.10.0(@typescript/typescript6@6.0.2)(prisma@7.10.0(@types/node@26.4.1)(@types/react@19.2.18)(@typescript/typescript6@6.0.2)(magicast@0.5.4)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)))(prisma@7.10.0(@types/node@26.4.1)(@types/react@19.2.18)(@typescript/typescript6@6.0.2)(magicast@0.5.4)(react-dom@19.2.5(react@19.2.5))(react@19.2.5))
+      '@better-auth/prisma-adapter': 1.7.2(@better-auth/core@1.7.2(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(@opentelemetry/api@1.9.1)(better-call@1.4.0(zod@4.4.3))(jose@6.2.9)(kysely@0.29.5)(nanostores@1.5.0))(@better-auth/utils@0.4.2)(@prisma/client@7.10.0(@typescript/typescript6@6.0.2)(prisma@7.10.0(@types/node@26.4.1)(@types/react@19.2.18)(@typescript/typescript6@6.0.2)(magicast@0.5.5)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)))(prisma@7.10.0(@types/node@26.4.1)(@types/react@19.2.18)(@typescript/typescript6@6.0.2)(magicast@0.5.5)(react-dom@19.2.5(react@19.2.5))(react@19.2.5))
       '@better-auth/telemetry': 1.7.2(@better-auth/core@1.7.2(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(@opentelemetry/api@1.9.1)(better-call@1.4.0(zod@4.4.3))(jose@6.2.9)(kysely@0.29.5)(nanostores@1.5.0))(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)
       '@better-auth/utils': 0.4.2
       '@better-fetch/fetch': 1.3.1
@@ -14796,10 +14799,10 @@ snapshots:
       nanostores: 1.5.0
       zod: 4.4.3
     optionalDependencies:
-      '@prisma/client': 7.10.0(@typescript/typescript6@6.0.2)(prisma@7.10.0(@types/node@26.4.1)(@types/react@19.2.18)(@typescript/typescript6@6.0.2)(magicast@0.5.4)(react-dom@19.2.5(react@19.2.5))(react@19.2.5))
+      '@prisma/client': 7.10.0(@typescript/typescript6@6.0.2)(prisma@7.10.0(@types/node@26.4.1)(@types/react@19.2.18)(@typescript/typescript6@6.0.2)(magicast@0.5.5)(react-dom@19.2.5(react@19.2.5))(react@19.2.5))
       mysql2: 3.24.2(@types/node@26.4.1)
       pg: 8.23.0
-      prisma: 7.10.0(@types/node@26.4.1)(@types/react@19.2.18)(@typescript/typescript6@6.0.2)(magicast@0.5.4)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
+      prisma: 7.10.0(@types/node@26.4.1)(@types/react@19.2.18)(@typescript/typescript6@6.0.2)(magicast@0.5.5)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
       react: 19.2.5
       react-dom: 19.2.5(react@19.2.5)
       vitest: 5.0.0(@opentelemetry/api@1.9.1)(@types/node@26.4.1)(@vitest/coverage-v8@5.0.0)(vite@8.2.2(@types/node@26.4.1)(esbuild@0.28.2)(jiti@2.7.0)(less@4.8.1)(sass-embedded@1.104.0)(sass@1.104.0)(terser@5.51.2)(yaml@2.9.1))
@@ -14908,7 +14911,7 @@ snapshots:
   bytes@3.1.2:
     optional: true
 
-  c12@3.3.4(magicast@0.5.4):
+  c12@3.3.4(magicast@0.5.5):
     dependencies:
       chokidar: 5.0.0
       confbox: 0.2.4
@@ -14923,7 +14926,7 @@ snapshots:
       pkg-types: 2.3.1
       rc9: 3.0.1
     optionalDependencies:
-      magicast: 0.5.4
+      magicast: 0.5.5
 
   cacheable@2.5.0:
     dependencies:
@@ -15174,7 +15177,7 @@ snapshots:
       import-fresh: 3.3.1
       parse-json: 5.2.0
       path-type: 4.0.0
-      yaml: 2.9.1
+      yaml: 2.9.0
 
   cosmiconfig@8.3.6(@typescript/typescript6@6.0.2):
     dependencies:
@@ -17078,7 +17081,7 @@ snapshots:
     dependencies:
       '@jridgewell/sourcemap-codec': 1.6.0
 
-  magic-string@1.3.1:
+  magic-string@1.2.3:
     dependencies:
       '@jridgewell/sourcemap-codec': 1.6.0
 
@@ -17087,6 +17090,13 @@ snapshots:
       '@babel/parser': 7.29.8
       '@babel/types': 7.29.8
       source-map-js: 1.2.1
+
+  magicast@0.5.5:
+    dependencies:
+      '@babel/parser': 7.29.8
+      '@babel/types': 7.29.8
+      source-map-js: 1.2.1
+    optional: true
 
   make-dir@4.0.0:
     dependencies:
@@ -18056,9 +18066,9 @@ snapshots:
     dependencies:
       parse-ms: 4.0.0
 
-  prisma@7.10.0(@types/node@26.4.1)(@types/react@19.2.18)(@typescript/typescript6@6.0.2)(magicast@0.5.4)(react-dom@19.2.5(react@19.2.5))(react@19.2.5):
+  prisma@7.10.0(@types/node@26.4.1)(@types/react@19.2.18)(@typescript/typescript6@6.0.2)(magicast@0.5.5)(react-dom@19.2.5(react@19.2.5))(react@19.2.5):
     dependencies:
-      '@prisma/config': 7.10.0(magicast@0.5.4)
+      '@prisma/config': 7.10.0(magicast@0.5.5)
       '@prisma/dev': 0.24.17(@typescript/typescript6@6.0.2)
       '@prisma/engines': 7.10.0
       '@prisma/studio-core': 0.33.0(@types/react@19.2.18)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
@@ -19214,7 +19224,7 @@ snapshots:
       chai: 6.2.2
       es-module-lexer: 2.3.2
       expect-type: 1.4.0
-      magic-string: 1.3.1
+      magic-string: 1.2.3
       obug: 2.1.4
       picomatch: 4.0.7
       std-env: 4.2.0
@@ -19367,7 +19377,8 @@ snapshots:
 
   yaml@2.9.0: {}
 
-  yaml@2.9.1: {}
+  yaml@2.9.1:
+    optional: true
 
   yargs-parser@21.1.1: {}
 
