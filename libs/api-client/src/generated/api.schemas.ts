@@ -936,7 +936,6 @@ export interface Session {
 
 export interface Account {
   readonly id: string;
-  issuer: string;
   accountId: string;
   providerId: string;
   userId: string;
@@ -1253,6 +1252,7 @@ export type SocialSignInBody = {
   provider:
     | 'apple'
     | 'atlassian'
+    | 'cloudflare'
     | 'cognito'
     | 'discord'
     | 'facebook'
@@ -2029,6 +2029,7 @@ export type LinkSocialAccountBody = {
   provider:
     | 'apple'
     | 'atlassian'
+    | 'cloudflare'
     | 'cognito'
     | 'discord'
     | 'facebook'
@@ -2107,7 +2108,6 @@ export type ListUserAccounts200Item = {
   providerId: string;
   createdAt: string;
   updatedAt: string;
-  issuer: string;
   accountId: string;
   userId: string;
   scopes: string[];
@@ -2277,7 +2277,6 @@ export type AccountInfo200User = {
 export type AccountInfo200Account = {
   id: string;
   providerId: string;
-  issuer: string;
   accountId: string;
 };
 
