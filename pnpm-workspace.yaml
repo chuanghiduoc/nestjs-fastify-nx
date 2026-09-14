@@ -27,6 +27,10 @@ autoInstallPeers: true
 # as its package ships a `^12` range.
 peerDependencyRules:
   allowedVersions:
+    # Vitest 5 is exercised by unit, coverage and integration CI; these consumers
+    # still publish peer ranges ending at Vitest 4.
+    '@nx/vitest>vitest': '5'
+    'better-auth>vitest': '5'
     # Build-time only: @nx/nest contributes generators and the webpack/eslint plugin wiring. It
     # never loads @nestjs/core at runtime, so its `>=10.0.0 <12.0.0` peer is advisory here.
     '@nx/nest>@nestjs/common': '12'
