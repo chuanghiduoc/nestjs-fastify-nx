@@ -23,10 +23,7 @@ import {
   type StoredFileRepositoryPort,
 } from '../../../domain/ports/stored-file-repository.port';
 import { UPLOAD_LIMITS, type UploadLimits } from '../../upload-limits';
-import {
-  UPLOAD_VERIFICATION_DISPATCHER,
-  type UploadVerificationDispatcher,
-} from '../../ports/upload-verification.dispatcher';
+import { UploadPublicationService } from '../../upload-publication.service';
 import { ConfirmUploadCommand } from './confirm-upload.command';
 
 function isPolicyViolation(err: unknown): boolean {
@@ -43,8 +40,7 @@ export class ConfirmUploadHandler implements ICommandHandler<
   constructor(
     @Inject(STORAGE_PORT) private readonly storage: StoragePort,
     @Inject(STORED_FILE_REPOSITORY) private readonly files: StoredFileRepositoryPort,
-    @Inject(UPLOAD_VERIFICATION_DISPATCHER)
-    private readonly verification: UploadVerificationDispatcher,
+    private readonly publication: UploadPublicationService,
     @Inject(UPLOAD_LIMITS) private readonly limits: UploadLimits,
   ) {}
 
@@ -53,7 +49,12 @@ export class ConfirmUploadHandler implements ICommandHandler<
     assertOwnsSourceKey(command.sourceKey, command.userId);
 
     const existing = await this.files.findBySourceKey(command.sourceKey);
-    if (existing) return this.recoverExisting(existing, command.correlationId);
+    if (existing) {
+      if (existing.organizationId !== command.organizationId || existing.userId !== command.userId) {
+        throw objectNotFound(command.sourceKey);
+      }
+      return this.recoverExisting(existing, command.correlationId);
+    }
 
     const meta = await this.storage.head(command.sourceKey);
     if (!meta) throw objectNotFound(command.sourceKey);
@@ -70,13 +71,6 @@ export class ConfirmUploadHandler implements ICommandHandler<
       assertMimeAllowed(meta.contentType);
       assertSizeWithinLimit(meta.size, this.limits.maxFileBytes);
 
-      // Inline check: if the queue is unreachable this still blocks a tampered upload.
-      await readHeadAndAssertMagicBytes(
-        { storage: this.storage, limits: this.limits },
-        sourceKey,
-        meta.contentType,
-        meta.bucket,
-      );
     } catch (err) {
       if (isPolicyViolation(err)) await this.safeDelete(sourceKey);
       throw err;
@@ -119,7 +113,9 @@ export class ConfirmUploadHandler implements ICommandHandler<
     try {
       await this.storage.finalize(command.sourceKey, finalKey, meta.etag, meta.bucket);
     } catch (err) {
-      await this.files.deleteIfStatus(fileId, STORED_FILE_STATUS.FINALIZING).catch(() => undefined);
+      await this.files.deleteIfStatus(fileId, STORED_FILE_STATUS.FINALIZING).catch((cleanupError: unknown) => {
+        this.logger.error({ err: cleanupError, fileId }, 'Failed to remove unfinished upload row');
+      });
       this.logger.error(
         { err, sourceKey: command.sourceKey, finalKey },
         'upload finalize failed — staging object remains lifecycle-managed',
@@ -127,28 +123,12 @@ export class ConfirmUploadHandler implements ICommandHandler<
       throw this.commitFailed();
     }
 
-    // CAS rather than update-by-id: if an orphan purge removed the row after the owner was
-    // hard-deleted mid-confirm, update() would surface a raw P2025 500 even though finalize succeeded.
-    const transitioned = await this.files.transition(
-      fileId,
-      STORED_FILE_STATUS.FINALIZING,
-      STORED_FILE_STATUS.VERIFYING,
-    );
-    if (!transitioned) {
-      this.logger.error({ fileId, finalKey }, 'stored-file row missing at VERIFYING transition');
-      throw this.commitFailed();
-    }
-
-    // The immutable object stays quarantined: no signed URL is issued until the worker has checked
-    // both its signature and its complete contents against the malware scanner.
-    await this.verification.dispatch({
-      key: finalKey,
-      declaredContentType: meta.contentType,
-      bucket: meta.bucket,
-      correlationId: command.correlationId,
-    });
-
-    return { id: fileId, key: finalKey, bucket: meta.bucket, size: meta.size };
+    return this.completeFinalizing(StoredFile.create({
+      id: fileId, organizationId: command.organizationId, userId: command.userId,
+      sourceKey: command.sourceKey, key: finalKey, bucket: meta.bucket,
+      contentType: meta.contentType, size: meta.size, etag: meta.etag,
+      status: STORED_FILE_STATUS.FINALIZING,
+    }), command.correlationId);
   }
 
   private async recoverExisting(
@@ -156,6 +136,10 @@ export class ConfirmUploadHandler implements ICommandHandler<
     correlationId?: string,
   ): Promise<StoredFileResult> {
     if (record.status === STORED_FILE_STATUS.REJECTED) throw objectNotFound(record.sourceKey);
+
+    if (record.status !== STORED_FILE_STATUS.FINALIZING) {
+      return this.publication.result(record, correlationId);
+    }
 
     const finalMeta = await this.storage.head(record.key, record.bucket);
     if (!finalMeta) {
@@ -175,27 +159,37 @@ export class ConfirmUploadHandler implements ICommandHandler<
       });
     }
 
-    if (record.status === STORED_FILE_STATUS.FINALIZING) {
-      await this.files.transition(
-        record.id,
-        STORED_FILE_STATUS.FINALIZING,
-        STORED_FILE_STATUS.VERIFYING,
-      );
-    }
+    return this.completeFinalizing(record, correlationId);
+  }
 
-    if (record.isQuarantined()) {
-      await this.verification.dispatch({
-        key: record.key,
-        declaredContentType: record.contentType,
-        bucket: record.bucket,
-        correlationId,
-      });
+  private async completeFinalizing(record: StoredFile, correlationId?: string): Promise<StoredFileResult> {
+    if (!this.limits.malwareScanEnabled) {
+      try {
+        await readHeadAndAssertMagicBytes(
+          { storage: this.storage, limits: this.limits }, record.key, record.contentType, record.bucket,
+        );
+      } catch (err) {
+        if (isPolicyViolation(err)) {
+          const rejected = await this.files.transition(record.id, STORED_FILE_STATUS.FINALIZING, STORED_FILE_STATUS.REJECTED);
+          if (rejected) await this.storage.delete(record.key, record.bucket);
+        }
+        throw err;
+      }
     }
-
-    const url = record.isQuarantined()
-      ? undefined
-      : await this.storage.getSignedUrl(record.key, undefined, record.bucket);
-    return { id: record.id, key: record.key, url, bucket: record.bucket, size: record.size };
+    const status = this.limits.malwareScanEnabled ? STORED_FILE_STATUS.VERIFYING : STORED_FILE_STATUS.READY;
+    const transitioned = await this.files.transition(record.id, STORED_FILE_STATUS.FINALIZING, status);
+    if (!transitioned) {
+      const current = await this.files.findById(record.id);
+      if (!current || current.status === STORED_FILE_STATUS.FINALIZING || current.status === STORED_FILE_STATUS.REJECTED) {
+        throw this.commitFailed();
+      }
+      return this.publication.result(current, correlationId);
+    }
+    return this.publication.result(StoredFile.create({
+      id: record.id, organizationId: record.organizationId, userId: record.userId,
+      sourceKey: record.sourceKey, key: record.key, bucket: record.bucket,
+      contentType: record.contentType, size: record.size, etag: record.etag, status,
+    }), correlationId);
   }
 
   // A failed delete must not mask the validation error that triggered it, but swallowing it

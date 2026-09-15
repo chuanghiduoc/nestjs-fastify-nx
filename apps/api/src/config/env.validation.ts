@@ -83,6 +83,11 @@ const envSchema = z
       .max(86_400)
       .default(3_600),
     UPLOAD_PRESIGN_EXPIRES_SECONDS: z.coerce.number().int().min(60).max(3_600).default(300),
+    MALWARE_SCANNER_ENABLED: z.enum(['true', 'false']).default('false').transform((v) => v === 'true'),
+    UPLOAD_MAX_FILES: z.coerce.number().int().min(1).max(100).default(10),
+    UPLOAD_MAX_TOTAL_BYTES: z.coerce.number().int().min(1024).max(Number.MAX_SAFE_INTEGER).default(1_073_741_824),
+    UPLOAD_MAX_CONCURRENT_REQUESTS: z.coerce.number().int().min(1).max(1000).default(4),
+    UPLOAD_REQUEST_TIMEOUT_MS: z.coerce.number().int().min(1000).max(3_600_000).default(900_000),
 
     // Throttler
     THROTTLER_ENABLED: z

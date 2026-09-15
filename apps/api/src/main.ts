@@ -9,6 +9,8 @@ import { ConfigService } from '@nestjs/config';
 import { Logger } from 'nestjs-pino';
 import { fastifyHelmet } from '@fastify/helmet';
 import fastifyCookie from '@fastify/cookie';
+import fastifyMultipart from '@fastify/multipart';
+import { IoAdapter } from '@nestjs/platform-socket.io';
 import fastifyRateLimit from '@fastify/rate-limit';
 import fastifyCompress from '@fastify/compress';
 import fastifyUnderPressure from '@fastify/under-pressure';
@@ -160,6 +162,11 @@ async function bootstrap() {
   }
 
   await fastify.register(fastifyCookie);
+  await fastify.register(fastifyMultipart, {
+    limits: {
+      fileSize: config.get('UPLOAD_MAX_FILE_BYTES', { infer: true }),
+    },
+  });
 
   if (config.get('IDEMPOTENCY_ENABLED', { infer: true })) {
     const idempotencyRedis = createApiRedis(
@@ -507,6 +514,7 @@ async function bootstrap() {
   }
 
   app.useGlobalPipes(new ProblemDetailsValidationPipe());
+  app.useWebSocketAdapter(new IoAdapter(app));
 
   if (!isProduction) {
     await setupSwagger(app);

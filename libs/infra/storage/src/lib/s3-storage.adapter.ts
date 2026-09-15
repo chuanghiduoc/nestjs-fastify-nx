@@ -1,3 +1,4 @@
+import type { Readable } from 'node:stream';
 import { Injectable, Logger, type OnModuleDestroy, type OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { DomainException } from '@nestjs-fastify-nx/core';
@@ -20,6 +21,7 @@ import type {
   PresignUploadOptions,
   StoragePort,
   StorageReadStream,
+  StreamUploadOptions,
   StoredFile,
   UploadOptions,
 } from './storage.port';
@@ -323,6 +325,36 @@ export class S3StorageAdapter implements StoragePort, OnModuleInit, OnModuleDest
     const url = `${this.publicEndpoint}/${bucket}/${key}`;
 
     return { key, bucket, url, size: body.length };
+  }
+
+  async uploadStream(
+    key: string,
+    body: Readable,
+    options: StreamUploadOptions,
+  ): Promise<StoredFile> {
+    const bucket = options.bucket ?? this.bucket;
+    try {
+      if (!Number.isSafeInteger(options.size) || options.size <= 0) {
+        throw new RangeError('Stream upload size must be a positive safe integer');
+      }
+      options.signal?.throwIfAborted();
+      await this.client.send(
+        new PutObjectCommand({
+          Bucket: bucket,
+          Key: key,
+          Body: body,
+          ContentType: options.contentType ?? 'application/octet-stream',
+          ContentLength: options.size,
+          Metadata: options.metadata,
+        }),
+        { abortSignal: options.signal },
+      );
+      return { key, bucket, size: options.size };
+    } catch (err) {
+      throw this.failure(FAILURES.upload, { key }, err);
+    } finally {
+      body.destroy();
+    }
   }
 
   // POST policy pins Content-Type and size — prevents mime-type smuggling or oversized payloads.

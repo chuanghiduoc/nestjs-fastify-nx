@@ -118,6 +118,70 @@ describe('S3StorageAdapter', () => {
     else process.env['NODE_ENV'] = originalNodeEnv;
   });
 
+  describe('uploadStream', () => {
+    it('sends the stream with its known size and cancellation signal without exposing a URL', async () => {
+      const body = Readable.from([Buffer.from('payload')]);
+      const signal = new AbortController().signal;
+      const send = mockSend(adapter).mockResolvedValue({});
+
+      const result = await adapter.uploadStream('key', body, {
+        size: 7,
+        signal,
+        bucket: 'private',
+        contentType: 'text/plain',
+        metadata: { owner: 'user' },
+      });
+
+      expect(send).toHaveBeenCalledWith(expect.any(PutObjectCommand), { abortSignal: signal });
+      expect(send.mock.calls[0]?.[0].input).toEqual({
+        Bucket: 'private',
+        Key: 'key',
+        Body: body,
+        ContentLength: 7,
+        ContentType: 'text/plain',
+        Metadata: { owner: 'user' },
+      });
+      expect(result).toEqual({ key: 'key', bucket: 'private', size: 7 });
+      expect(body.destroyed).toBe(true);
+    });
+
+    it.each([0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY, Number.MAX_SAFE_INTEGER + 1])(
+      'rejects invalid stream size %s and closes the stream',
+      async (size) => {
+        const body = Readable.from([Buffer.from('payload')]);
+        const send = mockSend(adapter);
+        await expect(adapter.uploadStream('key', body, { size })).rejects.toBeInstanceOf(
+          DomainException,
+        );
+        expect(send).not.toHaveBeenCalled();
+        expect(body.destroyed).toBe(true);
+      },
+    );
+
+    it('closes the stream when S3 fails', async () => {
+      const body = Readable.from([Buffer.from('payload')]);
+      mockSend(adapter).mockRejectedValue(new Error('connection reset'));
+      await expectDomainFailure(adapter.uploadStream('key', body, { size: 7 }), {
+        kind: 'unavailable',
+        code: ERROR_CODES.STORAGE_UPLOAD_FAILED,
+        permanent: false,
+      });
+      expect(body.destroyed).toBe(true);
+    });
+
+    it('rejects an already cancelled upload before contacting S3', async () => {
+      const body = Readable.from([Buffer.from('payload')]);
+      const controller = new AbortController();
+      controller.abort();
+      const send = mockSend(adapter);
+      await expect(
+        adapter.uploadStream('key', body, { size: 7, signal: controller.signal }),
+      ).rejects.toBeInstanceOf(DomainException);
+      expect(send).not.toHaveBeenCalled();
+      expect(body.destroyed).toBe(true);
+    });
+  });
+
   describe('onModuleInit', () => {
     it('fails startup in production when the configured bucket is inaccessible', async () => {
       process.env['NODE_ENV'] = 'production';

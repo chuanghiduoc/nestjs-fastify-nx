@@ -30,6 +30,8 @@ function storedFile(overrides: { organizationId?: string; userId?: string } = {}
 
 function repositoryMock(): Record<keyof StoredFileRepositoryPort, Mock> {
   return {
+    createBatch: vi.fn(),
+    publishBatch: vi.fn(),
     findBySourceKey: vi.fn().mockResolvedValue(null),
     findByKey: vi.fn().mockResolvedValue(null),
     findById: vi.fn().mockResolvedValue(storedFile()),

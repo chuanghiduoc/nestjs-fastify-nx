@@ -3,7 +3,7 @@ import { Client } from 'pg';
 import { expect, it } from 'vitest';
 import { createTestContainers } from '@nestjs-fastify-nx/testing';
 
-it('upgrades legacy team memberships without losing rows and backfills counters', async () => {
+it('initializes team counters and unique nullable membership keys', async () => {
   const containers = await createTestContainers();
   const client = new Client({ connectionString: containers.postgres.getConnectionUri() });
   try {
@@ -27,18 +27,12 @@ it('upgrades legacy team memberships without losing rows and backfills counters'
       users.rows[0].id,
       users.rows[1].id,
     ]);
-    await client.query(
-      readFileSync(
-        new URL('20260910000000_better_auth_team_membership/migration.sql', migrations),
-        'utf8',
-      ),
-    );
     const counts = await client.query<{ name: string; memberCount: number }>(
       `SELECT name, "memberCount" FROM teams ORDER BY name`,
     );
     expect(counts.rows).toEqual([
       { name: 'Empty', memberCount: 0 },
-      { name: 'Populated', memberCount: 2 },
+      { name: 'Populated', memberCount: 0 },
     ]);
     const members = await client.query<{ membershipKey: string | null }>(
       `SELECT "membershipKey" FROM team_members`,

@@ -29,12 +29,10 @@ CREATE TABLE "sessions" (
     CONSTRAINT "sessions_pkey" PRIMARY KEY ("id")
 );
 
--- Better Auth scopes account identity by `issuer` rather than `providerId`: credential accounts
--- get `local:credential`, an OAuth provider without an issuer of its own gets `local:oauth:<id>`.
 CREATE TABLE "accounts" (
     "id" UUID NOT NULL DEFAULT uuidv7(),
     "accountId" TEXT NOT NULL,
-    "issuer" TEXT NOT NULL,
+    "issuer" TEXT,
     "providerId" TEXT NOT NULL,
     "userId" UUID NOT NULL,
     "accessToken" TEXT,
@@ -101,6 +99,7 @@ CREATE TABLE "teams" (
     "id" UUID NOT NULL DEFAULT uuidv7(),
     "name" TEXT NOT NULL,
     "organizationId" UUID NOT NULL,
+    "memberCount" INTEGER NOT NULL DEFAULT 0,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3),
 
@@ -111,6 +110,7 @@ CREATE TABLE "team_members" (
     "id" UUID NOT NULL DEFAULT uuidv7(),
     "teamId" UUID NOT NULL,
     "userId" UUID NOT NULL,
+    "membershipKey" TEXT,
     "createdAt" TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "team_members_pkey" PRIMARY KEY ("id")
@@ -291,7 +291,7 @@ CREATE INDEX "sessions_activeTeamId_idx" ON "sessions"("activeTeamId");
 -- scan as the table grows unbounded.
 CREATE INDEX "sessions_expiresAt_idx" ON "sessions"("expiresAt");
 
-CREATE UNIQUE INDEX "accounts_issuer_accountId_key" ON "accounts"("issuer", "accountId");
+CREATE UNIQUE INDEX "accounts_providerId_accountId_key" ON "accounts"("providerId", "accountId");
 CREATE INDEX "accounts_userId_idx" ON "accounts"("userId");
 
 -- Better Auth reads "verifications" only by "identifier", ordered by "createdAt" — every
@@ -317,6 +317,7 @@ CREATE UNIQUE INDEX "teams_organizationId_name_key" ON "teams"("organizationId",
 CREATE INDEX "teams_org_createdAt_id_desc_idx" ON "teams"("organizationId", "createdAt" DESC, "id" DESC);
 
 CREATE UNIQUE INDEX "team_members_teamId_userId_key" ON "team_members"("teamId", "userId");
+CREATE UNIQUE INDEX "team_members_membershipKey_key" ON "team_members"("membershipKey");
 CREATE INDEX "team_members_userId_idx" ON "team_members"("userId");
 
 CREATE UNIQUE INDEX "organization_roles_organizationId_role_key" ON "organization_roles"("organizationId", "role");

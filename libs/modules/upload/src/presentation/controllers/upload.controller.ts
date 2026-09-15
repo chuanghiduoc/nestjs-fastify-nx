@@ -2,16 +2,21 @@ import {
   Body,
   Controller,
   Delete,
+  Get,
   HttpCode,
   HttpStatus,
   Param,
   ParseUUIDPipe,
   Post,
+  Req,
+  Res,
 } from '@nestjs/common';
-import { CommandBus } from '@nestjs/cqrs';
+import { CommandBus, QueryBus } from '@nestjs/cqrs';
+import type { FastifyRequest, FastifyReply } from 'fastify';
 import { Throttle } from '@nestjs/throttler';
 import {
   ApiBody,
+  ApiConsumes,
   ApiCookieAuth,
   ApiCreatedResponse,
   ApiNoContentResponse,
@@ -22,7 +27,7 @@ import {
 } from '@nestjs/swagger';
 import { ClsService } from 'nestjs-cls';
 import { REQUEST_CONTEXT_KEYS, type RequestContextStore } from '@nestjs-fastify-nx/core';
-import { ApiCommonErrors } from '@nestjs-fastify-nx/contracts';
+import { ApiCommonErrors, ApiPaginatedResponse, ListResponseDto } from '@nestjs-fastify-nx/contracts';
 import { PERMISSIONS } from '@nestjs-fastify-nx/shared';
 import { RequirePermission } from '@nestjs-fastify-nx/infra-authorization';
 import type { PresignedUpload, StoredFile } from '@nestjs-fastify-nx/infra-storage';
@@ -38,6 +43,9 @@ import { PresignUploadDto } from '../dto/presign-upload.dto';
 import { ConfirmUploadDto } from '../dto/confirm-upload.dto';
 import { PresignedUploadDto } from '../dto/presigned-upload.dto';
 import { StoredFileDto } from '../dto/stored-file.dto';
+import { prepareMultipartUpload, prepareMultipartUploads } from '../multipart/prepare-multipart-upload';
+import { UploadFilesCommand } from '../../application/commands/upload-files/upload-files.command';
+import { GetUploadQuery } from '../../application/queries/get-upload/get-upload.query';
 
 const PRESIGN_LIMIT = { default: { limit: 10, ttl: 60_000 } };
 const CONFIRM_LIMIT = { default: { limit: 30, ttl: 60_000 } };
@@ -50,7 +58,63 @@ export class UploadController {
   constructor(
     private readonly commandBus: CommandBus,
     private readonly cls: ClsService<RequestContextStore>,
+    private readonly queryBus: QueryBus,
   ) {}
+
+  @Post()
+  @RequirePermission(PERMISSIONS.FILE_CREATE)
+  @Throttle(PRESIGN_LIMIT)
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({ schema: { type: 'object', required: ['file'], properties: { file: { type: 'string', format: 'binary' } } } })
+  @ApiCreatedResponse({ type: StoredFileDto })
+  @ApiCommonErrors({ auth: true })
+  @ApiOperation({ summary: 'Upload one file through the backend.' })
+  async upload(
+    @CurrentUser() user: AuthenticatedSession,
+    @Req() request: FastifyRequest,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ): Promise<StoredFile> {
+    const file = await prepareMultipartUpload(request, reply);
+    const [result] = await this.commandBus.execute(new UploadFilesCommand({
+      organizationId: requireOrganizationId(user), userId: user.userId,
+      files: [file], signal: file.signal,
+      correlationId: this.cls.get(REQUEST_CONTEXT_KEYS.correlationId),
+    }));
+    return result;
+  }
+
+  @Post('batch')
+  @RequirePermission(PERMISSIONS.FILE_CREATE)
+  @Throttle(PRESIGN_LIMIT)
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({ schema: { type: 'object', required: ['file'], properties: { file: { type: 'array', items: { type: 'string', format: 'binary' } } } } })
+  @ApiPaginatedResponse(StoredFileDto)
+  @ApiCommonErrors({ auth: true })
+  @ApiOperation({ summary: 'Upload multiple files through the backend as one batch.' })
+  async uploadBatch(
+    @CurrentUser() user: AuthenticatedSession,
+    @Req() request: FastifyRequest,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ): Promise<ListResponseDto<StoredFile>> {
+    const files = await prepareMultipartUploads(request, reply);
+    const data = await this.commandBus.execute(new UploadFilesCommand({
+      organizationId: requireOrganizationId(user), userId: user.userId,
+      files, signal: files[0].signal,
+      correlationId: this.cls.get(REQUEST_CONTEXT_KEYS.correlationId),
+    }));
+    return { object: 'list', url: '/api/v1/upload/batch', data, hasMore: false };
+  }
+
+  @Get(':id')
+  @ApiOkResponse({ type: StoredFileDto })
+  @ApiCommonErrors({ auth: true, notFound: true })
+  @ApiOperation({ summary: 'Read upload status and a download URL when ready.' })
+  getUpload(
+    @CurrentUser() user: AuthenticatedSession,
+    @Param('id', new ParseUUIDPipe({ version: '7' })) id: string,
+  ): Promise<StoredFile> {
+    return this.queryBus.execute(new GetUploadQuery(requireOrganizationId(user), user.userId, id));
+  }
 
   @Post('presign')
   @RequirePermission(PERMISSIONS.FILE_CREATE)

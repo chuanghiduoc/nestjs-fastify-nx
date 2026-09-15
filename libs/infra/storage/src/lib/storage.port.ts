@@ -1,10 +1,19 @@
+import type { Readable } from 'node:stream';
+import type { StoredFileStatus } from '@nestjs-fastify-nx/shared';
+
 export interface UploadOptions {
   bucket?: string;
   contentType?: string;
   metadata?: Record<string, string>;
 }
 
+export interface StreamUploadOptions extends UploadOptions {
+  size: number;
+  signal?: AbortSignal;
+}
+
 export interface StoredFile {
+  status?: StoredFileStatus;
   id?: string;
   key: string;
   // Present only after asynchronous malware verification reaches READY.
@@ -45,6 +54,7 @@ export interface StorageReadStream extends AsyncIterable<Uint8Array> {
 }
 
 export interface StoragePort {
+  uploadStream(key: string, body: Readable, options: StreamUploadOptions): Promise<StoredFile>;
   upload(key: string, body: Buffer, options?: UploadOptions): Promise<StoredFile>;
   presignUpload(key: string, options: PresignUploadOptions): Promise<PresignedUpload>;
   head(key: string, bucket?: string): Promise<ObjectMetadata | null>;

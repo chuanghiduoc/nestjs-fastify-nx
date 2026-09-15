@@ -7,4 +7,6 @@ export interface UploadLimits {
   readonly presignExpiresSeconds: number;
   /** Enough to cover every signature in file-signature.ts. */
   readonly magicByteCount: number;
+  readonly malwareScanEnabled: boolean;
+  readonly bucket: string;
 }

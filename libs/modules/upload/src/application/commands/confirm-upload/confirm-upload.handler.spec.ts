@@ -10,6 +10,7 @@ import type { UploadVerificationDispatcher } from '../../ports/upload-verificati
 import type { UploadLimits } from '../../upload-limits';
 import { ConfirmUploadCommand } from './confirm-upload.command';
 import { ConfirmUploadHandler } from './confirm-upload.handler';
+import { UploadPublicationService } from '../../upload-publication.service';
 
 const USER_ID = '019dd1a5-9235-70db-8d57-54ef901d8185';
 const ORGANIZATION_ID = '019dd1a5-9235-70db-8d57-54ef901d8186';
@@ -20,6 +21,8 @@ const JPEG_HEADER = Buffer.from([0xff, 0xd8, 0xff]);
 const SOURCE_KEY = `uploads/${USER_ID}/019dd1a6-102a-7b25-a5a3-54b298b81864.png`;
 
 const LIMITS: UploadLimits = {
+  bucket: 'uploads',
+  malwareScanEnabled: true,
   maxFileBytes: MAX_FILE_SIZE,
   presignExpiresSeconds: 300,
   magicByteCount: 16,
@@ -27,6 +30,7 @@ const LIMITS: UploadLimits = {
 
 function storageMock(): Record<keyof StoragePort, Mock> {
   return {
+    uploadStream: vi.fn(),
     upload: vi.fn(),
     presignUpload: vi.fn(),
     head: vi.fn(),
@@ -41,6 +45,8 @@ function storageMock(): Record<keyof StoragePort, Mock> {
 
 function repositoryMock(): Record<keyof StoredFileRepositoryPort, Mock> {
   return {
+    createBatch: vi.fn(),
+    publishBatch: vi.fn(),
     findBySourceKey: vi.fn().mockResolvedValue(null),
     findByKey: vi.fn().mockResolvedValue(null),
     findById: vi.fn().mockResolvedValue(null),
@@ -52,15 +58,15 @@ function repositoryMock(): Record<keyof StoredFileRepositoryPort, Mock> {
   };
 }
 
-function build() {
+function build(options: { malwareScanEnabled: boolean } = { malwareScanEnabled: false }) {
   const storage = storageMock();
   const files = repositoryMock();
   const verification: { dispatch: Mock } = { dispatch: vi.fn().mockResolvedValue(undefined) };
   const handler = new ConfirmUploadHandler(
     storage as unknown as StoragePort,
     files as unknown as StoredFileRepositoryPort,
-    verification as unknown as UploadVerificationDispatcher,
-    LIMITS,
+    new UploadPublicationService(storage as unknown as StoragePort, files as unknown as StoredFileRepositoryPort, verification as unknown as UploadVerificationDispatcher),
+    { ...LIMITS, ...options },
   );
   return { handler, storage, files, verification };
 }
@@ -139,7 +145,7 @@ describe('ConfirmUploadHandler — staged object validation', () => {
     await expect(handler.execute(command())).rejects.toMatchObject({
       code: 'upload_magic_bytes_mismatch',
     });
-    expect(storage.delete).toHaveBeenCalledWith(SOURCE_KEY);
+    expect(storage.delete).toHaveBeenCalledWith(expect.stringMatching(/^files\//), 'uploads');
     expect(verification.dispatch).not.toHaveBeenCalled();
   });
 
@@ -151,7 +157,7 @@ describe('ConfirmUploadHandler — staged object validation', () => {
     await expect(handler.execute(command())).rejects.toMatchObject({
       code: 'upload_magic_bytes_unknown',
     });
-    expect(storage.delete).toHaveBeenCalledWith(SOURCE_KEY);
+    expect(storage.delete).toHaveBeenCalledWith(expect.stringMatching(/^files\//), 'uploads');
   });
 
   it('keeps the staged object when reading its head fails transiently', async () => {
@@ -166,7 +172,7 @@ describe('ConfirmUploadHandler — staged object validation', () => {
 
     await expect(handler.execute(command())).rejects.toBe(outage);
     expect(storage.delete).not.toHaveBeenCalled();
-    expect(files.create).not.toHaveBeenCalled();
+    expect(files.create).toHaveBeenCalledOnce();
     expect(verification.dispatch).not.toHaveBeenCalled();
   });
 
@@ -180,7 +186,7 @@ describe('ConfirmUploadHandler — staged object validation', () => {
 
 describe('ConfirmUploadHandler — happy path', () => {
   it('finalizes to an immutable key, moves to VERIFYING and dispatches verification', async () => {
-    const { handler, storage, files, verification } = build();
+    const { handler, storage, files, verification } = build({ malwareScanEnabled: true });
     storage.head.mockResolvedValue(validMeta());
 
     const result = await handler.execute(command());
@@ -198,6 +204,26 @@ describe('ConfirmUploadHandler — happy path', () => {
     );
     // Quarantined until the worker clears it.
     expect(result.url).toBeUndefined();
+    expect(result.status).toBe('VERIFYING');
+    expect(storage.readRange).not.toHaveBeenCalled();
+  });
+
+  it('publishes immediately without queueing when malware scanning is disabled', async () => {
+    const { handler, storage, files, verification } = build();
+    storage.head.mockResolvedValue(validMeta());
+    storage.getSignedUrl.mockResolvedValue('https://signed.example/file');
+    const result = await handler.execute(command());
+    expect(result).toMatchObject({ status: 'READY', url: 'https://signed.example/file' });
+    expect(storage.readRange).toHaveBeenCalledWith(result.key, LIMITS.magicByteCount, 'uploads');
+    expect(files.transition).toHaveBeenCalledWith(result.id, 'FINALIZING', 'READY');
+    expect(verification.dispatch).not.toHaveBeenCalled();
+  });
+
+  it('keeps verification durable and reports processing during a queue outage', async () => {
+    const { handler, storage, verification } = build({ malwareScanEnabled: true });
+    storage.head.mockResolvedValue(validMeta());
+    verification.dispatch.mockRejectedValue(new Error('queue unavailable'));
+    await expect(handler.execute(command())).resolves.toMatchObject({ status: 'VERIFYING' });
   });
 });
 
@@ -248,6 +274,14 @@ describe('ConfirmUploadHandler — concurrency and recovery', () => {
     expect(storage.finalize).not.toHaveBeenCalled();
     // READY is out of quarantine, so no re-verification is queued.
     expect(verification.dispatch).not.toHaveBeenCalled();
+    expect(storage.head).not.toHaveBeenCalled();
+  });
+
+  it('does not recover a source key owned by another organization', async () => {
+    const { handler, storage, files } = build();
+    files.findBySourceKey.mockResolvedValue(existingRecord({ organizationId: 'other-org' }));
+    await expect(handler.execute(command())).rejects.toMatchObject({ kind: 'not_found' });
+    expect(storage.head).not.toHaveBeenCalled();
   });
 
   it('treats an existing REJECTED row as not found', async () => {

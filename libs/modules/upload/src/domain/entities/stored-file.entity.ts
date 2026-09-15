@@ -26,7 +26,7 @@ export interface StoredFileProps {
 // expected status, so a duplicate confirm or a retried verify job can never skip a step or resurrect
 // a rejected object.
 const ALLOWED_TRANSITIONS: Record<StoredFileStatus, readonly StoredFileStatus[]> = {
-  [STORED_FILE_STATUS.FINALIZING]: [STORED_FILE_STATUS.VERIFYING, STORED_FILE_STATUS.REJECTED],
+  [STORED_FILE_STATUS.FINALIZING]: [STORED_FILE_STATUS.VERIFYING, STORED_FILE_STATUS.READY, STORED_FILE_STATUS.REJECTED],
   [STORED_FILE_STATUS.VERIFYING]: [STORED_FILE_STATUS.READY, STORED_FILE_STATUS.REJECTED],
   [STORED_FILE_STATUS.READY]: [],
   [STORED_FILE_STATUS.REJECTED]: [],

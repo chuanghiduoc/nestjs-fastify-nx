@@ -11,7 +11,8 @@
     }
   },
   "dependencies": {
-    "@nestjs-fastify-nx/core": "workspace:*"
+    "@nestjs-fastify-nx/core": "workspace:*",
+    "@nestjs-fastify-nx/shared": "workspace:*"
   },
   "devDependencies": {
     "@nestjs-fastify-nx/contracts": "workspace:*",

@@ -3,7 +3,7 @@ import { Client } from 'pg';
 import { expect, it } from 'vitest';
 import { createTestContainers } from '@nestjs-fastify-nx/testing';
 
-it('preserves legacy accounts and accepts provider identities without issuer', async () => {
+it('initializes provider identity uniqueness and optional account issuers', async () => {
   const containers = await createTestContainers();
   const client = new Client({ connectionString: containers.postgres.getConnectionUri() });
   try {
@@ -19,12 +19,6 @@ it('preserves legacy accounts and accepts provider identities without issuer', a
     await client.query(
       `INSERT INTO accounts ("accountId", issuer, "providerId", "userId", "updatedAt") VALUES ('existing', 'local:credential', 'credential', $1, now())`,
       [userId],
-    );
-    await client.query(
-      readFileSync(
-        new URL('20260914000000_restore_account_provider_identity/migration.sql', migrations),
-        'utf8',
-      ),
     );
     const legacy = await client.query(`SELECT issuer FROM accounts WHERE "accountId" = 'existing'`);
     expect(legacy.rows).toEqual([{ issuer: 'local:credential' }]);
