@@ -9,5 +9,15 @@
   },
   "enabledPlugins": {
     "nx@nx-claude-plugins": true
+  },
+  "sandbox": {
+    "filesystem": {
+      "allowRead": ["/tmp/.nx", "~/.nx"],
+      "allowWrite": ["/tmp/.nx", "~/.nx"]
+    },
+    "network": {
+      "allowedDomains": ["www.google-analytics.com"],
+      "allowUnixSockets": ["/tmp/.nx", "~/.nx"]
+    }
   }
 }

@@ -3,6 +3,8 @@ import { HttpStatus, type NestInterceptor } from '@nestjs/common';
 import { of } from 'rxjs';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type Redis from 'ioredis';
+import { prepareMultipartUploads } from '@nestjs-fastify-nx/modules-upload';
+import { positiveIntEnv } from '@nestjs-fastify-nx/shared';
 import { ERROR_CODES } from '@nestjs-fastify-nx/contracts';
 import { sanitizeUrlForLogging } from '@nestjs-fastify-nx/shared';
 import type { AuthenticatedSession, AuthenticatedApiKey } from '@nestjs-fastify-nx/infra-auth';
@@ -74,7 +76,17 @@ function extractPrincipal(req: FastifyRequest): string | undefined {
 }
 
 // Method + full URL (query included) + body. Detects a key reused for a different operation.
-function buildFingerprint(req: FastifyRequest): string {
+async function buildFingerprint(req: FastifyRequest, reply: FastifyReply): Promise<string> {
+  if (req.isMultipart?.()) {
+    const files = await prepareMultipartUploads(req, reply);
+    return sha256(
+      JSON.stringify([
+        req.method,
+        req.url,
+        files.map(({ digest, contentType, size }) => ({ digest, contentType, size })),
+      ]),
+    );
+  }
   return sha256(`${req.method}\n${req.url}\n${JSON.stringify(canonicalize(req.body ?? null))}`);
 }
 
@@ -120,7 +132,19 @@ export function registerIdempotency(
   fastify: FastifyInstance,
   options: IdempotencyOptions,
 ): NestInterceptor {
-  const store = new IdempotencyStore(options.redis, options.lockTtlSeconds, options.ttlSeconds);
+  const defaultStore = new IdempotencyStore(
+    options.redis,
+    options.lockTtlSeconds,
+    options.ttlSeconds,
+  );
+  const multipartStore = new IdempotencyStore(
+    options.redis,
+    Math.max(
+      options.lockTtlSeconds,
+      Math.ceil(positiveIntEnv('UPLOAD_REQUEST_TIMEOUT_MS', 900_000) / 1000) + 30,
+    ),
+    options.ttlSeconds,
+  );
   const reportError = options.onError ?? ((): void => undefined);
 
   const acquire = async (req: FastifyRequest, reply: FastifyReply): Promise<void> => {
@@ -128,6 +152,7 @@ export function registerIdempotency(
     const principal = extractPrincipal(req);
     if (!principal) return;
 
+    const store = req.isMultipart?.() ? multipartStore : defaultStore;
     const key = req.headers[IDEMPOTENCY_HEADER] as string;
     if (key.length === 0 || key.length > MAX_KEY_LENGTH) {
       await sendProblem(req, reply, {
@@ -140,7 +165,7 @@ export function registerIdempotency(
     }
 
     const storeKey = `idem:${sha256(JSON.stringify([principal, key]))}`;
-    const fingerprint = buildFingerprint(req);
+    const fingerprint = await buildFingerprint(req, reply);
 
     let result: AcquireResult;
     try {
@@ -220,7 +245,13 @@ export function registerIdempotency(
     if (!ctx) return payload;
 
     try {
-      await finalizeIdempotentResponse(store, ctx, reply, payload, reportError);
+      await finalizeIdempotentResponse(
+        req.isMultipart?.() ? multipartStore : defaultStore,
+        ctx,
+        reply,
+        payload,
+        reportError,
+      );
     } catch (err) {
       reportError(`idempotency finalize failed: ${(err as Error).message}`);
     }

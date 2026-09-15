@@ -43,6 +43,12 @@ The wrapper uses the same Bake graph and optionally boots the prod-parity stack:
 
 ## Database Migrations
 
+The migration history is consolidated into `20260501000000_init` for fresh
+databases, including custom SQL for row-level security, partitions and triggers.
+Databases that already applied the previous migration history require a reviewed
+baseline reconciliation before adopting this history. Do not reset a database
+with retained data or edit its migration records as part of routine deployment.
+
 Run migrations **before** starting the API:
 
 ```bash

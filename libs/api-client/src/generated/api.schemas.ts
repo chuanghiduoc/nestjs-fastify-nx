@@ -850,6 +850,33 @@ export interface RevokedSessionsResponseDto {
 }
 
 /**
+ * READY files can be downloaded; VERIFYING files are awaiting malware scanning.
+ */
+export type StoredFileDtoStatus = (typeof StoredFileDtoStatus)[keyof typeof StoredFileDtoStatus];
+
+export const StoredFileDtoStatus = {
+  FINALIZING: 'FINALIZING',
+  VERIFYING: 'VERIFYING',
+  READY: 'READY',
+  REJECTED: 'REJECTED',
+} as const;
+
+export interface StoredFileDto {
+  /** Stored-file identifier used by delete operations. */
+  id: string;
+  /** READY files can be downloaded; VERIFYING files are awaiting malware scanning. */
+  status: StoredFileDtoStatus;
+  /** Storage key under which the file was persisted. */
+  key: string;
+  /** Signed download URL, present when the file is READY. */
+  url?: string;
+  /** Storage bucket the file landed in. */
+  bucket: string;
+  /** Size in bytes. */
+  size: number;
+}
+
+/**
  * Declared MIME type of the file the client intends to upload.
  */
 export type PresignUploadDtoContentType =
@@ -894,19 +921,6 @@ export interface ConfirmUploadDto {
    * @maxLength 256
    */
   key: string;
-}
-
-export interface StoredFileDto {
-  /** Stored-file identifier used by delete operations. */
-  id: string;
-  /** Storage key under which the file was persisted. */
-  key: string;
-  /** Download URL, present only after asynchronous malware verification succeeds. */
-  url?: string;
-  /** Storage bucket the file landed in. */
-  bucket: string;
-  /** Size in bytes. */
-  size: number;
 }
 
 export interface User {
@@ -1206,6 +1220,18 @@ export type SessionsListParams = {
 
 export type SessionsList200 = ListResponseDto & {
   data?: SessionResponseDto[];
+};
+
+export type UploadUploadBody = {
+  file: Blob | File;
+};
+
+export type UploadUploadBatchBody = {
+  file: (Blob | File)[];
+};
+
+export type UploadUploadBatch200 = ListResponseDto & {
+  data?: StoredFileDto[];
 };
 
 export type SocialSignInBodyIdTokenUserName = {

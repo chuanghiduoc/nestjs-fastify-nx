@@ -23,11 +23,55 @@ import type {
   PresignUploadDto,
   PresignedUploadDto,
   StoredFileDto,
+  UploadUploadBatch200,
+  UploadUploadBatchBody,
+  UploadUploadBody,
 } from './api.schemas';
 
 import { customAxiosInstance } from '../lib/axios-instance';
 
 export const getUpload = () => {
+  /**
+   * @summary Upload one file through the backend.
+   */
+  const uploadUpload = (uploadUploadBody: UploadUploadBody) => {
+    const formData = new FormData();
+    formData.append(`file`, uploadUploadBody.file);
+
+    return customAxiosInstance<StoredFileDto>({
+      url: `/api/v1/upload`,
+      method: 'POST',
+      headers: { 'Content-Type': 'multipart/form-data' },
+      data: formData,
+    });
+  };
+  /**
+   * @summary Upload multiple files through the backend as one batch.
+   */
+  const uploadUploadBatch = (uploadUploadBatchBody: UploadUploadBatchBody) => {
+    const formData = new FormData();
+    uploadUploadBatchBody.file.forEach((value) => formData.append(`file`, value));
+
+    return customAxiosInstance<UploadUploadBatch200>({
+      url: `/api/v1/upload/batch`,
+      method: 'POST',
+      headers: { 'Content-Type': 'multipart/form-data' },
+      data: formData,
+    });
+  };
+  /**
+   * @summary Read upload status and a download URL when ready.
+   */
+  const uploadGetUpload = (id: string) => {
+    return customAxiosInstance<StoredFileDto>({ url: `/api/v1/upload/${id}`, method: 'GET' });
+  };
+  /**
+   * Marks the file deleted and hides it from every read immediately. The object stays in storage until the scheduler purges it after STORED_FILE_PURGE_AFTER_DAYS, so a mistaken delete is recoverable until then. Repeating the call on an already-deleted file is a no-op.
+   * @summary Soft-delete an uploaded file.
+   */
+  const uploadDeleteFile = (id: string) => {
+    return customAxiosInstance<void>({ url: `/api/v1/upload/${id}`, method: 'DELETE' });
+  };
   /**
    * Returns the URL and form fields a browser must POST `multipart/form-data` to. The policy pins `Content-Type` and the configured size cap (UPLOAD_MAX_FILE_BYTES); mismatches are rejected by S3 itself. After the upload completes, call `POST /upload/confirm` with the returned `key`.
    * @summary Issue a presigned POST policy for a direct browser→S3 upload.
@@ -52,21 +96,30 @@ export const getUpload = () => {
       data: confirmUploadDto,
     });
   };
-  /**
-   * Marks the file deleted and hides it from every read immediately. The object stays in storage until the scheduler purges it after STORED_FILE_PURGE_AFTER_DAYS, so a mistaken delete is recoverable until then. Repeating the call on an already-deleted file is a no-op.
-   * @summary Soft-delete an uploaded file.
-   */
-  const uploadDeleteFile = (id: string) => {
-    return customAxiosInstance<void>({ url: `/api/v1/upload/${id}`, method: 'DELETE' });
+  return {
+    uploadUpload,
+    uploadUploadBatch,
+    uploadGetUpload,
+    uploadDeleteFile,
+    uploadPresign,
+    uploadConfirm,
   };
-  return { uploadPresign, uploadConfirm, uploadDeleteFile };
 };
+export type UploadUploadResult = NonNullable<
+  Awaited<ReturnType<ReturnType<typeof getUpload>['uploadUpload']>>
+>;
+export type UploadUploadBatchResult = NonNullable<
+  Awaited<ReturnType<ReturnType<typeof getUpload>['uploadUploadBatch']>>
+>;
+export type UploadGetUploadResult = NonNullable<
+  Awaited<ReturnType<ReturnType<typeof getUpload>['uploadGetUpload']>>
+>;
+export type UploadDeleteFileResult = NonNullable<
+  Awaited<ReturnType<ReturnType<typeof getUpload>['uploadDeleteFile']>>
+>;
 export type UploadPresignResult = NonNullable<
   Awaited<ReturnType<ReturnType<typeof getUpload>['uploadPresign']>>
 >;
 export type UploadConfirmResult = NonNullable<
   Awaited<ReturnType<ReturnType<typeof getUpload>['uploadConfirm']>>
->;
-export type UploadDeleteFileResult = NonNullable<
-  Awaited<ReturnType<ReturnType<typeof getUpload>['uploadDeleteFile']>>
 >;

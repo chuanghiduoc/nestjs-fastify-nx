@@ -13,6 +13,9 @@ import { UPLOAD_LIMITS, type UploadLimits } from './application/upload-limits';
 import { STORED_FILE_REPOSITORY } from './domain/ports/stored-file-repository.port';
 import { PrismaStoredFileRepository } from './infrastructure/repositories/prisma-stored-file.repository';
 import { BullMqUploadVerificationDispatcher } from './infrastructure/dispatchers/bullmq-upload-verification.dispatcher';
+import { UploadPublicationService } from './application/upload-publication.service';
+import { UploadFilesHandler } from './application/commands/upload-files/upload-files.handler';
+import { GetUploadHandler } from './application/queries/get-upload/get-upload.handler';
 
 const DEFAULT_MAX_FILE_SIZE = 10 * 1024 * 1024;
 // Covers every signature in file-signature.ts.
@@ -24,6 +27,8 @@ const uploadLimitsProvider: Provider = {
     maxFileBytes: positiveIntEnv('UPLOAD_MAX_FILE_BYTES', DEFAULT_MAX_FILE_SIZE),
     presignExpiresSeconds: positiveIntEnv('UPLOAD_PRESIGN_EXPIRES_SECONDS', 300),
     magicByteCount: MAGIC_BYTE_COUNT,
+    malwareScanEnabled: process.env['MALWARE_SCANNER_ENABLED'] === 'true',
+    bucket: process.env['STORAGE_BUCKET'] ?? 'uploads',
   }),
 };
 
@@ -70,6 +75,9 @@ export class UploadVerificationModule {
     PresignUploadHandler,
     ConfirmUploadHandler,
     DeleteUploadHandler,
+    UploadPublicationService,
+    UploadFilesHandler,
+    GetUploadHandler,
   ],
 })
 export class UploadModule {}

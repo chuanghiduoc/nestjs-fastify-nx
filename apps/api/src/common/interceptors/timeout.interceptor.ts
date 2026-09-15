@@ -12,6 +12,7 @@ import { ConfigService } from '@nestjs/config';
 import { Observable, throwError, TimeoutError, type Subscriber } from 'rxjs';
 import { catchError, timeout } from 'rxjs/operators';
 import type { FastifyRequest } from 'fastify';
+import { positiveIntEnv } from '@nestjs-fastify-nx/shared';
 import { ERROR_CODES } from '@nestjs-fastify-nx/contracts';
 import { I18N_KEYS } from '@nestjs-fastify-nx/contracts';
 import type { EnvConfig } from '../../config/env.validation';
@@ -54,6 +55,10 @@ export class TimeoutInterceptor implements NestInterceptor {
             RequestWithIdempotency | undefined)
         : undefined;
 
+    const timeoutMs = request?.isMultipart?.()
+      ? positiveIntEnv('UPLOAD_REQUEST_TIMEOUT_MS', 900_000)
+      : this.timeoutMs;
+
     // Fast path (unchanged): non-idempotent requests get a 504 on timeout and the orphaned work is
     // discarded (rxjs timeout() unsubscribes the source).
     // The idempotency interceptor acquires inside this interceptor's source subscription.
@@ -63,7 +68,7 @@ export class TimeoutInterceptor implements NestInterceptor {
       (!request.idempotency && typeof request.headers['idempotency-key'] !== 'string')
     ) {
       return next.handle().pipe(
-        timeout(this.timeoutMs),
+        timeout(timeoutMs),
         catchError((err: unknown) => throwError(() => this.mapError(err))),
       );
     }
@@ -72,7 +77,7 @@ export class TimeoutInterceptor implements NestInterceptor {
     const contentType = this.resolveContentType(context);
 
     return new Observable<unknown>((subscriber) =>
-      subscribeWithLateCapture(next.handle(), subscriber, this.timeoutMs, {
+      subscribeWithLateCapture(next.handle(), subscriber, timeoutMs, {
         timeoutError: () => this.timeoutException(),
         onLateValue: (value) => {
           // Late success after the 504 already replied — record it so a retry replays instead of

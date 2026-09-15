@@ -110,7 +110,7 @@ describe('Upload E2E', () => {
           [presign.body.key],
         );
         expect(rows).toHaveLength(1);
-        expect(rows[0]).toMatchObject({ key: res.body.key, status: 'VERIFYING', size: 8 });
+        expect(rows[0]).toMatchObject({ key: res.body.key, status: 'READY', size: 8 });
         expect(rows[0].organizationId).toBe(rows[0].activeOrganizationId);
       } finally {
         await admin.end();

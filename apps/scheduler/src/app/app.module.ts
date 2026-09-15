@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { CqrsModule } from '@nestjs/cqrs';
+import { BullModule } from '@nestjs/bullmq';
+import { QUEUE_NAMES } from '@nestjs-fastify-nx/shared';
 import { LoggerModule } from 'nestjs-pino';
 import { ScheduleModule } from '@nestjs/schedule';
 import { CqrsInstrumentationInitializer } from '@nestjs-fastify-nx/core';
@@ -24,6 +26,7 @@ import { SchedulerLeadershipModule } from './leadership/scheduler-leadership.mod
 import { SessionCleanupTask } from './tasks/session-cleanup.task';
 import { StoredFileCleanupTask } from './tasks/stored-file-cleanup.task';
 import { VerificationCleanupTask } from './tasks/verification-cleanup.task';
+import { UploadVerificationRecoveryTask } from './tasks/upload-verification-recovery.task';
 
 @Module({
   imports: [
@@ -36,6 +39,7 @@ import { VerificationCleanupTask } from './tasks/verification-cleanup.task';
     DatabaseModule,
     StorageModule,
     SchedulerLeadershipModule,
+    BullModule.registerQueue({ name: QUEUE_NAMES.UPLOAD_VERIFICATION }),
     OutboxRelayModule,
     // Listener-only slices live here so the outbox relay's republished
     // domain events reach @OnEvent handlers in the scheduler process. We
@@ -60,6 +64,7 @@ import { VerificationCleanupTask } from './tasks/verification-cleanup.task';
     SessionCleanupTask,
     StoredFileCleanupTask,
     VerificationCleanupTask,
+    UploadVerificationRecoveryTask,
     // Tracing only here — the scheduler has no Prometheus registry, so cqrs_* metrics are
     // skipped (CqrsMetricsRecorderHolder stays unset). See CqrsInstrumentationInitializer.
     CqrsInstrumentationInitializer,

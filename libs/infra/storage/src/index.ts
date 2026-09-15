@@ -7,5 +7,6 @@ export type {
   StorageReadStream,
   StoredFile,
   UploadOptions,
+  StreamUploadOptions,
 } from './lib/storage.port';
 export { STORAGE_PORT } from './lib/storage.port';

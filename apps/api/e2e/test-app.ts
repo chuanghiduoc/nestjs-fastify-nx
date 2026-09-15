@@ -34,6 +34,16 @@ export function seedE2eStorageObject(key: string, body: Buffer, contentType: str
 }
 
 const e2eStorageStub: StoragePort = {
+  uploadStream: async (key, stream, options) => {
+    const chunks: Buffer[] = [];
+    for await (const value of stream) {
+      options.signal?.throwIfAborted();
+      chunks.push(Buffer.from(value as Uint8Array));
+    }
+    const body = Buffer.concat(chunks);
+    seedE2eStorageObject(key, body, options.contentType ?? 'application/octet-stream');
+    return { key, bucket: options.bucket ?? 'uploads', size: body.length };
+  },
   upload: async (key, body, options) => ({
     key,
     bucket: options?.bucket ?? 'uploads',
@@ -156,6 +166,7 @@ async function bootstrapTestApp(): Promise<TestAppContext> {
   process.env['AUTH_SESSION_RATE_LIMIT_WINDOW_MS'] = '60000';
   // 64 KB body limit — small enough for the >bodyLimit 413 test to fire cheaply.
   process.env['HTTP_BODY_LIMIT_BYTES'] = String(64 * 1024);
+  process.env['MALWARE_SCANNER_ENABLED'] = 'false';
   process.env['UPLOAD_MAX_FILE_BYTES'] = String(5 * 1024 * 1024); // 5 MB for test
 
   const moduleRef = await Test.createTestingModule({
@@ -232,9 +243,9 @@ async function bootstrapTestApp(): Promise<TestAppContext> {
   await fastify.register(fastifyMultipart, {
     limits: {
       fileSize: Number(process.env['UPLOAD_MAX_FILE_BYTES']),
-      files: 1,
-      fields: 20,
-      parts: 50,
+      files: 10,
+      fields: 0,
+      parts: 10,
     },
   });
 

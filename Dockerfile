@@ -90,31 +90,22 @@ RUN --mount=type=cache,id=nx-cache-v23-linux-v2,target=/app/.nx/cache,sharing=lo
 # devDependency imported from a runtime path fails the docker-smoke job rather than production.
 # ===========================================================================
 
-FROM base AS api-dev-deps
+FROM base AS runtime-dev-deps
 ENV NODE_ENV=production
-COPY --from=build-dev /app/dist/apps/api/package.json /app/dist/apps/api/pnpm-lock.yaml ./
+COPY --from=build-dev /app/dist/apps/api/package.json ./api.json
+COPY --from=build-dev /app/dist/apps/worker/package.json ./worker.json
+COPY --from=build-dev /app/dist/apps/scheduler/package.json ./scheduler.json
+COPY pnpm-workspace.yaml ./pnpm-workspace.yaml
+COPY docker/merge-service-manifests.mjs ./merge-service-manifests.mjs
 RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
-    pnpm config set store-dir /pnpm/store \
-    && pnpm install --prod --frozen-lockfile --ignore-scripts
-
-FROM base AS worker-dev-deps
-ENV NODE_ENV=production
-COPY --from=build-dev /app/dist/apps/worker/package.json /app/dist/apps/worker/pnpm-lock.yaml ./
-RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
-    pnpm config set store-dir /pnpm/store \
-    && pnpm install --prod --frozen-lockfile --ignore-scripts
-
-FROM base AS scheduler-dev-deps
-ENV NODE_ENV=production
-COPY --from=build-dev /app/dist/apps/scheduler/package.json /app/dist/apps/scheduler/pnpm-lock.yaml ./
-RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
-    pnpm config set store-dir /pnpm/store \
-    && pnpm install --prod --frozen-lockfile --ignore-scripts
+    node merge-service-manifests.mjs api.json worker.json scheduler.json \
+    && pnpm config set store-dir /pnpm/store \
+    && pnpm install --prod --ignore-scripts --lockfile=false --config.auto-install-peers=false
 
 FROM runtime AS api-dev
 ENV NODE_ENV=development \
     PORT=3000
-COPY --from=api-dev-deps --chown=appuser:appgroup /app/node_modules ./node_modules
+COPY --from=runtime-dev-deps --chown=appuser:appgroup /app/node_modules ./node_modules
 COPY --from=build-dev --chown=appuser:appgroup /app/dist/apps/api ./dist
 USER appuser
 EXPOSE 3000 9229
@@ -122,42 +113,42 @@ CMD ["node", "dist/main.js"]
 
 FROM runtime AS worker-dev
 ENV NODE_ENV=development
-COPY --from=worker-dev-deps --chown=appuser:appgroup /app/node_modules ./node_modules
+COPY --from=runtime-dev-deps --chown=appuser:appgroup /app/node_modules ./node_modules
 COPY --from=build-dev --chown=appuser:appgroup /app/dist/apps/worker ./dist
 USER appuser
 CMD ["node", "dist/main.js"]
 
 FROM runtime AS scheduler-dev
 ENV NODE_ENV=development
-COPY --from=scheduler-dev-deps --chown=appuser:appgroup /app/node_modules ./node_modules
+COPY --from=runtime-dev-deps --chown=appuser:appgroup /app/node_modules ./node_modules
 COPY --from=build-dev --chown=appuser:appgroup /app/dist/apps/scheduler ./dist
 USER appuser
 CMD ["node", "dist/main.js"]
 
 # ===========================================================================
-# Webpack emits a minimal runtime package and lockfile per service.
+# api, worker and scheduler share one node_modules layer: their webpack-generated
+# manifests pin identical versions, so installing the union once replaces three
+# near-identical layers. `--lockfile=false` is deliberate — the pruned lockfile
+# resolves @prisma/client with its optional `prisma` peer baked in, dragging the
+# Prisma CLI, Studio, pglite and TypeScript into the runtime image. Every direct
+# dependency in the generated manifest is an exact pin, so resolution stays stable.
+# pnpm-workspace.yaml comes along because that is where the security-floor
+# overrides live: without it a lockfile-free install resolves brace-expansion
+# and picomatch back to the vulnerable majors the overrides exist to block.
+# migration keeps its own stage: it genuinely needs the Prisma CLI.
 # ===========================================================================
 
-FROM base AS api-deps
+FROM base AS runtime-deps
 ENV NODE_ENV=production
-COPY --from=build-prod /app/dist/apps/api/package.json /app/dist/apps/api/pnpm-lock.yaml ./
+COPY --from=build-prod /app/dist/apps/api/package.json ./api.json
+COPY --from=build-prod /app/dist/apps/worker/package.json ./worker.json
+COPY --from=build-prod /app/dist/apps/scheduler/package.json ./scheduler.json
+COPY pnpm-workspace.yaml ./pnpm-workspace.yaml
+COPY docker/merge-service-manifests.mjs ./merge-service-manifests.mjs
 RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
-    pnpm config set store-dir /pnpm/store \
-    && pnpm install --prod --frozen-lockfile --ignore-scripts
-
-FROM base AS worker-deps
-ENV NODE_ENV=production
-COPY --from=build-prod /app/dist/apps/worker/package.json /app/dist/apps/worker/pnpm-lock.yaml ./
-RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
-    pnpm config set store-dir /pnpm/store \
-    && pnpm install --prod --frozen-lockfile --ignore-scripts
-
-FROM base AS scheduler-deps
-ENV NODE_ENV=production
-COPY --from=build-prod /app/dist/apps/scheduler/package.json /app/dist/apps/scheduler/pnpm-lock.yaml ./
-RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
-    pnpm config set store-dir /pnpm/store \
-    && pnpm install --prod --frozen-lockfile --ignore-scripts
+    node merge-service-manifests.mjs api.json worker.json scheduler.json \
+    && pnpm config set store-dir /pnpm/store \
+    && pnpm install --prod --ignore-scripts --lockfile=false --config.auto-install-peers=false
 
 FROM base AS migration-deps
 ENV NODE_ENV=production
@@ -186,7 +177,7 @@ RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
 FROM runtime AS api
 ENV NODE_ENV=production \
     PORT=3000
-COPY --from=api-deps  --chown=appuser:appgroup /app/node_modules ./node_modules
+COPY --from=runtime-deps  --chown=appuser:appgroup /app/node_modules ./node_modules
 COPY --from=build-prod --chown=appuser:appgroup /app/dist/apps/api ./dist
 USER appuser
 EXPOSE 3000
@@ -204,7 +195,7 @@ CMD ["node", "dist/main.js"]
 
 FROM runtime AS worker
 ENV NODE_ENV=production
-COPY --from=worker-deps  --chown=appuser:appgroup /app/node_modules ./node_modules
+COPY --from=runtime-deps  --chown=appuser:appgroup /app/node_modules ./node_modules
 COPY --from=build-prod --chown=appuser:appgroup /app/dist/apps/worker ./dist
 USER appuser
 
@@ -222,7 +213,7 @@ CMD ["node", "dist/main.js"]
 
 FROM runtime AS scheduler
 ENV NODE_ENV=production
-COPY --from=scheduler-deps  --chown=appuser:appgroup /app/node_modules ./node_modules
+COPY --from=runtime-deps  --chown=appuser:appgroup /app/node_modules ./node_modules
 COPY --from=build-prod --chown=appuser:appgroup /app/dist/apps/scheduler ./dist
 USER appuser
 

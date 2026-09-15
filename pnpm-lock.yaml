@@ -482,6 +482,9 @@ importers:
       '@nestjs-fastify-nx/modules-notifications':
         specifier: workspace:*
         version: link:../../libs/modules/notifications
+      '@nestjs-fastify-nx/modules-upload':
+        specifier: workspace:*
+        version: link:../../libs/modules/upload
       '@nestjs-fastify-nx/modules-users':
         specifier: workspace:*
         version: link:../../libs/modules/users
@@ -634,6 +637,9 @@ importers:
       '@nestjs-fastify-nx/core':
         specifier: workspace:*
         version: link:../../core
+      '@nestjs-fastify-nx/shared':
+        specifier: workspace:*
+        version: link:../../shared
     devDependencies:
       '@nestjs-fastify-nx/contracts':
         specifier: workspace:*

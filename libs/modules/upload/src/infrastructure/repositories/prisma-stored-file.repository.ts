@@ -79,6 +79,28 @@ export class PrismaStoredFileRepository implements StoredFileRepositoryPort {
     await this.run((client) => client.storedFile.create({ data: props }), { readOnly: false });
   }
 
+  async createBatch(props: readonly StoredFileProps[]): Promise<void> {
+    if (props.length === 0) throw new Error('Cannot create an empty upload batch');
+    await this.run((client) => client.storedFile.createMany({ data: [...props] }), {
+      readOnly: false,
+    });
+  }
+
+  async publishBatch(ids: readonly string[], status: 'READY' | 'VERIFYING'): Promise<void> {
+    if (ids.length === 0 || new Set(ids).size !== ids.length) {
+      throw new Error('Upload publication requires a nonempty set of distinct IDs');
+    }
+    await this.prisma.transaction(async (client) => {
+      const updated = await client.storedFile.updateMany({
+        where: { id: { in: [...ids] }, status: STORED_FILE_STATUS.FINALIZING, deletedAt: null },
+        data: { status },
+      });
+      if (updated.count !== ids.length) {
+        throw new Error('Upload batch changed before publication');
+      }
+    });
+  }
+
   async transition(
     id: string,
     from: StoredFileStatus,

@@ -48,7 +48,7 @@ const workerEnvSchema = z
       .max(86_400)
       .default(3_600),
     MALWARE_SCANNER_ENABLED: z
-      .string()
+      .enum(['true', 'false'])
       .default('false')
       .transform((v) => v === 'true'),
     MALWARE_SCANNER_HOST: z.string().default('localhost'),
@@ -171,13 +171,6 @@ const workerEnvSchema = z
         code: 'custom',
         path: ['STORAGE_SECRET_KEY'],
         message: 'Must not use default value in production',
-      });
-    }
-    if (!data.MALWARE_SCANNER_ENABLED) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['MALWARE_SCANNER_ENABLED'],
-        message: 'Malware scanning must be enabled in production',
       });
     }
     // The worker is the process that actually sends mail, so it must fail loudly at boot on a default

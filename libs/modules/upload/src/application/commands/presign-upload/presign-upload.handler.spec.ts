@@ -6,6 +6,8 @@ import { PresignUploadHandler } from './presign-upload.handler';
 
 const USER_ID = '019dd1a5-9235-70db-8d57-54ef901d8185';
 const LIMITS: UploadLimits = {
+  bucket: 'uploads',
+  malwareScanEnabled: true,
   maxFileBytes: 10 * 1024 * 1024,
   presignExpiresSeconds: 300,
   magicByteCount: 16,
