@@ -79,7 +79,13 @@ function extractPrincipal(req: FastifyRequest): string | undefined {
 async function buildFingerprint(req: FastifyRequest, reply: FastifyReply): Promise<string> {
   if (req.isMultipart?.()) {
     const files = await prepareMultipartUploads(req, reply);
-    return sha256(JSON.stringify([req.method, req.url, files.map(({ digest, contentType, size }) => ({ digest, contentType, size }))]));
+    return sha256(
+      JSON.stringify([
+        req.method,
+        req.url,
+        files.map(({ digest, contentType, size }) => ({ digest, contentType, size })),
+      ]),
+    );
   }
   return sha256(`${req.method}\n${req.url}\n${JSON.stringify(canonicalize(req.body ?? null))}`);
 }
@@ -126,8 +132,19 @@ export function registerIdempotency(
   fastify: FastifyInstance,
   options: IdempotencyOptions,
 ): NestInterceptor {
-  const defaultStore = new IdempotencyStore(options.redis, options.lockTtlSeconds, options.ttlSeconds);
-  const multipartStore = new IdempotencyStore(options.redis, Math.max(options.lockTtlSeconds, Math.ceil(positiveIntEnv('UPLOAD_REQUEST_TIMEOUT_MS', 900_000) / 1000) + 30), options.ttlSeconds);
+  const defaultStore = new IdempotencyStore(
+    options.redis,
+    options.lockTtlSeconds,
+    options.ttlSeconds,
+  );
+  const multipartStore = new IdempotencyStore(
+    options.redis,
+    Math.max(
+      options.lockTtlSeconds,
+      Math.ceil(positiveIntEnv('UPLOAD_REQUEST_TIMEOUT_MS', 900_000) / 1000) + 30,
+    ),
+    options.ttlSeconds,
+  );
   const reportError = options.onError ?? ((): void => undefined);
 
   const acquire = async (req: FastifyRequest, reply: FastifyReply): Promise<void> => {
@@ -228,7 +245,13 @@ export function registerIdempotency(
     if (!ctx) return payload;
 
     try {
-      await finalizeIdempotentResponse(req.isMultipart?.() ? multipartStore : defaultStore, ctx, reply, payload, reportError);
+      await finalizeIdempotentResponse(
+        req.isMultipart?.() ? multipartStore : defaultStore,
+        ctx,
+        reply,
+        payload,
+        reportError,
+      );
     } catch (err) {
       reportError(`idempotency finalize failed: ${(err as Error).message}`);
     }

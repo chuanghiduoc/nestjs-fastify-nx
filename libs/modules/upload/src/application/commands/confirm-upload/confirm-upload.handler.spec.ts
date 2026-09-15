@@ -65,7 +65,11 @@ function build(options: { malwareScanEnabled: boolean } = { malwareScanEnabled: 
   const handler = new ConfirmUploadHandler(
     storage as unknown as StoragePort,
     files as unknown as StoredFileRepositoryPort,
-    new UploadPublicationService(storage as unknown as StoragePort, files as unknown as StoredFileRepositoryPort, verification as unknown as UploadVerificationDispatcher),
+    new UploadPublicationService(
+      storage as unknown as StoragePort,
+      files as unknown as StoredFileRepositoryPort,
+      verification as unknown as UploadVerificationDispatcher,
+    ),
     { ...LIMITS, ...options },
   );
   return { handler, storage, files, verification };

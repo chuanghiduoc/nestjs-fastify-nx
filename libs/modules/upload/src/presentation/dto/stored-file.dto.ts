@@ -6,7 +6,10 @@ export class StoredFileDto implements StoredFile {
   @ApiProperty({ description: 'Stored-file identifier used by delete operations.' })
   id!: string;
 
-  @ApiProperty({ enum: Object.values(STORED_FILE_STATUS), description: 'READY files can be downloaded; VERIFYING files are awaiting malware scanning.' })
+  @ApiProperty({
+    enum: Object.values(STORED_FILE_STATUS),
+    description: 'READY files can be downloaded; VERIFYING files are awaiting malware scanning.',
+  })
   status!: StoredFileStatus;
 
   @ApiProperty({

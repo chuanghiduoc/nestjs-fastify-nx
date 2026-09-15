@@ -3,7 +3,6 @@
 Failure modes that already cost this repo a production incident or a red CI run.
 Each entry states the trap, the mechanism, and what not to "fix".
 
-
 - **`nx show project` over `cat project.json`** — `project.json` is partial; the resolved config (with inferred targets from plugins) only appears via `nx show project <name> --json`.
 - **Nx daemon caching**: after creating a new lib, run `pnpm nx reset` if `nx show projects` doesn't see it.
 - **Better Auth + Socket.io**: WebSocket upgrades validate the same `better-auth.session_token` cookie via `createWsAuthMiddleware` (in `apps/api/src/websocket/ws-auth.adapter.ts`).
@@ -78,4 +77,3 @@ Each entry states the trap, the mechanism, and what not to "fix".
 - **Global-state metrics are single-writer (`MetricsLeaderService`)**: `bullmq_*`, `bullmq_queue_depth`, `outbox_lag_seconds` are recorded only by the API replica that holds the Redis collector-leader lease — every replica observes the same QueueEvents broadcast / global gauge, so unguarded recording inflates counters by the replica count. When adding a metric derived from shared Redis/DB state, gate it on `leader.isLeader()`; per-replica series (`http_*`, `cqrs_*`) stay ungated. **A gated GAUGE must also register `leader.onLeadershipLost(() => gauge.reset())`** — a gauge is last-write-wins per replica, so an ex-leader that merely stops writing keeps exporting its final value forever and a scrape of old + new leader together double-counts. Counters need no reset (each replica's series stays monotonic). The lease itself is `RedisLeaderLease` in `@nestjs-fastify-nx/infra-redis`, shared with `SchedulerLeaderService` — do not re-implement the `SET NX PX` + compare-and-extend scripts. OTLP metric push is off in the API (`OTEL_METRICS_EXPORT_ENABLED=false`) — `@prometheus-io/client` (`/metrics`) is the source of truth; enable OTLP push only in worker/scheduler.
 - **Metrics endpoint IP allowlist**: `MetricsIpAllowGuard` reads `METRICS_ALLOW_CIDRS` (comma-separated CIDR ranges) and uses `socket.remoteAddress` (not `req.ip`, which is spoofable via X-Forwarded-For). Empty list fails closed (no metrics). Kubernetes typically needs `127.0.0.1/32` or pod CIDR.
 - **Better Auth body parser collision**: NestJS global `ProblemDetailsValidationPipe` would consume the request body before Better Auth can read it. Solved via `reply.hijack()` in `main.ts`. If adding new `/api/auth/*` endpoints, bypass the NestJS pipeline the same way.
-

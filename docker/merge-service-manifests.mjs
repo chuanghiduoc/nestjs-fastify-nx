@@ -27,8 +27,12 @@ const merged = {
   version: '0.0.0',
   private: true,
   packageManager: JSON.parse(readFileSync(inputs[0], 'utf8')).packageManager,
-  dependencies: Object.fromEntries(Object.entries(dependencies).sort(([a], [b]) => a.localeCompare(b))),
+  dependencies: Object.fromEntries(
+    Object.entries(dependencies).sort(([a], [b]) => a.localeCompare(b)),
+  ),
 };
 
 writeFileSync('package.json', `${JSON.stringify(merged, null, 2)}\n`);
-process.stdout.write(`merged ${inputs.length} manifests into ${Object.keys(dependencies).length} dependencies\n`);
+process.stdout.write(
+  `merged ${inputs.length} manifests into ${Object.keys(dependencies).length} dependencies\n`,
+);

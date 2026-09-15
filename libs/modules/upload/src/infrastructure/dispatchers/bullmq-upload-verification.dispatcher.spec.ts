@@ -21,7 +21,10 @@ describe('verificationJobId', () => {
 
 describe('BullMqUploadVerificationDispatcher', () => {
   it('enqueues a deduplicated job carrying the correlation id', async () => {
-    const queue = { getJob: vi.fn().mockResolvedValue(undefined), add: vi.fn().mockResolvedValue(undefined) };
+    const queue = {
+      getJob: vi.fn().mockResolvedValue(undefined),
+      add: vi.fn().mockResolvedValue(undefined),
+    };
     const dispatcher = new BullMqUploadVerificationDispatcher(queue as unknown as Queue);
 
     await dispatcher.dispatch({
@@ -39,7 +42,10 @@ describe('BullMqUploadVerificationDispatcher', () => {
   });
 
   it('propagates an enqueue failure so confirm does not report success', async () => {
-    const queue = { getJob: vi.fn().mockResolvedValue(undefined), add: vi.fn().mockRejectedValue(new Error('redis down')) };
+    const queue = {
+      getJob: vi.fn().mockResolvedValue(undefined),
+      add: vi.fn().mockRejectedValue(new Error('redis down')),
+    };
     const dispatcher = new BullMqUploadVerificationDispatcher(queue as unknown as Queue);
 
     await expect(
@@ -49,17 +55,31 @@ describe('BullMqUploadVerificationDispatcher', () => {
 });
 
 describe('verification recovery', () => {
-  it.each(['completed', 'failed'])('retries a retained %s job instead of silently deduplicating it', async (state) => {
-    const job = { getState: vi.fn().mockResolvedValue(state), retry: vi.fn().mockResolvedValue(undefined) };
-    const queue = { getJob: vi.fn().mockResolvedValue(job), add: vi.fn() };
-    await new BullMqUploadVerificationDispatcher(queue as unknown as Queue).dispatch({ key: 'k', declaredContentType: 'image/png', bucket: 'b' });
-    expect(job.retry).toHaveBeenCalledWith(state);
-    expect(queue.add).not.toHaveBeenCalled();
-  });
+  it.each(['completed', 'failed'])(
+    'retries a retained %s job instead of silently deduplicating it',
+    async (state) => {
+      const job = {
+        getState: vi.fn().mockResolvedValue(state),
+        retry: vi.fn().mockResolvedValue(undefined),
+      };
+      const queue = { getJob: vi.fn().mockResolvedValue(job), add: vi.fn() };
+      await new BullMqUploadVerificationDispatcher(queue as unknown as Queue).dispatch({
+        key: 'k',
+        declaredContentType: 'image/png',
+        bucket: 'b',
+      });
+      expect(job.retry).toHaveBeenCalledWith(state);
+      expect(queue.add).not.toHaveBeenCalled();
+    },
+  );
   it('leaves an active job with its current worker', async () => {
     const job = { getState: vi.fn().mockResolvedValue('active'), retry: vi.fn() };
     const queue = { getJob: vi.fn().mockResolvedValue(job), add: vi.fn() };
-    await new BullMqUploadVerificationDispatcher(queue as unknown as Queue).dispatch({ key: 'k', declaredContentType: 'image/png', bucket: 'b' });
+    await new BullMqUploadVerificationDispatcher(queue as unknown as Queue).dispatch({
+      key: 'k',
+      declaredContentType: 'image/png',
+      bucket: 'b',
+    });
     expect(job.retry).not.toHaveBeenCalled();
     expect(queue.add).not.toHaveBeenCalled();
   });

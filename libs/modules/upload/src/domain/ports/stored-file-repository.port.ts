@@ -11,10 +11,7 @@ export interface StoredFileTransitionFields {
 
 export interface StoredFileRepositoryPort {
   createBatch(props: readonly StoredFileProps[]): Promise<void>;
-  publishBatch(
-    ids: readonly string[],
-    status: 'READY' | 'VERIFYING',
-  ): Promise<void>;
+  publishBatch(ids: readonly string[], status: 'READY' | 'VERIFYING'): Promise<void>;
   findBySourceKey(sourceKey: string): Promise<StoredFile | null>;
   findByKey(key: string): Promise<StoredFile | null>;
   findById(id: string): Promise<StoredFile | null>;

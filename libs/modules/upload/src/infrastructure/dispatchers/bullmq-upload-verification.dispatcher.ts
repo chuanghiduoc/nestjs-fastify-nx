@@ -14,7 +14,10 @@ export function verificationJobId(storageKey: string): string {
   return `verify__${createHash('sha256').update(storageKey).digest('hex')}`;
 }
 
-export async function enqueueUploadVerification(queue: Queue, request: UploadVerificationRequest): Promise<void> {
+export async function enqueueUploadVerification(
+  queue: Queue,
+  request: UploadVerificationRequest,
+): Promise<void> {
   const jobId = verificationJobId(request.key);
   const existing = await queue.getJob(jobId);
   if (existing) {

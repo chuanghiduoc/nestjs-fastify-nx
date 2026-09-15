@@ -55,7 +55,9 @@ export class TimeoutInterceptor implements NestInterceptor {
             RequestWithIdempotency | undefined)
         : undefined;
 
-    const timeoutMs = request?.isMultipart?.() ? positiveIntEnv('UPLOAD_REQUEST_TIMEOUT_MS', 900_000) : this.timeoutMs;
+    const timeoutMs = request?.isMultipart?.()
+      ? positiveIntEnv('UPLOAD_REQUEST_TIMEOUT_MS', 900_000)
+      : this.timeoutMs;
 
     // Fast path (unchanged): non-idempotent requests get a 504 on timeout and the orphaned work is
     // discarded (rxjs timeout() unsubscribes the source).

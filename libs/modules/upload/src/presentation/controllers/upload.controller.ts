@@ -27,7 +27,11 @@ import {
 } from '@nestjs/swagger';
 import { ClsService } from 'nestjs-cls';
 import { REQUEST_CONTEXT_KEYS, type RequestContextStore } from '@nestjs-fastify-nx/core';
-import { ApiCommonErrors, ApiPaginatedResponse, ListResponseDto } from '@nestjs-fastify-nx/contracts';
+import {
+  ApiCommonErrors,
+  ApiPaginatedResponse,
+  ListResponseDto,
+} from '@nestjs-fastify-nx/contracts';
 import { PERMISSIONS } from '@nestjs-fastify-nx/shared';
 import { RequirePermission } from '@nestjs-fastify-nx/infra-authorization';
 import type { PresignedUpload, StoredFile } from '@nestjs-fastify-nx/infra-storage';
@@ -43,7 +47,10 @@ import { PresignUploadDto } from '../dto/presign-upload.dto';
 import { ConfirmUploadDto } from '../dto/confirm-upload.dto';
 import { PresignedUploadDto } from '../dto/presigned-upload.dto';
 import { StoredFileDto } from '../dto/stored-file.dto';
-import { prepareMultipartUpload, prepareMultipartUploads } from '../multipart/prepare-multipart-upload';
+import {
+  prepareMultipartUpload,
+  prepareMultipartUploads,
+} from '../multipart/prepare-multipart-upload';
 import { UploadFilesCommand } from '../../application/commands/upload-files/upload-files.command';
 import { GetUploadQuery } from '../../application/queries/get-upload/get-upload.query';
 
@@ -65,7 +72,13 @@ export class UploadController {
   @RequirePermission(PERMISSIONS.FILE_CREATE)
   @Throttle(PRESIGN_LIMIT)
   @ApiConsumes('multipart/form-data')
-  @ApiBody({ schema: { type: 'object', required: ['file'], properties: { file: { type: 'string', format: 'binary' } } } })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['file'],
+      properties: { file: { type: 'string', format: 'binary' } },
+    },
+  })
   @ApiCreatedResponse({ type: StoredFileDto })
   @ApiCommonErrors({ auth: true })
   @ApiOperation({ summary: 'Upload one file through the backend.' })
@@ -75,11 +88,15 @@ export class UploadController {
     @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<StoredFile> {
     const file = await prepareMultipartUpload(request, reply);
-    const [result] = await this.commandBus.execute(new UploadFilesCommand({
-      organizationId: requireOrganizationId(user), userId: user.userId,
-      files: [file], signal: file.signal,
-      correlationId: this.cls.get(REQUEST_CONTEXT_KEYS.correlationId),
-    }));
+    const [result] = await this.commandBus.execute(
+      new UploadFilesCommand({
+        organizationId: requireOrganizationId(user),
+        userId: user.userId,
+        files: [file],
+        signal: file.signal,
+        correlationId: this.cls.get(REQUEST_CONTEXT_KEYS.correlationId),
+      }),
+    );
     return result;
   }
 
@@ -87,7 +104,13 @@ export class UploadController {
   @RequirePermission(PERMISSIONS.FILE_CREATE)
   @Throttle(PRESIGN_LIMIT)
   @ApiConsumes('multipart/form-data')
-  @ApiBody({ schema: { type: 'object', required: ['file'], properties: { file: { type: 'array', items: { type: 'string', format: 'binary' } } } } })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['file'],
+      properties: { file: { type: 'array', items: { type: 'string', format: 'binary' } } },
+    },
+  })
   @ApiPaginatedResponse(StoredFileDto)
   @ApiCommonErrors({ auth: true })
   @ApiOperation({ summary: 'Upload multiple files through the backend as one batch.' })
@@ -97,11 +120,15 @@ export class UploadController {
     @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<ListResponseDto<StoredFile>> {
     const files = await prepareMultipartUploads(request, reply);
-    const data = await this.commandBus.execute(new UploadFilesCommand({
-      organizationId: requireOrganizationId(user), userId: user.userId,
-      files, signal: files[0].signal,
-      correlationId: this.cls.get(REQUEST_CONTEXT_KEYS.correlationId),
-    }));
+    const data = await this.commandBus.execute(
+      new UploadFilesCommand({
+        organizationId: requireOrganizationId(user),
+        userId: user.userId,
+        files,
+        signal: files[0].signal,
+        correlationId: this.cls.get(REQUEST_CONTEXT_KEYS.correlationId),
+      }),
+    );
     return { object: 'list', url: '/api/v1/upload/batch', data, hasMore: false };
   }
 

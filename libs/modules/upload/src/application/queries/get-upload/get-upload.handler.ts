@@ -4,7 +4,10 @@ import { AUTHORIZATION_PORT, type AuthorizationPort } from '@nestjs-fastify-nx/c
 import { PERMISSIONS, RESOURCE_TYPES } from '@nestjs-fastify-nx/shared';
 import type { StoredFile } from '@nestjs-fastify-nx/infra-storage';
 import { objectNotFound } from '../../../domain/entities/stored-file.entity';
-import { STORED_FILE_REPOSITORY, type StoredFileRepositoryPort } from '../../../domain/ports/stored-file-repository.port';
+import {
+  STORED_FILE_REPOSITORY,
+  type StoredFileRepositoryPort,
+} from '../../../domain/ports/stored-file-repository.port';
 import { UploadPublicationService } from '../../upload-publication.service';
 import { GetUploadQuery } from './get-upload.query';
 
@@ -24,7 +27,12 @@ export class GetUploadHandler implements IQueryHandler<GetUploadQuery, StoredFil
     const decision = await this.authorization.check(
       { type: 'user', userId: query.userId, organizationId: query.organizationId },
       PERMISSIONS.FILE_READ,
-      { type: RESOURCE_TYPES.FILE, id: file.id, organizationId: file.organizationId, ownerId: file.userId },
+      {
+        type: RESOURCE_TYPES.FILE,
+        id: file.id,
+        organizationId: file.organizationId,
+        ownerId: file.userId,
+      },
     );
     if (!decision.allowed) throw objectNotFound(query.fileId);
     return this.publication.result(file);

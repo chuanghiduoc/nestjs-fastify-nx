@@ -6,5 +6,7 @@ export class GetUploadQuery extends Query<StoredFile> {
     readonly organizationId: string,
     readonly userId: string,
     readonly fileId: string,
-  ) { super(); }
+  ) {
+    super();
+  }
 }

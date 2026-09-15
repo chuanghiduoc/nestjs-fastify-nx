@@ -57,10 +57,15 @@ export class UploadFilesHandler implements ICommandHandler<UploadFilesCommand, S
     const status = this.limits.malwareScanEnabled
       ? STORED_FILE_STATUS.VERIFYING
       : STORED_FILE_STATUS.READY;
-    await this.files.publishBatch(prepared.map(({ props }) => props.id), status);
-    return Promise.all(prepared.map(({ props }) =>
-      this.publication.result(StoredFile.create({ ...props, status }), options.correlationId),
-    ));
+    await this.files.publishBatch(
+      prepared.map(({ props }) => props.id),
+      status,
+    );
+    return Promise.all(
+      prepared.map(({ props }) =>
+        this.publication.result(StoredFile.create({ ...props, status }), options.correlationId),
+      ),
+    );
   }
 
   private prepare(command: UploadFilesCommand, file: MultipartUploadFile): StoredFileProps {

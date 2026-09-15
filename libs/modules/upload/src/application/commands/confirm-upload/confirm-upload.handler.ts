@@ -50,7 +50,10 @@ export class ConfirmUploadHandler implements ICommandHandler<
 
     const existing = await this.files.findBySourceKey(command.sourceKey);
     if (existing) {
-      if (existing.organizationId !== command.organizationId || existing.userId !== command.userId) {
+      if (
+        existing.organizationId !== command.organizationId ||
+        existing.userId !== command.userId
+      ) {
         throw objectNotFound(command.sourceKey);
       }
       return this.recoverExisting(existing, command.correlationId);
@@ -70,7 +73,6 @@ export class ConfirmUploadHandler implements ICommandHandler<
     try {
       assertMimeAllowed(meta.contentType);
       assertSizeWithinLimit(meta.size, this.limits.maxFileBytes);
-
     } catch (err) {
       if (isPolicyViolation(err)) await this.safeDelete(sourceKey);
       throw err;
@@ -113,9 +115,14 @@ export class ConfirmUploadHandler implements ICommandHandler<
     try {
       await this.storage.finalize(command.sourceKey, finalKey, meta.etag, meta.bucket);
     } catch (err) {
-      await this.files.deleteIfStatus(fileId, STORED_FILE_STATUS.FINALIZING).catch((cleanupError: unknown) => {
-        this.logger.error({ err: cleanupError, fileId }, 'Failed to remove unfinished upload row');
-      });
+      await this.files
+        .deleteIfStatus(fileId, STORED_FILE_STATUS.FINALIZING)
+        .catch((cleanupError: unknown) => {
+          this.logger.error(
+            { err: cleanupError, fileId },
+            'Failed to remove unfinished upload row',
+          );
+        });
       this.logger.error(
         { err, sourceKey: command.sourceKey, finalKey },
         'upload finalize failed — staging object remains lifecycle-managed',
@@ -123,12 +130,21 @@ export class ConfirmUploadHandler implements ICommandHandler<
       throw this.commitFailed();
     }
 
-    return this.completeFinalizing(StoredFile.create({
-      id: fileId, organizationId: command.organizationId, userId: command.userId,
-      sourceKey: command.sourceKey, key: finalKey, bucket: meta.bucket,
-      contentType: meta.contentType, size: meta.size, etag: meta.etag,
-      status: STORED_FILE_STATUS.FINALIZING,
-    }), command.correlationId);
+    return this.completeFinalizing(
+      StoredFile.create({
+        id: fileId,
+        organizationId: command.organizationId,
+        userId: command.userId,
+        sourceKey: command.sourceKey,
+        key: finalKey,
+        bucket: meta.bucket,
+        contentType: meta.contentType,
+        size: meta.size,
+        etag: meta.etag,
+        status: STORED_FILE_STATUS.FINALIZING,
+      }),
+      command.correlationId,
+    );
   }
 
   private async recoverExisting(
@@ -162,34 +178,64 @@ export class ConfirmUploadHandler implements ICommandHandler<
     return this.completeFinalizing(record, correlationId);
   }
 
-  private async completeFinalizing(record: StoredFile, correlationId?: string): Promise<StoredFileResult> {
+  private async completeFinalizing(
+    record: StoredFile,
+    correlationId?: string,
+  ): Promise<StoredFileResult> {
     if (!this.limits.malwareScanEnabled) {
       try {
         await readHeadAndAssertMagicBytes(
-          { storage: this.storage, limits: this.limits }, record.key, record.contentType, record.bucket,
+          { storage: this.storage, limits: this.limits },
+          record.key,
+          record.contentType,
+          record.bucket,
         );
       } catch (err) {
         if (isPolicyViolation(err)) {
-          const rejected = await this.files.transition(record.id, STORED_FILE_STATUS.FINALIZING, STORED_FILE_STATUS.REJECTED);
+          const rejected = await this.files.transition(
+            record.id,
+            STORED_FILE_STATUS.FINALIZING,
+            STORED_FILE_STATUS.REJECTED,
+          );
           if (rejected) await this.storage.delete(record.key, record.bucket);
         }
         throw err;
       }
     }
-    const status = this.limits.malwareScanEnabled ? STORED_FILE_STATUS.VERIFYING : STORED_FILE_STATUS.READY;
-    const transitioned = await this.files.transition(record.id, STORED_FILE_STATUS.FINALIZING, status);
+    const status = this.limits.malwareScanEnabled
+      ? STORED_FILE_STATUS.VERIFYING
+      : STORED_FILE_STATUS.READY;
+    const transitioned = await this.files.transition(
+      record.id,
+      STORED_FILE_STATUS.FINALIZING,
+      status,
+    );
     if (!transitioned) {
       const current = await this.files.findById(record.id);
-      if (!current || current.status === STORED_FILE_STATUS.FINALIZING || current.status === STORED_FILE_STATUS.REJECTED) {
+      if (
+        !current ||
+        current.status === STORED_FILE_STATUS.FINALIZING ||
+        current.status === STORED_FILE_STATUS.REJECTED
+      ) {
         throw this.commitFailed();
       }
       return this.publication.result(current, correlationId);
     }
-    return this.publication.result(StoredFile.create({
-      id: record.id, organizationId: record.organizationId, userId: record.userId,
-      sourceKey: record.sourceKey, key: record.key, bucket: record.bucket,
-      contentType: record.contentType, size: record.size, etag: record.etag, status,
-    }), correlationId);
+    return this.publication.result(
+      StoredFile.create({
+        id: record.id,
+        organizationId: record.organizationId,
+        userId: record.userId,
+        sourceKey: record.sourceKey,
+        key: record.key,
+        bucket: record.bucket,
+        contentType: record.contentType,
+        size: record.size,
+        etag: record.etag,
+        status,
+      }),
+      correlationId,
+    );
   }
 
   // A failed delete must not mask the validation error that triggered it, but swallowing it
