@@ -95,6 +95,7 @@ ENV NODE_ENV=production
 COPY --from=build-dev /app/dist/apps/api/package.json ./api.json
 COPY --from=build-dev /app/dist/apps/worker/package.json ./worker.json
 COPY --from=build-dev /app/dist/apps/scheduler/package.json ./scheduler.json
+COPY pnpm-workspace.yaml ./pnpm-workspace.yaml
 COPY docker/merge-service-manifests.mjs ./merge-service-manifests.mjs
 RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
     node merge-service-manifests.mjs api.json worker.json scheduler.json \
@@ -131,6 +132,9 @@ CMD ["node", "dist/main.js"]
 # resolves @prisma/client with its optional `prisma` peer baked in, dragging the
 # Prisma CLI, Studio, pglite and TypeScript into the runtime image. Every direct
 # dependency in the generated manifest is an exact pin, so resolution stays stable.
+# pnpm-workspace.yaml comes along because that is where the security-floor
+# overrides live: without it a lockfile-free install resolves brace-expansion
+# and picomatch back to the vulnerable majors the overrides exist to block.
 # migration keeps its own stage: it genuinely needs the Prisma CLI.
 # ===========================================================================
 
@@ -139,6 +143,7 @@ ENV NODE_ENV=production
 COPY --from=build-prod /app/dist/apps/api/package.json ./api.json
 COPY --from=build-prod /app/dist/apps/worker/package.json ./worker.json
 COPY --from=build-prod /app/dist/apps/scheduler/package.json ./scheduler.json
+COPY pnpm-workspace.yaml ./pnpm-workspace.yaml
 COPY docker/merge-service-manifests.mjs ./merge-service-manifests.mjs
 RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
     node merge-service-manifests.mjs api.json worker.json scheduler.json \
