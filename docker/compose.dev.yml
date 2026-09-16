@@ -16,21 +16,12 @@ services:
       minio:
         condition: service_healthy
     env_file: ../.env
-    entrypoint: >
-      /bin/sh -c "
-        set -eu;
-        case "$$MINIO_ORPHAN_EXPIRY_DAYS" in ''|*[!0-9]*|0) echo 'minio-init: MINIO_ORPHAN_EXPIRY_DAYS must be a positive integer'; exit 1;; esac;
-        connected=0;
-        for i in $$(seq 1 15); do
-          if mc alias set local http://minio:9000 \"$$MINIO_ROOT_USER\" \"$$MINIO_ROOT_PASSWORD\"; then connected=1; break; fi;
-          echo 'waiting for minio... attempt '$$i; sleep 2;
-        done;
-        [ "$$connected" = 1 ] || { echo 'minio-init: cannot reach minio after 30s'; exit 1; };
-        mc mb --ignore-existing \"local/$$STORAGE_BUCKET\";
-        mc ilm rule remove --all --force \"local/$$STORAGE_BUCKET\" 2>/dev/null || true;
-        mc ilm rule add --expire-days "$$MINIO_ORPHAN_EXPIRY_DAYS" --prefix 'uploads/' \"local/$$STORAGE_BUCKET\";
-        echo 'bucket ready: '$$STORAGE_BUCKET
-      "
+    environment:
+      MC_CONFIG_DIR: /tmp/.mc
+      MINIO_ORPHAN_EXPIRY_DAYS: ${MINIO_ORPHAN_EXPIRY_DAYS:-1}
+    volumes:
+      - ./minio/provision-bucket.sh:/provision-bucket.sh:ro
+    entrypoint: ['/bin/sh', '/provision-bucket.sh']
 
   migration:
     build:
@@ -48,6 +39,21 @@ services:
       # Container-to-container: hostname is the service name, port is the container port (5432).
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-nestjs_db}
 
+  db-grants:
+    image: postgres:18-alpine@sha256:9a8afca54e7861fd90fab5fdf4c42477a6b1cb7d293595148e674e0a3181de15
+    restart: 'no'
+    env_file: ../.env
+    environment:
+      POSTGRES_ADMIN_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_ADMIN_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-nestjs_db}
+    volumes:
+      - ./postgres/provision-runtime-roles.sh:/provision-runtime-roles.sh:ro
+    entrypoint: ['/bin/sh', '/provision-runtime-roles.sh']
+    depends_on:
+      migration:
+        condition: service_completed_successfully
+
   # Redis UI for browsing cache and queue data — http://localhost:8081
   # Connects to both redis-cache (db 0-5) and redis-queue (db 0-2).
   redis-commander:
@@ -58,8 +64,8 @@ services:
     cpus: 0.25
     environment:
       TZ: ${TZ:-UTC}
-      # Comma-separated Redis hosts: label:host:port:dbIndex
-      REDIS_HOSTS: cache:redis-cache:6379:0,queue:redis-queue:6380:0
+      # Comma-separated Redis hosts: label:host:port:dbIndex:password
+      REDIS_HOSTS: cache:redis-cache:6379:0:${REDIS_CACHE_PASSWORD:-},queue:redis-queue:6380:0:${REDIS_QUEUE_PASSWORD:-}
     ports:
       - '${REDIS_COMMANDER_PORT:-8081}:8081'
     depends_on:
@@ -105,7 +111,7 @@ services:
       # first line). It stays a dev-overlay knob and is absent from the production images.
       NODE_OPTIONS: ${NODE_DEBUG_OPTIONS:-}
       # Container-to-container connection uses service names and internal ports.
-      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-nestjs_db}
+      DATABASE_URL: postgresql://${API_DB_USER:-api_user}:${API_DB_PASSWORD:?API_DB_PASSWORD is required — run ./scripts/gen-env.sh}@postgres:5432/${POSTGRES_DB:-nestjs_db}
       REDIS_CACHE_HOST: redis-cache
       REDIS_CACHE_PORT: '6379'
       REDIS_QUEUE_HOST: redis-queue
@@ -119,6 +125,8 @@ services:
       postgres:
         condition: service_healthy
       migration:
+        condition: service_completed_successfully
+      db-grants:
         condition: service_completed_successfully
       redis-cache:
         condition: service_healthy
@@ -145,7 +153,7 @@ services:
       # .env carries the api's name, which would otherwise label this process as the api.
       OTEL_SERVICE_NAME: nestjs-fastify-worker
       # Container-to-container connection uses service names and internal ports.
-      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-nestjs_db}
+      DATABASE_URL: postgresql://${WORKER_DB_USER:-worker_user}:${WORKER_DB_PASSWORD:?WORKER_DB_PASSWORD is required — run ./scripts/gen-env.sh}@postgres:5432/${POSTGRES_DB:-nestjs_db}
       REDIS_CACHE_HOST: redis-cache
       REDIS_CACHE_PORT: '6379'
       REDIS_QUEUE_HOST: redis-queue
@@ -156,6 +164,8 @@ services:
       postgres:
         condition: service_healthy
       migration:
+        condition: service_completed_successfully
+      db-grants:
         condition: service_completed_successfully
       redis-queue:
         condition: service_healthy
@@ -191,7 +201,7 @@ services:
       TZ: ${TZ:-UTC}
       OTEL_SERVICE_NAME: nestjs-fastify-scheduler
       # Container-to-container connection uses service names and internal ports.
-      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-nestjs_db}
+      DATABASE_URL: postgresql://${SCHEDULER_DB_USER:-scheduler_user}:${SCHEDULER_DB_PASSWORD:?SCHEDULER_DB_PASSWORD is required — run ./scripts/gen-env.sh}@postgres:5432/${POSTGRES_DB:-nestjs_db}
       REDIS_CACHE_HOST: redis-cache
       REDIS_CACHE_PORT: '6379'
       REDIS_QUEUE_HOST: redis-queue
@@ -202,6 +212,8 @@ services:
       postgres:
         condition: service_healthy
       migration:
+        condition: service_completed_successfully
+      db-grants:
         condition: service_completed_successfully
       redis-queue:
         condition: service_healthy

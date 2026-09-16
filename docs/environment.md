@@ -27,16 +27,18 @@ Copy `.env.example` to `.env` and fill in the values.
 
 ## Redis
 
-| Variable                     | Default     | Required | Description                                                    |
-| ---------------------------- | ----------- | -------- | -------------------------------------------------------------- |
-| `REDIS_CACHE_HOST`           | `localhost` | Yes      | Cache Redis hostname                                           |
-| `REDIS_CACHE_PORT`           | `6379`      | Yes      | Cache Redis port                                               |
-| `REDIS_QUEUE_HOST`           | `localhost` | Yes      | Queue Redis hostname                                           |
-| `REDIS_QUEUE_PORT`           | `6380`      | Yes      | Queue Redis port                                               |
-| `REDIS_QUEUE_PREFIX`         | `bull`      | No       | BullMQ key prefix                                              |
-| `REDIS_PUBSUB_DB`            | `2`         | No       | Redis DB index used by the Socket.io adapter                   |
-| `WS_CONNECTION_LIMIT_PER_IP` | `50`        | No       | Maximum active WebSocket leases per resolved client IP         |
-| `WS_SESSION_REVALIDATE_MS`   | `60000`     | No       | Recheck active sessions and renew socket leases; max 5 minutes |
+| Variable                     | Default     | Required | Description                                                                                                                                                                  |
+| ---------------------------- | ----------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `REDIS_CACHE_HOST`           | `localhost` | Yes      | Cache Redis hostname                                                                                                                                                         |
+| `REDIS_CACHE_PORT`           | `6379`      | Yes      | Cache Redis port                                                                                                                                                             |
+| `REDIS_CACHE_PASSWORD`       | _(unset)_   | In prod  | `requirepass` for the cache instance. Only the api receives it. Blank leaves the local instance unauthenticated; api env validation refuses to boot in production without it |
+| `REDIS_QUEUE_HOST`           | `localhost` | Yes      | Queue Redis hostname                                                                                                                                                         |
+| `REDIS_QUEUE_PORT`           | `6380`      | Yes      | Queue Redis port                                                                                                                                                             |
+| `REDIS_QUEUE_PASSWORD`       | _(unset)_   | In prod  | `requirepass` for the queue instance. Issued to api, worker and scheduler. Required in production by all three validators                                                    |
+| `REDIS_QUEUE_PREFIX`         | `bull`      | No       | BullMQ key prefix                                                                                                                                                            |
+| `REDIS_PUBSUB_DB`            | `2`         | No       | Redis DB index used by the Socket.io adapter                                                                                                                                 |
+| `WS_CONNECTION_LIMIT_PER_IP` | `50`        | No       | Maximum active WebSocket leases per resolved client IP                                                                                                                       |
+| `WS_SESSION_REVALIDATE_MS`   | `60000`     | No       | Recheck active sessions and renew socket leases; max 5 minutes                                                                                                               |
 
 ## Storage (S3-compatible)
 
@@ -44,8 +46,8 @@ Copy `.env.example` to `.env` and fill in the values.
 | -------------------------------------- | ----------------------- | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `STORAGE_ENDPOINT`                     | `http://localhost:9000` | Yes                  | S3-compatible endpoint (app → storage)                                                                                                                                                                                                                        |
 | `STORAGE_PUBLIC_ENDPOINT`              | _(unset)_               | No                   | Browser-facing endpoint for presigned URLs; set when the app reaches storage at an internal hostname (e.g. `http://minio:9000` in containers) the browser can't resolve                                                                                       |
-| `STORAGE_ACCESS_KEY`                   | `minioadmin`            | Yes (rotate in prod) | Access key                                                                                                                                                                                                                                                    |
-| `STORAGE_SECRET_KEY`                   | `minioadmin`            | Yes (rotate in prod) | Secret key                                                                                                                                                                                                                                                    |
+| `STORAGE_ACCESS_KEY`                   | `minioadmin`            | Yes (rotate in prod) | Access key. Against MinIO this is the bucket-scoped user `minio-init` provisions — **not** `MINIO_ROOT_USER`, which never leaves the `minio`/`minio-init` containers                                                                                          |
+| `STORAGE_SECRET_KEY`                   | `minioadmin`            | Yes (rotate in prod) | Secret key for the above                                                                                                                                                                                                                                      |
 | `STORAGE_BUCKET`                       | `uploads`               | Yes                  | Default bucket name                                                                                                                                                                                                                                           |
 | `STORAGE_REGION`                       | `us-east-1`             | No                   | Region used for request signing. It must match what the backend expects — the bucket region on real AWS S3, or whatever a self-hosted backend was configured with (Garage defaults to `garage`). A mismatch fails signing with `AuthorizationHeaderMalformed` |
 | `STORAGE_FORCE_PATH_STYLE`             | `true`                  | No                   | Path-style addressing (`endpoint/bucket/key`), which every self-hosted backend serves. Set `false` against real AWS S3, which documents virtual-hosted-style as the supported form                                                                            |

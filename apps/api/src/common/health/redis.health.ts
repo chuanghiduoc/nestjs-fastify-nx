@@ -11,6 +11,7 @@ const PROBE_TIMEOUT_MS = 2_000;
 interface RedisTarget {
   readonly host: string;
   readonly port: number;
+  readonly password?: string;
 }
 
 abstract class BaseRedisHealthIndicator implements OnModuleDestroy {
@@ -23,6 +24,7 @@ abstract class BaseRedisHealthIndicator implements OnModuleDestroy {
     this.redis = new Redis({
       host: target.host,
       port: target.port,
+      password: target.password,
       lazyConnect: true,
       connectTimeout: PROBE_TIMEOUT_MS,
       // Bounds how long a single probe blocks. Killing the client is NOT how to fail fast:
@@ -61,6 +63,7 @@ export class RedisCacheHealthIndicator extends BaseRedisHealthIndicator {
     super(healthIndicator, {
       host: config.get('REDIS_CACHE_HOST', { infer: true }),
       port: config.get('REDIS_CACHE_PORT', { infer: true }),
+      password: config.get('REDIS_CACHE_PASSWORD', { infer: true }),
     });
   }
 }
@@ -71,6 +74,7 @@ export class RedisQueueHealthIndicator extends BaseRedisHealthIndicator {
     super(healthIndicator, {
       host: config.get('REDIS_QUEUE_HOST', { infer: true }),
       port: config.get('REDIS_QUEUE_PORT', { infer: true }),
+      password: config.get('REDIS_QUEUE_PASSWORD', { infer: true }),
     });
   }
 }

@@ -73,11 +73,17 @@ docker run --rm \
 
 ## Docker Compose (Production)
 
-Each runtime connects as its own least-privilege Postgres role, so production needs `.env` (compose
-interpolation: role credentials, MinIO root, image refs) plus one mode-0600 file per process
-containing only what that process uses. `gen-env.sh` writes all five with generated secrets and
-the right DSN in each — done by hand it is nine credentials and four DSNs, and compose reports only
-the first missing variable per run.
+Each runtime connects as its own least-privilege Postgres role, its own Redis credentials and a
+bucket-scoped MinIO key, so production needs `.env` (compose interpolation: role credentials,
+MinIO root, Redis passwords, image refs) plus one mode-0600 file per process containing only what
+that process uses. `gen-env.sh` writes all five with generated secrets and the right DSN in each —
+done by hand it is fifteen credentials and four DSNs, and compose reports only the first missing
+variable per run.
+
+`MINIO_ROOT_USER`/`MINIO_ROOT_PASSWORD` stay in `.env` for the `minio` and `minio-init` containers
+only; the apps receive `STORAGE_ACCESS_KEY`/`STORAGE_SECRET_KEY`, the bucket-scoped user
+`minio-init` provisions. `REDIS_CACHE_PASSWORD` reaches only `.env.api`; `REDIS_QUEUE_PASSWORD`
+reaches all three app env files.
 
 ```bash
 ./scripts/gen-env.sh --prod     # .env + .env.{api,worker,scheduler,migration}

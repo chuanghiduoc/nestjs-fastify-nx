@@ -25,6 +25,7 @@ export class ThrottlerRedisStorage implements OnModuleDestroy {
       {
         host: config.get('REDIS_CACHE_HOST', { infer: true }),
         port: config.get('REDIS_CACHE_PORT', { infer: true }),
+        password: config.get('REDIS_CACHE_PASSWORD', { infer: true }),
       },
       REDIS_DB.THROTTLER,
     );

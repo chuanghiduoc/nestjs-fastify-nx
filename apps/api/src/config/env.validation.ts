@@ -41,11 +41,13 @@ const envSchema = z
     // Redis cache instance (rate-limit counters, idempotency replay, Socket.io pub/sub, health probe)
     REDIS_CACHE_HOST: z.string().default('localhost'),
     REDIS_CACHE_PORT: z.coerce.number().int().min(1).max(65535).default(6379),
+    REDIS_CACHE_PASSWORD: z.string().min(1).optional(),
 
     // Redis queue
     REDIS_QUEUE_HOST: z.string().default('localhost'),
     REDIS_QUEUE_PORT: z.coerce.number().int().min(1).max(65535).default(6380),
     REDIS_QUEUE_PREFIX: z.string().default('bull'),
+    REDIS_QUEUE_PASSWORD: z.string().min(1).optional(),
     // Separate from cache (db=0) and BullMQ to avoid keyspace-event noise in pub/sub.
     REDIS_PUBSUB_DB: z.coerce.number().int().min(0).max(15).default(2),
 
@@ -351,6 +353,22 @@ const envSchema = z
         code: 'custom',
         path: ['BETTER_AUTH_SECRET'],
         message: 'BETTER_AUTH_SECRET must be set in production for stable session signing',
+      });
+    }
+    if (!data.REDIS_CACHE_PASSWORD) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['REDIS_CACHE_PASSWORD'],
+        message:
+          'REDIS_CACHE_PASSWORD must be set in production — the cache holds session rate-limit and idempotency keys',
+      });
+    }
+    if (!data.REDIS_QUEUE_PASSWORD) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['REDIS_QUEUE_PASSWORD'],
+        message:
+          'REDIS_QUEUE_PASSWORD must be set in production — an unauthenticated queue exposes every job payload and the DLQ',
       });
     }
     if (!data.BETTER_AUTH_URL) {

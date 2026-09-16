@@ -173,6 +173,7 @@ async function bootstrap() {
       {
         host: config.get('REDIS_CACHE_HOST', { infer: true }),
         port: config.get('REDIS_CACHE_PORT', { infer: true }),
+        password: config.get('REDIS_CACHE_PASSWORD', { infer: true }),
       },
       REDIS_DB.IDEMPOTENCY,
     );
@@ -246,6 +247,7 @@ async function bootstrap() {
     {
       host: config.get('REDIS_CACHE_HOST', { infer: true }),
       port: config.get('REDIS_CACHE_PORT', { infer: true }),
+      password: config.get('REDIS_CACHE_PASSWORD', { infer: true }),
     },
     REDIS_DB.RATE_LIMIT,
   );
@@ -506,6 +508,7 @@ async function bootstrap() {
         basePath: '/api/admin/queues',
         redisHost: config.get('REDIS_QUEUE_HOST', { infer: true }),
         redisPort: config.get('REDIS_QUEUE_PORT', { infer: true }),
+        redisPassword: config.get('REDIS_QUEUE_PASSWORD', { infer: true }),
         queuePrefix: config.get('REDIS_QUEUE_PREFIX', { infer: true }),
         // Reuses the rate-limit connection (db 4) so the failed-auth budget is shared across replicas.
         redis: rateLimitRedis,

@@ -24,6 +24,7 @@ export class MetricsLeaderService implements OnModuleInit, OnModuleDestroy {
     this.redis = new Redis({
       host: config.get('REDIS_QUEUE_HOST', { infer: true }),
       port: config.get('REDIS_QUEUE_PORT', { infer: true }),
+      password: config.get('REDIS_QUEUE_PASSWORD', { infer: true }),
       lazyConnect: true,
       maxRetriesPerRequest: 1,
       retryStrategy: redisReconnectStrategy,

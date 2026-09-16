@@ -53,14 +53,20 @@ services:
     cpus: 0.5
     environment:
       TZ: ${TZ:-UTC}
+      REDIS_CACHE_PASSWORD: ${REDIS_CACHE_PASSWORD:-}
     ports:
       # Host port (env) : Container port (fixed 6379)
       - '${REDIS_CACHE_PORT:-6379}:6379'
+    command: ['redis-server', '--requirepass', '${REDIS_CACHE_PASSWORD:-}']
     # No persistent volume by design: this instance holds only rate-limit counters
     # and idempotency replay keys. Both fail open on loss, so ephemeral storage is
     # acceptable and avoids fsync overhead on the request hot path.
     healthcheck:
-      test: ['CMD', 'redis-cli', 'ping']
+      test:
+        [
+          'CMD-SHELL',
+          'redis-cli ${REDIS_CACHE_PASSWORD:+-a "$$REDIS_CACHE_PASSWORD"} ping | grep -q PONG',
+        ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -72,6 +78,7 @@ services:
     cpus: 0.5
     environment:
       TZ: ${TZ:-UTC}
+      REDIS_QUEUE_PASSWORD: ${REDIS_QUEUE_PASSWORD:-}
     ports:
       # Host port (env) : Container port (fixed 6380)
       - '${REDIS_QUEUE_PORT:-6380}:6380'
@@ -79,11 +86,26 @@ services:
     # recreation (rolling deploy) drops waiting/delayed/active jobs and the DLQ —
     # a dead-letter store on ephemeral storage is not a dead-letter store.
     # Internal port 6380 to avoid conflict with redis-cache (6379).
-    command: redis-server --port 6380 --appendonly yes --appendfsync everysec
+    command:
+      [
+        'redis-server',
+        '--port',
+        '6380',
+        '--appendonly',
+        'yes',
+        '--appendfsync',
+        'everysec',
+        '--requirepass',
+        '${REDIS_QUEUE_PASSWORD:-}',
+      ]
     volumes:
       - redis_queue_data:/data
     healthcheck:
-      test: ['CMD', 'redis-cli', '-p', '6380', 'ping']
+      test:
+        [
+          'CMD-SHELL',
+          'redis-cli -p 6380 ${REDIS_QUEUE_PASSWORD:+-a "$$REDIS_QUEUE_PASSWORD"} ping | grep -q PONG',
+        ]
       interval: 10s
       timeout: 5s
       retries: 5
