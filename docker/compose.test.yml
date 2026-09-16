@@ -3,14 +3,14 @@ services:
     environment:
       POSTGRES_DB: nestjs_test_db
     ports:
-      - '5433:5432'
+      - '127.0.0.1:5433:5432'
     tmpfs:
       - /var/lib/postgresql
 
   redis-cache:
     ports:
-      - '6381:6379'
+      - '127.0.0.1:6381:6379'
 
   redis-queue:
     ports:
-      - '6382:6380'
+      - '127.0.0.1:6382:6380'

@@ -15,6 +15,12 @@ case "$MINIO_ORPHAN_EXPIRY_DAYS" in
     ;;
 esac
 
+if [ "$STORAGE_ACCESS_KEY" = "$MINIO_ROOT_USER" ]; then
+  echo "minio-init: STORAGE_ACCESS_KEY equals MINIO_ROOT_USER — apps would run on the root credential." >&2
+  echo "minio-init: run ./scripts/gen-env.sh to issue a bucket-scoped key instead." >&2
+  exit 1
+fi
+
 POLICY_NAME=app-storage
 POLICY_FILE=/tmp/app-storage-policy.json
 
@@ -35,12 +41,6 @@ done
 mc mb --ignore-existing "local/${STORAGE_BUCKET}"
 mc ilm rule remove --all --force "local/${STORAGE_BUCKET}" 2>/dev/null || true
 mc ilm rule add --expire-days "$MINIO_ORPHAN_EXPIRY_DAYS" --prefix 'uploads/' "local/${STORAGE_BUCKET}"
-
-if [ "$STORAGE_ACCESS_KEY" = "$MINIO_ROOT_USER" ]; then
-  echo "minio-init: STORAGE_ACCESS_KEY equals MINIO_ROOT_USER — apps will run on the root credential." >&2
-  echo "minio-init: run ./scripts/gen-env.sh to issue a bucket-scoped key instead." >&2
-  exit 0
-fi
 
 cat >"$POLICY_FILE" <<POLICY
 {

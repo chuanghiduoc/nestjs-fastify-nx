@@ -177,21 +177,47 @@ if [[ $CHECK_ONLY -eq 1 ]]; then
     fi
   }
 
+  # write_file leaves an existing file untouched, so a file generated before a credential was
+  # narrowed still carries it. Missing keys alone would not catch that.
+  OVERBROAD_FILES=()
+  reject_app_env_keys() {
+    local file="$1" key
+    shift
+    [[ -f "$file" ]] || return 0
+    local present=()
+    for key in "$@"; do
+      if grep -qE "^${key}=" "$file"; then present+=("$key"); fi
+    done
+    if [[ ${#present[@]} -gt 0 ]]; then
+      sec::err "$file carries credentials this runtime must not hold: ${present[*]}"
+      OVERBROAD_FILES+=("$file")
+    fi
+  }
+
   check_app_env .env.api DATABASE_URL BETTER_AUTH_SECRET REDIS_CACHE_PASSWORD REDIS_QUEUE_PASSWORD \
     STORAGE_ACCESS_KEY STORAGE_SECRET_KEY
   check_app_env .env.worker DATABASE_URL REDIS_QUEUE_PASSWORD STORAGE_ACCESS_KEY STORAGE_SECRET_KEY
   check_app_env .env.scheduler DATABASE_URL REDIS_QUEUE_PASSWORD STORAGE_ACCESS_KEY STORAGE_SECRET_KEY
   check_app_env .env.migration DATABASE_URL
 
+  reject_app_env_keys .env.worker BETTER_AUTH_SECRET REDIS_CACHE_PASSWORD
+  reject_app_env_keys .env.scheduler BETTER_AUTH_SECRET REDIS_CACHE_PASSWORD
+  reject_app_env_keys .env.migration BETTER_AUTH_SECRET REDIS_CACHE_PASSWORD REDIS_QUEUE_PASSWORD \
+    STORAGE_ACCESS_KEY STORAGE_SECRET_KEY
+
+  EQUAL_STORAGE_KEY=0
   if [[ -n "$(env_value STORAGE_ACCESS_KEY)" &&
     "$(env_value STORAGE_ACCESS_KEY)" == "$(env_value MINIO_ROOT_USER)" ]]; then
-    sec::warn "STORAGE_ACCESS_KEY equals MINIO_ROOT_USER — the apps would run on the MinIO root credential."
+    sec::err "STORAGE_ACCESS_KEY equals MINIO_ROOT_USER — provisioning refuses to scope down the root account, so the apps would run on it."
+    EQUAL_STORAGE_KEY=1
   fi
 
   # A preflight that always exits 0 cannot gate anything — CI and build-prod.sh rely on the status.
-  if [[ ${#MISSING[@]} -gt 0 || ${#MISSING_FILES[@]} -gt 0 || ${#STALE_FILES[@]} -gt 0 ]]; then
+  if [[ ${#MISSING[@]} -gt 0 || ${#MISSING_FILES[@]} -gt 0 || ${#STALE_FILES[@]} -gt 0 ||
+    ${#OVERBROAD_FILES[@]} -gt 0 || $EQUAL_STORAGE_KEY -eq 1 ]]; then
     sec::err "Environment is incomplete for a production boot."
     [[ ${#STALE_FILES[@]} -gt 0 ]] && sec::log "Re-run ./scripts/gen-env.sh --prod to regenerate: ${STALE_FILES[*]}"
+    [[ ${#OVERBROAD_FILES[@]} -gt 0 ]] && sec::log "Delete and regenerate with --force: ${OVERBROAD_FILES[*]}"
     exit 1
   fi
   exit 0
@@ -253,9 +279,11 @@ REDIS_QUEUE_PW="$(env_value REDIS_QUEUE_PASSWORD)"
 BOARD_USER="$(env_value BULL_BOARD_USER)"
 BOARD_PASSWORD="$(env_value BULL_BOARD_PASSWORD)"
 
-# Passwords are generated base64url, so they carry no character the DSN would have to escape.
+# Generated passwords are base64url and need no escaping, but ensure_secret preserves an
+# operator-supplied one, which may carry a character that would reshape the URL.
 dsn_for() {
-  printf 'postgresql://%s:%s@postgres:5432/%s' "$1" "$2" "$DB_NAME"
+  printf 'postgresql://%s:%s@postgres:5432/%s' \
+    "$(sec::urlencode "$1")" "$(sec::urlencode "$2")" "$DB_NAME"
 }
 
 API_DSN="$(dsn_for "$(env_value API_DB_USER)" "$(env_value API_DB_PASSWORD)")"

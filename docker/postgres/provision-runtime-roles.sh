@@ -53,6 +53,10 @@ REVOKE ALL ON ALL TABLES IN SCHEMA public FROM :"worker_user";
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE "stored_files" TO :"worker_user";
 
 REVOKE ALL ON ALL TABLES IN SCHEMA public FROM :"scheduler_user";
+-- PostgreSQL treats sequences as a separate object class: the REVOKE above does not touch them, so
+-- a deployment provisioned by an earlier revision of this script would keep the blanket sequence
+-- grant it handed these two roles. Neither writes a table that owns one.
+REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM :"worker_user", :"scheduler_user";
 GRANT MAINTAIN ON ALL TABLES IN SCHEMA public TO :"scheduler_user";
 GRANT SELECT, DELETE ON TABLE "users", "sessions", "verifications" TO :"scheduler_user";
 GRANT SELECT, UPDATE, DELETE ON TABLE "stored_files" TO :"scheduler_user";
@@ -76,6 +80,10 @@ ALTER DEFAULT PRIVILEGES FOR ROLE :"admin_user" IN SCHEMA public
   REVOKE INSERT, UPDATE, DELETE ON TABLES FROM :"scheduler_user";
 ALTER DEFAULT PRIVILEGES FOR ROLE :"admin_user" IN SCHEMA public
   REVOKE USAGE, SELECT ON SEQUENCES FROM :"scheduler_user";
+ALTER DEFAULT PRIVILEGES FOR ROLE :"admin_user" IN SCHEMA public
+  REVOKE ALL ON TABLES FROM :"worker_user";
+ALTER DEFAULT PRIVILEGES FOR ROLE :"admin_user" IN SCHEMA public
+  REVOKE ALL ON SEQUENCES FROM :"worker_user";
 -- Without these the scheduler silently loses the ability to VACUUM every table added by a later
 -- migration: the GRANTs above only cover tables that existed when this script ran. MAINTAIN is what
 -- lets the weekly VACUUM ANALYZE also cover the monthly audit_logs partitions created afterwards by

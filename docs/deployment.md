@@ -87,7 +87,8 @@ reaches all three app env files.
 
 ```bash
 ./scripts/gen-env.sh --prod     # .env + .env.{api,worker,scheduler,migration}
-./scripts/gen-env.sh --check    # list everything still missing, in one pass
+./scripts/gen-env.sh --check    # list everything still missing, in one pass; also fails when a
+                               # per-app file carries a credential that runtime must not hold
 
 # Then replace the placeholders it cannot know: BETTER_AUTH_URL, FRONTEND_BASE_URL,
 # CORS_ORIGINS and MAIL_* must point at your real hosts before this is exposed.

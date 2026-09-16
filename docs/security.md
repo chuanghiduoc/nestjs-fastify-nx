@@ -213,7 +213,9 @@ Three properties worth stating because they are easy to regress:
   Production env validation in all three apps refuses to boot without the password it needs.
 - **The apps never hold the MinIO root credential.** They sign presigned URLs with a user whose
   policy is limited to `STORAGE_BUCKET`, so a compromised api cannot read another bucket, create
-  MinIO users, or remove the orphan-expiry lifecycle rule.
+  MinIO users, or remove the orphan-expiry lifecycle rule. `provision-bucket.sh` exits non-zero when
+  `STORAGE_ACCESS_KEY` equals `MINIO_ROOT_USER` rather than quietly leaving the apps on the root
+  account, and `gen-env.sh --check` fails on the same condition.
 - **The dev stack uses the same roles and passwords as production.** Running dev on the Postgres
   superuser would bypass RLS unconditionally and leave every tenant-isolation policy unexercised
   until a deploy.
