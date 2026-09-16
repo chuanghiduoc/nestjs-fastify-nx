@@ -20,6 +20,8 @@ const baseProdEnv = {
   MAIL_IGNORE_TLS: 'false',
   MAIL_REQUIRE_TLS: 'true',
   EVENT_PUBLISHER_DRIVER: 'outbox',
+  REDIS_CACHE_PASSWORD: 'cache-pw',
+  REDIS_QUEUE_PASSWORD: 'queue-pw',
 };
 
 describe('validateConfig', () => {
@@ -112,6 +114,16 @@ describe('validateConfig', () => {
     expect(() => validateConfig({ ...baseProdEnv, STORAGE_ACCESS_KEY: 'minioadmin' })).toThrow(
       /STORAGE_ACCESS_KEY/,
     );
+  });
+
+  it('rejects an unauthenticated cache in production', () => {
+    const { REDIS_CACHE_PASSWORD: _pw, ...rest } = baseProdEnv;
+    expect(() => validateConfig(rest)).toThrow(/REDIS_CACHE_PASSWORD/);
+  });
+
+  it('rejects an unauthenticated queue in production', () => {
+    const { REDIS_QUEUE_PASSWORD: _pw, ...rest } = baseProdEnv;
+    expect(() => validateConfig(rest)).toThrow(/REDIS_QUEUE_PASSWORD/);
   });
 
   it('rejects default mail noreply address in production', () => {

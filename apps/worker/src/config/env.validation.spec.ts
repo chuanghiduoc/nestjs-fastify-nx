@@ -17,6 +17,7 @@ describe('validateWorkerConfig', () => {
       MALWARE_SCANNER_ENABLED: 'true',
       MAIL_HOST: 'smtp.company.example',
       MAIL_DEFAULT_EMAIL: 'noreply@company.example',
+      REDIS_QUEUE_PASSWORD: 'queue-pw',
     });
 
     expect(config.STORAGE_ACCESS_KEY).toBe('production-key');
@@ -32,9 +33,24 @@ describe('validateWorkerConfig', () => {
         STORAGE_SECRET_KEY: 'production-secret',
         MALWARE_SCANNER_ENABLED: 'true',
         MAIL_DEFAULT_EMAIL: 'noreply@company.example',
+        REDIS_QUEUE_PASSWORD: 'queue-pw',
         // MAIL_HOST omitted → defaults to 'localhost'
       }),
     ).toThrow(/MAIL_HOST/);
+  });
+
+  it('refuses an unauthenticated queue in production', () => {
+    expect(() =>
+      validateWorkerConfig({
+        NODE_ENV: 'production',
+        DATABASE_URL: 'postgresql://user:pass@db:5432/app',
+        STORAGE_ACCESS_KEY: 'production-key',
+        STORAGE_SECRET_KEY: 'production-secret',
+        MALWARE_SCANNER_ENABLED: 'true',
+        MAIL_HOST: 'smtp.company.example',
+        MAIL_DEFAULT_EMAIL: 'noreply@company.example',
+      }),
+    ).toThrow(/REDIS_QUEUE_PASSWORD/);
   });
 
   it('requires a database URL for durable upload lifecycle state', () => {

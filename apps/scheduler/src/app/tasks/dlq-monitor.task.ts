@@ -10,6 +10,7 @@ interface DlqMonitorEnv {
   REDIS_QUEUE_HOST: string;
   REDIS_QUEUE_PORT: number;
   REDIS_QUEUE_PREFIX: string;
+  REDIS_QUEUE_PASSWORD?: string;
 }
 
 // Cap the per-queue scan so one enormous failed set can't stall a reconcile tick.
@@ -33,6 +34,7 @@ export class DlqMonitorTask implements OnApplicationShutdown {
     const connection = {
       host: config.get('REDIS_QUEUE_HOST', { infer: true }),
       port: config.get('REDIS_QUEUE_PORT', { infer: true }),
+      password: config.get('REDIS_QUEUE_PASSWORD', { infer: true }),
     };
     const prefix = config.get('REDIS_QUEUE_PREFIX', { infer: true });
 

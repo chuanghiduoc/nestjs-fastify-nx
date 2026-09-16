@@ -26,6 +26,22 @@ sec::docker_run() {
   MSYS_NO_PATHCONV=1 docker run "$@"
 }
 
+# Percent-encode a DSN userinfo component. Generated credentials are base64url and need no
+# escaping, but an operator-supplied one may carry `@`, `:`, `/` or `#`, which would silently
+# reshape the connection URL Prisma parses.
+sec::urlencode() {
+  local LC_ALL=C
+  local string="$1" i char out=''
+  for ((i = 0; i < ${#string}; i++)); do
+    char="${string:i:1}"
+    case "$char" in
+      [A-Za-z0-9.~_-]) out+="$char" ;;
+      *) out+="$(printf '%%%02X' "'$char")" ;;
+    esac
+  done
+  printf '%s' "$out"
+}
+
 # Import an explicit allowlist from .env without executing it as shell code.
 # Existing process environment values take precedence, matching Compose.
 sec::source_env() {

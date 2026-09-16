@@ -152,6 +152,8 @@ async function bootstrapTestApp(): Promise<TestAppContext> {
   process.env['REDIS_CACHE_PORT'] = redisPort;
   process.env['REDIS_QUEUE_HOST'] = redisHost;
   process.env['REDIS_QUEUE_PORT'] = redisPort;
+  delete process.env['REDIS_CACHE_PASSWORD'];
+  delete process.env['REDIS_QUEUE_PASSWORD'];
   process.env['BETTER_AUTH_SECRET'] = 'e2e-better-auth-secret-must-be-32-chars-long';
   // Enable the Google provider so the social sign-in test can build an authorize
   // URL. Fake creds are fine — sign-in/social only mints the redirect URL locally.

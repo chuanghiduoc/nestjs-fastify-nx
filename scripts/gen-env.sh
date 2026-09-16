@@ -144,7 +144,8 @@ if [[ $CHECK_ONLY -eq 1 ]]; then
   MISSING=()
   for key in BETTER_AUTH_SECRET POSTGRES_ADMIN_USER POSTGRES_ADMIN_PASSWORD \
     API_DB_USER API_DB_PASSWORD WORKER_DB_USER WORKER_DB_PASSWORD \
-    SCHEDULER_DB_USER SCHEDULER_DB_PASSWORD MINIO_ROOT_USER MINIO_ROOT_PASSWORD; do
+    SCHEDULER_DB_USER SCHEDULER_DB_PASSWORD MINIO_ROOT_USER MINIO_ROOT_PASSWORD \
+    STORAGE_ACCESS_KEY STORAGE_SECRET_KEY REDIS_CACHE_PASSWORD REDIS_QUEUE_PASSWORD; do
     [[ -n "$(env_value "$key")" ]] || MISSING+=("$key")
   done
   if [[ ${#MISSING[@]} -eq 0 ]]; then
@@ -155,18 +156,68 @@ if [[ $CHECK_ONLY -eq 1 ]]; then
   fi
 
   MISSING_FILES=()
-  for f in .env.api .env.worker .env.scheduler .env.migration; do
-    if [[ -f "$f" ]]; then
-      sec::ok "$f present"
-    else
-      sec::warn "$f missing (needed by compose.prod.yml)"
-      MISSING_FILES+=("$f")
+  STALE_FILES=()
+  check_app_env() {
+    local file="$1" key
+    shift
+    if [[ ! -f "$file" ]]; then
+      sec::warn "$file missing (needed by compose.prod.yml)"
+      MISSING_FILES+=("$file")
+      return
     fi
-  done
+    local absent=()
+    for key in "$@"; do
+      grep -qE "^${key}=.+" "$file" || absent+=("$key")
+    done
+    if [[ ${#absent[@]} -eq 0 ]]; then
+      sec::ok "$file present"
+    else
+      sec::warn "$file is stale — missing: ${absent[*]}"
+      STALE_FILES+=("$file")
+    fi
+  }
+
+  # write_file leaves an existing file untouched, so a file generated before a credential was
+  # narrowed still carries it. Missing keys alone would not catch that.
+  OVERBROAD_FILES=()
+  reject_app_env_keys() {
+    local file="$1" key
+    shift
+    [[ -f "$file" ]] || return 0
+    local present=()
+    for key in "$@"; do
+      if grep -qE "^${key}=" "$file"; then present+=("$key"); fi
+    done
+    if [[ ${#present[@]} -gt 0 ]]; then
+      sec::err "$file carries credentials this runtime must not hold: ${present[*]}"
+      OVERBROAD_FILES+=("$file")
+    fi
+  }
+
+  check_app_env .env.api DATABASE_URL BETTER_AUTH_SECRET REDIS_CACHE_PASSWORD REDIS_QUEUE_PASSWORD \
+    STORAGE_ACCESS_KEY STORAGE_SECRET_KEY
+  check_app_env .env.worker DATABASE_URL REDIS_QUEUE_PASSWORD STORAGE_ACCESS_KEY STORAGE_SECRET_KEY
+  check_app_env .env.scheduler DATABASE_URL REDIS_QUEUE_PASSWORD STORAGE_ACCESS_KEY STORAGE_SECRET_KEY
+  check_app_env .env.migration DATABASE_URL
+
+  reject_app_env_keys .env.worker BETTER_AUTH_SECRET REDIS_CACHE_PASSWORD
+  reject_app_env_keys .env.scheduler BETTER_AUTH_SECRET REDIS_CACHE_PASSWORD
+  reject_app_env_keys .env.migration BETTER_AUTH_SECRET REDIS_CACHE_PASSWORD REDIS_QUEUE_PASSWORD \
+    STORAGE_ACCESS_KEY STORAGE_SECRET_KEY
+
+  EQUAL_STORAGE_KEY=0
+  if [[ -n "$(env_value STORAGE_ACCESS_KEY)" &&
+    "$(env_value STORAGE_ACCESS_KEY)" == "$(env_value MINIO_ROOT_USER)" ]]; then
+    sec::err "STORAGE_ACCESS_KEY equals MINIO_ROOT_USER — provisioning refuses to scope down the root account, so the apps would run on it."
+    EQUAL_STORAGE_KEY=1
+  fi
 
   # A preflight that always exits 0 cannot gate anything — CI and build-prod.sh rely on the status.
-  if [[ ${#MISSING[@]} -gt 0 || ${#MISSING_FILES[@]} -gt 0 ]]; then
+  if [[ ${#MISSING[@]} -gt 0 || ${#MISSING_FILES[@]} -gt 0 || ${#STALE_FILES[@]} -gt 0 ||
+    ${#OVERBROAD_FILES[@]} -gt 0 || $EQUAL_STORAGE_KEY -eq 1 ]]; then
     sec::err "Environment is incomplete for a production boot."
+    [[ ${#STALE_FILES[@]} -gt 0 ]] && sec::log "Re-run ./scripts/gen-env.sh --prod to regenerate: ${STALE_FILES[*]}"
+    [[ ${#OVERBROAD_FILES[@]} -gt 0 ]] && sec::log "Delete and regenerate with --force: ${OVERBROAD_FILES[*]}"
     exit 1
   fi
   exit 0
@@ -176,7 +227,22 @@ fi
 # example ships a placeholder that would otherwise be shared by every clone of this repo.
 ensure_secret BETTER_AUTH_SECRET 32
 
+ensure_runtime_credentials() {
+  ensure_value API_DB_USER api_user
+  ensure_secret API_DB_PASSWORD 24
+  ensure_value WORKER_DB_USER worker_user
+  ensure_secret WORKER_DB_PASSWORD 24
+  ensure_value SCHEDULER_DB_USER scheduler_user
+  ensure_secret SCHEDULER_DB_PASSWORD 24
+  ensure_value_over_example STORAGE_ACCESS_KEY app_storage
+  ensure_secret STORAGE_SECRET_KEY 24
+  ensure_secret REDIS_CACHE_PASSWORD 24
+  ensure_secret REDIS_QUEUE_PASSWORD 24
+}
+
 if [[ "$MODE" == "dev" ]]; then
+  ensure_runtime_credentials
+
   sec::ok "Dev environment ready."
   [[ ${#GENERATED[@]} -gt 0 ]] && sec::log "Generated: ${GENERATED[*]}"
   sec::log "Next: ./scripts/doctor.sh && ./scripts/build-dev.sh"
@@ -193,12 +259,7 @@ ensure_value POSTGRES_DB "$POSTGRES_DB_VALUE"
 # db-grants provisions these three roles; each app then connects as exactly one of them.
 ensure_value POSTGRES_ADMIN_USER postgres
 ensure_secret POSTGRES_ADMIN_PASSWORD 24
-ensure_value API_DB_USER api_user
-ensure_secret API_DB_PASSWORD 24
-ensure_value WORKER_DB_USER worker_user
-ensure_secret WORKER_DB_PASSWORD 24
-ensure_value SCHEDULER_DB_USER scheduler_user
-ensure_secret SCHEDULER_DB_PASSWORD 24
+ensure_runtime_credentials
 
 ensure_value_over_example MINIO_ROOT_USER minio_admin
 ensure_secret MINIO_ROOT_PASSWORD 24
@@ -210,15 +271,19 @@ ADMIN_USER="$(env_value POSTGRES_ADMIN_USER)"
 ADMIN_PASSWORD="$(env_value POSTGRES_ADMIN_PASSWORD)"
 DB_NAME="$(env_value POSTGRES_DB)"
 AUTH_SECRET="$(env_value BETTER_AUTH_SECRET)"
-MINIO_USER="$(env_value MINIO_ROOT_USER)"
-MINIO_PASSWORD="$(env_value MINIO_ROOT_PASSWORD)"
+STORAGE_KEY="$(env_value STORAGE_ACCESS_KEY)"
+STORAGE_SECRET="$(env_value STORAGE_SECRET_KEY)"
 BUCKET="$(env_value STORAGE_BUCKET)"
+REDIS_CACHE_PW="$(env_value REDIS_CACHE_PASSWORD)"
+REDIS_QUEUE_PW="$(env_value REDIS_QUEUE_PASSWORD)"
 BOARD_USER="$(env_value BULL_BOARD_USER)"
 BOARD_PASSWORD="$(env_value BULL_BOARD_PASSWORD)"
 
-# Passwords are generated base64url, so they carry no character the DSN would have to escape.
+# Generated passwords are base64url and need no escaping, but ensure_secret preserves an
+# operator-supplied one, which may carry a character that would reshape the URL.
 dsn_for() {
-  printf 'postgresql://%s:%s@postgres:5432/%s' "$1" "$2" "$DB_NAME"
+  printf 'postgresql://%s:%s@postgres:5432/%s' \
+    "$(sec::urlencode "$1")" "$(sec::urlencode "$2")" "$DB_NAME"
 }
 
 API_DSN="$(dsn_for "$(env_value API_DB_USER)" "$(env_value API_DB_PASSWORD)")"
@@ -227,8 +292,8 @@ SCHEDULER_DSN="$(dsn_for "$(env_value SCHEDULER_DB_USER)" "$(env_value SCHEDULER
 ADMIN_DSN="$(dsn_for "$ADMIN_USER" "$ADMIN_PASSWORD")"
 
 SHARED_STORAGE="STORAGE_ENDPOINT=http://minio:9000
-STORAGE_ACCESS_KEY=${MINIO_USER}
-STORAGE_SECRET_KEY=${MINIO_PASSWORD}
+STORAGE_ACCESS_KEY=${STORAGE_KEY}
+STORAGE_SECRET_KEY=${STORAGE_SECRET}
 STORAGE_BUCKET=${BUCKET}
 STORAGE_REGION=us-east-1"
 
@@ -248,6 +313,8 @@ FRONTEND_BASE_URL=http://localhost:4200
 CORS_ORIGINS=http://localhost:4200
 # Durable, crash-safe domain events — required in production by env validation.
 EVENT_PUBLISHER_DRIVER=outbox
+REDIS_CACHE_PASSWORD=${REDIS_CACHE_PW}
+REDIS_QUEUE_PASSWORD=${REDIS_QUEUE_PW}
 ${SHARED_STORAGE}
 ${SHARED_MAIL}
 BULL_BOARD_USER=${BOARD_USER}
@@ -258,8 +325,8 @@ METRICS_ALLOW_CIDRS=127.0.0.1/32"
 write_file .env.worker "# Generated by scripts/gen-env.sh — the worker connects as its own least-privilege role.
 NODE_ENV=production
 DATABASE_URL=${WORKER_DSN}
-BETTER_AUTH_SECRET=${AUTH_SECRET}
 FRONTEND_BASE_URL=http://localhost:4200
+REDIS_QUEUE_PASSWORD=${REDIS_QUEUE_PW}
 ${SHARED_STORAGE}
 ${SHARED_MAIL}
 # Uploads are scanned before they leave quarantine; env validation requires this in production.
@@ -270,8 +337,8 @@ MALWARE_SCANNER_PORT=3310"
 write_file .env.scheduler "# Generated by scripts/gen-env.sh — the scheduler connects as its own least-privilege role.
 NODE_ENV=production
 DATABASE_URL=${SCHEDULER_DSN}
-BETTER_AUTH_SECRET=${AUTH_SECRET}
 EVENT_PUBLISHER_DRIVER=outbox
+REDIS_QUEUE_PASSWORD=${REDIS_QUEUE_PW}
 ${SHARED_STORAGE}
 ${SHARED_MAIL}"
 

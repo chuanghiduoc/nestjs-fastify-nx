@@ -18,6 +18,7 @@ interface RedisQueueEnv {
   REDIS_QUEUE_HOST: string;
   REDIS_QUEUE_PORT: number;
   REDIS_QUEUE_PREFIX: string;
+  REDIS_QUEUE_PASSWORD?: string;
 }
 
 /**
@@ -35,6 +36,7 @@ export class RedisQueueClientProvider implements OnModuleDestroy {
     this.client = new Redis({
       host: config.get('REDIS_QUEUE_HOST', { infer: true }),
       port: config.get('REDIS_QUEUE_PORT', { infer: true }),
+      password: config.get('REDIS_QUEUE_PASSWORD', { infer: true }),
       maxRetriesPerRequest: null,
       retryStrategy: redisReconnectStrategy,
       // lazyConnect prevents opening a socket until the first command —
@@ -57,11 +59,13 @@ export class RedisQueueClientProvider implements OnModuleDestroy {
         const host: string = config.get('REDIS_QUEUE_HOST', { infer: true });
         const port: number = config.get('REDIS_QUEUE_PORT', { infer: true });
         const prefix: string = config.get('REDIS_QUEUE_PREFIX', { infer: true });
+        const password = config.get('REDIS_QUEUE_PASSWORD', { infer: true });
 
         return {
           connection: {
             host,
             port,
+            password,
             // BullMQ requires `maxRetriesPerRequest: null` — without it BullMQ
             // throws on every connection blip instead of letting ioredis retry.
             maxRetriesPerRequest: null,

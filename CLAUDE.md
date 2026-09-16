@@ -38,7 +38,7 @@ Reply to the maintainer in **Vietnamese**. Code, identifiers, commit messages, a
 
 ## Stack
 
-Node 24 · pnpm 11.14 · TypeScript 6 · NestJS 11 + Fastify 5 · Prisma 7 (`@prisma/adapter-pg`) · Better Auth 1.6 · Vitest 4 + Testcontainers · Webpack 5 + swc.
+Node 24 · pnpm 11.14 · TypeScript 6 · NestJS 12 + Fastify 5 · Prisma 7 (`@prisma/adapter-pg`) · Better Auth 1.7 · Vitest 5 + Testcontainers · Webpack 5 + swc.
 
 Three things that are **not** what you would guess:
 

@@ -34,6 +34,7 @@ export interface BullBoardOptions {
   basePath: string;
   redisHost: string;
   redisPort: number;
+  redisPassword?: string;
   queuePrefix: string;
   // Shared rate-limit Redis (db 4) — an in-memory counter would multiply the brute-force ceiling
   // by the replica count.
@@ -177,7 +178,7 @@ export function createBullBoardPlugin(opts: BullBoardOptions) {
     const rawQueues = Object.values(QUEUE_NAMES).map(
       (name) =>
         new Queue(name, {
-          connection: { host: opts.redisHost, port: opts.redisPort },
+          connection: { host: opts.redisHost, port: opts.redisPort, password: opts.redisPassword },
           prefix: opts.queuePrefix,
         }),
     );

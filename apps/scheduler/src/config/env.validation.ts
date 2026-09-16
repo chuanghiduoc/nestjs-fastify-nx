@@ -25,6 +25,7 @@ const schedulerEnvSchema = z
     REDIS_QUEUE_HOST: z.string().default('localhost'),
     REDIS_QUEUE_PORT: z.coerce.number().int().min(1).max(65535).default(6380),
     REDIS_QUEUE_PREFIX: z.string().default('bull'),
+    REDIS_QUEUE_PASSWORD: z.string().min(1).optional(),
 
     STORAGE_ENDPOINT: z.string().default('http://localhost:9000'),
     // S3StorageAdapter runs in this process too, so the key it reads must be validated here as
@@ -142,6 +143,14 @@ const schedulerEnvSchema = z
         code: 'custom',
         path: ['STORAGE_SECRET_KEY'],
         message: 'Must not use default value in production',
+      });
+    }
+    if (data.NODE_ENV === 'production' && !data.REDIS_QUEUE_PASSWORD) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['REDIS_QUEUE_PASSWORD'],
+        message:
+          'REDIS_QUEUE_PASSWORD must be set in production — an unauthenticated queue exposes every job payload and the DLQ',
       });
     }
     // The scheduler drains the outbox; in production it must run in outbox mode so relayed events are

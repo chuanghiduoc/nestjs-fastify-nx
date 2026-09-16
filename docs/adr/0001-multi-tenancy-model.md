@@ -41,30 +41,43 @@ invisible rewrite.
 ### RLS coverage is deliberately partial today
 
 Enabled on `stored_files` — the only tenant-owned business table that currently
-exists. **Not** enabled on:
+exists — and on `audit_logs`, whose `SELECT` policy is tenant-scoped while its
+`INSERT` policy also admits `organizationId IS NULL` so system-originated entries
+written without a request context still land. **Not** enabled on:
 
 - **Better Auth's tables** (`organizations`, `members`, `invitations`, `teams`,
   `team_members`, `organization_roles`). The plugin writes outside the request
   context, so `WITH CHECK` would reject the very first insert of a new
   organization. These are guarded by Better Auth's own membership and permission
   checks on every endpoint.
-- **`audit_logs`** — its listener has no organization context yet; enabling RLS
-  before that would silently drop audit writes.
 - **`outbox_events`** — infrastructure, drained cross-tenant by the relay.
   `organizationId` on the row exists to seed listener context, not to isolate.
+
+`audit_logs` carries no `UPDATE` or `DELETE` policy at all, which is what stops
+`api_user` from rewriting the audit trail despite holding those grants: with RLS
+enabled, an absent policy is a denial.
 
 **Every new tenant-owned business table MUST enable RLS in the same migration
 that creates it.** Partial coverage is a sequencing decision, not a standing
 exemption.
 
-### Two Postgres roles, because RLS must not break system work
+### Postgres roles, because RLS must not break system work
 
-- `app_request` — RLS enforced. Used by the request path.
-- `app_system` — `BYPASSRLS`. Used by the outbox relay, scheduler tasks, health
-  probes and migrations, which legitimately operate across tenants.
+The split is per runtime rather than the two abstract roles this ADR originally
+named, so a compromised process is bounded by what that process actually does:
 
-This extends the existing `docker/postgres/provision-runtime-roles.sh` split
-rather than inventing a new mechanism.
+- `api_user` — `NOBYPASSRLS`. The request path. RLS is the layer that enforces
+  isolation for it.
+- `worker_user` — `BYPASSRLS`, `stored_files` only. Queue processing has no
+  per-request organization context.
+- `scheduler_user` — `BYPASSRLS`. The outbox relay and retention sweeps, which
+  legitimately operate across tenants. `MAINTAIN` on the whole schema for the
+  weekly `VACUUM ANALYZE`, but DML only on the tables its tasks name.
+
+Migrations run as the schema-owning admin role, handed only to the migration
+one-shot. `docker/postgres/provision-runtime-roles.sh` is the single source of
+truth for the matrix; the dev stack runs it too, so RLS is exercised before a
+deploy rather than after.
 
 ### Tenant context propagation
 

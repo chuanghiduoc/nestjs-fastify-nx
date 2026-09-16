@@ -187,6 +187,39 @@ are deployment-specific and intentionally not wired into this workflow — see
 Scanning keeps secrets out of the repo; this section is about the ones the application issues
 itself.
 
+### Infrastructure credentials are split per runtime
+
+No process holds a credential it cannot use. A compromise of one app is bounded by that app's
+own grants rather than by the whole data tier.
+
+| Runtime     | Postgres role                                                                                   | Redis                        | MinIO             |
+| ----------- | ----------------------------------------------------------------------------------------------- | ---------------------------- | ----------------- |
+| `migration` | admin (schema owner)                                                                            | —                            | —                 |
+| `api`       | `api_user` — `NOBYPASSRLS`, no `_prisma_migrations`, no `UPDATE`/`DELETE` on `outbox_events`    | cache **and** queue password | bucket-scoped key |
+| `worker`    | `worker_user` — `stored_files` only                                                             | queue password only          | bucket-scoped key |
+| `scheduler` | `scheduler_user` — `MAINTAIN` schema-wide, DML on its seven tables, `SELECT` on `organizations` | queue password only          | bucket-scoped key |
+
+Provisioned by `docker/postgres/provision-runtime-roles.sh` and
+`docker/minio/provision-bucket.sh`, both run as one-shot compose services gated ahead of the apps.
+`scripts/gen-env.sh --prod` generates every secret and writes one env file per runtime, so the
+admin database password, `MINIO_ROOT_*` and `BETTER_AUTH_SECRET` never reach a process that has no
+use for them.
+
+Three properties worth stating because they are easy to regress:
+
+- **Both Redis instances run `--requirepass`, with different passwords.** The cache holds session
+  rate-limit counters and idempotency replay keys; the queue holds every job payload and the DLQ.
+  An unauthenticated instance also exposes `CONFIG SET dir`, which is a file-write primitive.
+  Production env validation in all three apps refuses to boot without the password it needs.
+- **The apps never hold the MinIO root credential.** They sign presigned URLs with a user whose
+  policy is limited to `STORAGE_BUCKET`, so a compromised api cannot read another bucket, create
+  MinIO users, or remove the orphan-expiry lifecycle rule. `provision-bucket.sh` exits non-zero when
+  `STORAGE_ACCESS_KEY` equals `MINIO_ROOT_USER` rather than quietly leaving the apps on the root
+  account, and `gen-env.sh --check` fails on the same condition.
+- **The dev stack uses the same roles and passwords as production.** Running dev on the Postgres
+  superuser would bypass RLS unconditionally and leave every tenant-isolation policy unexercised
+  until a deploy.
+
 ### API keys
 
 Machine-to-machine callers authenticate with a key rather than a session cookie. The properties
@@ -223,6 +256,12 @@ Per-service Dockerfile properties relied on by the scanners above:
 - Pinned base image by SHA256 digest (rebuilds reproducible, immune to
   tag mutation).
 - Non-root user (UID 1001), `STOPSIGNAL SIGTERM`, tini PID 1.
+- `compose.prod.yml` drops every capability on **both** tiers. Apps additionally run
+  `read_only: true` with a `noexec,nosuid` tmpfs; postgres, redis and minio cannot
+  (they write to their volumes) and instead keep only the five capabilities their
+  entrypoints need to chown the data directory and drop to a service account —
+  `CHOWN`, `DAC_OVERRIDE`, `FOWNER`, `SETGID`, `SETUID`. `no-new-privileges:true`
+  everywhere.
 - Multi-stage build — only pruned production node_modules + compiled JS in
   the final layer; no `node_modules` ever copied from the host
   (`.dockerignore` enforces this).

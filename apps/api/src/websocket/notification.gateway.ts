@@ -33,6 +33,7 @@ import { DEV_ALLOWED_ORIGINS } from '../common/http/cors-origins';
 interface WsRedisEnv {
   REDIS_CACHE_HOST: string;
   REDIS_CACHE_PORT: number;
+  REDIS_CACHE_PASSWORD?: string;
   REDIS_PUBSUB_DB: number;
   WS_CONNECTION_LIMIT_PER_IP: number;
   WS_SESSION_REVALIDATE_MS: number;
@@ -96,13 +97,15 @@ export class NotificationGateway
     const host = this.config.get('REDIS_CACHE_HOST', { infer: true });
     const port = this.config.get('REDIS_CACHE_PORT', { infer: true });
     const db = this.config.get('REDIS_PUBSUB_DB', { infer: true });
+    const password = this.config.get('REDIS_CACHE_PASSWORD', { infer: true });
 
-    this.pubClient = new Redis({ host, port, db, retryStrategy: redisReconnectStrategy });
+    this.pubClient = new Redis({ host, port, password, db, retryStrategy: redisReconnectStrategy });
     this.subClient = this.pubClient.duplicate();
 
     this.rateLimitClient = new Redis({
       host,
       port,
+      password,
       db,
       retryStrategy: redisReconnectStrategy,
       enableOfflineQueue: false,

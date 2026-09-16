@@ -24,7 +24,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
 source "${SCRIPT_DIR}/security/_lib.sh"
 cd "$(sec::repo_root)"
-sec::source_env API_DEBUG_PORT
+sec::source_env API_DEBUG_PORT POSTGRES_PORT POSTGRES_DB \
+  API_DB_USER API_DB_PASSWORD WORKER_DB_USER WORKER_DB_PASSWORD \
+  SCHEDULER_DB_USER SCHEDULER_DB_PASSWORD
 
 APP="api"
 NO_INFRA=0
@@ -92,6 +94,12 @@ if [[ $NO_INFRA -eq 0 ]]; then
   # `deploy` only runs committed migrations — no schema drift prompts.
   sec::log "Applying migrations (prisma migrate deploy)"
   pnpm exec prisma migrate deploy
+
+  # --no-deps because the compose `migration` service is not used on this path — migrations were
+  # just applied from the host, and pulling it in would build an image this flow never runs.
+  sec::log "Provisioning runtime database roles (db-grants)"
+  # shellcheck disable=SC2086
+  docker compose "${COMPOSE_ARGS[@]}" up --no-deps --no-log-prefix --exit-code-from db-grants db-grants
 fi
 
 # nx serve starts the Node inspector on 9229 by default, so hot-reloading more
@@ -107,6 +115,23 @@ esac
 # Every app on the host reads the same .env, which holds the api's name.
 if [[ "$APP" != "api" ]]; then
   export OTEL_SERVICE_NAME="nestjs-fastify-${APP}"
+fi
+
+# .env keeps the admin DSN for the Prisma CLI; the app connects as its own runtime role.
+case "$APP" in
+  api) ROLE_USER="${API_DB_USER:-api_user}"; ROLE_PASSWORD="${API_DB_PASSWORD:-}" ;;
+  worker) ROLE_USER="${WORKER_DB_USER:-worker_user}"; ROLE_PASSWORD="${WORKER_DB_PASSWORD:-}" ;;
+  scheduler) ROLE_USER="${SCHEDULER_DB_USER:-scheduler_user}"; ROLE_PASSWORD="${SCHEDULER_DB_PASSWORD:-}" ;;
+  *) ROLE_USER=""; ROLE_PASSWORD="" ;;
+esac
+
+if [[ -n "$ROLE_USER" ]]; then
+  if [[ -z "$ROLE_PASSWORD" ]]; then
+    sec::err "No password for '${ROLE_USER}' — run ./scripts/gen-env.sh to generate the runtime role credentials."
+    exit 1
+  fi
+  export DATABASE_URL="postgresql://$(sec::urlencode "$ROLE_USER"):$(sec::urlencode "$ROLE_PASSWORD")@localhost:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-nestjs_db}"
+  sec::log "  database role: ${ROLE_USER} (admin DSN stays in .env for the Prisma CLI)"
 fi
 
 sec::ok "Infra ready. Booting hot-reload loop for '${APP}'."

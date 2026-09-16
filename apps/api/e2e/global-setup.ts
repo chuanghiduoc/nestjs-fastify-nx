@@ -91,6 +91,8 @@ function configureTestEnvironment(
   process.env['REDIS_CACHE_PORT'] = redisPort;
   process.env['REDIS_QUEUE_HOST'] = redisHost;
   process.env['REDIS_QUEUE_PORT'] = redisPort;
+  delete process.env['REDIS_CACHE_PASSWORD'];
+  delete process.env['REDIS_QUEUE_PASSWORD'];
 }
 
 export async function teardown(): Promise<void> {
