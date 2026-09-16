@@ -192,12 +192,12 @@ itself.
 No process holds a credential it cannot use. A compromise of one app is bounded by that app's
 own grants rather than by the whole data tier.
 
-| Runtime     | Postgres role                                                                                | Redis                        | MinIO             |
-| ----------- | -------------------------------------------------------------------------------------------- | ---------------------------- | ----------------- |
-| `migration` | admin (schema owner)                                                                         | —                            | —                 |
-| `api`       | `api_user` — `NOBYPASSRLS`, no `_prisma_migrations`, no `UPDATE`/`DELETE` on `outbox_events` | cache **and** queue password | bucket-scoped key |
-| `worker`    | `worker_user` — `stored_files` only                                                          | queue password only          | bucket-scoped key |
-| `scheduler` | `scheduler_user` — `MAINTAIN` schema-wide, DML on its seven tables                           | queue password only          | bucket-scoped key |
+| Runtime     | Postgres role                                                                                   | Redis                        | MinIO             |
+| ----------- | ----------------------------------------------------------------------------------------------- | ---------------------------- | ----------------- |
+| `migration` | admin (schema owner)                                                                            | —                            | —                 |
+| `api`       | `api_user` — `NOBYPASSRLS`, no `_prisma_migrations`, no `UPDATE`/`DELETE` on `outbox_events`    | cache **and** queue password | bucket-scoped key |
+| `worker`    | `worker_user` — `stored_files` only                                                             | queue password only          | bucket-scoped key |
+| `scheduler` | `scheduler_user` — `MAINTAIN` schema-wide, DML on its seven tables, `SELECT` on `organizations` | queue password only          | bucket-scoped key |
 
 Provisioned by `docker/postgres/provision-runtime-roles.sh` and
 `docker/minio/provision-bucket.sh`, both run as one-shot compose services gated ahead of the apps.

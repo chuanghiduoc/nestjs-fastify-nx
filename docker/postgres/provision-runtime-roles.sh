@@ -56,6 +56,7 @@ REVOKE ALL ON ALL TABLES IN SCHEMA public FROM :"scheduler_user";
 GRANT MAINTAIN ON ALL TABLES IN SCHEMA public TO :"scheduler_user";
 GRANT SELECT, DELETE ON TABLE "users", "sessions", "verifications" TO :"scheduler_user";
 GRANT SELECT, UPDATE, DELETE ON TABLE "stored_files" TO :"scheduler_user";
+GRANT SELECT ON TABLE "organizations" TO :"scheduler_user";
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE "outbox_events" TO :"scheduler_user";
 GRANT SELECT, INSERT ON TABLE "audit_logs", "notifications" TO :"scheduler_user";
 -- No CREATE on the schema: partition DDL runs through the two SECURITY DEFINER functions below,
