@@ -60,19 +60,12 @@
       "dependsOn": ["^build"],
       "inputs": ["production", "^production"]
     },
-    "typecheck": {
-      "cache": true,
-      "outputs": ["{projectRoot}/out-tsc"]
-    },
+    "typecheck": { "cache": true, "outputs": ["{projectRoot}/out-tsc"] },
     "build": {
       "cache": true,
       "dependsOn": [
         "^build",
-        {
-          "projects": ["infra-database"],
-          "target": "prisma-generate",
-          "params": "ignore"
-        }
+        { "projects": ["infra-database"], "target": "prisma-generate", "params": "ignore" }
       ],
       "inputs": ["backendBuild", "^production"]
     },
@@ -84,9 +77,7 @@
         "{workspaceRoot}/eslint.config.mjs",
         "{workspaceRoot}/.prettierrc"
       ],
-      "options": {
-        "args": "--max-warnings=0"
-      }
+      "options": { "args": "--max-warnings=0" }
     },
     "test": {
       "cache": true,
@@ -100,21 +91,13 @@
       ],
       "outputs": []
     },
-    "e2e": {
-      "cache": true,
-      "inputs": ["e2eTest", "^production"],
-      "outputs": []
-    }
+    "e2e": { "cache": true, "inputs": ["e2eTest", "^production"], "outputs": [] }
   },
-  "sync": {
-    "applyChanges": true
-  },
+  "sync": { "applyChanges": true },
   "release": {
     "projects": ["api"],
     "projectsRelationship": "fixed",
-    "releaseTag": {
-      "pattern": "v{version}"
-    },
+    "releaseTag": { "pattern": "v{version}" },
     "version": {
       "specifierSource": "conventional-commits",
       "currentVersionResolver": "git-tag",
@@ -127,107 +110,38 @@
       "workspaceChangelog": {
         "file": "{workspaceRoot}/CHANGELOG.md",
         "createRelease": "github",
-        "renderOptions": {
-          "authors": false
-        }
+        "renderOptions": { "authors": false }
       }
     },
     "conventionalCommits": {
       "types": {
-        "feat": {
-          "semverBump": "minor",
-          "changelog": {
-            "title": "Features"
-          }
-        },
-        "fix": {
-          "semverBump": "patch",
-          "changelog": {
-            "title": "Bug Fixes"
-          }
-        },
-        "perf": {
-          "semverBump": "patch",
-          "changelog": {
-            "title": "Performance"
-          }
-        },
-        "refactor": {
-          "semverBump": "patch",
-          "changelog": {
-            "title": "Refactors"
-          }
-        },
-        "revert": {
-          "semverBump": "patch",
-          "changelog": {
-            "title": "Reverts"
-          }
-        },
+        "feat": { "semverBump": "minor", "changelog": { "title": "Features" } },
+        "fix": { "semverBump": "patch", "changelog": { "title": "Bug Fixes" } },
+        "perf": { "semverBump": "patch", "changelog": { "title": "Performance" } },
+        "refactor": { "semverBump": "patch", "changelog": { "title": "Refactors" } },
+        "revert": { "semverBump": "patch", "changelog": { "title": "Reverts" } },
         "docs": {
           "semverBump": "none",
-          "changelog": {
-            "hidden": false,
-            "title": "Documentation"
-          }
+          "changelog": { "hidden": false, "title": "Documentation" }
         },
         "build": {
           "semverBump": "none",
-          "changelog": {
-            "hidden": false,
-            "title": "Build System"
-          }
+          "changelog": { "hidden": false, "title": "Build System" }
         },
-        "chore": {
-          "semverBump": "none",
-          "changelog": {
-            "hidden": true
-          }
-        },
-        "ci": {
-          "semverBump": "none",
-          "changelog": {
-            "hidden": true
-          }
-        },
-        "test": {
-          "semverBump": "none",
-          "changelog": {
-            "hidden": true
-          }
-        },
-        "style": {
-          "semverBump": "none",
-          "changelog": {
-            "hidden": true
-          }
-        }
+        "chore": { "semverBump": "none", "changelog": { "hidden": true } },
+        "ci": { "semverBump": "none", "changelog": { "hidden": true } },
+        "test": { "semverBump": "none", "changelog": { "hidden": true } },
+        "style": { "semverBump": "none", "changelog": { "hidden": true } }
       }
     }
   },
   "generators": {
-    "@nx/js:library": {
-      "bundler": "tsc"
-    },
-    "@nestjs-fastify-nx/tools-generators": {
-      "module": {}
-    }
+    "@nx/js:library": { "bundler": "tsc" },
+    "@nestjs-fastify-nx/tools-generators": { "module": {} }
   },
   "plugins": [
-    {
-      "plugin": "@nx/eslint/plugin",
-      "options": {
-        "targetName": "lint"
-      }
-    },
-    {
-      "plugin": "@nx/js/typescript",
-      "options": {
-        "typecheck": {
-          "targetName": "typecheck"
-        }
-      }
-    },
+    { "plugin": "@nx/eslint/plugin", "options": { "targetName": "lint" } },
+    { "plugin": "@nx/js/typescript", "options": { "typecheck": { "targetName": "typecheck" } } },
     {
       "plugin": "@nx/webpack/plugin",
       "options": {
@@ -239,12 +153,8 @@
         "serveStaticTargetName": "serve-static"
       }
     },
-    {
-      "plugin": "@nx/vitest",
-      "options": {
-        "testTargetName": "test"
-      }
-    }
+    { "plugin": "@nx/vitest", "options": { "testTargetName": "test" } }
   ],
-  "analytics": true
+  "analytics": true,
+  "nxCloudId": "6aaa1610e479c96322018991"
 }
