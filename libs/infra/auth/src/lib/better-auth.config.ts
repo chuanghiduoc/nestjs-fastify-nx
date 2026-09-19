@@ -7,15 +7,14 @@ import { bearer, openAPI, organization } from 'better-auth/plugins';
 import type { PrismaClient } from '@nestjs-fastify-nx/infra-database';
 import type { I18nService } from 'nestjs-i18n';
 import { resolveRequestLocale, translateOrFallback } from '@nestjs-fastify-nx/infra-i18n';
+import type { AuthSessionPolicy } from './auth-session-policy';
 import { usesSecureCookies } from './session-cookie';
 import { organizationAccessControl, organizationRoles } from './organization-access-control';
 import { I18N_KEYS } from '@nestjs-fastify-nx/contracts';
 import {
   EMAIL_TEMPLATES,
   PLATFORM_ROLES,
-  SYSTEM_ROLES,
   USER_STATUS,
-  generateId,
   type EmailTemplate,
 } from '@nestjs-fastify-nx/shared';
 export interface AuthMailDispatcher {
@@ -34,47 +33,6 @@ const INVITATION_EXPIRES_IN_SECONDS = 60 * 60 * 48;
 const SESSION_EXPIRES_IN_SECONDS = 7 * 24 * 60 * 60;
 const SESSION_UPDATE_AGE_SECONDS = 24 * 60 * 60;
 const SESSION_COOKIE_CACHE_MAX_AGE_SECONDS = 5 * 60;
-
-export async function ensurePersonalOrganization(
-  prisma: PrismaClient,
-  userId: string,
-): Promise<string> {
-  const membership = await prisma.member.findFirst({
-    where: { userId },
-    orderBy: { createdAt: 'asc' },
-    select: { organizationId: true },
-  });
-  if (membership) return membership.organizationId;
-
-  const user = await prisma.user.findUniqueOrThrow({
-    where: { id: userId },
-    select: { name: true, email: true },
-  });
-
-  const name = user.name.trim() || user.email.split('@')[0];
-
-  // The first membership check is the common fast path. The per-user transaction lock closes the
-  // concurrent sign-in race across processes without deriving a slug from the user id.
-  return prisma.$transaction(async (tx) => {
-    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${userId}, 0))`;
-    const existing = await tx.member.findFirst({
-      where: { userId },
-      orderBy: { createdAt: 'asc' },
-      select: { organizationId: true },
-    });
-    if (existing) return existing.organizationId;
-
-    const organization = await tx.organization.create({
-      data: { name, slug: `ws-${generateId().replace(/-/g, '')}` },
-      select: { id: true },
-    });
-    await tx.member.create({
-      data: { organizationId: organization.id, userId, role: SYSTEM_ROLES.OWNER },
-      select: { id: true },
-    });
-    return organization.id;
-  });
-}
 
 type OAuthCredentials = { clientId: string; clientSecret: string };
 
@@ -104,6 +62,7 @@ export function createBetterAuth(
   prisma: PrismaClient,
   mail: AuthMailDispatcher,
   i18n: I18nService,
+  sessionPolicy: AuthSessionPolicy,
 ) {
   const secret = process.env['BETTER_AUTH_SECRET'];
   const baseURL = process.env['BETTER_AUTH_URL'];
@@ -208,7 +167,7 @@ export function createBetterAuth(
         create: {
           before: async (session) => {
             await assertActiveUser(session.userId);
-            const organizationId = await ensurePersonalOrganization(prisma, session.userId);
+            const organizationId = await sessionPolicy.resolveOrganizationId(session.userId);
             return { data: { ...session, activeOrganizationId: organizationId } };
           },
         },

@@ -1,5 +1,8 @@
 # Security scanning
 
+See [Authentication and organization ownership](authentication-flow.md) for the
+request paths, session provisioning policy and authorization ownership map.
+
 Defense-in-depth pipeline covering source, dependencies, code, images, and
 supply-chain provenance. Every layer runs both **locally** (developer feedback)
 and in **CI** (gate). A clean local run mirrors the CI gate.
