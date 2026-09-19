@@ -1,4 +1,5 @@
 export { OrganizationsModule } from './organizations.module';
+export { EnsurePersonalOrganizationCommand } from './application/commands/ensure-personal-organization/ensure-personal-organization.command';
 
 export { OrganizationRole } from './domain/entities/organization-role.entity';
 export { Team } from './domain/entities/team.entity';
