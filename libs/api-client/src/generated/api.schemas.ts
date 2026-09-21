@@ -203,44 +203,16 @@ export interface LivenessResponseDto {
   timestamp: string;
 }
 
-/**
- * Authorization role granted to the user.
- */
-export type UserProfileResponseDtoRole =
-  (typeof UserProfileResponseDtoRole)[keyof typeof UserProfileResponseDtoRole];
-
-export const UserProfileResponseDtoRole = {
-  ADMIN: 'ADMIN',
-  USER: 'USER',
-} as const;
-
-/**
- * Account lifecycle status.
- */
-export type UserProfileResponseDtoStatus =
-  (typeof UserProfileResponseDtoStatus)[keyof typeof UserProfileResponseDtoStatus];
-
-export const UserProfileResponseDtoStatus = {
-  ACTIVE: 'ACTIVE',
-  INACTIVE: 'INACTIVE',
-  BANNED: 'BANNED',
-} as const;
-
-export interface UserProfileResponseDto {
-  /** User UUID v7 identifier (sortable, time-prefixed). */
+export interface OrganizationResponseDto {
   id: string;
-  /** User email address. */
-  email: string;
-  /** Display name. */
   name: string;
-  /** Authorization role granted to the user. */
-  role: UserProfileResponseDtoRole;
-  /** Account lifecycle status. */
-  status: UserProfileResponseDtoStatus;
-  /** Account creation timestamp (ISO 8601 UTC). */
+  slug: string;
+  /** @nullable */
+  logo: string | null;
+  memberCount: number;
+  teamCount: number;
+  pendingInvitationCount: number;
   createdAt: string;
-  /** Last modification timestamp (ISO 8601 UTC). */
-  updatedAt: string;
 }
 
 /**
@@ -273,81 +245,6 @@ export interface ListResponseDto {
   page?: number;
   /** Items per page. Present only on offset-paginated endpoints. */
   pageSize?: number;
-}
-
-export type UserListItemResponseDtoStatus =
-  (typeof UserListItemResponseDtoStatus)[keyof typeof UserListItemResponseDtoStatus];
-
-export const UserListItemResponseDtoStatus = {
-  ACTIVE: 'ACTIVE',
-  INACTIVE: 'INACTIVE',
-  BANNED: 'BANNED',
-} as const;
-
-export interface UserListItemResponseDto {
-  /** User UUID v7 identifier. */
-  id: string;
-  email: string;
-  /** Display name. */
-  name: string;
-  /** Organization membership role. */
-  role: string;
-  status: UserListItemResponseDtoStatus;
-  createdAt: string;
-  updatedAt: string;
-}
-
-/**
- * Event payload captured at record time, minus the fields promoted to columns.
- */
-export type AuditLogResponseDtoMetadata = { [key: string]: unknown };
-
-export interface AuditLogResponseDto {
-  /** Audit entry id (UUID v7). */
-  id: string;
-  /**
-   * Organization the entry belongs to.
-   * @nullable
-   */
-  organizationId: string | null;
-  /**
-   * User the entry is attributed to, when the action had one.
-   * @nullable
-   */
-  userId: string | null;
-  /** Domain event name that produced the entry. */
-  action: string;
-  /**
-   * Resource label the action applied to.
-   * @nullable
-   */
-  resource: string | null;
-  /** Event payload captured at record time, minus the fields promoted to columns. */
-  metadata: AuditLogResponseDtoMetadata;
-  /**
-   * Client IP captured at record time.
-   * @nullable
-   */
-  ipAddress: string | null;
-  /**
-   * Client user agent captured at record time.
-   * @nullable
-   */
-  userAgent: string | null;
-  /** When the action occurred. */
-  createdAt: string;
-}
-
-export interface OrganizationResponseDto {
-  id: string;
-  name: string;
-  slug: string;
-  /** @nullable */
-  logo: string | null;
-  memberCount: number;
-  teamCount: number;
-  pendingInvitationCount: number;
-  createdAt: string;
 }
 
 export type CreateOrganizationRoleDtoPermissionsItem =
@@ -541,6 +438,109 @@ export interface InvitationResponseDto {
   expiresAt: string;
   /** User who sent the invitation. */
   inviterId: string;
+  createdAt: string;
+}
+
+/**
+ * Authorization role granted to the user.
+ */
+export type UserProfileResponseDtoRole =
+  (typeof UserProfileResponseDtoRole)[keyof typeof UserProfileResponseDtoRole];
+
+export const UserProfileResponseDtoRole = {
+  ADMIN: 'ADMIN',
+  USER: 'USER',
+} as const;
+
+/**
+ * Account lifecycle status.
+ */
+export type UserProfileResponseDtoStatus =
+  (typeof UserProfileResponseDtoStatus)[keyof typeof UserProfileResponseDtoStatus];
+
+export const UserProfileResponseDtoStatus = {
+  ACTIVE: 'ACTIVE',
+  INACTIVE: 'INACTIVE',
+  BANNED: 'BANNED',
+} as const;
+
+export interface UserProfileResponseDto {
+  /** User UUID v7 identifier (sortable, time-prefixed). */
+  id: string;
+  /** User email address. */
+  email: string;
+  /** Display name. */
+  name: string;
+  /** Authorization role granted to the user. */
+  role: UserProfileResponseDtoRole;
+  /** Account lifecycle status. */
+  status: UserProfileResponseDtoStatus;
+  /** Account creation timestamp (ISO 8601 UTC). */
+  createdAt: string;
+  /** Last modification timestamp (ISO 8601 UTC). */
+  updatedAt: string;
+}
+
+export type UserListItemResponseDtoStatus =
+  (typeof UserListItemResponseDtoStatus)[keyof typeof UserListItemResponseDtoStatus];
+
+export const UserListItemResponseDtoStatus = {
+  ACTIVE: 'ACTIVE',
+  INACTIVE: 'INACTIVE',
+  BANNED: 'BANNED',
+} as const;
+
+export interface UserListItemResponseDto {
+  /** User UUID v7 identifier. */
+  id: string;
+  email: string;
+  /** Display name. */
+  name: string;
+  /** Organization membership role. */
+  role: string;
+  status: UserListItemResponseDtoStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * Event payload captured at record time, minus the fields promoted to columns.
+ */
+export type AuditLogResponseDtoMetadata = { [key: string]: unknown };
+
+export interface AuditLogResponseDto {
+  /** Audit entry id (UUID v7). */
+  id: string;
+  /**
+   * Organization the entry belongs to.
+   * @nullable
+   */
+  organizationId: string | null;
+  /**
+   * User the entry is attributed to, when the action had one.
+   * @nullable
+   */
+  userId: string | null;
+  /** Domain event name that produced the entry. */
+  action: string;
+  /**
+   * Resource label the action applied to.
+   * @nullable
+   */
+  resource: string | null;
+  /** Event payload captured at record time, minus the fields promoted to columns. */
+  metadata: AuditLogResponseDtoMetadata;
+  /**
+   * Client IP captured at record time.
+   * @nullable
+   */
+  ipAddress: string | null;
+  /**
+   * Client user agent captured at record time.
+   * @nullable
+   */
+  userAgent: string | null;
+  /** When the action occurred. */
   createdAt: string;
 }
 
@@ -1028,6 +1028,58 @@ export interface Invitation {
   inviterId: string;
 }
 
+export type TeamsListParams = {
+  /**
+   * Items per page (1–100).
+   */
+  limit?: number;
+  /**
+   * Opaque cursor for the next page — pass the previous response's `lastCursor` value verbatim. The encoded format is `base64url(sortField.toISOString():id)` and clients MUST NOT construct it manually.
+   */
+  startingAfter?: string;
+  /**
+   * Case-insensitive substring match on the team name.
+   */
+  search?: string;
+};
+
+export type TeamsList200 = ListResponseDto & {
+  data?: TeamResponseDto[];
+};
+
+export type InvitationsListParams = {
+  /**
+   * Items per page (1–100).
+   */
+  limit?: number;
+  /**
+   * Opaque cursor for the next page — pass the previous response's `lastCursor` value verbatim. The encoded format is `base64url(sortField.toISOString():id)` and clients MUST NOT construct it manually.
+   */
+  startingAfter?: string;
+  /**
+   * Filter by invitation status.
+   */
+  status?: InvitationsListStatus;
+  /**
+   * Filter by the invited email address.
+   */
+  email?: string;
+};
+
+export type InvitationsListStatus =
+  (typeof InvitationsListStatus)[keyof typeof InvitationsListStatus];
+
+export const InvitationsListStatus = {
+  pending: 'pending',
+  accepted: 'accepted',
+  rejected: 'rejected',
+  canceled: 'canceled',
+} as const;
+
+export type InvitationsList200 = ListResponseDto & {
+  data?: InvitationResponseDto[];
+};
+
 export type AdminUsersListParams = {
   /**
    * Items per page (1–100).
@@ -1096,58 +1148,6 @@ export type AuditLogsListParams = {
 
 export type AuditLogsList200 = ListResponseDto & {
   data?: AuditLogResponseDto[];
-};
-
-export type TeamsListParams = {
-  /**
-   * Items per page (1–100).
-   */
-  limit?: number;
-  /**
-   * Opaque cursor for the next page — pass the previous response's `lastCursor` value verbatim. The encoded format is `base64url(sortField.toISOString():id)` and clients MUST NOT construct it manually.
-   */
-  startingAfter?: string;
-  /**
-   * Case-insensitive substring match on the team name.
-   */
-  search?: string;
-};
-
-export type TeamsList200 = ListResponseDto & {
-  data?: TeamResponseDto[];
-};
-
-export type InvitationsListParams = {
-  /**
-   * Items per page (1–100).
-   */
-  limit?: number;
-  /**
-   * Opaque cursor for the next page — pass the previous response's `lastCursor` value verbatim. The encoded format is `base64url(sortField.toISOString():id)` and clients MUST NOT construct it manually.
-   */
-  startingAfter?: string;
-  /**
-   * Filter by invitation status.
-   */
-  status?: InvitationsListStatus;
-  /**
-   * Filter by the invited email address.
-   */
-  email?: string;
-};
-
-export type InvitationsListStatus =
-  (typeof InvitationsListStatus)[keyof typeof InvitationsListStatus];
-
-export const InvitationsListStatus = {
-  pending: 'pending',
-  accepted: 'accepted',
-  rejected: 'rejected',
-  canceled: 'canceled',
-} as const;
-
-export type InvitationsList200 = ListResponseDto & {
-  data?: InvitationResponseDto[];
 };
 
 export type ApiKeysListParams = {
