@@ -9,12 +9,7 @@ import { DatabaseModule } from '@nestjs-fastify-nx/infra-database';
 import { RedisQueueModule } from '@nestjs-fastify-nx/infra-redis';
 import { MessagingModule } from '@nestjs-fastify-nx/infra-messaging';
 import { StorageModule } from '@nestjs-fastify-nx/infra-storage';
-import {
-  BetterAuthModule,
-  BetterAuthGuard,
-  ApiKeyGuard,
-  RolesGuard,
-} from '@nestjs-fastify-nx/infra-auth';
+import { BetterAuthGuard, ApiKeyGuard, RolesGuard } from '@nestjs-fastify-nx/infra-auth';
 import { AuthorizationModule, PermissionGuard } from '@nestjs-fastify-nx/infra-authorization';
 import { I18nInfraModule } from '@nestjs-fastify-nx/infra-i18n';
 import { UsersModule } from '@nestjs-fastify-nx/modules-users';
@@ -37,6 +32,7 @@ import { WebsocketModule } from '../websocket/websocket.module';
 import { GlobalExceptionFilter } from '../common/filters/global-exception.filter';
 import { TimeoutInterceptor } from '../common/interceptors';
 import { validateConfig } from '../config/env.validation';
+import { AuthenticationModule } from '../common/auth/authentication.module';
 import { AppController } from './app.controller';
 
 @Module({
@@ -61,7 +57,7 @@ import { AppController } from './app.controller';
     // The trigger writes the outbox row inside the same transaction as the
     // user insert, so signup + event are atomic. The outbox relay then
     // dispatches to in-process listeners — no application-side hook needed.
-    BetterAuthModule,
+    AuthenticationModule,
     UsersModule,
     AdminModule,
     AuditLogModule,

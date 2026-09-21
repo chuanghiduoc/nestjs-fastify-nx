@@ -7,7 +7,7 @@ import { DatabaseModule } from '@nestjs-fastify-nx/infra-database';
 import { RedisQueueModule } from '@nestjs-fastify-nx/infra-redis';
 import { MessagingModule } from '@nestjs-fastify-nx/infra-messaging';
 import { StorageModule } from '@nestjs-fastify-nx/infra-storage';
-import { BetterAuthModule, BetterAuthGuard, RolesGuard } from '@nestjs-fastify-nx/infra-auth';
+import { BetterAuthGuard, RolesGuard } from '@nestjs-fastify-nx/infra-auth';
 import { AuthorizationModule, PermissionGuard } from '@nestjs-fastify-nx/infra-authorization';
 import { I18nInfraModule } from '@nestjs-fastify-nx/infra-i18n';
 import { UsersModule } from '@nestjs-fastify-nx/modules-users';
@@ -25,6 +25,7 @@ import { ThrottlerModule } from '../throttler/throttler.module';
 import { UploadModule } from '@nestjs-fastify-nx/modules-upload';
 import { GlobalExceptionFilter } from '../filters/global-exception.filter';
 import { validateConfig } from '../../config/env.validation';
+import { AuthenticationModule } from '../auth/authentication.module';
 import { AppController } from '../../app/app.controller';
 
 @Module({
@@ -40,7 +41,7 @@ import { AppController } from '../../app/app.controller';
     RedisQueueModule,
     MessagingModule,
     StorageModule,
-    BetterAuthModule,
+    AuthenticationModule,
     UsersModule,
     AdminModule,
     AuditLogModule,

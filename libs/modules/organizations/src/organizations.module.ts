@@ -23,6 +23,9 @@ import { OrganizationsController } from './presentation/controllers/organization
 import { OrganizationRolesController } from './presentation/controllers/organization-roles.controller';
 import { TeamsController } from './presentation/controllers/teams.controller';
 import { InvitationsController } from './presentation/controllers/invitations.controller';
+import { PERSONAL_ORGANIZATION_REPOSITORY } from './domain/ports/personal-organization-repository.port';
+import { PrismaPersonalOrganizationRepository } from './infrastructure/repositories/prisma-personal-organization.repository';
+import { EnsurePersonalOrganizationHandler } from './application/commands/ensure-personal-organization/ensure-personal-organization.handler';
 
 @Module({
   imports: [DatabaseModule],
@@ -33,6 +36,8 @@ import { InvitationsController } from './presentation/controllers/invitations.co
     InvitationsController,
   ],
   providers: [
+    { provide: PERSONAL_ORGANIZATION_REPOSITORY, useClass: PrismaPersonalOrganizationRepository },
+    EnsurePersonalOrganizationHandler,
     { provide: ORGANIZATION_REPOSITORY, useClass: PrismaOrganizationRepository },
     { provide: ORGANIZATION_ROLE_REPOSITORY, useClass: PrismaOrganizationRoleRepository },
     { provide: TEAM_REPOSITORY, useClass: PrismaTeamRepository },
