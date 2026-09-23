@@ -12,7 +12,7 @@ export const TERM_TYPES = Object.values(TERM_TYPE);
 
 export type TermType = (typeof TERM_TYPE)[keyof typeof TERM_TYPE];
 
-const VERSION_PATTERN = /^[0-9A-Za-z][0-9A-Za-z._-]{0,49}$/;
+export const VERSION_PATTERN = /^[0-9A-Za-z][0-9A-Za-z._-]{0,49}$/;
 
 export interface TermProps {
   id: string;

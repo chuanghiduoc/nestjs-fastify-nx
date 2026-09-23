@@ -60,42 +60,36 @@ export class StoredFileCleanupTask {
     if (!this.leadership.isLeader() || this.cleanupRunning) return;
     this.cleanupRunning = true;
     try {
-      const finalizingCutoff = new Date(Date.now() - this.finalizingStaleMinutes * 60_000);
-      const verifyingCutoff = new Date(Date.now() - this.verifyingStaleHours * 3_600_000);
-      const rejectedCutoff = new Date(Date.now() - this.rejectedRetainHours * 3_600_000);
+      const scans: [string, string, Date][] = [
+        [
+          'REJECTED (retained)',
+          STORED_FILE_STATUS.REJECTED,
+          new Date(Date.now() - this.rejectedRetainHours * 3_600_000),
+        ],
+        [
+          'FINALIZING (stale)',
+          STORED_FILE_STATUS.FINALIZING,
+          new Date(Date.now() - this.finalizingStaleMinutes * 60_000),
+        ],
+        [
+          'VERIFYING (stale)',
+          STORED_FILE_STATUS.VERIFYING,
+          new Date(Date.now() - this.verifyingStaleHours * 3_600_000),
+        ],
+      ];
 
-      await this.processCandidates(
-        'REJECTED (retained)',
-        () =>
-          this.prisma.db.$queryRaw<CleanupCandidate[]>`
-          SELECT id, key, bucket, status, "updatedAt"
-            FROM stored_files
-           WHERE status = 'REJECTED' AND "updatedAt" < ${rejectedCutoff}
-           ORDER BY "updatedAt"
-           LIMIT ${this.batchSize}`,
-      );
-
-      await this.processCandidates(
-        'FINALIZING (stale)',
-        () =>
-          this.prisma.db.$queryRaw<CleanupCandidate[]>`
-          SELECT id, key, bucket, status, "updatedAt"
-            FROM stored_files
-           WHERE status = 'FINALIZING' AND "updatedAt" < ${finalizingCutoff}
-           ORDER BY "updatedAt"
-           LIMIT ${this.batchSize}`,
-      );
-
-      await this.processCandidates(
-        'VERIFYING (stale)',
-        () =>
-          this.prisma.db.$queryRaw<CleanupCandidate[]>`
-          SELECT id, key, bucket, status, "updatedAt"
-            FROM stored_files
-           WHERE status = 'VERIFYING' AND "updatedAt" < ${verifyingCutoff}
-           ORDER BY "updatedAt"
-           LIMIT ${this.batchSize}`,
-      );
+      for (const [label, status, cutoff] of scans) {
+        await this.processCandidates(
+          label,
+          () =>
+            this.prisma.db.$queryRaw<CleanupCandidate[]>`
+            SELECT id, key, bucket, status, "updatedAt"
+              FROM stored_files
+             WHERE status = ${status} AND "updatedAt" < ${cutoff}
+             ORDER BY "updatedAt"
+             LIMIT ${this.batchSize}`,
+        );
+      }
     } finally {
       this.cleanupRunning = false;
     }

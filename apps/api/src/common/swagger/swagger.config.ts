@@ -4,6 +4,7 @@ import type { OpenAPIObject } from '@nestjs/swagger';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import {
   buildProblemExample,
+  ERROR_CODES,
   ListResponseDto,
   ProblemDetailsDto,
   ValidationErrorItemDto,
@@ -16,6 +17,7 @@ import {
 } from '@nestjs-fastify-nx/infra-auth';
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import ScalarApiReference from '@scalar/fastify-api-reference';
+import { STRICT_AUTH_PATHS } from '../auth-http/auth-rate-limits';
 
 const API_TITLE = 'NestJS Fastify Nx Boilerplate';
 const PROBLEM_JSON = 'application/problem+json';
@@ -26,13 +28,7 @@ const AUTH_TAG = 'auth';
 
 // Credential paths that create a session (no auth required yet). Better Auth's generated spec marks
 // them as secured — strip that so they aren't documented as needing a token.
-const PUBLIC_AUTH_PATHS = new Set([
-  `${AUTH_PATH_PREFIX}/sign-in/email`,
-  `${AUTH_PATH_PREFIX}/sign-up/email`,
-  `${AUTH_PATH_PREFIX}/request-password-reset`,
-  `${AUTH_PATH_PREFIX}/reset-password`,
-  `${AUTH_PATH_PREFIX}/forget-password`,
-]);
+const PUBLIC_AUTH_PATHS = new Set([...STRICT_AUTH_PATHS, `${AUTH_PATH_PREFIX}/forget-password`]);
 
 const logger = new Logger('Swagger');
 
@@ -130,13 +126,11 @@ function dedupeOperationIds(document: OpenAPIObject): void {
   const seen = new Set<string>();
 
   for (const pathItem of Object.values(document.paths ?? {})) {
-    if (!pathItem || typeof pathItem !== 'object') continue;
-    for (const method of HTTP_METHODS) {
-      const op = (pathItem as Record<string, unknown>)[method] as
-        { operationId?: string } | undefined;
-      if (!op?.operationId) continue;
+    forEachOperation(pathItem, (op, method) => {
+      const operationId = op['operationId'];
+      if (typeof operationId !== 'string') return;
 
-      let id = op.operationId;
+      let id = operationId;
       if (seen.has(id)) {
         const methodSuffix = method.charAt(0).toUpperCase() + method.slice(1);
         let candidate = `${id}${methodSuffix}`;
@@ -145,10 +139,10 @@ function dedupeOperationIds(document: OpenAPIObject): void {
           candidate = `${id}${methodSuffix}${counter++}`;
         }
         id = candidate;
-        op.operationId = id;
+        op['operationId'] = id;
       }
       seen.add(id);
-    }
+    });
   }
 }
 
@@ -216,6 +210,18 @@ interface AuthOpenApiDocument {
 }
 
 const HTTP_METHODS = ['get', 'put', 'post', 'delete', 'options', 'head', 'patch', 'trace'] as const;
+type HttpMethod = (typeof HTTP_METHODS)[number];
+
+function forEachOperation(
+  pathItem: unknown,
+  fn: (op: Record<string, unknown>, method: HttpMethod) => void,
+): void {
+  if (!pathItem || typeof pathItem !== 'object') return;
+  for (const method of HTTP_METHODS) {
+    const op = (pathItem as Record<string, unknown>)[method];
+    if (op && typeof op === 'object') fn(op as Record<string, unknown>, method);
+  }
+}
 
 // Better Auth leaves many merged operations without an operationId. Orval then falls back to ugly
 // path-derived names (getApiAuthRevokeSession…), inconsistent with the clean names elsewhere. Derive
@@ -254,10 +260,9 @@ function assignMissingOperationIds(fullPath: string, pathItem: Record<string, un
 // (sign-in/up, password reset) need no session, so they get an empty requirement.
 function applyCookieOnlySecurity(fullPath: string, pathItem: Record<string, unknown>): void {
   const isPublic = PUBLIC_AUTH_PATHS.has(fullPath);
-  for (const method of HTTP_METHODS) {
-    const op = pathItem[method] as { security?: unknown } | undefined;
-    if (op && typeof op === 'object') op.security = isPublic ? [] : [{ session: [] }];
-  }
+  forEachOperation(pathItem, (op) => {
+    op['security'] = isPublic ? [] : [{ session: [] }];
+  });
 }
 
 // Better Auth's spec sometimes inlines `{id}` in a path without declaring the parameter. Inject the missing parameter so strict validators (Orval) accept the merged document.
@@ -265,10 +270,8 @@ function ensurePathParameters(url: string, pathItem: Record<string, unknown>): v
   const placeholders = [...url.matchAll(/\{([^}]+)\}/g)].map((m) => m[1]);
   if (placeholders.length === 0) return;
 
-  for (const method of HTTP_METHODS) {
-    const op = pathItem[method] as
-      { parameters?: Array<{ name?: string; in?: string }> } | undefined;
-    if (!op || typeof op !== 'object') continue;
+  forEachOperation(pathItem, (opRecord) => {
+    const op = opRecord as { parameters?: Array<{ name?: string; in?: string }> };
     op.parameters = op.parameters ?? [];
     for (const name of placeholders) {
       const exists = op.parameters.some((p) => p?.name === name && p?.in === 'path');
@@ -281,7 +284,7 @@ function ensurePathParameters(url: string, pathItem: Record<string, unknown>): v
         } as { name?: string; in?: string });
       }
     }
-  }
+  });
 }
 
 // Better Auth's generateOpenAPISchema() attaches a generic `{ message }` (application/json)
@@ -293,19 +296,19 @@ function ensurePathParameters(url: string, pathItem: Record<string, unknown>): v
 function normalizeAuthInfraErrors(pathItem: Record<string, unknown>): void {
   const INFRA_RESPONSES: Record<string, { code: string; title: string; detail: string }> = {
     '429': {
-      code: 'rate_limited',
+      code: ERROR_CODES.RATE_LIMITED,
       title: 'Too Many Requests',
       detail: 'Rate limit exceeded — see the `Retry-After` response header.',
     },
     '500': {
-      code: 'internal_server_error',
+      code: ERROR_CODES.INTERNAL_SERVER_ERROR,
       title: 'Internal Server Error',
       detail: 'Unexpected server error. Quote the `requestId` field when contacting support.',
     },
   };
-  for (const method of HTTP_METHODS) {
-    const op = pathItem[method] as { responses?: Record<string, unknown> } | undefined;
-    if (!op?.responses) continue;
+  forEachOperation(pathItem, (opRecord) => {
+    const op = opRecord as { responses?: Record<string, unknown> };
+    if (!op.responses) return;
     for (const [code, cfg] of Object.entries(INFRA_RESPONSES)) {
       if (!op.responses[code]) continue;
       op.responses[code] = {
@@ -319,19 +322,16 @@ function normalizeAuthInfraErrors(pathItem: Record<string, unknown>): void {
         },
       };
     }
-  }
+  });
 }
 
 // Better Auth's openAPI plugin tags every operation with `Default`. Replace it outright so Orval's `tags-split` mode doesn't emit each operation twice (once under `auth`, once under `default`).
 function tagOperations(pathItem: unknown, tag: string): unknown {
   if (!pathItem || typeof pathItem !== 'object') return pathItem;
   const cloned: Record<string, unknown> = { ...(pathItem as Record<string, unknown>) };
-  for (const method of HTTP_METHODS) {
-    const op = cloned[method] as { tags?: string[] } | undefined;
-    if (op && typeof op === 'object') {
-      cloned[method] = { ...op, tags: [tag] };
-    }
-  }
+  forEachOperation(cloned, (op, method) => {
+    cloned[method] = { ...op, tags: [tag] };
+  });
   return cloned;
 }
 
@@ -346,16 +346,14 @@ function injectRequestIdResponseHeader(document: OpenAPIObject): void {
   };
 
   for (const pathItem of Object.values(document.paths ?? {})) {
-    if (!pathItem || typeof pathItem !== 'object') continue;
-    for (const method of HTTP_METHODS) {
-      const op = (pathItem as Record<string, unknown>)[method] as
-        { responses?: Record<string, { headers?: Record<string, unknown> }> } | undefined;
-      if (!op?.responses) continue;
+    forEachOperation(pathItem, (opRecord) => {
+      const op = opRecord as { responses?: Record<string, { headers?: Record<string, unknown> }> };
+      if (!op.responses) return;
       for (const response of Object.values(op.responses)) {
         if (!response || typeof response !== 'object') continue;
         response.headers = { ...(response.headers ?? {}), [REQUEST_ID_HEADER]: headerSpec };
       }
-    }
+    });
   }
 }
 

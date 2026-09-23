@@ -128,3 +128,7 @@ export function toCursorListResponse<T>(args: {
   response.lastCursor = args.lastCursor;
   return response;
 }
+
+export function toUnpaginatedListResponse<T>(url: string, items: readonly T[]): ListResponseDto<T> {
+  return toListResponse({ url, items, page: 1, pageSize: items.length, total: items.length });
+}

@@ -39,16 +39,44 @@ export {
   type DetectedFileType,
 } from './lib/file-signature';
 export { intEnv, positiveIntEnv, boolEnv, stripEmptyEnvStrings } from './lib/env-readers';
+export {
+  envFlag,
+  databaseEnvShape,
+  redisQueueEnvShape,
+  storageEnvShape,
+  otelEnvShape,
+  nodeEnvShape,
+  sentryEnvShape,
+  mailEnvShape,
+  outboxRelayEnvShape,
+  outboxPurgeEnvShape,
+  refineDatabasePoolBounds,
+  refineOutboxRetryBounds,
+  refineDatabaseUrlProd,
+  refineStorageProd,
+  refineRedisQueuePasswordProd,
+  refineMailProd,
+  parseEnvOrThrow,
+} from './lib/env-schema';
 export { redisReconnectStrategy } from './lib/redis-reconnect';
-export { encodeCursor, decodeCursor, type DecodedCursor } from './lib/cursor-pagination';
+export {
+  compareNewestFirst,
+  decodeCursor,
+  encodeCursor,
+  keysetAfter,
+  lastCursorOf,
+  paginateNewestFirst,
+  takePage,
+  type CursorKeyed,
+  type CursorPageSlice,
+  type DecodedCursor,
+} from './lib/cursor-pagination';
 export { injectDatabasePassword } from './lib/db-password-file';
 export { withTimeout } from './lib/with-timeout';
 export { STORED_FILE_STATUS, type StoredFileStatus } from './lib/stored-file-status';
 export {
-  ALL_PLATFORM_ROLES,
   PLATFORM_ROLES,
   USER_STATUS,
-  isPlatformRole,
   type PlatformRole,
   type UserStatusValue,
 } from './lib/user-status';
@@ -70,10 +98,7 @@ export {
   type SystemRole,
 } from './lib/permissions';
 export {
-  API_KEY_DISPLAY_PREFIX_LENGTH,
   API_KEY_PREFIX,
-  API_KEY_SECRET_BYTES,
-  apiKeyDisplayPrefix,
   generateApiKey,
   hashApiKey,
   looksLikeApiKey,

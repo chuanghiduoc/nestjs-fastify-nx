@@ -1,7 +1,6 @@
 import { hostname } from 'node:os';
 import { RequestMethod } from '@nestjs/common';
 import type { Params } from 'nestjs-pino';
-import type { Options as PinoHttpOptions } from 'pino-http';
 import { ClsServiceManager } from 'nestjs-cls';
 import type { RequestContextStore } from '@nestjs-fastify-nx/core';
 import {
@@ -38,7 +37,7 @@ function isNoisyProbe(req: { url?: string; originalUrl?: string }): boolean {
   return path === '/metrics' || path.startsWith('/api/v1/health');
 }
 
-export function buildPinoLoggerConfig(overrides: Partial<PinoHttpOptions> = {}): Params {
+export function buildPinoLoggerConfig(): Params {
   const isProduction = process.env['NODE_ENV'] === 'production';
   const prettyLogs = !isProduction && process.env['LOG_PRETTY'] !== 'false';
   const service = process.env['OTEL_SERVICE_NAME'] ?? 'app';
@@ -76,7 +75,6 @@ export function buildPinoLoggerConfig(overrides: Partial<PinoHttpOptions> = {}):
         res: (res: { statusCode?: number }) => ({ statusCode: res.statusCode }),
       },
       redact: { paths: SENSITIVE_REDACT_PATHS, censor: SENSITIVE_REDACT_CENSOR },
-      ...overrides,
     },
   };
 }

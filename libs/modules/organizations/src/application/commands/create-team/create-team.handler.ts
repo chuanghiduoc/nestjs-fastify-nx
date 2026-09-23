@@ -3,8 +3,10 @@ import { CommandHandler, type ICommandHandler } from '@nestjs/cqrs';
 import { TEAM_REPOSITORY } from '../../../domain/ports/team-repository.port';
 import type { TeamRepositoryPort } from '../../../domain/ports/team-repository.port';
 import { Team } from '../../../domain/entities/team.entity';
-import type { TeamDto } from '../../dto/organization-role.dto';
+import { toTeamDto, type TeamDto } from '../../dto/organization-role.dto';
 import { CreateTeamCommand } from './create-team.command';
+
+const NO_MEMBERS_YET = 0;
 
 @CommandHandler(CreateTeamCommand)
 export class CreateTeamHandler implements ICommandHandler<CreateTeamCommand, TeamDto> {
@@ -15,12 +17,6 @@ export class CreateTeamHandler implements ICommandHandler<CreateTeamCommand, Tea
 
     await this.teams.create(team);
 
-    return {
-      id: team.id,
-      name: team.name,
-      memberCount: 0,
-      createdAt: team.createdAt,
-      updatedAt: team.updatedAt,
-    };
+    return toTeamDto(team, NO_MEMBERS_YET);
   }
 }

@@ -1,25 +1,14 @@
 import { DomainException } from '@nestjs-fastify-nx/core';
-import { ERROR_CODES, I18N_KEYS } from '@nestjs-fastify-nx/contracts';
+import { ERROR_CODES, I18N_KEYS, fieldProblem } from '@nestjs-fastify-nx/contracts';
 
 function notFound(path: string, code: string, message: string, messageKey: string) {
-  return new DomainException({
-    kind: 'not_found',
-    code,
-    title: I18N_KEYS.common.not_found,
-    messageKey,
-    violations: [{ path, code, message, messageKey }],
-  });
+  return new DomainException(fieldProblem({ kind: 'not_found', code, path, message, messageKey }));
 }
 
 function conflict(path: string, code: string, message: string, messageKey: string) {
-  return new DomainException({
-    kind: 'conflict',
-    permanent: false,
-    code,
-    title: I18N_KEYS.common.conflict,
-    messageKey,
-    violations: [{ path, code, message, messageKey }],
-  });
+  return new DomainException(
+    fieldProblem({ kind: 'conflict', code, path, message, messageKey, permanent: false }),
+  );
 }
 
 export const organizationNotFound = () =>

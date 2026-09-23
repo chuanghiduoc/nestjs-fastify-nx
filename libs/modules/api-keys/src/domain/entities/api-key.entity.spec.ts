@@ -72,37 +72,11 @@ describe('ApiKey', () => {
     expect(entity.scopes).toEqual([PERMISSIONS.FILE_READ]);
   });
 
-  it('is usable while neither revoked nor expired', () => {
-    expect(issue().entity.isUsableAt(new Date())).toBe(true);
-  });
-
-  it('is unusable once expired', () => {
-    const { entity } = issue({ expiresAt: new Date(Date.now() + 1000) });
-
-    expect(entity.isUsableAt(new Date(Date.now() + 5000))).toBe(false);
-  });
-
-  it('is unusable once revoked', () => {
-    const { entity } = issue();
-    const revoked = ApiKey.reconstitute({
-      id: entity.id,
-      organizationId: entity.organizationId,
-      name: entity.name,
-      prefix: entity.prefix,
-      keyHash: entity.keyHash,
-      scopes: entity.scopes,
-      createdById: entity.createdById,
-      lastUsedAt: null,
-      expiresAt: null,
-      revokedAt: new Date(),
-      createdAt: entity.createdAt,
-      updatedAt: entity.updatedAt,
-    });
-
-    expect(revoked.isUsableAt(new Date())).toBe(false);
-  });
-
   it('trims the name', () => {
     expect(issue({ name: '  CI bot  ' }).entity.name).toBe('CI bot');
+  });
+
+  it('rejects a name that is empty once trimmed', () => {
+    expect(() => issue({ name: '   ' })).toThrow(DomainException);
   });
 });

@@ -1,5 +1,5 @@
 import { DomainException } from '@nestjs-fastify-nx/core';
-import { I18N_KEYS, ERROR_CODES } from '@nestjs-fastify-nx/contracts';
+import { I18N_KEYS, ERROR_CODES, fieldProblem } from '@nestjs-fastify-nx/contracts';
 import { generateId } from '@nestjs-fastify-nx/shared';
 
 // Deliberately NOT `uuid`'s `validate()`: that enforces an RFC version/variant, while this must
@@ -38,34 +38,26 @@ export class AuditLog {
   static create(input: CreateAuditLogInput): AuditLog {
     if (input.id !== undefined) {
       if (input.id.trim() === '') {
-        throw new DomainException({
-          kind: 'validation',
-          code: ERROR_CODES.INVALID_AUDIT_LOG_ID,
-          title: I18N_KEYS.errors.audit_log.title_invalid_id,
-          violations: [
-            {
-              path: 'id',
-              code: 'empty_string',
-              message: 'id must be a non-empty string when provided',
-              messageKey: I18N_KEYS.errors.audit_log.invalid_id_empty,
-            },
-          ],
-        });
+        throw new DomainException(
+          fieldProblem({
+            kind: 'validation',
+            code: ERROR_CODES.INVALID_AUDIT_LOG_ID,
+            messageKey: I18N_KEYS.errors.audit_log.invalid_id_empty,
+            path: 'id',
+            message: 'id must be a non-empty string when provided',
+          }),
+        );
       }
       if (!POSTGRES_UUID.test(input.id)) {
-        throw new DomainException({
-          kind: 'validation',
-          code: ERROR_CODES.INVALID_AUDIT_LOG_ID,
-          title: I18N_KEYS.errors.audit_log.title_invalid_id,
-          violations: [
-            {
-              path: 'id',
-              code: 'not_a_uuid',
-              message: 'id must be a valid UUID (audit_logs.id is a Postgres UUID column)',
-              messageKey: I18N_KEYS.errors.audit_log.invalid_id_uuid,
-            },
-          ],
-        });
+        throw new DomainException(
+          fieldProblem({
+            kind: 'validation',
+            code: ERROR_CODES.INVALID_AUDIT_LOG_ID,
+            messageKey: I18N_KEYS.errors.audit_log.invalid_id_uuid,
+            path: 'id',
+            message: 'id must be a valid UUID (audit_logs.id is a Postgres UUID column)',
+          }),
+        );
       }
     }
     return new AuditLog({

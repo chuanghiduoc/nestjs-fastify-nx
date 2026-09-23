@@ -21,7 +21,7 @@ export class GetUploadHandler implements IQueryHandler<GetUploadQuery, StoredFil
 
   async execute(query: GetUploadQuery): Promise<StoredFile> {
     const file = await this.files.findById(query.fileId);
-    if (!file || file.isDeleted() || file.organizationId !== query.organizationId) {
+    if (!file || file.organizationId !== query.organizationId) {
       throw objectNotFound(query.fileId);
     }
     const decision = await this.authorization.check(

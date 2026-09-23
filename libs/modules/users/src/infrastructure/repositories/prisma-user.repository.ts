@@ -1,23 +1,15 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { DomainException } from '@nestjs-fastify-nx/core';
 import { ERROR_CODES, I18N_KEYS } from '@nestjs-fastify-nx/contracts';
-import { PrismaService } from '@nestjs-fastify-nx/infra-database';
+import { PrismaService, escapeLikePattern } from '@nestjs-fastify-nx/infra-database';
 import { Prisma } from '@nestjs-fastify-nx/infra-database';
+import { keysetAfter, takePage } from '@nestjs-fastify-nx/shared';
 import { User, UserRole, UserStatus } from '../../domain/entities/user.entity';
 import type {
   FindAllCursorOptions,
   FindAllCursorResult,
   UserRepositoryPort,
 } from '../../domain/ports/user-repository.port';
-
-// Postgres LIKE/ILIKE treats '%', '_' and the escape character itself as pattern metacharacters
-// even when the value arrives as a bound parameter. Prisma's `contains` does not escape them, so
-// an unescaped search term like "50%off" would silently behave as a wildcard match instead of a
-// literal one. Backslash is the default LIKE escape character, so prefixing each metacharacter
-// with it here is sufficient without an explicit ESCAPE clause.
-function escapeLikePattern(value: string): string {
-  return value.replace(/[\\%_]/g, (char) => `\\${char}`);
-}
 
 type UserRow = {
   id: string;
@@ -148,16 +140,7 @@ export class PrismaUserRepository implements UserRepositoryPort {
         { name: { contains: escapedSearch, mode: 'insensitive' } },
       ];
     }
-    if (startingAfter) {
-      where.AND = [
-        {
-          OR: [
-            { createdAt: { lt: startingAfter.createdAt } },
-            { AND: [{ createdAt: startingAfter.createdAt }, { id: { lt: startingAfter.id } }] },
-          ],
-        },
-      ];
-    }
+    if (startingAfter) where.AND = [keysetAfter(startingAfter)];
     try {
       const rows = await this.reader.user.findMany({
         where,
@@ -165,8 +148,8 @@ export class PrismaUserRepository implements UserRepositoryPort {
         orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
         take: limit + 1,
       });
-      const hasMore = rows.length > limit;
-      const items = (hasMore ? rows.slice(0, limit) : rows).map((row) =>
+      const { items: page, hasMore } = takePage(rows, limit);
+      const items = page.map((row) =>
         Object.assign(this.mapToEntity(row), {
           organizationRole: row.memberships?.[0]?.role ?? '',
         }),

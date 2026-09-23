@@ -123,15 +123,21 @@ export function createBetterAuth(
       sendResetPassword: async ({ user, token }, request) => {
         const lang = resolveRequestLocale(request);
         const link = `${frontendBase}/reset?token=${encodeURIComponent(token)}`;
-        const subject = await translateOrFallback(i18n, I18N_KEYS.emails.password_reset.subject, {
-          lang,
-        });
-        const body = await renderPasswordResetEmail(i18n, lang, { name: user.name, link });
-        await mail.send({
+        const keys = I18N_KEYS.emails.password_reset;
+        const body = await renderAuthEmail(i18n, lang, keys, [
+          { kind: 'greeting', name: user.name },
+          { kind: 'text', key: 'lead' },
+          { kind: 'link', link },
+          { kind: 'text', key: 'ignore' },
+        ]);
+        await sendAuthEmail({
+          mail,
+          i18n,
           to: user.email,
-          subject,
-          body,
+          lang,
+          subjectKey: keys.subject,
           templateId: EMAIL_TEMPLATES.PASSWORD_RESET,
+          body,
         });
       },
     },
@@ -140,17 +146,21 @@ export function createBetterAuth(
       sendVerificationEmail: async ({ user, token }, request) => {
         const lang = resolveRequestLocale(request);
         const link = `${frontendBase}/verify-email?token=${encodeURIComponent(token)}`;
-        const subject = await translateOrFallback(
+        const keys = I18N_KEYS.emails.email_verification;
+        const body = await renderAuthEmail(i18n, lang, keys, [
+          { kind: 'greeting', name: user.name },
+          { kind: 'text', key: 'lead' },
+          { kind: 'link', link },
+          { kind: 'text', key: 'expiry' },
+        ]);
+        await sendAuthEmail({
+          mail,
           i18n,
-          I18N_KEYS.emails.email_verification.subject,
-          { lang },
-        );
-        const body = await renderEmailVerificationEmail(i18n, lang, { name: user.name, link });
-        await mail.send({
           to: user.email,
-          subject,
-          body,
+          lang,
+          subjectKey: keys.subject,
           templateId: EMAIL_TEMPLATES.EMAIL_VERIFICATION,
+          body,
         });
       },
     },
@@ -185,19 +195,22 @@ export function createBetterAuth(
         sendChangeEmailConfirmation: async ({ user, newEmail, token }, request) => {
           const lang = resolveRequestLocale(request);
           const link = `${frontendBase}/verify-email?token=${encodeURIComponent(token)}`;
-          const subject = await translateOrFallback(i18n, I18N_KEYS.emails.email_change.subject, {
-            lang,
-          });
-          const body = await renderEmailChangeConfirmation(i18n, lang, {
-            name: user.name,
-            newEmail,
-            link,
-          });
-          await mail.send({
+          const keys = I18N_KEYS.emails.email_change;
+          const body = await renderAuthEmail(i18n, lang, keys, [
+            { kind: 'greeting', name: user.name },
+            { kind: 'text', key: 'lead' },
+            { kind: 'text', key: 'target', args: { newEmail: escapeHtml(newEmail) } },
+            { kind: 'link', link },
+            { kind: 'text', key: 'not_you' },
+          ]);
+          await sendAuthEmail({
+            mail,
+            i18n,
             to: user.email,
-            subject,
-            body,
+            lang,
+            subjectKey: keys.subject,
             templateId: EMAIL_TEMPLATES.EMAIL_CHANGE_CONFIRMATION,
+            body,
           });
         },
       },
@@ -207,17 +220,22 @@ export function createBetterAuth(
         sendDeleteAccountVerification: async ({ user, token }, request) => {
           const lang = resolveRequestLocale(request);
           const link = `${frontendBase}/delete-account?token=${encodeURIComponent(token)}`;
-          const subject = await translateOrFallback(
+          const keys = I18N_KEYS.emails.account_deletion;
+          const body = await renderAuthEmail(i18n, lang, keys, [
+            { kind: 'greeting', name: user.name },
+            { kind: 'text', key: 'warning' },
+            { kind: 'text', key: 'confirm' },
+            { kind: 'link', link },
+            { kind: 'text', key: 'not_you' },
+          ]);
+          await sendAuthEmail({
+            mail,
             i18n,
-            I18N_KEYS.emails.account_deletion.subject,
-            { lang },
-          );
-          const body = await renderAccountDeletionEmail(i18n, lang, { name: user.name, link });
-          await mail.send({
             to: user.email,
-            subject,
-            body,
+            lang,
+            subjectKey: keys.subject,
             templateId: EMAIL_TEMPLATES.ACCOUNT_DELETION,
+            body,
           });
         },
       },
@@ -261,23 +279,36 @@ export function createBetterAuth(
         sendInvitationEmail: async (data, request) => {
           const lang = resolveRequestLocale(request);
           const link = `${frontendBase}/accept-invitation?id=${encodeURIComponent(data.id)}`;
-          const subject = await translateOrFallback(
+          const keys = I18N_KEYS.emails.organization_invitation;
+          const inviterName = data.inviter.user.name || data.inviter.user.email;
+          const body = await renderAuthEmail(i18n, lang, keys, [
+            { kind: 'greeting' },
+            {
+              kind: 'text',
+              key: 'lead',
+              args: {
+                inviter: escapeHtml(inviterName),
+                organization: escapeHtml(data.organization.name),
+              },
+            },
+            { kind: 'text', key: 'role', args: { role: escapeHtml(data.role) } },
+            { kind: 'text', key: 'accept' },
+            { kind: 'link', link },
+            {
+              kind: 'text',
+              key: 'expiry',
+              args: { expiresAt: data.invitation.expiresAt.toISOString() },
+            },
+          ]);
+          await sendAuthEmail({
+            mail,
             i18n,
-            I18N_KEYS.emails.organization_invitation.subject,
-            { lang, args: { organization: data.organization.name } },
-          );
-          const body = await renderOrganizationInvitationEmail(i18n, lang, {
-            organizationName: data.organization.name,
-            inviterName: data.inviter.user.name || data.inviter.user.email,
-            role: data.role,
-            expiresAt: data.invitation.expiresAt,
-            link,
-          });
-          await mail.send({
             to: data.email,
-            subject,
-            body,
+            lang,
+            subjectKey: keys.subject,
+            subjectArgs: { organization: data.organization.name },
             templateId: EMAIL_TEMPLATES.ORGANIZATION_INVITATION,
+            body,
           });
         },
       }),
@@ -312,8 +343,8 @@ export function resolveFrontendBase(): string {
   return apiOrigin;
 }
 
-// One layout for every transactional email: the four templates differed only in their paragraphs,
-// so the markup, the inline style and the escaping rule were maintained in four places.
+// One layout for every transactional email: the five templates differ only in their paragraphs,
+// so the markup, the inline style and the escaping rule are maintained in one place.
 function emailLayout(paragraphs: readonly string[]): string {
   const body = paragraphs.map((paragraph) => `<p>${paragraph}</p>`).join('\n');
   return `<!doctype html><html><body style="font-family:system-ui,sans-serif;line-height:1.5">
@@ -342,96 +373,56 @@ async function greeting(
   return translateOrFallback(i18n, namespaceKeys.greeting, { lang });
 }
 
-async function renderPasswordResetEmail(
-  i18n: I18nService,
-  lang: string,
-  ctx: { name?: string; link: string },
-): Promise<string> {
-  const keys = I18N_KEYS.emails.password_reset;
-  const [hello, lead, ignore] = await Promise.all([
-    greeting(i18n, lang, keys, ctx.name),
-    translateOrFallback(i18n, keys.lead, { lang }),
-    translateOrFallback(i18n, keys.ignore, { lang }),
-  ]);
-  return emailLayout([hello, lead, linkParagraph(ctx.link), ignore]);
-}
+type EmailParagraphSpec<T> =
+  | { kind: 'greeting'; name?: string }
+  | { kind: 'link'; link: string }
+  | { kind: 'text'; key: keyof T & string; args?: Record<string, unknown> };
 
-async function renderEmailVerificationEmail(
+async function renderAuthEmail<
+  T extends Record<string, string> & { greeting: string; greeting_named: string },
+>(
   i18n: I18nService,
   lang: string,
-  ctx: { name?: string; link: string },
+  keys: T,
+  specs: readonly EmailParagraphSpec<T>[],
 ): Promise<string> {
-  const keys = I18N_KEYS.emails.email_verification;
-  const [hello, lead, expiry] = await Promise.all([
-    greeting(i18n, lang, keys, ctx.name),
-    translateOrFallback(i18n, keys.lead, { lang }),
-    translateOrFallback(i18n, keys.expiry, { lang }),
-  ]);
-  return emailLayout([hello, lead, linkParagraph(ctx.link), expiry]);
-}
-
-async function renderEmailChangeConfirmation(
-  i18n: I18nService,
-  lang: string,
-  ctx: { name?: string; newEmail: string; link: string },
-): Promise<string> {
-  const keys = I18N_KEYS.emails.email_change;
-  const [hello, lead, target, notYou] = await Promise.all([
-    greeting(i18n, lang, keys, ctx.name),
-    translateOrFallback(i18n, keys.lead, { lang }),
-    translateOrFallback(i18n, keys.target, {
-      lang,
-      args: { newEmail: escapeHtml(ctx.newEmail) },
+  const paragraphs = await Promise.all(
+    specs.map((spec) => {
+      switch (spec.kind) {
+        case 'greeting':
+          return greeting(i18n, lang, keys, spec.name);
+        case 'link':
+          return Promise.resolve(linkParagraph(spec.link));
+        case 'text':
+          return translateOrFallback(i18n, keys[spec.key], { lang, args: spec.args });
+      }
     }),
-    translateOrFallback(i18n, keys.not_you, { lang }),
-  ]);
-  return emailLayout([hello, lead, target, linkParagraph(ctx.link), notYou]);
+  );
+  return emailLayout(paragraphs);
 }
 
-async function renderOrganizationInvitationEmail(
-  i18n: I18nService,
-  lang: string,
-  ctx: {
-    organizationName: string;
-    inviterName: string;
-    role: string;
-    expiresAt: Date;
-    link: string;
-  },
-): Promise<string> {
-  const keys = I18N_KEYS.emails.organization_invitation;
-  const [hello, lead, role, accept, expiry] = await Promise.all([
-    greeting(i18n, lang, keys, undefined),
-    translateOrFallback(i18n, keys.lead, {
-      lang,
-      args: {
-        inviter: escapeHtml(ctx.inviterName),
-        organization: escapeHtml(ctx.organizationName),
-      },
-    }),
-    translateOrFallback(i18n, keys.role, { lang, args: { role: escapeHtml(ctx.role) } }),
-    translateOrFallback(i18n, keys.accept, { lang }),
-    translateOrFallback(i18n, keys.expiry, {
-      lang,
-      args: { expiresAt: ctx.expiresAt.toISOString() },
-    }),
-  ]);
-  return emailLayout([hello, lead, role, accept, linkParagraph(ctx.link), expiry]);
+interface SendAuthEmailParams {
+  mail: AuthMailDispatcher;
+  i18n: I18nService;
+  to: string;
+  lang: string;
+  subjectKey: string;
+  subjectArgs?: Record<string, unknown>;
+  templateId: EmailTemplate;
+  body: string;
 }
 
-async function renderAccountDeletionEmail(
-  i18n: I18nService,
-  lang: string,
-  ctx: { name?: string; link: string },
-): Promise<string> {
-  const keys = I18N_KEYS.emails.account_deletion;
-  const [hello, warning, confirm, notYou] = await Promise.all([
-    greeting(i18n, lang, keys, ctx.name),
-    translateOrFallback(i18n, keys.warning, { lang }),
-    translateOrFallback(i18n, keys.confirm, { lang }),
-    translateOrFallback(i18n, keys.not_you, { lang }),
-  ]);
-  return emailLayout([hello, warning, confirm, linkParagraph(ctx.link), notYou]);
+async function sendAuthEmail(params: SendAuthEmailParams): Promise<void> {
+  const subject = await translateOrFallback(params.i18n, params.subjectKey, {
+    lang: params.lang,
+    args: params.subjectArgs,
+  });
+  await params.mail.send({
+    to: params.to,
+    subject,
+    body: params.body,
+    templateId: params.templateId,
+  });
 }
 
 const EMAIL_LINK_PROTOCOLS = new Set(['http:', 'https:']);

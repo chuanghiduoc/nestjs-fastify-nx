@@ -103,168 +103,158 @@ export interface CommonErrorsOptions {
   serviceUnavailable?: boolean;
 }
 
+interface ResolvedCommonErrorsOptions {
+  auth: boolean;
+  forbidden: boolean;
+  notFound: boolean;
+  conflict: boolean;
+  validation: boolean;
+  unsupportedMediaType: boolean;
+  payloadTooLarge: boolean;
+  serviceUnavailable: boolean;
+}
+
+const resolveOptions = (options: CommonErrorsOptions): ResolvedCommonErrorsOptions => {
+  const auth = options.auth ?? true;
+  return {
+    auth,
+    // Forced on for authenticated routes — see CommonErrorsOptions.forbidden. Opting out would
+    // document a contract the guard does not honour.
+    forbidden: auth || (options.forbidden ?? false),
+    notFound: options.notFound ?? false,
+    conflict: options.conflict ?? false,
+    validation: options.validation ?? true,
+    unsupportedMediaType: options.unsupportedMediaType ?? false,
+    payloadTooLarge: options.payloadTooLarge ?? false,
+    serviceUnavailable: options.serviceUnavailable ?? true,
+  };
+};
+
+interface CommonErrorEntry {
+  enabled: (options: ResolvedCommonErrorsOptions) => boolean;
+  status: number;
+  code: string;
+  title: string;
+  detail: string;
+  description?: string;
+}
+
+const LEADING_ERROR_TABLE: CommonErrorEntry[] = [
+  {
+    enabled: () => true,
+    status: HttpStatus.BAD_REQUEST,
+    code: 'bad_request',
+    title: 'Bad Request',
+    detail: 'Malformed request — invalid JSON, missing required headers, etc.',
+  },
+  {
+    enabled: (options) => options.auth,
+    status: HttpStatus.UNAUTHORIZED,
+    code: 'unauthorized',
+    title: 'Unauthorized',
+    detail: 'Authentication required or the session cookie is missing or invalid.',
+    description: 'Authentication required or session invalid.',
+  },
+  {
+    enabled: (options) => options.forbidden,
+    status: HttpStatus.FORBIDDEN,
+    code: 'forbidden',
+    title: 'Forbidden',
+    detail: 'Authenticated, but lacking permission for this resource.',
+  },
+  {
+    enabled: (options) => options.notFound,
+    status: HttpStatus.NOT_FOUND,
+    code: 'not_found',
+    title: 'Not Found',
+    detail: 'The requested resource does not exist.',
+    description: 'Resource not found.',
+  },
+  {
+    enabled: (options) => options.conflict,
+    status: HttpStatus.CONFLICT,
+    code: 'conflict',
+    title: 'Conflict',
+    detail: 'State conflict — e.g. duplicate key, stale version, concurrent update.',
+  },
+  {
+    enabled: (options) => options.payloadTooLarge,
+    status: HttpStatus.PAYLOAD_TOO_LARGE,
+    code: 'payload_too_large',
+    title: 'Payload Too Large',
+    detail: 'Request body exceeds the configured size limit.',
+  },
+  {
+    enabled: (options) => options.unsupportedMediaType,
+    status: HttpStatus.UNSUPPORTED_MEDIA_TYPE,
+    code: 'unsupported_media_type',
+    title: 'Unsupported Media Type',
+    detail: 'Request Content-Type is not accepted by this endpoint.',
+  },
+];
+
+// Both are raised by process-wide mechanisms rather than by any handler, so every route can answer
+// with them: @fastify/under-pressure sheds load with 503, and the global TimeoutInterceptor aborts a
+// handler past HTTP_REQUEST_TIMEOUT_MS with 504. Omitting them documents a contract narrower than the
+// one the server actually honours.
+const TRAILING_ERROR_TABLE: CommonErrorEntry[] = [
+  {
+    enabled: () => true,
+    status: HttpStatus.TOO_MANY_REQUESTS,
+    code: 'rate_limited',
+    title: 'Too Many Requests',
+    detail: 'Rate limit exceeded — see the `Retry-After` response header.',
+  },
+  {
+    enabled: () => true,
+    status: HttpStatus.INTERNAL_SERVER_ERROR,
+    code: 'internal_server_error',
+    title: 'Internal Server Error',
+    detail: 'Unexpected server error. Quote the `requestId` field when contacting support.',
+  },
+  {
+    enabled: () => true,
+    status: HttpStatus.GATEWAY_TIMEOUT,
+    code: 'request_timeout',
+    title: 'Gateway Timeout',
+    detail: 'The request exceeded the server time budget and was aborted.',
+  },
+  {
+    enabled: (options) => options.serviceUnavailable,
+    status: HttpStatus.SERVICE_UNAVAILABLE,
+    code: 'service_unavailable',
+    title: 'Service Unavailable',
+    detail: 'The service is shedding load or a required dependency is unavailable.',
+  },
+];
+
+const toApiResponse = (entry: CommonErrorEntry) =>
+  ApiResponse(
+    problemResponse({
+      status: entry.status,
+      code: entry.code,
+      title: entry.title,
+      detail: entry.detail,
+      description: entry.description ?? entry.detail,
+    }),
+  );
+
 // Documents Problem Details error responses (always 400, 429, 500 plus selected optional codes).
 export const ApiCommonErrors = (options: CommonErrorsOptions = {}) => {
-  const auth = options.auth ?? true;
-  // Forced on for authenticated routes — see CommonErrorsOptions.forbidden. Opting out would
-  // document a contract the guard does not honour.
-  const forbidden = auth || (options.forbidden ?? false);
-  const validation = options.validation ?? true;
-  const notFound = options.notFound ?? false;
-  const conflict = options.conflict ?? false;
-  const unsupportedMediaType = options.unsupportedMediaType ?? false;
-  const payloadTooLarge = options.payloadTooLarge ?? false;
-  const serviceUnavailable = options.serviceUnavailable ?? true;
+  const resolved = resolveOptions(options);
 
   const decorators: MethodDecorator[] = [
     ApiExtraModels(ProblemDetailsDto, ValidationProblemDetailsDto),
-    ApiResponse(
-      problemResponse({
-        status: HttpStatus.BAD_REQUEST,
-        code: 'bad_request',
-        title: 'Bad Request',
-        detail: 'Malformed request — invalid JSON, missing required headers, etc.',
-        description: 'Malformed request — invalid JSON, missing required headers, etc.',
-      }),
-    ),
+    ...LEADING_ERROR_TABLE.filter((entry) => entry.enabled(resolved)).map(toApiResponse),
   ];
 
-  if (auth) {
-    decorators.push(
-      ApiResponse(
-        problemResponse({
-          status: HttpStatus.UNAUTHORIZED,
-          code: 'unauthorized',
-          title: 'Unauthorized',
-          detail: 'Authentication required or the session cookie is missing or invalid.',
-          description: 'Authentication required or session invalid.',
-        }),
-      ),
-    );
-  }
-
-  if (forbidden) {
-    decorators.push(
-      ApiResponse(
-        problemResponse({
-          status: HttpStatus.FORBIDDEN,
-          code: 'forbidden',
-          title: 'Forbidden',
-          detail: 'Authenticated, but lacking permission for this resource.',
-          description: 'Authenticated, but lacking permission for this resource.',
-        }),
-      ),
-    );
-  }
-
-  if (notFound) {
-    decorators.push(
-      ApiResponse(
-        problemResponse({
-          status: HttpStatus.NOT_FOUND,
-          code: 'not_found',
-          title: 'Not Found',
-          detail: 'The requested resource does not exist.',
-          description: 'Resource not found.',
-        }),
-      ),
-    );
-  }
-
-  if (conflict) {
-    decorators.push(
-      ApiResponse(
-        problemResponse({
-          status: HttpStatus.CONFLICT,
-          code: 'conflict',
-          title: 'Conflict',
-          detail: 'State conflict — e.g. duplicate key, stale version, concurrent update.',
-          description: 'State conflict — e.g. duplicate key, stale version, concurrent update.',
-        }),
-      ),
-    );
-  }
-
-  if (payloadTooLarge) {
-    decorators.push(
-      ApiResponse(
-        problemResponse({
-          status: HttpStatus.PAYLOAD_TOO_LARGE,
-          code: 'payload_too_large',
-          title: 'Payload Too Large',
-          detail: 'Request body exceeds the configured size limit.',
-          description: 'Request body exceeds the configured size limit.',
-        }),
-      ),
-    );
-  }
-
-  if (unsupportedMediaType) {
-    decorators.push(
-      ApiResponse(
-        problemResponse({
-          status: HttpStatus.UNSUPPORTED_MEDIA_TYPE,
-          code: 'unsupported_media_type',
-          title: 'Unsupported Media Type',
-          detail: 'Request Content-Type is not accepted by this endpoint.',
-          description: 'Request Content-Type is not accepted by this endpoint.',
-        }),
-      ),
-    );
-  }
-
-  if (validation) {
+  if (resolved.validation) {
     decorators.push(ApiResponse(validationResponse()));
   }
 
   decorators.push(
-    ApiResponse(
-      problemResponse({
-        status: HttpStatus.TOO_MANY_REQUESTS,
-        code: 'rate_limited',
-        title: 'Too Many Requests',
-        detail: 'Rate limit exceeded — see the `Retry-After` response header.',
-        description: 'Rate limit exceeded — see the `Retry-After` response header.',
-      }),
-    ),
-    ApiResponse(
-      problemResponse({
-        status: HttpStatus.INTERNAL_SERVER_ERROR,
-        code: 'internal_server_error',
-        title: 'Internal Server Error',
-        detail: 'Unexpected server error. Quote the `requestId` field when contacting support.',
-        description:
-          'Unexpected server error. Quote the `requestId` field when contacting support.',
-      }),
-    ),
-    // Both are raised by process-wide mechanisms rather than by any handler, so every route can
-    // answer with them: @fastify/under-pressure sheds load with 503, and the global
-    // TimeoutInterceptor aborts a handler past HTTP_REQUEST_TIMEOUT_MS with 504. Omitting them
-    // documents a contract narrower than the one the server actually honours.
-    ApiResponse(
-      problemResponse({
-        status: HttpStatus.GATEWAY_TIMEOUT,
-        code: 'request_timeout',
-        title: 'Gateway Timeout',
-        detail: 'The request exceeded the server time budget and was aborted.',
-        description: 'The request exceeded the server time budget and was aborted.',
-      }),
-    ),
+    ...TRAILING_ERROR_TABLE.filter((entry) => entry.enabled(resolved)).map(toApiResponse),
   );
-
-  if (serviceUnavailable) {
-    decorators.push(
-      ApiResponse(
-        problemResponse({
-          status: HttpStatus.SERVICE_UNAVAILABLE,
-          code: 'service_unavailable',
-          title: 'Service Unavailable',
-          detail: 'The service is shedding load or a required dependency is unavailable.',
-          description: 'The service is shedding load or a required dependency is unavailable.',
-        }),
-      ),
-    );
-  }
 
   return applyDecorators(...decorators);
 };

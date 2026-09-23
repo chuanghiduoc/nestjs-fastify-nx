@@ -1,6 +1,7 @@
 export { DatabaseModule } from './lib/database.module';
 export { PrismaService, type TransactionClient } from './lib/prisma.service';
 export { PrismaReplicationLagHealthIndicator } from './lib/prisma-replication-lag.health';
+export { escapeLikePattern, jsonObjectOrEmpty } from './lib/query-helpers';
 
 // Prisma 7 `prisma-client` generator emits the client into this lib's source tree
 // (see prisma/schema.prisma `output`). Re-export it here so consumers depend on the

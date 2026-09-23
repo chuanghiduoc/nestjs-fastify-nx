@@ -1,6 +1,6 @@
 export { TermsModule } from './terms.module';
 
-export { Term, TERM_TYPE, TERM_TYPES, type TermType } from './domain/entities/term.entity';
+export { TERM_TYPE, TERM_TYPES, type TermType } from './domain/entities/term.entity';
 export {
   ListPublishedTermsQuery,
   type ListPublishedTermsResult,

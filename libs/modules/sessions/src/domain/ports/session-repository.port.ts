@@ -27,7 +27,6 @@ export interface FindSessionsCursorResult {
 
 export interface SessionRepositoryPort {
   findAllCursor(options: FindSessionsCursorOptions): Promise<FindSessionsCursorResult>;
-  findByIdForUser(userId: string, id: string): Promise<SessionRecord | null>;
   /** Deletes one session owned by the user; false when it did not exist. */
   deleteForUser(userId: string, id: string): Promise<boolean>;
   deleteAllForUserExcept(userId: string, keepSessionId: string): Promise<number>;

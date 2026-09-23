@@ -21,7 +21,12 @@ import {
   ApiParam,
   ApiTags,
 } from '@nestjs/swagger';
-import { ApiCommonErrors, ListResponseDto, toListResponse } from '@nestjs-fastify-nx/contracts';
+import {
+  ApiCommonErrors,
+  ApiPaginatedResponse,
+  ListResponseDto,
+  toUnpaginatedListResponse,
+} from '@nestjs-fastify-nx/contracts';
 import { CurrentUser, Roles, type AuthenticatedSession } from '@nestjs-fastify-nx/infra-auth';
 import { RequirePermission } from '@nestjs-fastify-nx/infra-authorization';
 import { PERMISSIONS, PLATFORM_ROLES } from '@nestjs-fastify-nx/shared';
@@ -33,7 +38,7 @@ import { PublishTermCommand } from '../../application/commands/publish-term/publ
 import { AcceptTermCommand } from '../../application/commands/accept-term/accept-term.command';
 import type { TermAcceptanceDto, TermDto } from '../../application/dto/term.dto';
 import { TERM_TYPE, TERM_TYPES, type TermType } from '../../domain/entities/term.entity';
-import { CreateTermDto, TermResponseDto } from '../dto/term.dto';
+import { CreateTermDto, TermAcceptanceResponseDto, TermResponseDto } from '../dto/term.dto';
 
 const TERMS_PATH = '/api/v1/terms';
 const ACCEPTANCES_PATH = '/api/v1/terms/acceptances';
@@ -49,71 +54,55 @@ export class TermsController {
 
   @Get()
   @RequirePermission(PERMISSIONS.TERM_READ)
-  @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'List published legal documents',
     description:
       'Returns every published version, newest first per type. Unpublished drafts are never exposed here. The set is small and bounded, so it is not paginated.',
   })
-  @ApiOkResponse({ type: ListResponseDto, description: 'Published terms.' })
-  @ApiCommonErrors({ auth: true, forbidden: true })
+  @ApiPaginatedResponse(TermResponseDto, { description: 'Published terms.' })
+  @ApiCommonErrors()
   async list(): Promise<ListResponseDto<TermDto>> {
     const result = await this.queryBus.execute(new ListPublishedTermsQuery());
 
-    return toListResponse({
-      url: TERMS_PATH,
-      items: result.data,
-      page: 1,
-      pageSize: result.data.length,
-      total: result.data.length,
-    });
+    return toUnpaginatedListResponse(TERMS_PATH, result.data);
   }
 
   @Get('acceptances')
   @RequirePermission(PERMISSIONS.TERM_READ)
-  @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'List the versions the caller has accepted',
     description:
       'Used by a client to decide whether to prompt for re-acceptance after a new version is published.',
   })
-  @ApiOkResponse({ type: ListResponseDto, description: 'The caller’s acceptances.' })
-  @ApiCommonErrors({ auth: true, forbidden: true })
+  @ApiPaginatedResponse(TermAcceptanceResponseDto, { description: 'The caller’s acceptances.' })
+  @ApiCommonErrors()
   async acceptances(
     @CurrentUser() user: AuthenticatedSession,
   ): Promise<ListResponseDto<TermAcceptanceDto>> {
     const result = await this.queryBus.execute(new ListMyTermAcceptancesQuery(user.userId));
 
-    return toListResponse({
-      url: ACCEPTANCES_PATH,
-      items: result.data,
-      page: 1,
-      pageSize: result.data.length,
-      total: result.data.length,
-    });
+    return toUnpaginatedListResponse(ACCEPTANCES_PATH, result.data);
   }
 
   @Get(':type/latest')
   @RequirePermission(PERMISSIONS.TERM_READ)
-  @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Read the newest published version of one document' })
   @ApiParam({ name: 'type', enum: TERM_TYPES })
   @ApiOkResponse({ type: TermResponseDto, description: 'Latest published version.' })
-  @ApiCommonErrors({ auth: true, forbidden: true, validation: true, notFound: true })
+  @ApiCommonErrors({ validation: true, notFound: true })
   latest(@Param('type', new ParseEnumPipe(TERM_TYPE)) type: TermType): Promise<TermDto> {
     return this.queryBus.execute(new GetLatestTermQuery(type));
   }
 
   @Post()
   @Roles(PLATFORM_ROLES.ADMIN)
-  @HttpCode(HttpStatus.CREATED)
   @ApiOperation({
     summary: 'Create a new version of a legal document',
     description:
       'Versions are immutable once created — publish a new version rather than editing a published one.',
   })
   @ApiCreatedResponse({ type: TermResponseDto, description: 'Version created.' })
-  @ApiCommonErrors({ auth: true, forbidden: true, validation: true, conflict: true })
+  @ApiCommonErrors({ validation: true, conflict: true })
   create(@Body() dto: CreateTermDto): Promise<TermDto> {
     return this.commandBus.execute(
       new CreateTermCommand({
@@ -135,7 +124,7 @@ export class TermsController {
   })
   @ApiParam({ name: 'id', format: 'uuid', description: 'Term id (UUID v7).' })
   @ApiOkResponse({ type: TermResponseDto, description: 'Version published.' })
-  @ApiCommonErrors({ auth: true, forbidden: true, notFound: true })
+  @ApiCommonErrors({ notFound: true })
   publish(@Param('id', new ParseUUIDPipe({ version: '7' })) id: string): Promise<TermDto> {
     return this.commandBus.execute(new PublishTermCommand(id));
   }
@@ -150,7 +139,7 @@ export class TermsController {
   })
   @ApiParam({ name: 'id', format: 'uuid', description: 'Term id (UUID v7).' })
   @ApiNoContentResponse({ description: 'Acceptance recorded.' })
-  @ApiCommonErrors({ auth: true, forbidden: true, notFound: true, conflict: true })
+  @ApiCommonErrors({ notFound: true, conflict: true })
   accept(
     @CurrentUser() user: AuthenticatedSession,
     @Param('id', new ParseUUIDPipe({ version: '7' })) id: string,

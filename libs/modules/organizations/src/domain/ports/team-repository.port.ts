@@ -21,6 +21,6 @@ export interface TeamRepositoryPort {
   findAllCursor(options: FindTeamsCursorOptions): Promise<FindTeamsCursorResult>;
   findById(organizationId: string, id: string): Promise<TeamWithMemberCount | null>;
   create(team: Team): Promise<void>;
-  update(team: Team): Promise<void>;
+  update(team: Team): Promise<boolean>;
   delete(organizationId: string, id: string): Promise<boolean>;
 }

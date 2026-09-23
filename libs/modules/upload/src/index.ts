@@ -8,11 +8,6 @@ export {
   type MalwareScannerPort,
   type MalwareScanResult,
 } from './domain/ports/malware-scanner.port';
-export {
-  verificationJobId,
-  enqueueUploadVerification,
-} from './infrastructure/dispatchers/bullmq-upload-verification.dispatcher';
-export {
-  prepareMultipartUpload,
-  prepareMultipartUploads,
-} from './presentation/multipart/prepare-multipart-upload';
+export type { UploadVerificationRequest } from './application/ports/upload-verification.dispatcher';
+export { enqueueUploadVerification } from './infrastructure/dispatchers/bullmq-upload-verification.dispatcher';
+export { prepareMultipartUploads } from './presentation/multipart/prepare-multipart-upload';

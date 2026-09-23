@@ -58,14 +58,13 @@ export class ApiKeysController {
 
   @Get()
   @RequirePermission(PERMISSIONS.API_KEY_READ)
-  @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'List API keys of the active organization',
     description:
       'Cursor-paginated, newest first. Only the non-secret `prefix` is returned — the raw key exists in the response of `POST /api-keys` and nowhere else. Revoked keys are hidden unless `includeRevoked=true`.',
   })
   @ApiPaginatedResponse(ApiKeyResponseDto, { description: 'Cursor-paginated list of API keys.' })
-  @ApiCommonErrors({ auth: true, forbidden: true, validation: true })
+  @ApiCommonErrors({ validation: true })
   async list(
     @CurrentUser() user: AuthenticatedSession,
     @Query() filter: ListApiKeysFilterDto,
@@ -88,7 +87,6 @@ export class ApiKeysController {
   @Post()
   @RequirePermission(PERMISSIONS.API_KEY_CREATE)
   @Throttle(CREATE_LIMIT)
-  @HttpCode(HttpStatus.CREATED)
   @ApiOperation({
     summary: 'Issue an API key for machine-to-machine access',
     description:
@@ -98,7 +96,7 @@ export class ApiKeysController {
     type: IssuedApiKeyResponseDto,
     description: 'Key issued. `key` is shown only here.',
   })
-  @ApiCommonErrors({ auth: true, forbidden: true, validation: true })
+  @ApiCommonErrors({ validation: true })
   create(
     @CurrentUser() user: AuthenticatedSession,
     @Body() dto: CreateApiKeyDto,
@@ -124,7 +122,7 @@ export class ApiKeysController {
   })
   @ApiParam({ name: 'id', format: 'uuid', description: 'API key id (UUID v7).' })
   @ApiNoContentResponse({ description: 'Key revoked.' })
-  @ApiCommonErrors({ auth: true, forbidden: true, notFound: true })
+  @ApiCommonErrors({ notFound: true })
   revoke(
     @CurrentUser() user: AuthenticatedSession,
     @Param('id', new ParseUUIDPipe({ version: '7' })) id: string,

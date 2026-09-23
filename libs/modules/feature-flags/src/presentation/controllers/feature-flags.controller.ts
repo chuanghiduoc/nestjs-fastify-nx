@@ -33,6 +33,7 @@ import {
   AllowApiKey,
   CurrentApiKey,
   CurrentUser,
+  requireOrganizationId,
   resolveOrganizationId,
   type AuthenticatedApiKey,
   type AuthenticatedSession,
@@ -67,7 +68,6 @@ export class FeatureFlagsController {
   @RequirePermission(PERMISSIONS.FEATURE_FLAG_READ)
   @AllowApiKey()
   @ApiSecurity('apiKey')
-  @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'List feature flags of the active organization',
     description:
@@ -76,7 +76,7 @@ export class FeatureFlagsController {
   @ApiPaginatedResponse(FeatureFlagResponseDto, {
     description: 'Cursor-paginated list of feature flags.',
   })
-  @ApiCommonErrors({ auth: true, forbidden: true, validation: true })
+  @ApiCommonErrors({ validation: true })
   async list(
     @CurrentUser() user: AuthenticatedSession | undefined,
     @CurrentApiKey() apiKey: AuthenticatedApiKey | undefined,
@@ -102,14 +102,13 @@ export class FeatureFlagsController {
   @RequirePermission(PERMISSIONS.FEATURE_FLAG_READ)
   @AllowApiKey()
   @ApiSecurity('apiKey')
-  @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Resolve every flag for the calling subject',
     description:
       'Returns `{ key: boolean }` for every flag in the organization. Bucketing is deterministic: the subject is the calling user, or the API key when the caller is a machine, so the same subject always lands on the same side of a partial rollout.',
   })
   @ApiOkResponse({ type: EvaluatedFlagsResponseDto, description: 'Resolved flags.' })
-  @ApiCommonErrors({ auth: true, forbidden: true })
+  @ApiCommonErrors()
   evaluate(
     @CurrentUser() user: AuthenticatedSession | undefined,
     @CurrentApiKey() apiKey: AuthenticatedApiKey | undefined,
@@ -124,17 +123,16 @@ export class FeatureFlagsController {
 
   @Post()
   @RequirePermission(PERMISSIONS.FEATURE_FLAG_MANAGE)
-  @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Create a feature flag' })
   @ApiCreatedResponse({ type: FeatureFlagResponseDto, description: 'Flag created.' })
-  @ApiCommonErrors({ auth: true, forbidden: true, validation: true, conflict: true })
+  @ApiCommonErrors({ validation: true, conflict: true })
   create(
     @CurrentUser() user: AuthenticatedSession,
     @Body() dto: CreateFeatureFlagDto,
   ): Promise<FeatureFlagDto> {
     return this.commandBus.execute(
       new CreateFeatureFlagCommand({
-        organizationId: resolveOrganizationId(user, undefined),
+        organizationId: requireOrganizationId(user),
         key: dto.key,
         description: dto.description,
         enabled: dto.enabled,
@@ -152,7 +150,7 @@ export class FeatureFlagsController {
   })
   @ApiParam({ name: 'id', format: 'uuid', description: 'Feature flag id (UUID v7).' })
   @ApiOkResponse({ type: FeatureFlagResponseDto, description: 'Flag updated.' })
-  @ApiCommonErrors({ auth: true, forbidden: true, validation: true, notFound: true })
+  @ApiCommonErrors({ validation: true, notFound: true })
   update(
     @CurrentUser() user: AuthenticatedSession,
     @Param('id', new ParseUUIDPipe({ version: '7' })) id: string,
@@ -160,7 +158,7 @@ export class FeatureFlagsController {
   ): Promise<FeatureFlagDto> {
     return this.commandBus.execute(
       new UpdateFeatureFlagCommand({
-        organizationId: resolveOrganizationId(user, undefined),
+        organizationId: requireOrganizationId(user),
         id,
         description: dto.description,
         enabled: dto.enabled,
@@ -178,13 +176,11 @@ export class FeatureFlagsController {
   })
   @ApiParam({ name: 'id', format: 'uuid', description: 'Feature flag id (UUID v7).' })
   @ApiNoContentResponse({ description: 'Flag deleted.' })
-  @ApiCommonErrors({ auth: true, forbidden: true, notFound: true })
+  @ApiCommonErrors({ notFound: true })
   remove(
     @CurrentUser() user: AuthenticatedSession,
     @Param('id', new ParseUUIDPipe({ version: '7' })) id: string,
   ): Promise<void> {
-    return this.commandBus.execute(
-      new DeleteFeatureFlagCommand(resolveOrganizationId(user, undefined), id),
-    );
+    return this.commandBus.execute(new DeleteFeatureFlagCommand(requireOrganizationId(user), id));
   }
 }

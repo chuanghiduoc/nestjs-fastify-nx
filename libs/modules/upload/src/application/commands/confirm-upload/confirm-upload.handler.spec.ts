@@ -31,14 +31,12 @@ const LIMITS: UploadLimits = {
 function storageMock(): Record<keyof StoragePort, Mock> {
   return {
     uploadStream: vi.fn(),
-    upload: vi.fn(),
     presignUpload: vi.fn(),
     head: vi.fn(),
     getSignedUrl: vi.fn(),
     delete: vi.fn().mockResolvedValue(undefined),
     finalize: vi.fn().mockResolvedValue(undefined),
     readRange: vi.fn().mockResolvedValue(PNG_HEADER),
-    read: vi.fn(),
     readStream: vi.fn(),
   };
 }
@@ -50,7 +48,7 @@ function repositoryMock(): Record<keyof StoredFileRepositoryPort, Mock> {
     findBySourceKey: vi.fn().mockResolvedValue(null),
     findByKey: vi.fn().mockResolvedValue(null),
     findById: vi.fn().mockResolvedValue(null),
-    create: vi.fn().mockResolvedValue(undefined),
+    create: vi.fn().mockResolvedValue('created'),
     transition: vi.fn().mockResolvedValue(true),
     transitionByKey: vi.fn().mockResolvedValue(true),
     deleteIfStatus: vi.fn().mockResolvedValue(undefined),
@@ -67,7 +65,6 @@ function build(options: { malwareScanEnabled: boolean } = { malwareScanEnabled: 
     files as unknown as StoredFileRepositoryPort,
     new UploadPublicationService(
       storage as unknown as StoragePort,
-      files as unknown as StoredFileRepositoryPort,
       verification as unknown as UploadVerificationDispatcher,
     ),
     { ...LIMITS, ...options },
@@ -235,7 +232,7 @@ describe('ConfirmUploadHandler — concurrency and recovery', () => {
   it('recovers through the existing row when a duplicate sourceKey races the insert', async () => {
     const { handler, storage, files } = build();
     storage.head.mockResolvedValueOnce(validMeta()).mockResolvedValue(validMeta());
-    files.create.mockRejectedValue(Object.assign(new Error('dup'), { code: 'P2002' }));
+    files.create.mockResolvedValue('duplicate');
     files.findBySourceKey.mockResolvedValueOnce(null).mockResolvedValue(existingRecord());
 
     const result = await handler.execute(command());
@@ -247,9 +244,18 @@ describe('ConfirmUploadHandler — concurrency and recovery', () => {
   it('re-throws a create failure that is not a unique-constraint race', async () => {
     const { handler, storage, files } = build();
     storage.head.mockResolvedValue(validMeta());
-    files.create.mockRejectedValue(Object.assign(new Error('boom'), { code: 'P2000' }));
+    files.create.mockRejectedValue(new Error('boom'));
 
     await expect(handler.execute(command())).rejects.toThrow('boom');
+  });
+
+  it('fails when a duplicate race resolves but the concurrent row cannot be found', async () => {
+    const { handler, storage, files } = build();
+    storage.head.mockResolvedValue(validMeta());
+    files.create.mockResolvedValue('duplicate');
+    files.findBySourceKey.mockResolvedValue(null);
+
+    await expect(handler.execute(command())).rejects.toThrow('Failed to finalize upload');
   });
 
   it('answers 409-retryable while a concurrent confirm has not published the object yet', async () => {

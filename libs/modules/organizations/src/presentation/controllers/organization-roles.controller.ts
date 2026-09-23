@@ -19,7 +19,11 @@ import {
   ApiParam,
   ApiTags,
 } from '@nestjs/swagger';
-import { ApiCommonErrors, ListResponseDto, toListResponse } from '@nestjs-fastify-nx/contracts';
+import {
+  ApiCommonErrors,
+  ListResponseDto,
+  toUnpaginatedListResponse,
+} from '@nestjs-fastify-nx/contracts';
 import {
   CurrentUser,
   requireOrganizationId,
@@ -51,14 +55,13 @@ export class OrganizationRolesController {
 
   @Get()
   @RequirePermission(PERMISSIONS.ROLE_READ)
-  @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'List roles available in the active organization',
     description:
       'Returns the built-in system roles followed by the roles this organization defined itself. System roles carry `system: true`, a null `id`, and cannot be updated or deleted. The list is small and bounded by the permission catalog, so it is not paginated.',
   })
   @ApiOkResponse({ type: ListResponseDto, description: 'System roles plus tenant-defined roles.' })
-  @ApiCommonErrors({ auth: true, forbidden: true })
+  @ApiCommonErrors()
   async list(
     @CurrentUser() user: AuthenticatedSession,
   ): Promise<ListResponseDto<OrganizationRoleDto>> {
@@ -66,25 +69,18 @@ export class OrganizationRolesController {
       new ListOrganizationRolesQuery(requireOrganizationId(user)),
     );
 
-    return toListResponse({
-      url: ROLES_PATH,
-      items: result.data,
-      page: 1,
-      pageSize: result.data.length,
-      total: result.data.length,
-    });
+    return toUnpaginatedListResponse(ROLES_PATH, result.data);
   }
 
   @Post()
   @RequirePermission(PERMISSIONS.ROLE_CREATE)
-  @HttpCode(HttpStatus.CREATED)
   @ApiOperation({
     summary: 'Define a custom role for the active organization',
     description:
       'Creates a tenant-defined role carrying a subset of the permission catalog. The role is written to the same `organization_roles` table Better Auth reads, so a member assigned this role resolves the identical permissions through both the REST guard and the auth surface.',
   })
   @ApiCreatedResponse({ type: OrganizationRoleResponseDto, description: 'Role created.' })
-  @ApiCommonErrors({ auth: true, forbidden: true, validation: true, conflict: true })
+  @ApiCommonErrors({ conflict: true })
   create(
     @CurrentUser() user: AuthenticatedSession,
     @Body() dto: CreateOrganizationRoleDto,
@@ -109,7 +105,7 @@ export class OrganizationRolesController {
   })
   @ApiParam({ name: 'role', description: 'Role name.', example: 'auditor' })
   @ApiOkResponse({ type: OrganizationRoleResponseDto, description: 'Role updated.' })
-  @ApiCommonErrors({ auth: true, forbidden: true, validation: true, notFound: true })
+  @ApiCommonErrors({ notFound: true })
   update(
     @CurrentUser() user: AuthenticatedSession,
     @Param('role') role: string,
@@ -135,7 +131,7 @@ export class OrganizationRolesController {
   })
   @ApiParam({ name: 'role', description: 'Role name.', example: 'auditor' })
   @ApiNoContentResponse({ description: 'Role deleted.' })
-  @ApiCommonErrors({ auth: true, forbidden: true, notFound: true, conflict: true })
+  @ApiCommonErrors({ notFound: true, conflict: true })
   remove(@CurrentUser() user: AuthenticatedSession, @Param('role') role: string): Promise<void> {
     return this.commandBus.execute(
       new DeleteOrganizationRoleCommand(requireOrganizationId(user), role),

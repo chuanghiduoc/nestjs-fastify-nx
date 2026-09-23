@@ -1,8 +1,8 @@
 import { Inject } from '@nestjs/common';
 import { QueryHandler, type IQueryHandler } from '@nestjs/cqrs';
 import { DomainException } from '@nestjs-fastify-nx/core';
-import { ERROR_CODES, I18N_KEYS } from '@nestjs-fastify-nx/contracts';
-import { decodeCursor, encodeCursor, type DecodedCursor } from '@nestjs-fastify-nx/shared';
+import { ERROR_CODES, I18N_KEYS, invalidCursorProblem } from '@nestjs-fastify-nx/contracts';
+import { decodeCursor, lastCursorOf, type DecodedCursor } from '@nestjs-fastify-nx/shared';
 import { AUDIT_LOG_REPOSITORY_PORT } from '../../../domain/ports/audit-log-repository.port';
 import type { AuditLogRepositoryPort } from '../../../domain/ports/audit-log-repository.port';
 import type { AuditLogListItemDto } from '../../dto/audit-log-list-item.dto';
@@ -46,10 +46,7 @@ export class ListAuditLogsCursorHandler implements IQueryHandler<
       createdAt: entry.createdAt,
     }));
 
-    const lastItem = items[items.length - 1];
-    const lastCursor = lastItem ? encodeCursor(lastItem.createdAt, lastItem.id) : null;
-
-    return { data, hasMore, lastCursor };
+    return { data, hasMore, lastCursor: lastCursorOf(items) };
   }
 
   private assertRangeOrdered(from?: Date, until?: Date): void {
@@ -75,22 +72,7 @@ export class ListAuditLogsCursorHandler implements IQueryHandler<
     if (!raw) return undefined;
 
     const decoded = decodeCursor(raw);
-    if (!decoded) {
-      throw new DomainException({
-        kind: 'malformed',
-        title: I18N_KEYS.common.bad_request,
-        code: ERROR_CODES.INVALID_CURSOR,
-        messageKey: I18N_KEYS.errors.pagination.invalid_cursor,
-        violations: [
-          {
-            path: 'startingAfter',
-            code: ERROR_CODES.INVALID_CURSOR,
-            message: 'startingAfter is not a valid cursor',
-            messageKey: I18N_KEYS.errors.pagination.invalid_cursor,
-          },
-        ],
-      });
-    }
+    if (!decoded) throw new DomainException(invalidCursorProblem());
 
     return decoded;
   }

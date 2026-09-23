@@ -6,7 +6,6 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { GqlContextType, GqlExecutionContext } from '@nestjs/graphql';
 import type { FastifyRequest } from 'fastify';
 import { ClsService } from 'nestjs-cls';
 import { REQUEST_CONTEXT_KEYS, type RequestContextStore } from '@nestjs-fastify-nx/core';
@@ -14,7 +13,7 @@ import { ERROR_CODES, I18N_KEYS } from '@nestjs-fastify-nx/contracts';
 import { PrismaService } from '@nestjs-fastify-nx/infra-database';
 import { hashApiKey, looksLikeApiKey, type Permission } from '@nestjs-fastify-nx/shared';
 import { ALLOW_API_KEY_KEY } from './allow-api-key.decorator';
-import { IS_PUBLIC_KEY } from './public.decorator';
+import { isPublic, requestOf } from './request-context';
 import type { AuthenticatedApiKey } from './api-key.types';
 
 type RequestWithApiKey = FastifyRequest & { apiKey?: AuthenticatedApiKey };
@@ -44,13 +43,9 @@ export class ApiKeyGuard implements CanActivate {
   async canActivate(context: ExecutionContext): Promise<boolean> {
     if (context.getType() === 'ws') return true;
 
-    const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
-      context.getHandler(),
-      context.getClass(),
-    ]);
-    if (isPublic) return true;
+    if (isPublic(this.reflector, context)) return true;
 
-    const request = this.getRequest(context);
+    const request = requestOf<RequestWithApiKey>(context);
     const presented = this.extractKey(request);
     if (!presented) return true;
 
@@ -113,12 +108,5 @@ export class ApiKeyGuard implements CanActivate {
 
     const candidate = authorization.slice(BEARER_PREFIX.length).trim();
     return looksLikeApiKey(candidate) ? candidate : null;
-  }
-
-  private getRequest(context: ExecutionContext): RequestWithApiKey {
-    if (context.getType<GqlContextType>() === 'graphql') {
-      return GqlExecutionContext.create(context).getContext<{ req: RequestWithApiKey }>().req;
-    }
-    return context.switchToHttp().getRequest<RequestWithApiKey>();
   }
 }

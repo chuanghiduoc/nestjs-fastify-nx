@@ -13,7 +13,6 @@ export const ERROR_CODES = {
   REQUEST_TIMEOUT: 'request_timeout',
   NOT_IMPLEMENTED: 'not_implemented',
 
-  ROUTE_NOT_FOUND: 'route_not_found',
   VALIDATION_FAILED: 'validation_failed',
   PAYLOAD_TOO_LARGE: 'payload_too_large',
   UNSUPPORTED_MEDIA_TYPE: 'unsupported_media_type',
@@ -34,7 +33,6 @@ export const ERROR_CODES = {
   UPLOAD_SIZE_OUT_OF_RANGE: 'upload_size_out_of_range',
   UPLOAD_MAGIC_BYTES_UNKNOWN: 'upload_magic_bytes_unknown',
   UPLOAD_MAGIC_BYTES_MISMATCH: 'upload_magic_bytes_mismatch',
-  UPLOAD_COMMIT_FAILED: 'upload_commit_failed',
   UPLOAD_IN_PROGRESS: 'upload_in_progress',
 
   ORGANIZATION_NOT_FOUND: 'organization_not_found',
@@ -62,7 +60,6 @@ export const ERROR_CODES = {
   SESSION_NOT_FOUND: 'session_not_found',
 
   // Storage adapter failures — raised by S3StorageAdapter, caught by handlers/processors.
-  STORAGE_BODY_EMPTY: 'storage_body_empty',
   STORAGE_UPLOAD_FAILED: 'storage_upload_failed',
   STORAGE_PRESIGN_FAILED: 'storage_presign_failed',
   STORAGE_HEAD_FAILED: 'storage_head_failed',

@@ -24,6 +24,7 @@ interface OutboxRow {
 }
 
 const STUCK_CHECK_INTERVAL_MS = 60_000;
+const MAX_OUTBOX_ERROR_MESSAGE_LENGTH = 2_000;
 
 // Three-stage dispatch: CLAIM tx (FOR UPDATE SKIP LOCKED) → PUBLISH (no tx) → MARK tx (per-row).
 // Lock windows stay short and a poison-pill listener cannot roll back an entire batch.
@@ -150,11 +151,9 @@ export class OutboxRelayService implements OnApplicationBootstrap, OnModuleDestr
     this.lastStuckCheckAt = now;
 
     try {
-      const result = await this.prisma.db.$queryRawUnsafe<[{ count: bigint }]>(
-        `SELECT COUNT(*) AS count FROM "outbox_events" WHERE attempts >= $1 AND "processedAt" IS NULL`,
-        this.maxAttempts,
-      );
-      const stuck = Number(result[0]?.count ?? 0);
+      const stuck = await this.prisma.db.outboxEvent.count({
+        where: { attempts: { gte: this.maxAttempts }, processedAt: null },
+      });
       if (stuck > 0) {
         this.logger.warn(
           `Outbox has ${stuck} permanently-stuck row(s) (attempts >= maxAttempts=${this.maxAttempts}); manual intervention required`,
@@ -210,7 +209,7 @@ export class OutboxRelayService implements OnApplicationBootstrap, OnModuleDestr
     if (!parsed.success) {
       const message = `Invalid outbox payload envelope — ${formatEnvelopeIssues(parsed.error)}`;
       this.logger.error(`Outbox dispatch skipped for ${row.eventType} (id=${row.id}) - ${message}`);
-      await this.parkPermanently(row.id, message.slice(0, 2_000));
+      await this.parkPermanently(row.id, message);
       return false;
     }
     const payload = parsed.data;
@@ -221,7 +220,7 @@ export class OutboxRelayService implements OnApplicationBootstrap, OnModuleDestr
     if (version > OUTBOX_SCHEMA_VERSION) {
       const message = `Unsupported outbox schemaVersion=${version} (relay supports up to ${OUTBOX_SCHEMA_VERSION}) — producer/consumer deploy skew`;
       this.logger.error(`Outbox dispatch skipped for ${row.eventType} (id=${row.id}) — ${message}`);
-      await this.parkPermanently(row.id, message.slice(0, 2_000));
+      await this.parkPermanently(row.id, message);
       return false;
     }
 
@@ -244,9 +243,9 @@ export class OutboxRelayService implements OnApplicationBootstrap, OnModuleDestr
       );
       // A listener that rejected the event on a business rule will reject it identically forever.
       if (isDomainException(err) && err.permanent) {
-        await this.parkPermanently(row.id, message.slice(0, 2_000));
+        await this.parkPermanently(row.id, message);
       } else {
-        await this.recordError(row.id, message.slice(0, 2_000));
+        await this.recordError(row.id, message);
       }
       return false;
     }
@@ -265,13 +264,10 @@ export class OutboxRelayService implements OnApplicationBootstrap, OnModuleDestr
   }
 
   private async markProcessed(id: string): Promise<void> {
-    await this.prisma.db.$executeRawUnsafe(
-      `UPDATE "outbox_events"
-          SET "processedAt" = $1, "lastError" = NULL, "nextAttemptAt" = NULL
-        WHERE id = $2`,
-      new Date(),
-      id,
-    );
+    await this.prisma.db.outboxEvent.update({
+      where: { id },
+      data: { processedAt: new Date(), lastError: null, nextAttemptAt: null },
+    });
   }
 
   // A failure that waiting cannot fix must not consume the retry budget: parking the row at once
@@ -279,12 +275,13 @@ export class OutboxRelayService implements OnApplicationBootstrap, OnModuleDestr
   // surfaces it with an explanatory lastError.
   private async parkPermanently(id: string, message: string): Promise<void> {
     try {
-      await this.prisma.db.$executeRawUnsafe(
-        `UPDATE "outbox_events" SET "lastError" = $1, attempts = $2 WHERE id = $3`,
-        message,
-        this.maxAttempts,
-        id,
-      );
+      await this.prisma.db.outboxEvent.update({
+        where: { id },
+        data: {
+          lastError: message.slice(0, MAX_OUTBOX_ERROR_MESSAGE_LENGTH),
+          attempts: this.maxAttempts,
+        },
+      });
     } catch (err) {
       this.logger.error({ err, outboxId: id }, 'Failed to park outbox row');
     }
@@ -292,11 +289,10 @@ export class OutboxRelayService implements OnApplicationBootstrap, OnModuleDestr
 
   private async recordError(id: string, message: string): Promise<void> {
     try {
-      await this.prisma.db.$executeRawUnsafe(
-        `UPDATE "outbox_events" SET "lastError" = $1 WHERE id = $2`,
-        message,
-        id,
-      );
+      await this.prisma.db.outboxEvent.update({
+        where: { id },
+        data: { lastError: message.slice(0, MAX_OUTBOX_ERROR_MESSAGE_LENGTH) },
+      });
     } catch (err) {
       this.logger.error({ err, outboxId: id }, 'Failed to record outbox lastError');
     }

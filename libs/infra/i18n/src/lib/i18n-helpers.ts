@@ -11,7 +11,6 @@ export async function translateOrFallback(
       lang: options?.lang,
       args: options?.args,
     });
-    if (typeof translated === 'string' && translated !== key) return translated;
     return typeof translated === 'string' ? translated : key;
   } catch {
     return key;

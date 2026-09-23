@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { PrismaService } from '@nestjs-fastify-nx/infra-database';
+import { PrismaService, jsonObjectOrEmpty } from '@nestjs-fastify-nx/infra-database';
 import { Prisma } from '@nestjs-fastify-nx/infra-database';
+import { keysetAfter, takePage } from '@nestjs-fastify-nx/shared';
 import type {
   AuditLogRepositoryPort,
   FindAuditLogsCursorOptions,
@@ -54,16 +55,7 @@ export class PrismaAuditLogRepository implements AuditLogRepositoryPort {
     const createdAtRange = buildRange(options.occurredFrom, options.occurredUntil);
     if (createdAtRange) where.createdAt = createdAtRange;
 
-    if (startingAfter) {
-      where.AND = [
-        {
-          OR: [
-            { createdAt: { lt: startingAfter.createdAt } },
-            { AND: [{ createdAt: startingAfter.createdAt }, { id: { lt: startingAfter.id } }] },
-          ],
-        },
-      ];
-    }
+    if (startingAfter) where.AND = [keysetAfter(startingAfter)];
 
     // `audit_logs` is behind row-level security, so the read has to run with the tenant setting
     // bound on the same transaction the query uses. A plain readTarget() query is not rejected —
@@ -78,15 +70,15 @@ export class PrismaAuditLogRepository implements AuditLogRepositoryPort {
       { readOnly: true },
     );
 
-    const hasMore = rows.length > limit;
-    const items = (hasMore ? rows.slice(0, limit) : rows).map((row) =>
+    const { items: page, hasMore } = takePage(rows, limit);
+    const items = page.map((row) =>
       AuditLog.reconstitute({
         id: row.id,
         organizationId: row.organizationId,
         userId: row.userId,
         action: row.action,
         resource: row.resource,
-        metadata: toMetadata(row.metadata),
+        metadata: jsonObjectOrEmpty(row.metadata),
         ipAddress: row.ipAddress,
         userAgent: row.userAgent,
         createdAt: row.createdAt,
@@ -100,8 +92,4 @@ export class PrismaAuditLogRepository implements AuditLogRepositoryPort {
 function buildRange(from?: Date, until?: Date): Prisma.DateTimeFilter | undefined {
   if (!from && !until) return undefined;
   return { ...(from ? { gte: from } : {}), ...(until ? { lte: until } : {}) };
-}
-
-function toMetadata(raw: Prisma.JsonValue): Record<string, unknown> {
-  return typeof raw === 'object' && raw !== null && !Array.isArray(raw) ? raw : {};
 }

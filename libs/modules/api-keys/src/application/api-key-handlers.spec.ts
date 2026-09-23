@@ -183,4 +183,36 @@ describe('ListApiKeysHandler', () => {
 
     await expect(execute).rejects.toMatchObject({ kind: 'malformed' });
   });
+
+  it('resumes strictly after the cursor, tiebreaking on id among rows sharing a timestamp', async () => {
+    const sameTime = new Date('2026-08-01T00:00:00.000Z');
+    const idA = '01900000-0000-7000-8000-000000000001';
+    const idB = '01900000-0000-7000-8000-000000000002';
+    const base = {
+      organizationId: ORG_ID,
+      name: 'seeded',
+      prefix: 'sk_abc12345',
+      keyHash: 'a'.repeat(64),
+      scopes: [PERMISSIONS.FILE_READ],
+      createdById: USER_ID,
+      lastUsedAt: null,
+      expiresAt: null,
+      revokedAt: null,
+      createdAt: sameTime,
+      updatedAt: sameTime,
+    };
+    repository.seed(ApiKey.reconstitute({ ...base, id: idA }));
+    repository.seed(ApiKey.reconstitute({ ...base, id: idB }));
+    const handler = new ListApiKeysHandler(repository);
+
+    const firstPage = await handler.execute(new ListApiKeysQuery(ORG_ID, 1));
+    expect(firstPage.data.map((key) => key.id)).toEqual([idB]);
+    expect(firstPage.hasMore).toBe(true);
+
+    const secondPage = await handler.execute(
+      new ListApiKeysQuery(ORG_ID, 1, { startingAfter: firstPage.lastCursor ?? undefined }),
+    );
+    expect(secondPage.data.map((key) => key.id)).toEqual([idA]);
+    expect(secondPage.hasMore).toBe(false);
+  });
 });

@@ -9,6 +9,7 @@ export interface BatchedPurgeConfig {
   readonly defaultBatchSize: number;
   readonly defaultMaxBatches: number;
   readonly label: string;
+  readonly extraWhere?: string;
 }
 
 @Injectable()
@@ -37,6 +38,13 @@ export class BatchedPurgeRunner {
     );
     this.logger.log(`Starting ${config.label}: ${config.column} < NOW() - ${cutoffDays} days`);
 
+    const whereClause = [
+      `"${config.column}" < NOW() - ($1 || ' days')::interval`,
+      config.extraWhere,
+    ]
+      .filter(Boolean)
+      .join(' AND ');
+
     let totalPurged = 0;
     try {
       for (let batch = 0; batch < maxBatches; batch++) {
@@ -44,7 +52,7 @@ export class BatchedPurgeRunner {
           `DELETE FROM "${config.table}"
              WHERE id IN (
                SELECT id FROM "${config.table}"
-                WHERE "${config.column}" < NOW() - ($1 || ' days')::interval
+                WHERE ${whereClause}
                 LIMIT $2
              )`,
           String(cutoffDays),

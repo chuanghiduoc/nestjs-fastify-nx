@@ -48,12 +48,10 @@ export const I18N_KEYS = {
       size_out_of_range: 'errors.upload.size_out_of_range',
       magic_bytes_mismatch: 'errors.upload.magic_bytes_mismatch',
       magic_bytes_unknown: 'errors.upload.magic_bytes_unknown',
-      commit_failed: 'errors.upload.commit_failed',
     },
     users: {
       not_found: 'errors.users.not_found',
       already_exists: 'errors.users.already_exists',
-      database_error: 'errors.users.database_error',
     },
     pagination: {
       invalid_cursor: 'errors.pagination.invalid_cursor',
@@ -105,7 +103,6 @@ export const I18N_KEYS = {
       organization_context_required: 'errors.auth.organization_context_required',
     },
     storage: {
-      body_empty: 'errors.storage.body_empty',
       upload_failed: 'errors.storage.upload_failed',
       presign_failed: 'errors.storage.presign_failed',
       head_failed: 'errors.storage.head_failed',

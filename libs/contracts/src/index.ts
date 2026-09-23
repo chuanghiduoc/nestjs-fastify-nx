@@ -7,8 +7,10 @@ export {
   CursorPaginationDto,
   toListResponse,
   toCursorListResponse,
+  toUnpaginatedListResponse,
 } from './lib/dto/list-response.dto';
 export { invalidCursorProblem } from './lib/dto/cursor-problem';
+export { fieldProblem, type FieldProblemInput } from './lib/errors/field-problem';
 export {
   ProblemDetailsDto,
   ValidationProblemDetailsDto,
@@ -16,7 +18,6 @@ export {
 } from './lib/errors/problem-details.dto';
 export { ERROR_CODES, errorTypeSlug, errorTypeUrl, type ErrorCode } from './lib/errors/error-codes';
 export {
-  ERROR_CATALOG,
   ERROR_CATALOG_ENTRIES,
   findErrorTypeDoc,
   type ErrorTypeDoc,

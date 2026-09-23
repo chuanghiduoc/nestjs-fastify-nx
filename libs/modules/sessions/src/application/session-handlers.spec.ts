@@ -95,7 +95,7 @@ describe('session handlers', () => {
 
     await new RevokeSessionHandler(repository).execute(new RevokeSessionCommand(USER_ID, id));
 
-    expect(await repository.findByIdForUser(USER_ID, id)).toBeNull();
+    expect(await repository.deleteForUser(USER_ID, id)).toBe(false);
   });
 
   // 404, not 403 — a distinguishable 403 would confirm the session id exists.
@@ -107,7 +107,13 @@ describe('session handlers', () => {
     );
 
     await expect(execute).rejects.toMatchObject({ kind: 'not_found' });
-    expect(await repository.findByIdForUser(OTHER_USER_ID, id)).not.toBeNull();
+    const { items } = await repository.findAllCursor({
+      userId: OTHER_USER_ID,
+      limit: 20,
+      activeOnly: false,
+      now: new Date(),
+    });
+    expect(items.map((session) => session.id)).toContain(id);
   });
 
   it('answers not_found for an unknown session', async () => {
@@ -129,7 +135,36 @@ describe('session handlers', () => {
     );
 
     expect(result.revoked).toBe(2);
-    expect(await repository.findByIdForUser(USER_ID, current)).not.toBeNull();
-    expect(await repository.findByIdForUser(OTHER_USER_ID, otherUsers)).not.toBeNull();
+    expect(await repository.deleteForUser(USER_ID, current)).toBe(true);
+    expect(await repository.deleteForUser(OTHER_USER_ID, otherUsers)).toBe(true);
+  });
+
+  it('honours startingAfter with an id tiebreak on same-timestamp sessions', async () => {
+    const createdAt = new Date('2026-01-01T00:00:00.000Z');
+    const base = {
+      userId: USER_ID,
+      ipAddress: '203.0.113.9',
+      userAgent: 'curl/8',
+      expiresAt: new Date(Date.now() + 3_600_000),
+      createdAt,
+      updatedAt: createdAt,
+    };
+    const lower = { ...base, id: '019dd1a5-9235-70db-8d57-54ef91400010' };
+    const higher = { ...base, id: '019dd1a5-9235-70db-8d57-54ef91400020' };
+    repository.seed(lower);
+    repository.seed(higher);
+    const handler = new ListMySessionsHandler(repository);
+
+    const page1 = await handler.execute(new ListMySessionsQuery(USER_ID, lower.id, 1));
+    expect(page1.data.map((session) => session.id)).toEqual([higher.id]);
+    expect(page1.hasMore).toBe(true);
+
+    const page2 = await handler.execute(
+      new ListMySessionsQuery(USER_ID, lower.id, 1, {
+        startingAfter: page1.lastCursor ?? undefined,
+      }),
+    );
+    expect(page2.data.map((session) => session.id)).toEqual([lower.id]);
+    expect(page2.hasMore).toBe(false);
   });
 });

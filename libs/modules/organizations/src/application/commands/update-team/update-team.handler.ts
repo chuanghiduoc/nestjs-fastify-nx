@@ -2,7 +2,7 @@ import { Inject } from '@nestjs/common';
 import { CommandHandler, type ICommandHandler } from '@nestjs/cqrs';
 import { TEAM_REPOSITORY } from '../../../domain/ports/team-repository.port';
 import type { TeamRepositoryPort } from '../../../domain/ports/team-repository.port';
-import type { TeamDto } from '../../dto/organization-role.dto';
+import { toTeamDto, type TeamDto } from '../../dto/organization-role.dto';
 import { teamNotFound } from '../../organization-errors';
 import { UpdateTeamCommand } from './update-team.command';
 
@@ -15,14 +15,8 @@ export class UpdateTeamHandler implements ICommandHandler<UpdateTeamCommand, Tea
     if (!existing) throw teamNotFound();
 
     const renamed = existing.renamedTo(command.name);
-    await this.teams.update(renamed);
+    if (!(await this.teams.update(renamed))) throw teamNotFound();
 
-    return {
-      id: renamed.id,
-      name: renamed.name,
-      memberCount: existing.memberCount,
-      createdAt: renamed.createdAt,
-      updatedAt: renamed.updatedAt,
-    };
+    return toTeamDto(renamed, existing.memberCount);
   }
 }

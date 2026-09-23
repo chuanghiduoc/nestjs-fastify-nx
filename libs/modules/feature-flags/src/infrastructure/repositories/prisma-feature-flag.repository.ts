@@ -1,7 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '@nestjs-fastify-nx/infra-database';
 import { Prisma } from '@nestjs-fastify-nx/infra-database';
-import { FeatureFlag } from '../../domain/entities/feature-flag.entity';
+import { keysetAfter, takePage } from '@nestjs-fastify-nx/shared';
+import { FeatureFlag, type FeatureFlagChanges } from '../../domain/entities/feature-flag.entity';
 import type {
   FeatureFlagRepositoryPort,
   FindFeatureFlagsCursorOptions,
@@ -34,16 +35,7 @@ export class PrismaFeatureFlagRepository implements FeatureFlagRepositoryPort {
     const { organizationId, startingAfter, limit } = options;
 
     const where: Prisma.FeatureFlagWhereInput = { organizationId };
-    if (startingAfter) {
-      where.AND = [
-        {
-          OR: [
-            { createdAt: { lt: startingAfter.createdAt } },
-            { AND: [{ createdAt: startingAfter.createdAt }, { id: { lt: startingAfter.id } }] },
-          ],
-        },
-      ];
-    }
+    if (startingAfter) where.AND = [keysetAfter(startingAfter)];
 
     const rows = await this.prisma.readTarget().featureFlag.findMany({
       where,
@@ -51,13 +43,13 @@ export class PrismaFeatureFlagRepository implements FeatureFlagRepositoryPort {
       take: limit + 1,
     });
 
-    const hasMore = rows.length > limit;
-    return { items: (hasMore ? rows.slice(0, limit) : rows).map(toEntity), hasMore };
+    const { items, hasMore } = takePage(rows, limit);
+    return { items: items.map(toEntity), hasMore };
   }
 
   async findAll(organizationId: string): Promise<FeatureFlag[]> {
     const rows = await this.prisma
-      .readTarget()
+      .writeTarget()
       .featureFlag.findMany({ where: { organizationId }, orderBy: { key: 'asc' } });
     return rows.map(toEntity);
   }
@@ -91,15 +83,22 @@ export class PrismaFeatureFlagRepository implements FeatureFlagRepositoryPort {
     }
   }
 
-  async update(flag: FeatureFlag): Promise<void> {
-    await this.prisma.writeTarget().featureFlag.update({
-      where: { id: flag.id },
+  async update(
+    organizationId: string,
+    id: string,
+    changes: FeatureFlagChanges,
+    updatedAt: Date,
+  ): Promise<boolean> {
+    const { count } = await this.prisma.writeTarget().featureFlag.updateMany({
+      where: { id, organizationId },
       data: {
-        description: flag.description,
-        enabled: flag.enabled,
-        rolloutPercentage: flag.rolloutPercentage,
+        description: changes.description,
+        enabled: changes.enabled,
+        rolloutPercentage: changes.rolloutPercentage,
+        updatedAt,
       },
     });
+    return count > 0;
   }
 
   async delete(organizationId: string, id: string): Promise<boolean> {

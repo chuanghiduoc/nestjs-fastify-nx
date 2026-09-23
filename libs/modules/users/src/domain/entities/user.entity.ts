@@ -1,4 +1,3 @@
-import { generateId } from '@nestjs-fastify-nx/shared';
 import type { PlatformRole, UserStatusValue } from '@nestjs-fastify-nx/shared';
 import { Email } from '../value-objects/email.vo';
 
@@ -31,18 +30,6 @@ interface UserProps {
 
 export class User {
   private constructor(private readonly props: UserProps) {}
-
-  static create(email: Email, name = ''): User {
-    return new User({
-      id: generateId(),
-      email,
-      name,
-      role: UserRole.USER,
-      status: UserStatus.ACTIVE,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    });
-  }
 
   static reconstitute(raw: {
     id: string;
@@ -79,9 +66,5 @@ export class User {
   }
   get updatedAt(): Date {
     return this.props.updatedAt;
-  }
-
-  isActive(): boolean {
-    return this.props.status === UserStatus.ACTIVE;
   }
 }

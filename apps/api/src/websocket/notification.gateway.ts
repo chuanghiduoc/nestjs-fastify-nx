@@ -18,6 +18,7 @@ import Redis from 'ioredis';
 import { ConfigService } from '@nestjs/config';
 import { BETTER_AUTH_INSTANCE } from '@nestjs-fastify-nx/infra-auth';
 import type { BetterAuthInstance } from '@nestjs-fastify-nx/infra-auth';
+import { closeQuietly } from '@nestjs-fastify-nx/infra-redis';
 import { redisReconnectStrategy } from '@nestjs-fastify-nx/shared';
 import {
   applyWsMessageRateLimit,
@@ -29,19 +30,21 @@ import {
 } from './ws-auth.adapter';
 import { BoundedConcurrencyLimiter, jitterDelay } from './bounded-concurrency';
 import { DEV_ALLOWED_ORIGINS } from '../common/http/cors-origins';
+import type { EnvConfig } from '../config/env.validation';
 
-interface WsRedisEnv {
-  REDIS_CACHE_HOST: string;
-  REDIS_CACHE_PORT: number;
-  REDIS_CACHE_PASSWORD?: string;
-  REDIS_PUBSUB_DB: number;
-  WS_CONNECTION_LIMIT_PER_IP: number;
-  WS_SESSION_REVALIDATE_MS: number;
-  WS_SESSION_REVALIDATE_CONCURRENCY: number;
-  WS_MESSAGE_RATE_LIMIT_MAX: number;
-  WS_MESSAGE_RATE_LIMIT_WINDOW_MS: number;
-  TRUST_PROXY_CIDRS: string[];
-}
+type WsRedisEnv = Pick<
+  EnvConfig,
+  | 'REDIS_CACHE_HOST'
+  | 'REDIS_CACHE_PORT'
+  | 'REDIS_CACHE_PASSWORD'
+  | 'REDIS_PUBSUB_DB'
+  | 'WS_CONNECTION_LIMIT_PER_IP'
+  | 'WS_SESSION_REVALIDATE_MS'
+  | 'WS_SESSION_REVALIDATE_CONCURRENCY'
+  | 'WS_MESSAGE_RATE_LIMIT_MAX'
+  | 'WS_MESSAGE_RATE_LIMIT_WINDOW_MS'
+  | 'TRUST_PROXY_CIDRS'
+>;
 
 // Empty allowlist in production rejects all cross-origin upgrades — never use origin: true with credentials.
 const wsCorsOrigin: (
@@ -169,10 +172,9 @@ export class NotificationGateway
     }
     // Guard the optional chaining — shutdown can fire before afterInit() ran.
     const closes: Promise<unknown>[] = [];
-    if (this.pubClient) closes.push(this.pubClient.quit().catch(() => this.pubClient.disconnect()));
-    if (this.subClient) closes.push(this.subClient.quit().catch(() => this.subClient.disconnect()));
-    if (this.rateLimitClient)
-      closes.push(this.rateLimitClient.quit().catch(() => this.rateLimitClient.disconnect()));
+    if (this.pubClient) closes.push(closeQuietly(this.pubClient));
+    if (this.subClient) closes.push(closeQuietly(this.subClient));
+    if (this.rateLimitClient) closes.push(closeQuietly(this.rateLimitClient));
     await Promise.allSettled(closes);
   }
 
@@ -259,13 +261,5 @@ export class NotificationGateway
     const user = wsData(socket).user;
     this.logger.debug(`Ping from userId=${user?.userId}`);
     return { event: 'pong', data: 'pong' };
-  }
-
-  sendToUser(userId: string, event: string, payload: unknown): void {
-    this.server.to(`user:${userId}`).emit(event, payload);
-  }
-
-  broadcast(event: string, payload: unknown): void {
-    this.server.emit(event, payload);
   }
 }

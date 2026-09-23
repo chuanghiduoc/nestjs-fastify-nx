@@ -1,6 +1,5 @@
 export { FeatureFlagsModule } from './feature-flags.module';
 
-export { FeatureFlag } from './domain/entities/feature-flag.entity';
 export {
   ListFeatureFlagsQuery,
   type ListFeatureFlagsResult,

@@ -6,9 +6,8 @@ import type Redis from 'ioredis';
 import { prepareMultipartUploads } from '@nestjs-fastify-nx/modules-upload';
 import { positiveIntEnv } from '@nestjs-fastify-nx/shared';
 import { ERROR_CODES } from '@nestjs-fastify-nx/contracts';
-import { sanitizeUrlForLogging } from '@nestjs-fastify-nx/shared';
 import type { AuthenticatedSession, AuthenticatedApiKey } from '@nestjs-fastify-nx/infra-auth';
-import { buildProblemDetails, PROBLEM_CONTENT_TYPE } from '../filters/problem-details.helper';
+import { sendProblem } from '../filters/problem-details.helper';
 import { ensureRequestIds } from '../logging/request-id';
 import { IdempotencyStore, type AcquireResult } from './idempotency-store';
 
@@ -16,6 +15,7 @@ export interface IdempotencyOptions {
   readonly redis: Redis;
   readonly ttlSeconds: number;
   readonly lockTtlSeconds: number;
+  readonly uploadRequestTimeoutMs?: number;
   // Reports a Redis failure without throwing — the request continues (fail-open).
   readonly onError?: (message: string) => void;
 }
@@ -98,32 +98,6 @@ function shouldHandle(req: FastifyRequest): boolean {
   );
 }
 
-function sendProblem(
-  req: FastifyRequest,
-  reply: FastifyReply,
-  problem: { status: number; code: string; title: string; detail: string },
-): FastifyReply {
-  const { status, code, title, detail } = problem;
-  // Reuse the id the request already carries (stamped by ClsMiddleware) — minting a second one here
-  // would put an X-Request-Id on this 4xx that matches no log line.
-  const { requestId } = ensureRequestIds(req.raw, req.headers);
-  // Match the shared exception filter's problem response shape.
-  return reply
-    .status(status)
-    .header('content-type', PROBLEM_CONTENT_TYPE)
-    .header('x-request-id', requestId)
-    .send(
-      buildProblemDetails({
-        status,
-        title,
-        detail,
-        code,
-        instance: sanitizeUrlForLogging(req.url),
-        requestId,
-      }),
-    );
-}
-
 // Adds the idempotency hooks directly to the root Fastify instance (NOT via register(), whose
 // encapsulation would scope the hooks away from Nest's root-registered routes). Register this
 // BEFORE @fastify/compress so the onSend hook stores the uncompressed JSON body.
@@ -137,12 +111,11 @@ export function registerIdempotency(
     options.lockTtlSeconds,
     options.ttlSeconds,
   );
+  const uploadRequestTimeoutMs =
+    options.uploadRequestTimeoutMs ?? positiveIntEnv('UPLOAD_REQUEST_TIMEOUT_MS', 900_000);
   const multipartStore = new IdempotencyStore(
     options.redis,
-    Math.max(
-      options.lockTtlSeconds,
-      Math.ceil(positiveIntEnv('UPLOAD_REQUEST_TIMEOUT_MS', 900_000) / 1000) + 30,
-    ),
+    Math.max(options.lockTtlSeconds, Math.ceil(uploadRequestTimeoutMs / 1000) + 30),
     options.ttlSeconds,
   );
   const reportError = options.onError ?? ((): void => undefined);
@@ -158,7 +131,6 @@ export function registerIdempotency(
       await sendProblem(req, reply, {
         status: HttpStatus.BAD_REQUEST,
         code: ERROR_CODES.IDEMPOTENCY_KEY_INVALID,
-        title: 'Invalid Idempotency-Key',
         detail: `Idempotency-Key must be between 1 and ${MAX_KEY_LENGTH} characters.`,
       });
       return;
@@ -213,7 +185,6 @@ export function registerIdempotency(
       await sendProblem(req, reply, {
         status: HttpStatus.CONFLICT,
         code: ERROR_CODES.IDEMPOTENCY_KEY_CONFLICT,
-        title: 'Idempotency-Key In Progress',
         detail: 'A request with this Idempotency-Key is still being processed. Retry shortly.',
       });
       return;
@@ -223,7 +194,6 @@ export function registerIdempotency(
       await sendProblem(req, reply, {
         status: HttpStatus.UNPROCESSABLE_ENTITY,
         code: ERROR_CODES.IDEMPOTENCY_KEY_MISMATCH,
-        title: 'Idempotency-Key Reused',
         detail: 'This Idempotency-Key was already used with a different request payload.',
       });
       return;

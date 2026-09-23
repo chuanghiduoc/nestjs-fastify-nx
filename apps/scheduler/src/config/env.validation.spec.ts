@@ -26,4 +26,55 @@ describe('validateSchedulerConfig', () => {
       }),
     ).toThrow('OUTBOX_TX_TIMEOUT_MS');
   });
+
+  it('rejects an OUTBOX_POLL_INTERVAL_MS below the unified 100ms floor (was 50ms in api)', () => {
+    expect(() =>
+      validateSchedulerConfig({
+        DATABASE_URL: 'postgresql://localhost/app',
+        OUTBOX_POLL_INTERVAL_MS: '50',
+      }),
+    ).toThrow(/OUTBOX_POLL_INTERVAL_MS/);
+  });
+
+  it('rejects an OUTBOX_MAX_ATTEMPTS above the unified cap of 100 (was 1000 in api)', () => {
+    expect(() =>
+      validateSchedulerConfig({
+        DATABASE_URL: 'postgresql://localhost/app',
+        OUTBOX_MAX_ATTEMPTS: '500',
+      }),
+    ).toThrow(/OUTBOX_MAX_ATTEMPTS/);
+  });
+
+  it('rejects a non-postgres DATABASE_URL in production', () => {
+    expect(() =>
+      validateSchedulerConfig({
+        NODE_ENV: 'production',
+        DATABASE_URL: 'mysql://localhost/app',
+        STORAGE_ACCESS_KEY: 'real-key',
+        STORAGE_SECRET_KEY: 'real-secret',
+        REDIS_QUEUE_PASSWORD: 'queue-pw',
+        EVENT_PUBLISHER_DRIVER: 'outbox',
+      }),
+    ).toThrow(/DATABASE_URL/);
+  });
+
+  it('rejects OUTBOX_PARKED_RETENTION_DAYS shorter than OUTBOX_RETENTION_DAYS', () => {
+    expect(() =>
+      validateSchedulerConfig({
+        DATABASE_URL: 'postgresql://localhost/app',
+        OUTBOX_RETENTION_DAYS: '10',
+        OUTBOX_PARKED_RETENTION_DAYS: '5',
+      }),
+    ).toThrow(/OUTBOX_PARKED_RETENTION_DAYS/);
+  });
+
+  it('accepts OUTBOX_PARKED_RETENTION_DAYS equal to OUTBOX_RETENTION_DAYS', () => {
+    expect(() =>
+      validateSchedulerConfig({
+        DATABASE_URL: 'postgresql://localhost/app',
+        OUTBOX_RETENTION_DAYS: '10',
+        OUTBOX_PARKED_RETENTION_DAYS: '10',
+      }),
+    ).not.toThrow();
+  });
 });

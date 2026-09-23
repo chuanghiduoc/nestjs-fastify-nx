@@ -1,3 +1,4 @@
+import { paginateNewestFirst } from '@nestjs-fastify-nx/shared';
 import type {
   FindSessionsCursorOptions,
   FindSessionsCursorResult,
@@ -17,18 +18,11 @@ export class InMemorySessionRepository implements SessionRepositoryPort {
       .filter((session) => session.userId === options.userId)
       .filter((session) =>
         options.activeOnly ? session.expiresAt.getTime() > options.now.getTime() : true,
-      )
-      .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime());
+      );
 
-    return Promise.resolve({
-      items: matching.slice(0, options.limit),
-      hasMore: matching.length > options.limit,
-    });
-  }
-
-  findByIdForUser(userId: string, id: string): Promise<SessionRecord | null> {
-    const session = this.sessions.get(id);
-    return Promise.resolve(session && session.userId === userId ? session : null);
+    return Promise.resolve(
+      paginateNewestFirst(matching, { startingAfter: options.startingAfter, limit: options.limit }),
+    );
   }
 
   deleteForUser(userId: string, id: string): Promise<boolean> {

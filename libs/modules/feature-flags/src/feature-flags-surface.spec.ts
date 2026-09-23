@@ -81,6 +81,21 @@ describe('PrismaFeatureFlagRepository', () => {
     expect(await repository.findAll(ORG_ID)).toHaveLength(2);
   });
 
+  it('reads through the write target so evaluation is read-after-write consistent', async () => {
+    const readDb = { featureFlag: { findMany: vi.fn().mockResolvedValue([]) } };
+    const writeDb = { featureFlag: { findMany: vi.fn().mockResolvedValue([flagRow()]) } };
+    const repository = new PrismaFeatureFlagRepository({
+      readTarget: () => readDb,
+      writeTarget: () => writeDb,
+    } as unknown as PrismaService);
+
+    const flags = await repository.findAll(ORG_ID);
+
+    expect(flags).toHaveLength(1);
+    expect(readDb.featureFlag.findMany).not.toHaveBeenCalled();
+    expect(writeDb.featureFlag.findMany).toHaveBeenCalled();
+  });
+
   it('translates a duplicate key into a domain conflict', async () => {
     const duplicate = new Prisma.PrismaClientKnownRequestError('duplicate', {
       code: 'P2002',
@@ -117,6 +132,33 @@ describe('PrismaFeatureFlagRepository', () => {
     expect(await repository.delete(ORG_ID, id)).toBe(false);
     expect(findFirst.mock.calls[0][0].where).toEqual({ id, organizationId: ORG_ID });
     expect(deleteMany.mock.calls[0][0].where).toEqual({ id, organizationId: ORG_ID });
+  });
+
+  it('writes only the given fields, scoped to the row and its organization', async () => {
+    const updateMany = vi.fn().mockResolvedValue({ count: 1 });
+    const repository = new PrismaFeatureFlagRepository(prismaDouble({ updateMany }));
+    const id = generateId();
+    const updatedAt = new Date('2026-08-02T00:00:00.000Z');
+
+    const applied = await repository.update(ORG_ID, id, { enabled: true }, updatedAt);
+
+    expect(applied).toBe(true);
+    expect(updateMany.mock.calls[0][0].where).toEqual({ id, organizationId: ORG_ID });
+    expect(updateMany.mock.calls[0][0].data).toEqual({
+      description: undefined,
+      enabled: true,
+      rolloutPercentage: undefined,
+      updatedAt,
+    });
+  });
+
+  it('reports false when the row was missing or belonged to another organization', async () => {
+    const updateMany = vi.fn().mockResolvedValue({ count: 0 });
+    const repository = new PrismaFeatureFlagRepository(prismaDouble({ updateMany }));
+
+    expect(await repository.update(ORG_ID, generateId(), { enabled: true }, new Date())).toBe(
+      false,
+    );
   });
 });
 

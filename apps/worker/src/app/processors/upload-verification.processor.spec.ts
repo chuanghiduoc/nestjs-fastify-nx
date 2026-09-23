@@ -2,11 +2,11 @@ import { describe, expect, it, vi } from 'vitest';
 import type { CommandBus } from '@nestjs/cqrs';
 import type { ConfigService } from '@nestjs/config';
 import type { Job } from 'bullmq';
-import { VerifyUploadCommand } from '@nestjs-fastify-nx/modules-upload';
 import {
-  UploadVerificationProcessor,
-  type UploadVerificationPayload,
-} from './upload-verification.processor';
+  VerifyUploadCommand,
+  type UploadVerificationRequest,
+} from '@nestjs-fastify-nx/modules-upload';
+import { UploadVerificationProcessor } from './upload-verification.processor';
 
 function build() {
   const commandBus = { execute: vi.fn().mockResolvedValue('verified') };
@@ -18,7 +18,7 @@ function build() {
   return { processor, commandBus };
 }
 
-const job = (data: Partial<UploadVerificationPayload> = {}) =>
+const job = (data: Partial<UploadVerificationRequest> = {}) =>
   ({
     data: {
       key: 'files/u/f.png',
@@ -27,7 +27,7 @@ const job = (data: Partial<UploadVerificationPayload> = {}) =>
       correlationId: 'corr-1',
       ...data,
     },
-  }) as Job<UploadVerificationPayload>;
+  }) as Job<UploadVerificationRequest>;
 
 // The lifecycle itself is covered by VerifyUploadHandler's spec; this only pins the transport
 // contract, so the api and the worker cannot drift apart on the payload shape.

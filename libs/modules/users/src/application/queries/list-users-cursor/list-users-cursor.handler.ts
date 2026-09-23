@@ -1,8 +1,8 @@
 import { Inject } from '@nestjs/common';
 import { QueryHandler, type IQueryHandler } from '@nestjs/cqrs';
 import { DomainException } from '@nestjs-fastify-nx/core';
-import { I18N_KEYS, ERROR_CODES } from '@nestjs-fastify-nx/contracts';
-import { decodeCursor, encodeCursor, type DecodedCursor } from '@nestjs-fastify-nx/shared';
+import { invalidCursorProblem } from '@nestjs-fastify-nx/contracts';
+import { decodeCursor, lastCursorOf, type DecodedCursor } from '@nestjs-fastify-nx/shared';
 import { USER_REPOSITORY_PORT } from '../../../domain/ports/user-repository.port';
 import type { UserRepositoryPort } from '../../../domain/ports/user-repository.port';
 import type { UserListItemDto } from '../../dto/user-list-item.dto';
@@ -35,10 +35,7 @@ export class ListUsersCursorHandler implements IQueryHandler<
       updatedAt: user.updatedAt,
     }));
 
-    const lastItem = items[items.length - 1];
-    const lastCursor = lastItem ? encodeCursor(lastItem.createdAt, lastItem.id) : null;
-
-    return { data, hasMore, lastCursor };
+    return { data, hasMore, lastCursor: lastCursorOf(items) };
   }
 
   // Decoding here — rather than in the repository — keeps the cursor string at the boundary that
@@ -48,24 +45,7 @@ export class ListUsersCursorHandler implements IQueryHandler<
     if (!raw) return undefined;
 
     const decoded = decodeCursor(raw);
-    if (!decoded) {
-      throw new DomainException({
-        kind: 'malformed',
-        // The default title only reads correctly for a rule violation; a malformed cursor needs the
-        // status-appropriate key.
-        title: I18N_KEYS.common.bad_request,
-        code: ERROR_CODES.INVALID_CURSOR,
-        messageKey: I18N_KEYS.errors.pagination.invalid_cursor,
-        violations: [
-          {
-            path: 'startingAfter',
-            code: ERROR_CODES.INVALID_CURSOR,
-            message: 'startingAfter is not a valid cursor',
-            messageKey: I18N_KEYS.errors.pagination.invalid_cursor,
-          },
-        ],
-      });
-    }
+    if (!decoded) throw new DomainException(invalidCursorProblem());
 
     return decoded;
   }

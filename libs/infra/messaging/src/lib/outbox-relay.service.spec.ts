@@ -16,17 +16,23 @@ interface OutboxRow {
   attempts: number;
 }
 
+interface UpdateCall {
+  where: { id: string };
+  data: Record<string, unknown>;
+}
+
 /**
  * Builds a fake PrismaService modelling the three-stage dispatch:
  *  - claim:    inside `transaction(...)` via tx.$queryRawUnsafe
- *  - mark/err: outside tx via prisma.db.$executeRawUnsafe (per row)
- *  - stuck:    outside tx via prisma.db.$queryRawUnsafe (count)
+ *  - mark/err: outside tx via prisma.db.outboxEvent.update (per row)
+ *  - stuck:    outside tx via prisma.db.outboxEvent.count
  */
 function buildPrisma(opts: { claim: (limit: number) => OutboxRow[] }): {
   prisma: PrismaService;
-  dbExecuteCalls: Array<{ sql: string; args: unknown[] }>;
+  updateCalls: UpdateCall[];
+  countMock: ReturnType<typeof vi.fn>;
 } {
-  const dbExecuteCalls: Array<{ sql: string; args: unknown[] }> = [];
+  const updateCalls: UpdateCall[] = [];
 
   const transaction = vi.fn(async <T>(fn: (tx: unknown) => Promise<T>) =>
     fn({
@@ -36,16 +42,23 @@ function buildPrisma(opts: { claim: (limit: number) => OutboxRow[] }): {
     }),
   );
 
+  const countMock = vi.fn(async () => 0);
+  const updateMock = vi.fn(async (call: UpdateCall) => {
+    updateCalls.push(call);
+    return {};
+  });
+
   const db = {
-    $queryRawUnsafe: vi.fn(async () => [{ count: BigInt(0) }]),
-    $executeRawUnsafe: vi.fn(async (sql: string, ...args: unknown[]) => {
-      dbExecuteCalls.push({ sql, args });
-    }),
+    outboxEvent: {
+      count: countMock,
+      update: updateMock,
+    },
   };
 
   return {
     prisma: { transaction, db } as unknown as PrismaService,
-    dbExecuteCalls,
+    updateCalls,
+    countMock,
   };
 }
 
@@ -84,13 +97,13 @@ describe('OutboxRelayService', () => {
   });
 
   it('returns 0 when there is nothing to dispatch', async () => {
-    const { prisma, dbExecuteCalls } = buildPrisma({ claim: () => [] });
+    const { prisma, updateCalls } = buildPrisma({ claim: () => [] });
     const bus = buildBus();
     const relay = new OutboxRelayService(prisma, bus);
 
     expect(await relay.tick()).toBe(0);
     expect(bus.publish).not.toHaveBeenCalled();
-    expect(dbExecuteCalls).toHaveLength(0);
+    expect(updateCalls).toHaveLength(0);
   });
 
   it('does not claim rows while this scheduler replica is a follower', async () => {
@@ -102,7 +115,7 @@ describe('OutboxRelayService', () => {
   });
 
   it('publishes claimed rows and marks them processed outside the claim transaction', async () => {
-    const { prisma, dbExecuteCalls } = buildPrisma({ claim: () => [buildRow()] });
+    const { prisma, updateCalls } = buildPrisma({ claim: () => [buildRow()] });
     const bus = buildBus();
     const relay = new OutboxRelayService(prisma, bus);
 
@@ -117,14 +130,14 @@ describe('OutboxRelayService', () => {
 
     // processedAt UPDATE runs outside the claim tx — keep this lookup tight
     // so a long-running listener can't ripple back into row-lock contention.
-    expect(dbExecuteCalls).toHaveLength(1);
-    expect(dbExecuteCalls[0].sql).toMatch(/processedAt/);
-    expect(dbExecuteCalls[0].args[0]).toBeInstanceOf(Date);
-    expect(dbExecuteCalls[0].args[1]).toBe('row-1');
+    expect(updateCalls).toHaveLength(1);
+    expect(updateCalls[0].data).toHaveProperty('processedAt');
+    expect(updateCalls[0].data['processedAt']).toBeInstanceOf(Date);
+    expect(updateCalls[0].where.id).toBe('row-1');
   });
 
   it('records lastError on prisma.db without marking processed when the bus throws', async () => {
-    const { prisma, dbExecuteCalls } = buildPrisma({
+    const { prisma, updateCalls } = buildPrisma({
       claim: () => [buildRow({ attempts: 2 })],
     });
     const bus = buildBus();
@@ -133,15 +146,14 @@ describe('OutboxRelayService', () => {
 
     expect(await relay.tick()).toBe(0);
 
-    expect(dbExecuteCalls).toHaveLength(1);
-    expect(dbExecuteCalls[0].sql).toMatch(/lastError/);
-    expect(dbExecuteCalls[0].args[0]).toBe('Error');
-    expect(dbExecuteCalls[0].args[0]).not.toContain('listener failed');
-    expect(dbExecuteCalls[0].sql).not.toMatch(/processedAt/);
+    expect(updateCalls).toHaveLength(1);
+    expect(updateCalls[0].data['lastError']).toBe('Error');
+    expect(updateCalls[0].data['lastError']).not.toContain('listener failed');
+    expect(updateCalls[0].data).not.toHaveProperty('processedAt');
   });
 
   it('skips a row whose schemaVersion is newer than the relay supports and records the error', async () => {
-    const { prisma, dbExecuteCalls } = buildPrisma({
+    const { prisma, updateCalls } = buildPrisma({
       claim: () => [
         buildRow({
           payload: {
@@ -160,10 +172,9 @@ describe('OutboxRelayService', () => {
     // Never dispatched, never marked processed — only lastError recorded so the row
     // exhausts attempts and surfaces via the stuck-row warning.
     expect(bus.publish).not.toHaveBeenCalled();
-    expect(dbExecuteCalls).toHaveLength(1);
-    expect(dbExecuteCalls[0].sql).toMatch(/lastError/);
-    expect(dbExecuteCalls[0].args[0]).toContain('schemaVersion=99');
-    expect(dbExecuteCalls[0].sql).not.toMatch(/processedAt/);
+    expect(updateCalls).toHaveLength(1);
+    expect(updateCalls[0].data['lastError']).toContain('schemaVersion=99');
+    expect(updateCalls[0].data).not.toHaveProperty('processedAt');
   });
 
   it('dispatches a legacy row with no schemaVersion field (backward-compat: treated as v1)', async () => {
@@ -195,17 +206,16 @@ describe('OutboxRelayService', () => {
       payload: null as unknown as OutboxRow['payload'],
     });
     const valid = buildRow({ id: 'row-good' });
-    const { prisma, dbExecuteCalls } = buildPrisma({ claim: () => [malformed, valid] });
+    const { prisma, updateCalls } = buildPrisma({ claim: () => [malformed, valid] });
     const bus = buildBus();
     const relay = new OutboxRelayService(prisma, bus);
 
     expect(await relay.tick()).toBe(1);
     expect(bus.publish).toHaveBeenCalledOnce();
-    expect(dbExecuteCalls).toHaveLength(2);
-    expect(dbExecuteCalls[0].sql).toMatch(/lastError/);
-    expect(String(dbExecuteCalls[0].args[0])).toMatch(/^Invalid outbox payload envelope — /);
-    expect(String(dbExecuteCalls[0].args[0])).toContain('received null');
-    expect(dbExecuteCalls[1].sql).toMatch(/processedAt/);
+    expect(updateCalls).toHaveLength(2);
+    expect(String(updateCalls[0].data['lastError'])).toMatch(/^Invalid outbox payload envelope — /);
+    expect(String(updateCalls[0].data['lastError'])).toContain('received null');
+    expect(updateCalls[1].data).toHaveProperty('processedAt');
   });
 
   it('dispatches aggregates concurrently while retaining per-aggregate order', async () => {
@@ -226,7 +236,7 @@ describe('OutboxRelayService', () => {
         payload: { eventId: 'b1', occurredAt: '2026-04-28T00:00:00.000Z', payload: {} },
       }),
     ];
-    const { prisma, dbExecuteCalls } = buildPrisma({ claim: () => rows });
+    const { prisma, updateCalls } = buildPrisma({ claim: () => rows });
     const bus = buildBus();
     bus.publish.mockImplementation(async (event: { eventId: string }) => {
       // a2 fails; a1 and b1 succeed. A failed row does not block the rest of the batch — every
@@ -248,15 +258,15 @@ describe('OutboxRelayService', () => {
 
     // All three rows got a per-row outcome recorded (2 processedAt, 1 lastError-only).
     // markProcessed's UPDATE also clears lastError, so distinguish recordError by the
-    // absence of processedAt rather than by presence of the lastError substring alone.
-    expect(dbExecuteCalls).toHaveLength(3);
-    const processedCalls = dbExecuteCalls.filter((c) => c.sql.includes('processedAt'));
-    const errorOnlyCalls = dbExecuteCalls.filter(
-      (c) => c.sql.includes('lastError') && !c.sql.includes('processedAt'),
+    // absence of processedAt rather than by presence of the lastError property alone.
+    expect(updateCalls).toHaveLength(3);
+    const processedCalls = updateCalls.filter((c) => 'processedAt' in c.data);
+    const errorOnlyCalls = updateCalls.filter(
+      (c) => 'lastError' in c.data && !('processedAt' in c.data),
     );
     expect(processedCalls).toHaveLength(2);
     expect(errorOnlyCalls).toHaveLength(1);
-    expect(errorOnlyCalls[0].args[1]).toBe('a2');
+    expect(errorOnlyCalls[0].where.id).toBe('a2');
   });
 
   it('records a poison row as failed but keeps dispatching the rest of the batch', async () => {
@@ -298,8 +308,10 @@ describe('OutboxRelayService', () => {
     const prisma = {
       transaction,
       db: {
-        $queryRawUnsafe: vi.fn(async () => [{ count: BigInt(0) }]),
-        $executeRawUnsafe: vi.fn(async () => undefined),
+        outboxEvent: {
+          count: vi.fn(async () => 0),
+          update: vi.fn(async () => ({})),
+        },
       },
     } as unknown as PrismaService;
 
@@ -315,10 +327,8 @@ describe('OutboxRelayService', () => {
   });
 
   it('logs a warning when stuck rows exist (attempts >= maxAttempts, processedAt IS NULL)', async () => {
-    const { prisma } = buildPrisma({ claim: () => [] });
-    (prisma.db.$queryRawUnsafe as ReturnType<typeof vi.fn>).mockResolvedValueOnce([
-      { count: BigInt(2) },
-    ]);
+    const { prisma, countMock } = buildPrisma({ claim: () => [] });
+    countMock.mockResolvedValueOnce(2);
     const bus = buildBus();
     const relay = new OutboxRelayService(prisma, bus);
 
@@ -335,16 +345,16 @@ describe('OutboxRelayService', () => {
   it('checks for stuck rows at most once per minute', async () => {
     vi.useFakeTimers();
     try {
-      const { prisma } = buildPrisma({ claim: () => [] });
+      const { prisma, countMock } = buildPrisma({ claim: () => [] });
       const relay = new OutboxRelayService(prisma, buildBus());
 
       await relay.tick();
       await relay.tick();
-      expect(prisma.db.$queryRawUnsafe).toHaveBeenCalledTimes(1);
+      expect(countMock).toHaveBeenCalledTimes(1);
 
       await vi.advanceTimersByTimeAsync(60_000);
       await relay.tick();
-      expect(prisma.db.$queryRawUnsafe).toHaveBeenCalledTimes(2);
+      expect(countMock).toHaveBeenCalledTimes(2);
     } finally {
       vi.useRealTimers();
     }

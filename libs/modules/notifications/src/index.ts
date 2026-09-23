@@ -1,6 +1,5 @@
 export { NotificationsModule, NotificationsListenersModule } from './notifications.module';
 
-export { Notification } from './domain/entities/notification.entity';
 export { NOTIFICATION_TYPES } from './application/listeners/membership-notification.listener';
 export {
   ListNotificationsQuery,

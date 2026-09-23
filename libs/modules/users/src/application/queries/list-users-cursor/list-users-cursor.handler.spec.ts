@@ -4,12 +4,25 @@ import { MockUserRepository } from '../../../testing/mock-user-repository';
 import { UserFactory } from '../../../testing/user.factory';
 import { ListUsersCursorHandler } from './list-users-cursor.handler';
 import { ListUsersCursorQuery } from './list-users-cursor.query';
+import type { User } from '../../../domain/entities/user.entity';
 
 const ORG_ID = '019dd1a5-9235-70db-8d57-54ef90300001';
+const OTHER_ORG_ID = '019dd1a5-9235-70db-8d57-54ef90300002';
 
 describe('ListUsersCursorHandler', () => {
   let repo: MockUserRepository;
   let handler: ListUsersCursorHandler;
+
+  async function seedMember(
+    overrides: Partial<{ email: string; name: string }> = {},
+    organizationId = ORG_ID,
+    role = 'member',
+  ): Promise<User> {
+    const user = UserFactory.create(overrides);
+    await repo.save(user);
+    repo.addMembership(user.id, organizationId, role);
+    return user;
+  }
 
   beforeEach(() => {
     repo = new MockUserRepository();
@@ -20,8 +33,8 @@ describe('ListUsersCursorHandler', () => {
   });
 
   it('returns first page with hasMore=false when items <= limit', async () => {
-    await repo.save(UserFactory.create({ email: 'a@test.com' }));
-    await repo.save(UserFactory.create({ email: 'b@test.com' }));
+    await seedMember({ email: 'a@test.com' });
+    await seedMember({ email: 'b@test.com' });
 
     const result = await handler.execute(new ListUsersCursorQuery(ORG_ID, 10));
 
@@ -32,7 +45,7 @@ describe('ListUsersCursorHandler', () => {
 
   it('returns first page with hasMore=true when items exceed limit', async () => {
     for (let i = 0; i < 5; i++) {
-      await repo.save(UserFactory.create({ email: `user${i}@test.com` }));
+      await seedMember({ email: `user${i}@test.com` });
     }
 
     const result = await handler.execute(new ListUsersCursorQuery(ORG_ID, 3));
@@ -50,9 +63,26 @@ describe('ListUsersCursorHandler', () => {
     expect(result.lastCursor).toBeNull();
   });
 
+  it('never returns a user who belongs to another organization', async () => {
+    await seedMember({ email: 'mine@test.com' }, ORG_ID);
+    await seedMember({ email: 'theirs@test.com' }, OTHER_ORG_ID);
+
+    const result = await handler.execute(new ListUsersCursorQuery(ORG_ID, 10));
+
+    expect(result.data.map((u) => u.email)).toEqual(['mine@test.com']);
+  });
+
+  it('excludes a user with no membership at all', async () => {
+    await repo.save(UserFactory.create({ email: 'orphan@test.com' }));
+
+    const result = await handler.execute(new ListUsersCursorQuery(ORG_ID, 10));
+
+    expect(result.data).toHaveLength(0);
+  });
+
   it('lastCursor decodes to createdAt + id of last item in data', async () => {
     for (let i = 0; i < 3; i++) {
-      await repo.save(UserFactory.create({ email: `u${i}@test.com` }));
+      await seedMember({ email: `u${i}@test.com` });
     }
 
     const result = await handler.execute(new ListUsersCursorQuery(ORG_ID, 10));
@@ -67,7 +97,7 @@ describe('ListUsersCursorHandler', () => {
 
   it('second page via startingAfter does not overlap first page', async () => {
     for (let i = 0; i < 5; i++) {
-      await repo.save(UserFactory.create({ email: `p${i}@test.com` }));
+      await seedMember({ email: `p${i}@test.com` });
     }
 
     const page1 = await handler.execute(new ListUsersCursorQuery(ORG_ID, 3));
@@ -85,7 +115,7 @@ describe('ListUsersCursorHandler', () => {
   });
 
   it('rejects an invalid startingAfter cursor instead of returning the first page', async () => {
-    await repo.save(UserFactory.create({ email: 'x@test.com' }));
+    await seedMember({ email: 'x@test.com' });
 
     // Asserted on the domain kind, not an HTTP status: this layer runs under REST, GraphQL and the
     // scheduler, and only the transport knows that `malformed` means 400.
@@ -95,7 +125,7 @@ describe('ListUsersCursorHandler', () => {
   });
 
   it('maps domain User fields to UserListItemDto correctly', async () => {
-    await repo.save(UserFactory.create({ email: 'dto@test.com', name: 'DTO User' }));
+    await seedMember({ email: 'dto@test.com', name: 'DTO User' });
 
     const result = await handler.execute(new ListUsersCursorQuery(ORG_ID, 10));
     const item = result.data[0];

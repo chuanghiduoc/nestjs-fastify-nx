@@ -1,9 +1,9 @@
 import { createHash } from 'node:crypto';
 import { DomainException } from '@nestjs-fastify-nx/core';
-import { ERROR_CODES, I18N_KEYS } from '@nestjs-fastify-nx/contracts';
+import { ERROR_CODES, I18N_KEYS, fieldProblem } from '@nestjs-fastify-nx/contracts';
 import { generateId } from '@nestjs-fastify-nx/shared';
 
-const KEY_PATTERN = /^[a-z][a-z0-9._-]{1,99}$/;
+export const KEY_PATTERN = /^[a-z][a-z0-9._-]{1,99}$/;
 const ROLLOUT_MIN = 0;
 const ROLLOUT_MAX = 100;
 const BUCKET_COUNT = 100;
@@ -35,13 +35,7 @@ export interface FeatureFlagChanges {
 }
 
 function validation(path: string, code: string, message: string, messageKey: string): never {
-  throw new DomainException({
-    kind: 'validation',
-    code,
-    title: I18N_KEYS.common.unprocessable_entity,
-    messageKey,
-    violations: [{ path, code, message, messageKey }],
-  });
+  throw new DomainException(fieldProblem({ kind: 'validation', code, messageKey, path, message }));
 }
 
 function assertKey(key: string): string {

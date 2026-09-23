@@ -2,8 +2,8 @@ import { DomainException } from '@nestjs-fastify-nx/core';
 import { ERROR_CODES, I18N_KEYS } from '@nestjs-fastify-nx/contracts';
 import type { AuthenticatedSession } from './better-auth.types';
 
-export function requireOrganizationId(session: AuthenticatedSession): string {
-  if (session.organizationId) return session.organizationId;
+export function requireOrganizationId(session: AuthenticatedSession | undefined): string {
+  if (session?.organizationId) return session.organizationId;
 
   throw new DomainException({
     kind: 'forbidden',

@@ -9,8 +9,8 @@ interface ProbeRequest {
   originalUrl?: string;
 }
 
-function pinoHttp(overrides = {}): PinoHttpOptions {
-  return buildPinoLoggerConfig(overrides).pinoHttp as PinoHttpOptions;
+function pinoHttp(): PinoHttpOptions {
+  return buildPinoLoggerConfig().pinoHttp as PinoHttpOptions;
 }
 
 describe('buildPinoLoggerConfig', () => {
@@ -90,13 +90,10 @@ describe('buildPinoLoggerConfig', () => {
     ).toEqual({ type: 'Error', code: 'P2024' });
   });
 
-  it('applies the sensitive redaction list and lets callers override', () => {
+  it('applies the sensitive redaction list', () => {
     const redact = pinoHttp().redact as { paths: string[]; censor: string };
     expect(redact.paths).toContain('*.sessionToken');
     expect(redact.censor).toBe('[REDACTED]');
-
-    const custom = pinoHttp({ level: 'debug' });
-    expect(custom.level).toBe('debug');
   });
 });
 

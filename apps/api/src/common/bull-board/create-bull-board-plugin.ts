@@ -3,18 +3,18 @@ import * as Sentry from '@sentry/nestjs';
 import { createBullBoard } from '@bull-board/api';
 import { BullMQAdapter } from '@bull-board/api/bullMQAdapter';
 import { FastifyAdapter } from '@bull-board/fastify';
-import type { FastifyError, FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import type { FastifyError, FastifyInstance } from 'fastify';
 import { Queue } from 'bullmq';
 import type { Redis } from 'ioredis';
 import { timingSafeEqual } from 'node:crypto';
+import { closeQueueQuietly } from '@nestjs-fastify-nx/infra-redis';
 import { ERROR_CODES } from '@nestjs-fastify-nx/contracts';
 import { QUEUE_NAMES, sanitizeUrlForLogging } from '@nestjs-fastify-nx/shared';
 import { redisFixedWindowIncr } from '../rate-limit/redis-fixed-window';
-import { ensureRequestIds } from '../logging/request-id';
 import {
   buildProblemDetails,
+  sendProblem,
   statusTitle,
-  PROBLEM_CONTENT_TYPE,
   type ProblemDetailsBody,
 } from '../filters/problem-details.helper';
 import { resolveFastifyCode, resolveFastifyStatus } from '../filters/fastify-error-handler';
@@ -49,14 +49,6 @@ interface BasicCredentials {
 interface AuthFailureState {
   count: number;
   ttlMs: number;
-}
-
-interface ProblemArgs {
-  status: number;
-  title: string;
-  detail: string;
-  code: string;
-  headers?: Record<string, string>;
 }
 
 // `@bull-board/fastify` installs its own `setErrorHandler` inside the scope it owns, so the Nest
@@ -146,30 +138,6 @@ export async function recordAuthFailure(redis: Redis, ip: string): Promise<AuthF
   );
 }
 
-// Returned so the caller can `return sendProblem(...)` from an async hook — Fastify treats the
-// returned reply as the terminal response instead of continuing the chain.
-function sendProblem(
-  request: FastifyRequest,
-  reply: FastifyReply,
-  args: ProblemArgs,
-): FastifyReply {
-  const { requestId } = ensureRequestIds(request.raw, request.headers);
-  reply.header('content-type', PROBLEM_CONTENT_TYPE);
-  for (const [name, value] of Object.entries(args.headers ?? {})) {
-    reply.header(name, value);
-  }
-  return reply.status(args.status).send(
-    buildProblemDetails({
-      status: args.status,
-      title: args.title,
-      detail: args.detail,
-      code: args.code,
-      instance: sanitizeUrlForLogging(request.url),
-      requestId,
-    }),
-  );
-}
-
 export function createBullBoardPlugin(opts: BullBoardOptions) {
   return async function bullBoardPlugin(fastify: FastifyInstance) {
     const serverAdapter = new FastifyAdapter();
@@ -193,15 +161,7 @@ export function createBullBoardPlugin(opts: BullBoardOptions) {
     );
 
     fastify.addHook('onClose', async () => {
-      await Promise.all(
-        rawQueues.map(async (queue) => {
-          try {
-            await queue.close();
-          } catch {
-            await queue.disconnect().catch(() => undefined);
-          }
-        }),
-      );
+      await Promise.all(rawQueues.map((queue) => closeQueueQuietly(queue)));
     });
 
     // Throttling belongs in this instance-level hook, not in a route-scoped rate-limit plugin:
@@ -230,7 +190,6 @@ export function createBullBoardPlugin(opts: BullBoardOptions) {
         );
         return sendProblem(request, reply, {
           status: HttpStatus.SERVICE_UNAVAILABLE,
-          title: 'Service Unavailable',
           detail: 'Bull Board is temporarily unavailable. Retry shortly.',
           code: ERROR_CODES.SERVICE_UNAVAILABLE,
           headers: { 'retry-after': '5' },
@@ -241,7 +200,6 @@ export function createBullBoardPlugin(opts: BullBoardOptions) {
         const retryAfter = Math.max(1, Math.ceil(failure.ttlMs / 1000));
         return sendProblem(request, reply, {
           status: HttpStatus.TOO_MANY_REQUESTS,
-          title: 'Too Many Requests',
           detail: `Too many failed sign-in attempts. Try again in ${retryAfter} seconds.`,
           code: ERROR_CODES.RATE_LIMITED,
           headers: { 'retry-after': String(retryAfter) },
@@ -250,7 +208,6 @@ export function createBullBoardPlugin(opts: BullBoardOptions) {
 
       return sendProblem(request, reply, {
         status: HttpStatus.UNAUTHORIZED,
-        title: 'Unauthorized',
         detail: 'Valid Basic Auth credentials are required to access Bull Board.',
         code: ERROR_CODES.UNAUTHORIZED,
         headers: { 'WWW-Authenticate': 'Basic realm="Bull Board"' },

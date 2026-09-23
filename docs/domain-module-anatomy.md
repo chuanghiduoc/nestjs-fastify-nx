@@ -84,23 +84,23 @@ imports. It's the single place business rules live. Create one per aggregate
 export class User {
   private constructor(private readonly props: UserProps) {}
 
-  static create(email: Email, name = ''): User {
-    return new User({ id: generateId(), email, name, role: UserRole.USER, ... });
-  }
-
   static reconstitute(raw: { id: string; email: string; ... }): User {
     return new User({ ...raw, email: Email.fromPersistence(raw.email) });
   }
 
   get email(): Email { return this.props.email; }
-  isActive(): boolean { return this.props.status === UserStatus.ACTIVE; }
 }
 ```
 
-The private constructor forces two named factories: `create()` for a
-brand-new aggregate, `reconstitute()` for rebuilding from a persisted row (the
-repository is the only caller). No public setters — state changes go through
-methods, not raw field writes.
+The private constructor forces every caller through `reconstitute()` — the
+repository is the only caller — rather than exposing raw field writes.
+`users` has only this one factory: account creation is owned entirely by
+Better Auth, so nothing in this module ever mints a brand-new `User`. A
+module whose command handlers DO create a new aggregate pairs
+`reconstitute()` with a `create()` factory the same way; see
+`Team.create()` / `OrganizationRole.create()` in `organizations` for that
+shape. No public setters — state changes go through methods, not raw field
+writes.
 
 **Rules**: never import Prisma, `@nestjs/swagger`, or `class-validator` here.
 Domain enums (`UserRole`, `UserStatus`) live next to the entity and are
@@ -148,31 +148,35 @@ carried through the outbox to listeners. Create one per state change other
 parts of the system react to.
 
 ```typescript
-// domain/events/user-registered.event.ts
-export interface UserRegisteredPayload extends Record<string, unknown> {
+// domain/events/<name>.event.ts — shape only; see the Rule below for why `users` has none today
+export interface SomethingHappenedPayload extends Record<string, unknown> {
   email: string;
   ip?: string;
   userAgent?: string;
 }
 
-export class UserRegistered implements DomainEvent {
+export class SomethingHappened implements DomainEvent {
   readonly eventId = generateId();
-  readonly eventType = 'users.registered';
+  readonly eventType = 'context.something_happened';
   readonly occurredAt = new Date();
   constructor(
     readonly aggregateId: string,
-    readonly payload: UserRegisteredPayload,
+    readonly payload: SomethingHappenedPayload,
   ) {}
 }
 ```
 
-**Rules**: for `users`, the outbox row is written by a **Postgres trigger**,
-not application code (Better Auth writes outside the Nest pipeline). If your
-event instead originates from a command handler, publish it via
-an outbox write through the same transaction-scoped Prisma client as the
-aggregate write. Never call `eventEmitter.emit()` or `queue.add()` directly
-from a command handler — anything not written through the outbox is lost on
-rollback.
+**Rules**: `users` has no files under `domain/events/` today — every one of
+its outbox rows (`users.registered`, `users.logged_in`, `users.logged_out`)
+is written by a **Postgres trigger** against the `DOMAIN_EVENTS` string
+constant, not by application code instantiating an event class (Better Auth
+writes outside the Nest pipeline, and nothing downstream ever receives a
+class instance — the outbox relay always rebuilds a plain `DomainEvent`; see
+`application/listeners/` below). Add a class here only when a command handler
+in THIS module originates the event itself: publish it via an outbox write
+through the same transaction-scoped Prisma client as the aggregate write.
+Never call `eventEmitter.emit()` or `queue.add()` directly from a command
+handler — anything not written through the outbox is lost on rollback.
 
 ### `domain/ports/` — repository interfaces
 
@@ -361,7 +365,7 @@ export class UserRegisteredListener {
   // promisify + suppressErrors:false so a throw propagates to EventBusService.publish — the outbox
   // relay then records lastError and retries. Swallowed here, the event would look delivered.
   @OnEvent('users.registered', { async: true, promisify: true, suppressErrors: false })
-  async handle(event: UserRegistered): Promise<void> {
+  async handle(event: DomainEvent): Promise<void> {
     const jobId = `welcome-email__${event.eventId}`; // BullMQ rejects ':' — use '__'
     await this.emailQueue.add(
       'welcome-email',
@@ -556,12 +560,7 @@ port→adapter binding), and imports.
 ```typescript
 // users.module.ts
 @Module({
-  imports: [
-    ConfigModule,
-    MessagingModule,
-    RedisQueueModule,
-    BullModule.registerQueue({ name: QUEUE_NAMES.EMAIL_NOTIFICATION }),
-  ],
+  imports: [UsersListenersModule],
   controllers: [UsersController],
   providers: [
     { provide: USER_REPOSITORY_PORT, useClass: PrismaUserRepository },
@@ -569,15 +568,18 @@ port→adapter binding), and imports.
     // consumers dispatch via QueryBus, so they aren't exported for direct DI.
     GetUserProfileHandler,
     ListUsersCursorHandler,
-    UserRegisteredListener,
   ],
-  exports: [USER_REPOSITORY_PORT],
 })
 export class UsersModule {}
 ```
 
-Only the repository port token is exported — never the handlers; they're
-found by the CQRS bus explorer purely because they're in `providers`.
+Importing `UsersListenersModule` (rather than re-declaring `MessagingModule`
+/ `RedisQueueModule` / the Bull queue registration here too) pulls in
+`UserRegisteredListener` without registering it twice. A module exports a
+port token only when another module genuinely needs to inject that
+repository directly — nothing does for `users` today, so it exports nothing;
+never export a handler, they're found by the CQRS bus explorer purely
+because they're in `providers`.
 
 **The `*-listeners.module.ts` split** (`users-listeners.module.ts`):
 

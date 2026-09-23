@@ -1,6 +1,5 @@
 export { ApiKeysModule } from './api-keys.module';
 
-export { ApiKey } from './domain/entities/api-key.entity';
 export {
   ListApiKeysQuery,
   type ListApiKeysResult,

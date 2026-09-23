@@ -12,7 +12,6 @@ import { ConfigService } from '@nestjs/config';
 import { Observable, throwError, TimeoutError, type Subscriber } from 'rxjs';
 import { catchError, timeout } from 'rxjs/operators';
 import type { FastifyRequest } from 'fastify';
-import { positiveIntEnv } from '@nestjs-fastify-nx/shared';
 import { ERROR_CODES } from '@nestjs-fastify-nx/contracts';
 import { I18N_KEYS } from '@nestjs-fastify-nx/contracts';
 import type { EnvConfig } from '../../config/env.validation';
@@ -33,12 +32,14 @@ type RequestWithIdempotency = FastifyRequest & { idempotency?: IdempotencyContex
 @Injectable()
 export class TimeoutInterceptor implements NestInterceptor {
   private readonly timeoutMs: number;
+  private readonly uploadTimeoutMs: number;
 
   constructor(
     config: ConfigService<EnvConfig, true>,
     private readonly reflector: Reflector,
   ) {
     this.timeoutMs = config.get('HTTP_REQUEST_TIMEOUT_MS', { infer: true });
+    this.uploadTimeoutMs = config.get('UPLOAD_REQUEST_TIMEOUT_MS', { infer: true });
   }
 
   intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
@@ -55,9 +56,7 @@ export class TimeoutInterceptor implements NestInterceptor {
             RequestWithIdempotency | undefined)
         : undefined;
 
-    const timeoutMs = request?.isMultipart?.()
-      ? positiveIntEnv('UPLOAD_REQUEST_TIMEOUT_MS', 900_000)
-      : this.timeoutMs;
+    const timeoutMs = request?.isMultipart?.() ? this.uploadTimeoutMs : this.timeoutMs;
 
     // Fast path (unchanged): non-idempotent requests get a 504 on timeout and the orphaned work is
     // discarded (rxjs timeout() unsubscribes the source).

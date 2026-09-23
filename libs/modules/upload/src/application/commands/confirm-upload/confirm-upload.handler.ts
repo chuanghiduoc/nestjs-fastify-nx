@@ -15,10 +15,10 @@ import {
   assertSizeWithinLimit,
   objectNotFound,
   StoredFile,
+  type StoredFileProps,
 } from '../../../domain/entities/stored-file.entity';
 import { readHeadAndAssertMagicBytes } from '../../ports/read-magic-bytes';
 import {
-  isDuplicateKeyError,
   STORED_FILE_REPOSITORY,
   type StoredFileRepositoryPort,
 } from '../../../domain/ports/stored-file-repository.port';
@@ -90,26 +90,24 @@ export class ConfirmUploadHandler implements ICommandHandler<
     const extension = dotIndex >= 0 ? command.sourceKey.slice(dotIndex) : '';
     const fileId = generateId();
     const finalKey = `files/${command.userId}/${fileId}${extension}`;
+    const props: StoredFileProps = {
+      id: fileId,
+      organizationId: command.organizationId,
+      userId: command.userId,
+      sourceKey: command.sourceKey,
+      key: finalKey,
+      bucket: meta.bucket,
+      contentType: meta.contentType,
+      size: meta.size,
+      etag: meta.etag,
+      status: STORED_FILE_STATUS.FINALIZING,
+    };
 
-    try {
-      await this.files.create({
-        id: fileId,
-        organizationId: command.organizationId,
-        userId: command.userId,
-        sourceKey: command.sourceKey,
-        key: finalKey,
-        bucket: meta.bucket,
-        contentType: meta.contentType,
-        size: meta.size,
-        etag: meta.etag,
-        status: STORED_FILE_STATUS.FINALIZING,
-      });
-    } catch (err) {
-      if (isDuplicateKeyError(err)) {
-        const concurrent = await this.files.findBySourceKey(command.sourceKey);
-        if (concurrent) return this.recoverExisting(concurrent, command.correlationId);
-      }
-      throw err;
+    const outcome = await this.files.create(props);
+    if (outcome === 'duplicate') {
+      const concurrent = await this.files.findBySourceKey(command.sourceKey);
+      if (concurrent) return this.recoverExisting(concurrent, command.correlationId);
+      throw this.commitFailed();
     }
 
     try {
@@ -130,21 +128,7 @@ export class ConfirmUploadHandler implements ICommandHandler<
       throw this.commitFailed();
     }
 
-    return this.completeFinalizing(
-      StoredFile.create({
-        id: fileId,
-        organizationId: command.organizationId,
-        userId: command.userId,
-        sourceKey: command.sourceKey,
-        key: finalKey,
-        bucket: meta.bucket,
-        contentType: meta.contentType,
-        size: meta.size,
-        etag: meta.etag,
-        status: STORED_FILE_STATUS.FINALIZING,
-      }),
-      command.correlationId,
-    );
+    return this.completeFinalizing(StoredFile.create(props), command.correlationId);
   }
 
   private async recoverExisting(
@@ -221,21 +205,7 @@ export class ConfirmUploadHandler implements ICommandHandler<
       }
       return this.publication.result(current, correlationId);
     }
-    return this.publication.result(
-      StoredFile.create({
-        id: record.id,
-        organizationId: record.organizationId,
-        userId: record.userId,
-        sourceKey: record.sourceKey,
-        key: record.key,
-        bucket: record.bucket,
-        contentType: record.contentType,
-        size: record.size,
-        etag: record.etag,
-        status,
-      }),
-      correlationId,
-    );
+    return this.publication.result(record.withStatus(status), correlationId);
   }
 
   // A failed delete must not mask the validation error that triggered it, but swallowing it

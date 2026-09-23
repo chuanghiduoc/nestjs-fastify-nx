@@ -28,8 +28,4 @@ export type {
   RelationInput,
   ResourceRef,
 } from './lib/authorization/authorization.port';
-export {
-  ACCESS_FILTER_TRUNCATED_CODE,
-  accessFilterTruncated,
-  applyAccessFilter,
-} from './lib/authorization/access-filter';
+export { applyAccessFilter } from './lib/authorization/access-filter';

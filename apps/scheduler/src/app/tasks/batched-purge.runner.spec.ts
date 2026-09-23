@@ -46,6 +46,22 @@ describe('BatchedPurgeRunner', () => {
     expect(batch).toBe(500);
   });
 
+  it('ANDs a configured extraWhere literal into the DELETE', async () => {
+    vi.mocked(prisma.db.$executeRawUnsafe).mockResolvedValue(0);
+
+    await runner.purgeIfLeader(
+      'k',
+      true,
+      { ...CONFIG, extraWhere: '"processedAt" IS NOT NULL' },
+      7,
+    );
+
+    const [sql] = vi.mocked(prisma.db.$executeRawUnsafe).mock.calls[0] as [string];
+    expect(sql).toMatch(
+      /"expiresAt" < NOW\(\) - \(\$1 \|\| ' days'\)::interval AND "processedAt" IS NOT NULL/,
+    );
+  });
+
   it('skips entirely when not leader', async () => {
     await runner.purgeIfLeader('k', false, CONFIG, 7);
 

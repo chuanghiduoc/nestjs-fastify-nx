@@ -1,7 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import type { PresignedUpload } from '@nestjs-fastify-nx/infra-storage';
-
-const DEFAULT_MAX_FILE_SIZE = 10 * 1024 * 1024;
+import { UPLOAD_DEFAULT_MAX_FILE_BYTES } from '../../application/upload-limits';
 
 export class PresignedUploadDto implements PresignedUpload {
   @ApiProperty({
@@ -44,7 +43,7 @@ export class PresignedUploadDto implements PresignedUpload {
 
   @ApiProperty({
     description: 'Maximum bytes the policy will accept — clients should validate locally too.',
-    example: DEFAULT_MAX_FILE_SIZE,
+    example: UPLOAD_DEFAULT_MAX_FILE_BYTES,
   })
   maxBytes!: number;
 }

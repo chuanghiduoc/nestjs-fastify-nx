@@ -3,7 +3,7 @@ import { CommandHandler, type ICommandHandler } from '@nestjs/cqrs';
 import { AUTHORIZATION_PORT, type AuthorizationPort } from '@nestjs-fastify-nx/core';
 import { ORGANIZATION_ROLE_REPOSITORY } from '../../../domain/ports/organization-role-repository.port';
 import type { OrganizationRoleRepositoryPort } from '../../../domain/ports/organization-role-repository.port';
-import type { OrganizationRoleDto } from '../../dto/organization-role.dto';
+import { toRoleDto, type OrganizationRoleDto } from '../../dto/organization-role.dto';
 import { roleNotFound } from '../../organization-errors';
 import { UpdateOrganizationRoleCommand } from './update-organization-role.command';
 
@@ -28,15 +28,8 @@ export class UpdateOrganizationRoleHandler implements ICommandHandler<
     });
 
     const updated = existing.withPermissions(command.permissions, grantedToActor);
-    await this.roles.update(updated);
+    if (!(await this.roles.update(updated))) throw roleNotFound();
 
-    return {
-      id: updated.id,
-      role: updated.role,
-      system: false,
-      permissions: updated.permissions,
-      createdAt: updated.createdAt,
-      updatedAt: updated.updatedAt,
-    };
+    return toRoleDto(updated);
   }
 }

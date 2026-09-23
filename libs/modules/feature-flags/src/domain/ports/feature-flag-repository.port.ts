@@ -1,5 +1,5 @@
 import type { DecodedCursor } from '@nestjs-fastify-nx/shared';
-import type { FeatureFlag } from '../entities/feature-flag.entity';
+import type { FeatureFlag, FeatureFlagChanges } from '../entities/feature-flag.entity';
 
 export const FEATURE_FLAG_REPOSITORY = Symbol('FEATURE_FLAG_REPOSITORY');
 
@@ -19,6 +19,11 @@ export interface FeatureFlagRepositoryPort {
   findAll(organizationId: string): Promise<FeatureFlag[]>;
   findById(organizationId: string, id: string): Promise<FeatureFlag | null>;
   create(flag: FeatureFlag): Promise<void>;
-  update(flag: FeatureFlag): Promise<void>;
+  update(
+    organizationId: string,
+    id: string,
+    changes: FeatureFlagChanges,
+    updatedAt: Date,
+  ): Promise<boolean>;
   delete(organizationId: string, id: string): Promise<boolean>;
 }

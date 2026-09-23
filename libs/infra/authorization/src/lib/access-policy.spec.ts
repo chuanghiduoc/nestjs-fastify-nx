@@ -80,11 +80,6 @@ describe('decideAccess for a caller who is no longer a member', () => {
     ]);
   });
 
-  it('does not turn a global permission into a universal grant', () => {
-    const [decision] = decideAccess(removedMember(), [{ permission: PERMISSIONS.TERM_MANAGE }]);
-    expect(decision).toEqual({ allowed: false, reason: DENIAL_REASONS.permissionNotGranted });
-  });
-
   it('does not extend the owner-scoped grant to a resource the caller owns', () => {
     const [decision] = decideAccess(removedMember(), [
       {
@@ -146,15 +141,8 @@ describe('decideFilter for a caller who is no longer a member', () => {
 
 describe('decideWithoutOrganization', () => {
   it('grants only the membership-independent permissions', () => {
-    expect(
-      decideWithoutOrganization([
-        PERMISSIONS.SESSION_READ,
-        PERMISSIONS.TERM_MANAGE,
-        PERMISSIONS.FILE_READ,
-      ]),
-    ).toEqual([
+    expect(decideWithoutOrganization([PERMISSIONS.SESSION_READ, PERMISSIONS.FILE_READ])).toEqual([
       { allowed: true },
-      { allowed: false, reason: DENIAL_REASONS.permissionNotGranted },
       { allowed: false, reason: DENIAL_REASONS.permissionNotGranted },
     ]);
   });

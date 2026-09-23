@@ -19,15 +19,6 @@ export class GetCurrentOrganizationHandler implements IQueryHandler<
     const summary = await this.organizations.findSummary(query.organizationId);
     if (!summary) throw organizationNotFound();
 
-    return {
-      id: summary.id,
-      name: summary.name,
-      slug: summary.slug,
-      logo: summary.logo,
-      memberCount: summary.memberCount,
-      teamCount: summary.teamCount,
-      pendingInvitationCount: summary.pendingInvitationCount,
-      createdAt: summary.createdAt,
-    };
+    return summary;
   }
 }

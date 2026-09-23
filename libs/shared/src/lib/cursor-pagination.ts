@@ -43,3 +43,48 @@ export function decodeCursor(cursor: string): DecodedCursor | null {
     return null;
   }
 }
+
+export interface CursorKeyed {
+  readonly createdAt: Date;
+  readonly id: string;
+}
+
+export interface CursorPageSlice<T> {
+  items: T[];
+  hasMore: boolean;
+}
+
+export function keysetAfter(cursor: DecodedCursor) {
+  return {
+    OR: [
+      { createdAt: { lt: cursor.createdAt } },
+      { createdAt: cursor.createdAt, id: { lt: cursor.id } },
+    ],
+  };
+}
+
+export function takePage<T>(rows: readonly T[], limit: number): CursorPageSlice<T> {
+  return { items: rows.slice(0, limit), hasMore: rows.length > limit };
+}
+
+export function lastCursorOf(items: readonly CursorKeyed[]): string | null {
+  const last = items.at(-1);
+  return last ? encodeCursor(last.createdAt, last.id) : null;
+}
+
+export function compareNewestFirst(left: CursorKeyed, right: CursorKeyed): number {
+  const byDate = right.createdAt.getTime() - left.createdAt.getTime();
+  return byDate !== 0 ? byDate : right.id.localeCompare(left.id);
+}
+
+export function paginateNewestFirst<T extends CursorKeyed>(
+  rows: readonly T[],
+  page: { startingAfter?: DecodedCursor; limit: number },
+): CursorPageSlice<T> {
+  const { startingAfter, limit } = page;
+  const sorted = [...rows].sort(compareNewestFirst);
+  const remaining = startingAfter
+    ? sorted.filter((row) => compareNewestFirst(row, startingAfter) > 0)
+    : sorted;
+  return takePage(remaining, limit);
+}

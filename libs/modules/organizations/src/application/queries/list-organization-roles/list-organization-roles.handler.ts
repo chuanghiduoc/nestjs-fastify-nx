@@ -3,7 +3,7 @@ import { QueryHandler, type IQueryHandler } from '@nestjs/cqrs';
 import { SYSTEM_ROLES, SYSTEM_ROLE_PERMISSIONS, type SystemRole } from '@nestjs-fastify-nx/shared';
 import { ORGANIZATION_ROLE_REPOSITORY } from '../../../domain/ports/organization-role-repository.port';
 import type { OrganizationRoleRepositoryPort } from '../../../domain/ports/organization-role-repository.port';
-import type { OrganizationRoleDto } from '../../dto/organization-role.dto';
+import { toRoleDto, type OrganizationRoleDto } from '../../dto/organization-role.dto';
 import {
   ListOrganizationRolesQuery,
   type ListOrganizationRolesResult,
@@ -32,14 +32,7 @@ export class ListOrganizationRolesHandler implements IQueryHandler<
       }),
     );
 
-    const customRoles: OrganizationRoleDto[] = custom.map((entity) => ({
-      id: entity.id,
-      role: entity.role,
-      system: false,
-      permissions: entity.permissions,
-      createdAt: entity.createdAt,
-      updatedAt: entity.updatedAt,
-    }));
+    const customRoles: OrganizationRoleDto[] = custom.map(toRoleDto);
 
     return { data: [...systemRoles, ...customRoles] };
   }

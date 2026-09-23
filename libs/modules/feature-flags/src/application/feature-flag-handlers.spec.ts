@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { generateId } from '@nestjs-fastify-nx/shared';
 import { FeatureFlag } from '../domain/entities/feature-flag.entity';
+import type { FeatureFlagRepositoryPort } from '../domain/ports/feature-flag-repository.port';
 import { InMemoryFeatureFlagRepository } from '../testing/in-memory-feature-flag-repository';
 import { ListFeatureFlagsHandler } from './queries/list-feature-flags/list-feature-flags.handler';
 import { ListFeatureFlagsQuery } from './queries/list-feature-flags/list-feature-flags.query';
@@ -97,6 +98,27 @@ describe('feature flag handlers', () => {
     await expect(execute).rejects.toMatchObject({ kind: 'not_found' });
   });
 
+  it('answers not_found when the flag is deleted between the read and the write', async () => {
+    const flag = FeatureFlag.create({ organizationId: ORG_ID, key: 'checkout.new-flow' });
+    repository.seed(flag);
+    await repository.delete(ORG_ID, flag.id);
+    const staleRead: FeatureFlagRepositoryPort = {
+      findAllCursor: (options) => repository.findAllCursor(options),
+      findAll: (organizationId) => repository.findAll(organizationId),
+      findById: async () => flag,
+      create: (f) => repository.create(f),
+      update: (organizationId, id, changes, updatedAt) =>
+        repository.update(organizationId, id, changes, updatedAt),
+      delete: (organizationId, id) => repository.delete(organizationId, id),
+    };
+
+    const execute = new UpdateFeatureFlagHandler(staleRead).execute(
+      new UpdateFeatureFlagCommand({ organizationId: ORG_ID, id: flag.id, enabled: true }),
+    );
+
+    await expect(execute).rejects.toMatchObject({ kind: 'not_found' });
+  });
+
   it('deletes a flag and reports not_found on the second call', async () => {
     const flag = FeatureFlag.create({ organizationId: ORG_ID, key: 'checkout.new-flow' });
     repository.seed(flag);
@@ -115,5 +137,70 @@ describe('feature flag handlers', () => {
     );
 
     await expect(execute).rejects.toMatchObject({ kind: 'not_found' });
+  });
+});
+
+describe('InMemoryFeatureFlagRepository', () => {
+  let repository: InMemoryFeatureFlagRepository;
+
+  beforeEach(() => {
+    repository = new InMemoryFeatureFlagRepository();
+  });
+
+  it('writes only the given fields, leaving the rest untouched', async () => {
+    const flag = FeatureFlag.create({
+      organizationId: ORG_ID,
+      key: 'checkout.new-flow',
+      description: 'before',
+      rolloutPercentage: 40,
+    });
+    repository.seed(flag);
+    const updatedAt = new Date(flag.updatedAt.getTime() + 1000);
+
+    const applied = await repository.update(ORG_ID, flag.id, { enabled: true }, updatedAt);
+
+    expect(applied).toBe(true);
+    const stored = await repository.findById(ORG_ID, flag.id);
+    expect(stored?.enabled).toBe(true);
+    expect(stored?.rolloutPercentage).toBe(40);
+    expect(stored?.description).toBe('before');
+    expect(stored?.updatedAt).toEqual(updatedAt);
+  });
+
+  it('reports false when the row no longer exists', async () => {
+    expect(await repository.update(ORG_ID, generateId(), { enabled: true }, new Date())).toBe(
+      false,
+    );
+  });
+
+  it('reports false for a row belonging to another organization', async () => {
+    const flag = FeatureFlag.create({ organizationId: OTHER_ORG_ID, key: 'theirs.flag' });
+    repository.seed(flag);
+
+    expect(await repository.update(ORG_ID, flag.id, { enabled: true }, new Date())).toBe(false);
+  });
+
+  it('resumes strictly after the cursor, tiebreaking on id among rows sharing a timestamp', async () => {
+    const sameTime = new Date('2026-01-01T00:00:00.000Z');
+    const idA = '01900000-0000-7000-8000-000000000001';
+    const idB = '01900000-0000-7000-8000-000000000002';
+    const base = {
+      organizationId: ORG_ID,
+      description: null,
+      enabled: true,
+      rolloutPercentage: 100,
+      createdAt: sameTime,
+      updatedAt: sameTime,
+    };
+    repository.seed(FeatureFlag.reconstitute({ ...base, id: idA, key: 'a.flag' }));
+    repository.seed(FeatureFlag.reconstitute({ ...base, id: idB, key: 'b.flag' }));
+
+    const page = await repository.findAllCursor({
+      organizationId: ORG_ID,
+      limit: 10,
+      startingAfter: { createdAt: sameTime, id: idB },
+    });
+
+    expect(page.items.map((flag) => flag.id)).toEqual([idA]);
   });
 });

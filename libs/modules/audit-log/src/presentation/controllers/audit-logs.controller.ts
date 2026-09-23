@@ -1,4 +1,4 @@
-import { Controller, Get, HttpCode, HttpStatus, Query } from '@nestjs/common';
+import { Controller, Get, Query } from '@nestjs/common';
 import { QueryBus } from '@nestjs/cqrs';
 import { ApiCookieAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import {
@@ -32,13 +32,12 @@ export class AuditLogsController {
 
   @Get()
   @RequirePermission(PERMISSIONS.AUDIT_LOG_READ)
-  @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'List audit entries for the active organization',
     description:
       "Returns a Stripe-style cursor-paginated list of audit entries recorded for the caller's active organization, newest first. Filterable by `action`, `resource`, `userId` and an inclusive `occurredFrom`/`occurredUntil` window. `totalCount` is deliberately omitted — `audit_logs` is a growth table where COUNT would be a hot path. Requires the `audit_log:read` permission.",
   })
-  @ApiCommonErrors({ auth: true, forbidden: true, validation: true })
+  @ApiCommonErrors({ validation: true })
   @ApiPaginatedResponse(AuditLogResponseDto, {
     description: 'Cursor-paginated list of audit entries.',
   })

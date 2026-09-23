@@ -1,15 +1,12 @@
 import { Test } from '@nestjs/testing';
-import { HttpStatus, VersioningType } from '@nestjs/common';
-import { ERROR_CODES } from '@nestjs-fastify-nx/contracts';
-import { sanitizeUrlForLogging } from '@nestjs-fastify-nx/shared';
+import { VersioningType } from '@nestjs/common';
+import { Logger } from 'nestjs-pino';
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { FastifyAdapter } from '@nestjs/platform-fastify';
-import type { FastifyReply, FastifyRequest, RouteShorthandOptions } from 'fastify';
-import { toNodeHandler } from 'better-auth/node';
 import fastifyCookie from '@fastify/cookie';
-import fastifyRateLimit from '@fastify/rate-limit';
 import fastifyMultipart from '@fastify/multipart';
 import Redis from 'ioredis';
+import { closeQuietly } from '@nestjs-fastify-nx/infra-redis';
 import { BETTER_AUTH_INSTANCE, type BetterAuthInstance } from '@nestjs-fastify-nx/infra-auth';
 import { PrismaService } from '@nestjs-fastify-nx/infra-database';
 import { STORAGE_PORT, type StoragePort } from '@nestjs-fastify-nx/infra-storage';
@@ -18,9 +15,12 @@ import { AppModule } from '../src/app/app.module';
 import { registerIdempotency } from '../src/common/idempotency/register-idempotency';
 import { ProblemDetailsValidationPipe } from '../src/common/pipes';
 import { applyFastifyProblemDetailsHook } from '../src/common/filters/fastify-error-handler';
-import { flushBufferedReplyHeaders } from '../src/common/http/flush-reply-headers';
 import { GLOBAL_PREFIX, GLOBAL_PREFIX_EXCLUDES } from '../src/common/http/global-prefix';
-import { buildProblemDetails } from '../src/common/filters/problem-details.helper';
+import {
+  STRICT_AUTH_PATHS,
+  registerAuthRateLimits,
+} from '../src/common/auth-http/auth-rate-limits';
+import { createBetterAuthRouteHandler } from '../src/common/auth-http/better-auth-route-handler';
 
 // In-process stub — e2e covers controller logic, not the S3 wire format.
 // Real S3 paths are unit-tested in s3-storage.adapter.spec.ts.
@@ -44,12 +44,6 @@ const e2eStorageStub: StoragePort = {
     seedE2eStorageObject(key, body, options.contentType ?? 'application/octet-stream');
     return { key, bucket: options.bucket ?? 'uploads', size: body.length };
   },
-  upload: async (key, body, options) => ({
-    key,
-    bucket: options?.bucket ?? 'uploads',
-    url: `http://e2e-stub/${key}`,
-    size: body.length,
-  }),
   presignUpload: async (key, options) => ({
     url: 'http://e2e-stub/uploads',
     fields: { key, 'Content-Type': options.contentType },
@@ -82,7 +76,6 @@ const e2eStorageStub: StoragePort = {
   },
   readRange: async (key, byteCount) =>
     e2eObjects.get(key)?.body.subarray(0, byteCount) ?? Buffer.alloc(0),
-  read: async (key) => e2eObjects.get(key)?.body ?? Buffer.alloc(0),
   readStream: async (key) => {
     const body = e2eObjects.get(key)?.body ?? Buffer.alloc(0);
     return {
@@ -110,6 +103,7 @@ export interface TestAppContext {
 let sharedApp: Promise<TestAppContext> | undefined;
 let closingSharedApp: Promise<void> | undefined;
 let throttlerRedis: Redis | undefined;
+let authRateLimitRedis: Redis | undefined;
 
 function closeSharedApp(): Promise<void> {
   if (!sharedApp) return Promise.resolve();
@@ -164,6 +158,7 @@ async function bootstrapTestApp(): Promise<TestAppContext> {
   // high enough that session ops between tests don't trip it.
   process.env['AUTH_RATE_LIMIT_MAX'] = '3';
   process.env['AUTH_RATE_LIMIT_WINDOW_MS'] = '60000';
+  process.env['AUTH_IP_RATE_LIMIT_MAX'] = '10000';
   process.env['AUTH_SESSION_RATE_LIMIT_MAX'] = '200';
   process.env['AUTH_SESSION_RATE_LIMIT_WINDOW_MS'] = '60000';
   // 64 KB body limit — small enough for the >bodyLimit 413 test to fire cheaply.
@@ -214,32 +209,6 @@ async function bootstrapTestApp(): Promise<TestAppContext> {
     }),
   );
 
-  // Register rate-limit + multipart mirroring main.ts so 429 and 413 edge cases
-  // are exercised in e2e. Uses in-memory store (no Redis needed in tests).
-  await fastify.register(fastifyRateLimit, {
-    global: false,
-    hook: 'preHandler',
-    max: Number(process.env['AUTH_RATE_LIMIT_MAX']),
-    timeWindow: Number(process.env['AUTH_RATE_LIMIT_WINDOW_MS']),
-    keyGenerator: (req) => {
-      const body = req.body as Record<string, unknown> | undefined;
-      const email = body && typeof body['email'] === 'string' ? body['email'].toLowerCase() : '';
-      return `${req.ip}:${email}`;
-    },
-    // Same builder main.ts uses — a hand-rolled body here would let e2e pass against a shape
-    // production does not emit.
-    errorResponseBuilder: (req, context) => ({
-      ...buildProblemDetails({
-        status: HttpStatus.TOO_MANY_REQUESTS,
-        title: 'Too Many Requests',
-        detail: `Rate limit exceeded. Try again in ${Math.ceil(context.ttl / 1000)} seconds.`,
-        code: ERROR_CODES.RATE_LIMITED,
-        instance: sanitizeUrlForLogging(req.url),
-      }),
-      retryAfter: Math.ceil(context.ttl / 1000),
-    }),
-  });
-
   applyFastifyProblemDetailsHook(fastify);
 
   await fastify.register(fastifyMultipart, {
@@ -251,43 +220,38 @@ async function bootstrapTestApp(): Promise<TestAppContext> {
     },
   });
 
-  const auth = app.get<BetterAuthInstance>(BETTER_AUTH_INSTANCE);
-  const betterAuthHandler = toNodeHandler(auth.handler);
-
-  const strictMax = Number(process.env['AUTH_RATE_LIMIT_MAX']);
-  const strictWindow = Number(process.env['AUTH_RATE_LIMIT_WINDOW_MS']);
-  const looseMax = Number(process.env['AUTH_SESSION_RATE_LIMIT_MAX']);
-  const looseWindow = Number(process.env['AUTH_SESSION_RATE_LIMIT_WINDOW_MS']);
-  const strictConfig: RouteShorthandOptions = {
-    config: { rateLimit: { max: strictMax, timeWindow: strictWindow } },
-  };
-  const looseConfig: RouteShorthandOptions = {
-    config: {
-      rateLimit: { max: looseMax, timeWindow: looseWindow, keyGenerator: (req) => req.ip },
+  const rateLimitRedis = new Redis({ host: redisHost, port: Number(redisPort), db: 4 });
+  authRateLimitRedis = rateLimitRedis;
+  await rateLimitRedis.flushdb();
+  fastify.addHook('onClose', () => {
+    authRateLimitRedis = undefined;
+    return closeQuietly(rateLimitRedis);
+  });
+  const logger = app.get(Logger);
+  const { strictAuthRouteConfig, looseAuthRouteConfig } = await registerAuthRateLimits(
+    fastify,
+    rateLimitRedis,
+    {
+      authRateLimitMax: Number(process.env['AUTH_RATE_LIMIT_MAX']),
+      authIpRateLimitMax: Number(process.env['AUTH_IP_RATE_LIMIT_MAX']),
+      authRateLimitWindowMs: Number(process.env['AUTH_RATE_LIMIT_WINDOW_MS']),
+      authRateLimitFailOpen: false,
+      authSessionRateLimitMax: Number(process.env['AUTH_SESSION_RATE_LIMIT_MAX']),
+      authSessionRateLimitWindowMs: Number(process.env['AUTH_SESSION_RATE_LIMIT_WINDOW_MS']),
     },
-  };
-  const STRICT_AUTH_PATHS = [
-    '/api/auth/sign-in/email',
-    '/api/auth/sign-up/email',
-    '/api/auth/request-password-reset',
-    '/api/auth/reset-password',
-  ] as const;
+    logger,
+  );
 
-  const authRouteHandler = async (req: FastifyRequest, reply: FastifyReply): Promise<void> => {
-    if (req.body !== undefined && (req.raw as unknown as { body?: unknown }).body === undefined) {
-      (req.raw as unknown as { body: unknown }).body = req.body;
-    }
-    // Use the SAME production helper main.ts calls, so the CORS regression test exercises the real
-    // hijack header-flush path — not a divergent copy that could stay green after a prod regression.
-    flushBufferedReplyHeaders(reply);
-    reply.hijack();
-    await betterAuthHandler(req.raw, reply.raw);
-  };
+  const auth = app.get<BetterAuthInstance>(BETTER_AUTH_INSTANCE);
+  const authRouteHandler = createBetterAuthRouteHandler(auth, {
+    timeoutMs: Number(process.env['HTTP_REQUEST_TIMEOUT_MS'] ?? 30_000),
+    logger,
+  });
 
   for (const path of STRICT_AUTH_PATHS) {
-    fastify.all(path, strictConfig, authRouteHandler);
+    fastify.all(path, strictAuthRouteConfig, authRouteHandler);
   }
-  fastify.all('/api/auth/*', looseConfig, authRouteHandler);
+  fastify.all('/api/auth/*', looseAuthRouteConfig, authRouteHandler);
 
   await app.init();
   await fastify.ready();
@@ -309,7 +273,7 @@ export async function resetRateLimitBudget(): Promise<void> {
     port: Number(process.env['E2E_REDIS_PORT']),
     db: 1,
   });
-  await throttlerRedis.flushdb();
+  await Promise.all([throttlerRedis.flushdb(), authRateLimitRedis?.flushdb()]);
 }
 
 async function closeThrottlerRedis(): Promise<void> {

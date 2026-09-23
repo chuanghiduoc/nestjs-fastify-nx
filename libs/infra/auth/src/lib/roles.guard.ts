@@ -1,10 +1,9 @@
 import { Injectable, CanActivate, ExecutionContext, ForbiddenException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { GqlContextType, GqlExecutionContext } from '@nestjs/graphql';
 import type { FastifyRequest } from 'fastify';
 import { I18N_KEYS } from '@nestjs-fastify-nx/contracts';
 import { ROLES_KEY } from './roles.decorator';
-import { IS_PUBLIC_KEY } from './public.decorator';
+import { isPublic, requestOf } from './request-context';
 import type { AuthenticatedSession } from './better-auth.types';
 
 type RequestWithUser = FastifyRequest & { user: AuthenticatedSession };
@@ -18,11 +17,7 @@ export class RolesGuard implements CanActivate {
     // @Roles() can never silently become a no-op on a message handler.
     // Mirror BetterAuthGuard: a @Public route never populates request.user, so RolesGuard must not
     // run (it would 403 on a missing user). @Public + @Roles is a misconfiguration, but fail sanely.
-    const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
-      context.getHandler(),
-      context.getClass(),
-    ]);
-    if (isPublic) return true;
+    if (isPublic(this.reflector, context)) return true;
 
     const requiredRoles = this.reflector.getAllAndOverride<string[]>(ROLES_KEY, [
       context.getHandler(),
@@ -35,7 +30,7 @@ export class RolesGuard implements CanActivate {
     const user =
       context.getType() === 'ws'
         ? context.switchToWs().getClient<{ data?: { user?: AuthenticatedSession } }>().data?.user
-        : this.getRequest(context).user;
+        : requestOf<RequestWithUser>(context).user;
 
     if (!user || !requiredRoles.includes(user.role)) {
       throw new ForbiddenException({
@@ -45,13 +40,5 @@ export class RolesGuard implements CanActivate {
     }
 
     return true;
-  }
-
-  private getRequest(context: ExecutionContext): RequestWithUser {
-    if (context.getType<GqlContextType>() === 'graphql') {
-      const gqlCtx = GqlExecutionContext.create(context);
-      return gqlCtx.getContext<{ req: RequestWithUser }>().req;
-    }
-    return context.switchToHttp().getRequest<RequestWithUser>();
   }
 }

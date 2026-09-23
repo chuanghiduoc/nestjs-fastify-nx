@@ -1,3 +1,4 @@
+import { paginateNewestFirst } from '@nestjs-fastify-nx/shared';
 import type {
   FindAllCursorOptions,
   FindAllCursorResult,
@@ -5,8 +6,11 @@ import type {
 } from '../domain/ports/user-repository.port';
 import type { User } from '../domain/entities/user.entity';
 
+type UserWithRole = User & { readonly organizationRole: string };
+
 export class MockUserRepository implements UserRepositoryPort {
   private store = new Map<string, User>();
+  private memberships = new Map<string, Map<string, string>>();
 
   findById(id: string): Promise<User | null> {
     return Promise.resolve(this.store.get(id) ?? null);
@@ -18,12 +22,22 @@ export class MockUserRepository implements UserRepositoryPort {
     );
   }
 
-  findAllCursor(options: FindAllCursorOptions): Promise<FindAllCursorResult> {
-    const { startingAfter, limit, role, status, search } = options;
-    let rows = [...this.store.values()].map((user) =>
-      Object.assign(user, { organizationRole: 'member' }),
-    );
+  addMembership(userId: string, organizationId: string, role: string): void {
+    const forUser = this.memberships.get(userId) ?? new Map<string, string>();
+    forUser.set(organizationId, role);
+    this.memberships.set(userId, forUser);
+  }
 
+  findAllCursor(options: FindAllCursorOptions): Promise<FindAllCursorResult> {
+    const { organizationId, startingAfter, limit, role, status, search } = options;
+
+    const members: UserWithRole[] = [];
+    for (const user of this.store.values()) {
+      const organizationRole = this.memberships.get(user.id)?.get(organizationId);
+      if (organizationRole) members.push(Object.assign(user, { organizationRole }));
+    }
+
+    let rows = members;
     if (role) rows = rows.filter((u) => u.organizationRole === role);
     if (status) rows = rows.filter((u) => u.status === status);
     if (search) {
@@ -35,25 +49,7 @@ export class MockUserRepository implements UserRepositoryPort {
       );
     }
 
-    // Mimic DB ordering: createdAt DESC, id DESC
-    rows.sort((a, b) => {
-      const tDiff = b.createdAt.getTime() - a.createdAt.getTime();
-      if (tDiff !== 0) return tDiff;
-      return b.id < a.id ? -1 : 1;
-    });
-
-    if (startingAfter) {
-      rows = rows.filter((u) => {
-        const tDiff = u.createdAt.getTime() - startingAfter.createdAt.getTime();
-        if (tDiff < 0) return true;
-        if (tDiff === 0) return u.id < startingAfter.id;
-        return false;
-      });
-    }
-
-    const hasMore = rows.length > limit;
-    const items = hasMore ? rows.slice(0, limit) : rows;
-    return Promise.resolve({ items, hasMore });
+    return Promise.resolve(paginateNewestFirst(rows, { startingAfter, limit }));
   }
 
   save(user: User): Promise<void> {
@@ -63,5 +59,6 @@ export class MockUserRepository implements UserRepositoryPort {
 
   clear(): void {
     this.store.clear();
+    this.memberships.clear();
   }
 }

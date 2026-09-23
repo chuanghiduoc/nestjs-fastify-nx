@@ -1,4 +1,5 @@
-import type { FeatureFlag } from '../domain/entities/feature-flag.entity';
+import { paginateNewestFirst } from '@nestjs-fastify-nx/shared';
+import { FeatureFlag, type FeatureFlagChanges } from '../domain/entities/feature-flag.entity';
 import type {
   FeatureFlagRepositoryPort,
   FindFeatureFlagsCursorOptions,
@@ -17,14 +18,12 @@ export class InMemoryFeatureFlagRepository implements FeatureFlagRepositoryPort 
   }
 
   findAllCursor(options: FindFeatureFlagsCursorOptions): Promise<FindFeatureFlagsCursorResult> {
-    const matching = this.scoped(options.organizationId).sort(
-      (left, right) => right.createdAt.getTime() - left.createdAt.getTime(),
+    return Promise.resolve(
+      paginateNewestFirst(this.scoped(options.organizationId), {
+        startingAfter: options.startingAfter,
+        limit: options.limit,
+      }),
     );
-
-    return Promise.resolve({
-      items: matching.slice(0, options.limit),
-      hasMore: matching.length > options.limit,
-    });
   }
 
   findAll(organizationId: string): Promise<FeatureFlag[]> {
@@ -41,9 +40,30 @@ export class InMemoryFeatureFlagRepository implements FeatureFlagRepositoryPort 
     return Promise.resolve();
   }
 
-  update(flag: FeatureFlag): Promise<void> {
-    this.seed(flag);
-    return Promise.resolve();
+  update(
+    organizationId: string,
+    id: string,
+    changes: FeatureFlagChanges,
+    updatedAt: Date,
+  ): Promise<boolean> {
+    const flag = this.flags.get(id);
+    if (!flag || flag.organizationId !== organizationId) return Promise.resolve(false);
+
+    const merged = flag.withChanges(changes);
+    this.flags.set(
+      id,
+      FeatureFlag.reconstitute({
+        id: merged.id,
+        organizationId: merged.organizationId,
+        key: merged.key,
+        description: merged.description,
+        enabled: merged.enabled,
+        rolloutPercentage: merged.rolloutPercentage,
+        createdAt: merged.createdAt,
+        updatedAt,
+      }),
+    );
+    return Promise.resolve(true);
   }
 
   delete(organizationId: string, id: string): Promise<boolean> {
