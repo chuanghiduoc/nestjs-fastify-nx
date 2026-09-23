@@ -1,10 +1,13 @@
 import { STATUS_CODES } from 'node:http';
 import { HttpStatus } from '@nestjs/common';
+import type { FastifyReply, FastifyRequest } from 'fastify';
 import {
   ERROR_CODES,
   errorTypeUrl,
   type ValidationErrorItemDto,
 } from '@nestjs-fastify-nx/contracts';
+import { sanitizeUrlForLogging } from '@nestjs-fastify-nx/shared';
+import { ensureRequestIds } from '../logging/request-id';
 
 export const PROBLEM_CONTENT_TYPE = 'application/problem+json';
 
@@ -141,4 +144,34 @@ export function buildProblemDetails(args: ProblemDetailsArgs): ProblemDetailsBod
     );
   }
   return body;
+}
+
+export interface SendProblemArgs {
+  status: number;
+  detail?: string;
+  code?: string;
+  headers?: Record<string, string>;
+  extra?: Record<string, unknown>;
+}
+
+export function sendProblem(
+  req: FastifyRequest,
+  reply: FastifyReply,
+  args: SendProblemArgs,
+): FastifyReply {
+  const { requestId } = ensureRequestIds(req.raw, req.headers);
+  reply.header('content-type', PROBLEM_CONTENT_TYPE);
+  reply.header('x-request-id', requestId);
+  for (const [name, value] of Object.entries(args.headers ?? {})) {
+    reply.header(name, value);
+  }
+  const body = buildProblemDetails({
+    status: args.status,
+    title: statusTitle(args.status),
+    detail: args.detail,
+    code: args.code ?? statusCode(args.status),
+    instance: sanitizeUrlForLogging(req.url),
+    requestId,
+  });
+  return reply.status(args.status).send(args.extra ? { ...body, ...args.extra } : body);
 }

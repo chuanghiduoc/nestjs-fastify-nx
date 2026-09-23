@@ -3,12 +3,17 @@ import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '@nestjs-fastify-nx/infra-database';
 import { positiveIntEnv } from '@nestjs-fastify-nx/shared';
 import { SchedulerLeaderService } from '../leadership/scheduler-leader.service';
+import { BatchedPurgeRunner, type BatchedPurgeConfig } from './batched-purge.runner';
 
-// Hard cap so a runaway OUTBOX_RETENTION_DAYS=99999 in env doesn't silently
-// disable cleanup. The env schema clamps the same range; this defence is a
-// second line for a direct instantiation that bypasses ConfigModule.
-const MAX_RETENTION_DAYS = 365;
-const MAX_PARKED_AGE_DAYS = 90;
+const PROCESSED_PURGE_CONFIG: BatchedPurgeConfig = {
+  table: 'outbox_events',
+  column: 'createdAt',
+  envPrefix: 'OUTBOX',
+  defaultBatchSize: 1_000,
+  defaultMaxBatches: 200,
+  label: 'Outbox purge',
+  extraWhere: '"processedAt" IS NOT NULL',
+};
 
 interface ParkedRow {
   id: string;
@@ -25,51 +30,26 @@ export class OutboxCleanupTask {
   // process.env — so every one of these knobs silently fell back to its default.
   private readonly batchSize = positiveIntEnv('OUTBOX_PURGE_BATCH_SIZE', 1_000);
   private readonly maxBatches = positiveIntEnv('OUTBOX_PURGE_MAX_BATCHES', 200);
-  private readonly retentionDays = this.resolveRetentionDays();
+  private readonly retentionDays = positiveIntEnv('OUTBOX_RETENTION_DAYS', 7);
   private readonly maxAttempts = positiveIntEnv('OUTBOX_MAX_ATTEMPTS', 10);
-  private readonly parkedRetentionDays = this.resolveParkedRetentionDays();
-  private running = false;
+  private readonly parkedRetentionDays = positiveIntEnv('OUTBOX_PARKED_RETENTION_DAYS', 30);
   private parkedRunning = false;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly leadership: SchedulerLeaderService,
+    private readonly purgeRunner: BatchedPurgeRunner,
   ) {}
 
   // UTC-pinned to guard against host TZ drift; 03:15 runs after weekly VACUUM at 03:00 Sun.
   @Cron('15 3 * * *', { name: 'outbox-purge', timeZone: 'UTC' })
   async purgeOldOutboxEvents(): Promise<void> {
-    if (!this.leadership.isLeader() || this.running) return;
-    this.running = true;
-    const cutoffDays = this.retentionDays;
-    this.logger.log(
-      `Starting outbox purge: processedAt IS NOT NULL AND createdAt < NOW() - ${cutoffDays} days`,
+    await this.purgeRunner.purgeIfLeader(
+      'outbox-purge',
+      this.leadership.isLeader(),
+      PROCESSED_PURGE_CONFIG,
+      this.retentionDays,
     );
-
-    let totalPurged = 0;
-    try {
-      for (let batch = 0; batch < this.maxBatches; batch++) {
-        const deleted = await this.prisma.db.$executeRawUnsafe<number>(
-          `DELETE FROM "outbox_events"
-             WHERE id IN (
-               SELECT id FROM "outbox_events"
-                WHERE "processedAt" IS NOT NULL
-                  AND "createdAt" < NOW() - ($1 || ' days')::interval
-                LIMIT $2
-             )`,
-          String(cutoffDays),
-          this.batchSize,
-        );
-        const n = Number(deleted ?? 0);
-        if (n === 0) break;
-        totalPurged += n;
-      }
-      this.logger.log(`Outbox purge complete: ${totalPurged} row(s) deleted`);
-    } catch (err) {
-      this.logger.error({ err, totalPurged }, 'Outbox purge failed');
-    } finally {
-      this.running = false;
-    }
   }
 
   @Cron('50 3 * * *', { name: 'outbox-parked-purge', timeZone: 'UTC' })
@@ -121,25 +101,5 @@ export class OutboxCleanupTask {
     } finally {
       this.parkedRunning = false;
     }
-  }
-
-  private resolveRetentionDays(): number {
-    const raw = positiveIntEnv('OUTBOX_RETENTION_DAYS', 7);
-    if (raw > MAX_RETENTION_DAYS) {
-      this.logger.warn(`OUTBOX_RETENTION_DAYS=${raw} exceeds cap ${MAX_RETENTION_DAYS}; clamping`);
-      return MAX_RETENTION_DAYS;
-    }
-    return raw;
-  }
-
-  private resolveParkedRetentionDays(): number {
-    const raw = positiveIntEnv('OUTBOX_PARKED_RETENTION_DAYS', 30);
-    const clamped = Math.min(Math.max(raw, this.retentionDays), MAX_PARKED_AGE_DAYS);
-    if (clamped !== raw) {
-      this.logger.warn(
-        `OUTBOX_PARKED_RETENTION_DAYS=${raw} outside [${this.retentionDays}, ${MAX_PARKED_AGE_DAYS}]; using ${clamped}`,
-      );
-    }
-    return clamped;
   }
 }

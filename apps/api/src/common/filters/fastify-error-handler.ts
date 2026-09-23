@@ -86,8 +86,7 @@ export function applyFastifyProblemDetailsHook(fastify: FastifyInstance): void {
     const title =
       (typeof source?.['title'] === 'string' && source['title']) ||
       (typeof source?.['error'] === 'string' && source['error']) ||
-      statusTitle(status) ||
-      'Error';
+      statusTitle(status);
     const rawDetail =
       (typeof source?.['detail'] === 'string' && source['detail']) ||
       (typeof source?.['message'] === 'string' && source['message']) ||

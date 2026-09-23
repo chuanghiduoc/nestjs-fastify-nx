@@ -83,10 +83,9 @@ export function describeAuthorizationConformance(harness: ConformanceHarness): v
           { permission: PERMISSIONS.SESSION_REVOKE },
           { permission: PERMISSIONS.TERM_READ },
           { permission: PERMISSIONS.TERM_ACCEPT },
-          { permission: PERMISSIONS.TERM_MANAGE },
         ],
       );
-      expect(decisions.map((d) => d.allowed)).toEqual([true, true, true, true, false]);
+      expect(decisions.map((d) => d.allowed)).toEqual([true, true, true, true]);
     });
 
     it('scopes a self resource to a principal with no membership', async () => {

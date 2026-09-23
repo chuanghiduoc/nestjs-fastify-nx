@@ -50,14 +50,13 @@ export class SessionsController {
 
   @Get()
   @RequirePermission(PERMISSIONS.SESSION_READ)
-  @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'List the caller’s sign-in sessions',
     description:
       'Cursor-paginated, newest first, always scoped to the caller. Each entry carries the IP and user agent captured at sign-in so a person can recognise their own devices; the session token itself is never returned.',
   })
   @ApiPaginatedResponse(SessionResponseDto, { description: 'Cursor-paginated list of sessions.' })
-  @ApiCommonErrors({ auth: true, forbidden: true, validation: true })
+  @ApiCommonErrors()
   async list(
     @CurrentUser() user: AuthenticatedSession,
     @Query() filter: ListSessionsFilterDto,
@@ -87,7 +86,7 @@ export class SessionsController {
   })
   @ApiParam({ name: 'id', format: 'uuid', description: 'Session id (UUID v7).' })
   @ApiNoContentResponse({ description: 'Session revoked.' })
-  @ApiCommonErrors({ auth: true, forbidden: true, notFound: true })
+  @ApiCommonErrors({ notFound: true })
   revoke(
     @CurrentUser() user: AuthenticatedSession,
     @Param('id', new ParseUUIDPipe({ version: '7' })) id: string,
@@ -104,7 +103,7 @@ export class SessionsController {
       'The classic "sign out everywhere else" action after a password change. The session making the request survives.',
   })
   @ApiOkResponse({ type: RevokedSessionsResponseDto, description: 'How many were revoked.' })
-  @ApiCommonErrors({ auth: true, forbidden: true })
+  @ApiCommonErrors()
   revokeOthers(@CurrentUser() user: AuthenticatedSession): Promise<RevokedSessionsDto> {
     return this.commandBus.execute(new RevokeOtherSessionsCommand(user.userId, user.sessionId));
   }

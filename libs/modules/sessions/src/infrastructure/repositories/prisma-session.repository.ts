@@ -1,10 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '@nestjs-fastify-nx/infra-database';
 import { Prisma } from '@nestjs-fastify-nx/infra-database';
+import { keysetAfter, takePage } from '@nestjs-fastify-nx/shared';
 import type {
   FindSessionsCursorOptions,
   FindSessionsCursorResult,
-  SessionRecord,
   SessionRepositoryPort,
 } from '../../domain/ports/session-repository.port';
 
@@ -27,16 +27,7 @@ export class PrismaSessionRepository implements SessionRepositoryPort {
 
     const where: Prisma.SessionWhereInput = { userId };
     if (activeOnly) where.expiresAt = { gt: now };
-    if (startingAfter) {
-      where.AND = [
-        {
-          OR: [
-            { createdAt: { lt: startingAfter.createdAt } },
-            { AND: [{ createdAt: startingAfter.createdAt }, { id: { lt: startingAfter.id } }] },
-          ],
-        },
-      ];
-    }
+    if (startingAfter) where.AND = [keysetAfter(startingAfter)];
 
     // Primary, not a replica: a caller who just revoked a device must not be shown it again by a
     // lagging read.
@@ -47,14 +38,7 @@ export class PrismaSessionRepository implements SessionRepositoryPort {
       take: limit + 1,
     });
 
-    const hasMore = rows.length > limit;
-    return { items: hasMore ? rows.slice(0, limit) : rows, hasMore };
-  }
-
-  async findByIdForUser(userId: string, id: string): Promise<SessionRecord | null> {
-    return this.prisma
-      .writeTarget()
-      .session.findFirst({ where: { id, userId }, select: SESSION_FIELDS });
+    return takePage(rows, limit);
   }
 
   async deleteForUser(userId: string, id: string): Promise<boolean> {

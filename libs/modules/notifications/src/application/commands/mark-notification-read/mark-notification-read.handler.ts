@@ -1,7 +1,7 @@
 import { Inject } from '@nestjs/common';
 import { CommandHandler, type ICommandHandler } from '@nestjs/cqrs';
 import { DomainException } from '@nestjs-fastify-nx/core';
-import { ERROR_CODES, I18N_KEYS } from '@nestjs-fastify-nx/contracts';
+import { ERROR_CODES, I18N_KEYS, fieldProblem } from '@nestjs-fastify-nx/contracts';
 import { NOTIFICATION_REPOSITORY } from '../../../domain/ports/notification-repository.port';
 import type { NotificationRepositoryPort } from '../../../domain/ports/notification-repository.port';
 import { MarkNotificationReadCommand } from './mark-notification-read.command';
@@ -34,19 +34,14 @@ export class MarkNotificationReadHandler implements ICommandHandler<
     );
     if (exists) return;
 
-    throw new DomainException({
-      kind: 'not_found',
-      code: ERROR_CODES.NOTIFICATION_NOT_FOUND,
-      title: I18N_KEYS.common.not_found,
-      messageKey: I18N_KEYS.errors.notifications.not_found,
-      violations: [
-        {
-          path: 'id',
-          code: ERROR_CODES.NOTIFICATION_NOT_FOUND,
-          message: 'Notification not found',
-          messageKey: I18N_KEYS.errors.notifications.not_found,
-        },
-      ],
-    });
+    throw new DomainException(
+      fieldProblem({
+        kind: 'not_found',
+        code: ERROR_CODES.NOTIFICATION_NOT_FOUND,
+        messageKey: I18N_KEYS.errors.notifications.not_found,
+        path: 'id',
+        message: 'Notification not found',
+      }),
+    );
   }
 }

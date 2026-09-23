@@ -1,6 +1,5 @@
 import { CanActivate, ExecutionContext, Inject, Injectable } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { GqlContextType, GqlExecutionContext } from '@nestjs/graphql';
 import type { FastifyRequest } from 'fastify';
 import {
   DomainException,
@@ -10,7 +9,8 @@ import {
 } from '@nestjs-fastify-nx/core';
 import { ERROR_CODES, I18N_KEYS } from '@nestjs-fastify-nx/contracts';
 import {
-  IS_PUBLIC_KEY,
+  isPublic,
+  requestOf,
   requireOrganizationId,
   type AuthenticatedApiKey,
   type AuthenticatedSession,
@@ -55,11 +55,7 @@ export class PermissionGuard implements CanActivate {
     // as an HTTP request (see the global-enhancer rule in CLAUDE.md).
     if (context.getType() === 'ws') return true;
 
-    const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
-      context.getHandler(),
-      context.getClass(),
-    ]);
-    if (isPublic) return true;
+    if (isPublic(this.reflector, context)) return true;
 
     const required = this.reflector.getAllAndOverride<Permission[]>(REQUIRED_PERMISSIONS_KEY, [
       context.getHandler(),
@@ -67,7 +63,7 @@ export class PermissionGuard implements CanActivate {
     ]);
     if (!required || required.length === 0) return true;
 
-    const decisions = await this.decide(this.getRequest(context), required);
+    const decisions = await this.decide(requestOf<RequestWithUser>(context), required);
 
     const deniedIndex = decisions.findIndex((decision) => !decision.allowed);
     if (deniedIndex >= 0) throw forbidden(required[deniedIndex]);
@@ -104,12 +100,5 @@ export class PermissionGuard implements CanActivate {
       { type: 'user', userId: user.userId, organizationId: requireOrganizationId(user) },
       requests,
     );
-  }
-
-  private getRequest(context: ExecutionContext): RequestWithUser {
-    if (context.getType<GqlContextType>() === 'graphql') {
-      return GqlExecutionContext.create(context).getContext<{ req: RequestWithUser }>().req;
-    }
-    return context.switchToHttp().getRequest<RequestWithUser>();
   }
 }

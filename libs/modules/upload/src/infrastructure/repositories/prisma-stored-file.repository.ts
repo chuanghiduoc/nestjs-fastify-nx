@@ -3,6 +3,7 @@ import { PrismaService, type TransactionClient } from '@nestjs-fastify-nx/infra-
 import { STORED_FILE_STATUS, type StoredFileStatus } from '@nestjs-fastify-nx/shared';
 import { StoredFile, type StoredFileProps } from '../../domain/entities/stored-file.entity';
 import type {
+  StoredFileCreateOutcome,
   StoredFileRepositoryPort,
   StoredFileTransitionFields,
 } from '../../domain/ports/stored-file-repository.port';
@@ -11,7 +12,6 @@ interface StoredFileRow {
   id: string;
   organizationId: string;
   userId: string;
-  deletedAt: Date | null;
   sourceKey: string;
   key: string;
   bucket: string;
@@ -19,6 +19,14 @@ interface StoredFileRow {
   size: number;
   etag: string;
   status: string;
+}
+
+type StoredFileSelector = { id: string } | { key: string };
+
+const PRISMA_UNIQUE_CONSTRAINT_CODE = 'P2002';
+
+function isUniqueConstraintViolation(error: unknown): boolean {
+  return (error as { code?: string } | null)?.code === PRISMA_UNIQUE_CONSTRAINT_CODE;
 }
 
 // Quarantining an in-flight upload must reach the row even after the owner soft-deleted it,
@@ -51,32 +59,36 @@ export class PrismaStoredFileRepository implements StoredFileRepositoryPort {
     return this.prisma.withTenantContext(fn, { readOnly: options.readOnly });
   }
 
-  async findBySourceKey(sourceKey: string): Promise<StoredFile | null> {
+  private async findOne(
+    where: { sourceKey: string } | { key: string } | { id: string },
+  ): Promise<StoredFile | null> {
     const row = await this.run(
-      (client) => client.storedFile.findFirst({ where: { sourceKey, deletedAt: null } }),
+      (client) => client.storedFile.findFirst({ where: { ...where, deletedAt: null } }),
       { readOnly: true },
     );
     return row ? this.toDomain(row) : null;
+  }
+
+  async findBySourceKey(sourceKey: string): Promise<StoredFile | null> {
+    return this.findOne({ sourceKey });
   }
 
   async findByKey(key: string): Promise<StoredFile | null> {
-    const row = await this.run(
-      (client) => client.storedFile.findFirst({ where: { key, deletedAt: null } }),
-      { readOnly: true },
-    );
-    return row ? this.toDomain(row) : null;
+    return this.findOne({ key });
   }
 
   async findById(id: string): Promise<StoredFile | null> {
-    const row = await this.run(
-      (client) => client.storedFile.findFirst({ where: { id, deletedAt: null } }),
-      { readOnly: true },
-    );
-    return row ? this.toDomain(row) : null;
+    return this.findOne({ id });
   }
 
-  async create(props: StoredFileProps): Promise<void> {
-    await this.run((client) => client.storedFile.create({ data: props }), { readOnly: false });
+  async create(props: StoredFileProps): Promise<StoredFileCreateOutcome> {
+    try {
+      await this.run((client) => client.storedFile.create({ data: props }), { readOnly: false });
+      return 'created';
+    } catch (err) {
+      if (isUniqueConstraintViolation(err)) return 'duplicate';
+      throw err;
+    }
   }
 
   async createBatch(props: readonly StoredFileProps[]): Promise<void> {
@@ -90,55 +102,56 @@ export class PrismaStoredFileRepository implements StoredFileRepositoryPort {
     if (ids.length === 0 || new Set(ids).size !== ids.length) {
       throw new Error('Upload publication requires a nonempty set of distinct IDs');
     }
-    await this.prisma.transaction(async (client) => {
-      const updated = await client.storedFile.updateMany({
-        where: { id: { in: [...ids] }, status: STORED_FILE_STATUS.FINALIZING, deletedAt: null },
-        data: { status },
-      });
-      if (updated.count !== ids.length) {
-        throw new Error('Upload batch changed before publication');
-      }
-    });
+    await this.run(
+      async (client) => {
+        const updated = await client.storedFile.updateMany({
+          where: { id: { in: [...ids] }, status: STORED_FILE_STATUS.FINALIZING, deletedAt: null },
+          data: { status },
+        });
+        if (updated.count !== ids.length) {
+          throw new Error('Upload batch changed before publication');
+        }
+      },
+      { readOnly: false },
+    );
   }
 
-  async transition(
+  private async setStatus(
+    selector: StoredFileSelector,
+    from: StoredFileStatus,
+    to: StoredFileStatus,
+    fields?: StoredFileTransitionFields,
+  ): Promise<boolean> {
+    const where = matchesSoftDeleted(from, to)
+      ? { ...selector, status: from }
+      : { ...selector, status: from, deletedAt: null };
+    const result = await this.run(
+      (client) =>
+        client.storedFile.updateMany({
+          where,
+          data: { status: to, ...fields },
+        }),
+      { readOnly: false },
+    );
+    return result.count > 0;
+  }
+
+  transition(
     id: string,
     from: StoredFileStatus,
     to: StoredFileStatus,
     fields?: StoredFileTransitionFields,
   ): Promise<boolean> {
-    const where = matchesSoftDeleted(from, to)
-      ? { id, status: from }
-      : { id, status: from, deletedAt: null };
-    const result = await this.run(
-      (client) =>
-        client.storedFile.updateMany({
-          where,
-          data: { status: to, ...fields },
-        }),
-      { readOnly: false },
-    );
-    return result.count > 0;
+    return this.setStatus({ id }, from, to, fields);
   }
 
-  async transitionByKey(
+  transitionByKey(
     key: string,
     from: StoredFileStatus,
     to: StoredFileStatus,
     fields?: StoredFileTransitionFields,
   ): Promise<boolean> {
-    const where = matchesSoftDeleted(from, to)
-      ? { key, status: from }
-      : { key, status: from, deletedAt: null };
-    const result = await this.run(
-      (client) =>
-        client.storedFile.updateMany({
-          where,
-          data: { status: to, ...fields },
-        }),
-      { readOnly: false },
-    );
-    return result.count > 0;
+    return this.setStatus({ key }, from, to, fields);
   }
 
   async deleteIfStatus(id: string, status: StoredFileStatus): Promise<void> {
@@ -171,7 +184,6 @@ export class PrismaStoredFileRepository implements StoredFileRepositoryPort {
       size: row.size,
       etag: row.etag,
       status: row.status as StoredFileStatus,
-      deletedAt: row.deletedAt,
     });
   }
 }

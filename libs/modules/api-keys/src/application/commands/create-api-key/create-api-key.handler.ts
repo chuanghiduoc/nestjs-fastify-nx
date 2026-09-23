@@ -4,7 +4,7 @@ import { AUTHORIZATION_PORT, type AuthorizationPort } from '@nestjs-fastify-nx/c
 import { API_KEY_REPOSITORY } from '../../../domain/ports/api-key-repository.port';
 import type { ApiKeyRepositoryPort } from '../../../domain/ports/api-key-repository.port';
 import { ApiKey } from '../../../domain/entities/api-key.entity';
-import type { IssuedApiKeyDto } from '../../dto/api-key.dto';
+import { toApiKeyDto, type IssuedApiKeyDto } from '../../dto/api-key.dto';
 import { CreateApiKeyCommand } from './create-api-key.command';
 
 @CommandHandler(CreateApiKeyCommand)
@@ -32,17 +32,6 @@ export class CreateApiKeyHandler implements ICommandHandler<CreateApiKeyCommand,
 
     await this.apiKeys.create(entity);
 
-    return {
-      id: entity.id,
-      name: entity.name,
-      prefix: entity.prefix,
-      scopes: entity.scopes,
-      createdById: entity.createdById,
-      lastUsedAt: entity.lastUsedAt,
-      expiresAt: entity.expiresAt,
-      revokedAt: entity.revokedAt,
-      createdAt: entity.createdAt,
-      key: raw,
-    };
+    return { ...toApiKeyDto(entity), key: raw };
   }
 }

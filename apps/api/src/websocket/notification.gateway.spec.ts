@@ -121,32 +121,6 @@ describe('NotificationGateway.handleDisconnect', () => {
   });
 });
 
-describe('NotificationGateway.sendToUser', () => {
-  it('emits the event only to the target users room', () => {
-    const gateway = buildGateway();
-    const emit = vi.fn();
-    const to = vi.fn().mockReturnValue({ emit });
-    internals(gateway).server = { to } as unknown as Server;
-
-    gateway.sendToUser('user-42', 'notification', { message: 'hi' });
-
-    expect(to).toHaveBeenCalledWith('user:user-42');
-    expect(emit).toHaveBeenCalledWith('notification', { message: 'hi' });
-  });
-});
-
-describe('NotificationGateway.broadcast', () => {
-  it('emits the event to every connected socket', () => {
-    const gateway = buildGateway();
-    const emit = vi.fn();
-    internals(gateway).server = { emit } as unknown as Server;
-
-    gateway.broadcast('announcement', { message: 'hello' });
-
-    expect(emit).toHaveBeenCalledWith('announcement', { message: 'hello' });
-  });
-});
-
 describe('NotificationGateway.onApplicationShutdown', () => {
   function makeRedisClient(): Redis {
     return {

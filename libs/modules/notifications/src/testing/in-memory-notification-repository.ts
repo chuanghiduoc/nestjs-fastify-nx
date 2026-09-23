@@ -1,3 +1,4 @@
+import { paginateNewestFirst } from '@nestjs-fastify-nx/shared';
 import { Notification } from '../domain/entities/notification.entity';
 import type {
   FindNotificationsCursorOptions,
@@ -15,13 +16,14 @@ export class InMemoryNotificationRepository implements NotificationRepositoryPor
           notification.organizationId === options.organizationId &&
           notification.userId === options.userId,
       )
-      .filter((notification) => (options.unreadOnly ? !notification.isRead : true))
-      .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime());
+      .filter((notification) => (options.unreadOnly ? !notification.isRead : true));
 
-    return Promise.resolve({
-      items: matching.slice(0, options.limit),
-      hasMore: matching.length > options.limit,
-    });
+    return Promise.resolve(
+      paginateNewestFirst(matching, {
+        startingAfter: options.startingAfter,
+        limit: options.limit,
+      }),
+    );
   }
 
   countUnread(organizationId: string, userId: string): Promise<number> {

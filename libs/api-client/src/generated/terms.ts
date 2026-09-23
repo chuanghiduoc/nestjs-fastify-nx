@@ -18,7 +18,12 @@
  * Every response carries an `X-Request-Id` header (also mirrored as `requestId` in error bodies). Quote it when filing support tickets.
  * OpenAPI spec version: 1.0.0
  */
-import type { CreateTermDto, ListResponseDto, TermResponseDto } from './api.schemas';
+import type {
+  CreateTermDto,
+  TermResponseDto,
+  TermsAcceptances200,
+  TermsList200,
+} from './api.schemas';
 
 import { customAxiosInstance } from '../lib/axios-instance';
 
@@ -28,7 +33,7 @@ export const getTerms = () => {
    * @summary List published legal documents
    */
   const termsList = () => {
-    return customAxiosInstance<ListResponseDto>({ url: `/api/v1/terms`, method: 'GET' });
+    return customAxiosInstance<TermsList200>({ url: `/api/v1/terms`, method: 'GET' });
   };
   /**
    * Versions are immutable once created — publish a new version rather than editing a published one.
@@ -47,7 +52,7 @@ export const getTerms = () => {
    * @summary List the versions the caller has accepted
    */
   const termsAcceptances = () => {
-    return customAxiosInstance<ListResponseDto>({
+    return customAxiosInstance<TermsAcceptances200>({
       url: `/api/v1/terms/acceptances`,
       method: 'GET',
     });

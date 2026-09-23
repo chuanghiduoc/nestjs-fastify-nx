@@ -55,7 +55,6 @@ export interface StorageReadStream extends AsyncIterable<Uint8Array> {
 
 export interface StoragePort {
   uploadStream(key: string, body: Readable, options: StreamUploadOptions): Promise<StoredFile>;
-  upload(key: string, body: Buffer, options?: UploadOptions): Promise<StoredFile>;
   presignUpload(key: string, options: PresignUploadOptions): Promise<PresignedUpload>;
   head(key: string, bucket?: string): Promise<ObjectMetadata | null>;
   getSignedUrl(key: string, expiresIn?: number, bucket?: string): Promise<string>;
@@ -71,10 +70,7 @@ export interface StoragePort {
   // Read the first `byteCount` bytes of the object — used by the async
   // magic-byte verifier so the worker doesn't have to download whole files.
   readRange(key: string, byteCount: number, bucket?: string): Promise<Buffer>;
-  // Complete quarantined object for malware scanning; it remains unavailable until scan success.
-  // Only for objects known to be small — it materialises the whole body in memory.
-  read(key: string, bucket?: string): Promise<Buffer>;
-  // The same bytes as `read`, streamed. Uploads are capped in the hundreds of megabytes upward,
-  // so the scanner consumes this instead: one 10 GB object would otherwise be one 10 GB Buffer.
+  // Streamed read for the malware scanner. Uploads are capped in the hundreds of megabytes upward,
+  // so the whole object is never materialised as one Buffer.
   readStream(key: string, bucket?: string): Promise<StorageReadStream>;
 }

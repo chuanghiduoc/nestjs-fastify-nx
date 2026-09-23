@@ -184,7 +184,8 @@ describe('StoredFileCleanupTask', () => {
 
       await task.cleanup();
 
-      const [, rejectedCutoff] = queryRaw.mock.calls[0] as [unknown, Date];
+      const [, status, rejectedCutoff] = queryRaw.mock.calls[0] as [unknown, string, Date];
+      expect(status).toBe('REJECTED');
       expect(rejectedCutoff).toBeInstanceOf(Date);
       expect(Date.now() - rejectedCutoff.getTime()).toBeGreaterThanOrEqual(72 * 3_600_000 - 5_000);
     });

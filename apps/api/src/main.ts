@@ -1,49 +1,34 @@
 import './tracing';
-import * as Sentry from '@sentry/nestjs';
 import { NestFactory } from '@nestjs/core';
 import { HttpStatus, VersioningType } from '@nestjs/common';
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { FastifyAdapter } from '@nestjs/platform-fastify';
-import type { FastifyReply, FastifyRequest, RouteShorthandOptions } from 'fastify';
 import { ConfigService } from '@nestjs/config';
 import { Logger } from 'nestjs-pino';
 import { fastifyHelmet } from '@fastify/helmet';
 import fastifyCookie from '@fastify/cookie';
 import fastifyMultipart from '@fastify/multipart';
 import { IoAdapter } from '@nestjs/platform-socket.io';
-import fastifyRateLimit from '@fastify/rate-limit';
 import fastifyCompress from '@fastify/compress';
 import fastifyUnderPressure from '@fastify/under-pressure';
-import { createHash } from 'node:crypto';
-import { toNodeHandler } from 'better-auth/node';
 import { BETTER_AUTH_INSTANCE, type BetterAuthInstance } from '@nestjs-fastify-nx/infra-auth';
-import { positiveIntEnv, sanitizeUrlForLogging } from '@nestjs-fastify-nx/shared';
-import { ERROR_CODES } from '@nestjs-fastify-nx/contracts';
+import { positiveIntEnv } from '@nestjs-fastify-nx/shared';
 import { reportFatalError, startSentry } from '@nestjs-fastify-nx/infra-observability';
 import { AppModule } from './app/app.module';
-import { ensureRequestIds } from './common/logging/request-id';
 import { ProblemDetailsValidationPipe } from './common/pipes';
 import { setupSwagger } from './common/swagger/swagger.config';
 import { createBullBoardPlugin } from './common/bull-board/create-bull-board-plugin';
 import { registerIdempotency } from './common/idempotency/register-idempotency';
-import { REDIS_DB, createApiRedis } from './common/redis/api-redis.factory';
-import { redisFixedWindowIncr } from './common/rate-limit/redis-fixed-window';
-import { flushBufferedReplyHeaders } from './common/http/flush-reply-headers';
+import { REDIS_DB, createManagedApiRedis } from './common/redis/api-redis.factory';
 import { resolveTrustedProxies } from './common/http/trusted-proxies';
 import { DEV_ALLOWED_ORIGINS } from './common/http/cors-origins';
 import { GLOBAL_PREFIX, GLOBAL_PREFIX_EXCLUDES } from './common/http/global-prefix';
 import { applyFastifyProblemDetailsHook } from './common/filters/fastify-error-handler';
-import { buildProblemDetails } from './common/filters/problem-details.helper';
-import { maskBetterAuthServerResponse } from './common/filters/better-auth-response';
+import { sendProblem } from './common/filters/problem-details.helper';
 import { registerDevRequestLogger } from './common/logging/dev-request-logger';
+import { STRICT_AUTH_PATHS, registerAuthRateLimits } from './common/auth-http/auth-rate-limits';
+import { createBetterAuthRouteHandler } from './common/auth-http/better-auth-route-handler';
 import type { EnvConfig } from './config/env.validation';
-
-const STRICT_AUTH_PATHS = new Set([
-  '/api/auth/sign-in/email',
-  '/api/auth/sign-up/email',
-  '/api/auth/request-password-reset',
-  '/api/auth/reset-password',
-]);
 
 // Relaxed CSP applied ONLY to the Bull Board admin path (its bundled UI uses inline script/style).
 // Kept as tight as Bull Board allows: inline script/style but no third-party origins.
@@ -55,7 +40,6 @@ const BULL_BOARD_CSP =
 const CORS_PREFLIGHT_MAX_AGE_SECONDS = 600;
 const HSTS_MAX_AGE_SECONDS = 2 * 365 * 24 * 60 * 60;
 const RETRY_AFTER_OVERLOAD_SECONDS = 10;
-const RETRY_AFTER_AUTH_UNAVAILABLE_SECONDS = 5;
 
 startSentry({ serviceName: 'nestjs-fastify-api', profiling: true });
 
@@ -169,25 +153,21 @@ async function bootstrap() {
   });
 
   if (config.get('IDEMPOTENCY_ENABLED', { infer: true })) {
-    const idempotencyRedis = createApiRedis(
-      {
+    const idempotencyRedis = createManagedApiRedis(fastify, app.get(Logger), {
+      config: {
         host: config.get('REDIS_CACHE_HOST', { infer: true }),
         port: config.get('REDIS_CACHE_PORT', { infer: true }),
         password: config.get('REDIS_CACHE_PASSWORD', { infer: true }),
       },
-      REDIS_DB.IDEMPOTENCY,
-    );
-    idempotencyRedis.on('error', (err: Error) => {
-      app.get(Logger).warn({ err }, 'Idempotency Redis error');
-    });
-    fastify.addHook('onClose', async () => {
-      await idempotencyRedis.quit().catch(() => idempotencyRedis.disconnect());
+      db: REDIS_DB.IDEMPOTENCY,
+      label: 'Idempotency',
     });
     app.useGlobalInterceptors(
       registerIdempotency(fastify, {
         redis: idempotencyRedis,
         ttlSeconds: config.get('IDEMPOTENCY_TTL_SECONDS', { infer: true }),
         lockTtlSeconds: config.get('IDEMPOTENCY_LOCK_TTL_SECONDS', { infer: true }),
+        uploadRequestTimeoutMs: config.get('UPLOAD_REQUEST_TIMEOUT_MS', { infer: true }),
         onError: (message) => app.get(Logger).warn(message),
       }),
     );
@@ -207,25 +187,11 @@ async function bootstrap() {
     maxEventLoopDelay: positiveIntEnv('HTTP_MAX_EVENT_LOOP_DELAY_MS', 1000),
     // Same problem+json shape as every other error so clients branch on `code` uniformly.
     pressureHandler: (req, reply) => {
-      // This onRequest hook is registered before Nest's middleware runs, so it is usually the first
-      // to resolve the ids — stamping them here means the (short-circuited) request still logs under
-      // the same id the client receives.
-      const { requestId } = ensureRequestIds(req.raw, req.headers);
-      reply
-        .code(HttpStatus.SERVICE_UNAVAILABLE)
-        .header('content-type', 'application/problem+json')
-        .header('x-request-id', requestId)
-        .header('retry-after', String(RETRY_AFTER_OVERLOAD_SECONDS))
-        .send(
-          buildProblemDetails({
-            status: HttpStatus.SERVICE_UNAVAILABLE,
-            title: 'Service Unavailable',
-            detail: 'Server is under heavy load; please retry shortly.',
-            code: ERROR_CODES.SERVICE_UNAVAILABLE,
-            instance: sanitizeUrlForLogging(req.url),
-            requestId,
-          }),
-        );
+      sendProblem(req, reply, {
+        status: HttpStatus.SERVICE_UNAVAILABLE,
+        detail: 'Server is under heavy load; please retry shortly.',
+        headers: { 'retry-after': String(RETRY_AFTER_OVERLOAD_SECONDS) },
+      });
     },
   });
 
@@ -237,262 +203,37 @@ async function bootstrap() {
     encodings: ['gzip', 'deflate'],
   });
 
-  // Must register before betterAuthHandler — reply.hijack() bypasses NestJS ThrottlerGuard.
-  const authRateLimitMax = config.get('AUTH_RATE_LIMIT_MAX', { infer: true });
-  const authIpRateLimitMax = config.get('AUTH_IP_RATE_LIMIT_MAX', { infer: true });
-  const authRateLimitWindowMs = config.get('AUTH_RATE_LIMIT_WINDOW_MS', { infer: true });
-  const authRateLimitFailOpen = config.get('AUTH_RATE_LIMIT_FAIL_OPEN', { infer: true });
-
-  const rateLimitRedis = createApiRedis(
-    {
+  const rateLimitRedis = createManagedApiRedis(fastify, app.get(Logger), {
+    config: {
       host: config.get('REDIS_CACHE_HOST', { infer: true }),
       port: config.get('REDIS_CACHE_PORT', { infer: true }),
       password: config.get('REDIS_CACHE_PASSWORD', { infer: true }),
     },
-    REDIS_DB.RATE_LIMIT,
+    db: REDIS_DB.RATE_LIMIT,
+    label: 'Rate-limit',
+  });
+
+  const { strictAuthRouteConfig, looseAuthRouteConfig } = await registerAuthRateLimits(
+    fastify,
+    rateLimitRedis,
+    {
+      authRateLimitMax: config.get('AUTH_RATE_LIMIT_MAX', { infer: true }),
+      authIpRateLimitMax: config.get('AUTH_IP_RATE_LIMIT_MAX', { infer: true }),
+      authRateLimitWindowMs: config.get('AUTH_RATE_LIMIT_WINDOW_MS', { infer: true }),
+      authRateLimitFailOpen: config.get('AUTH_RATE_LIMIT_FAIL_OPEN', { infer: true }),
+      authSessionRateLimitMax: config.get('AUTH_SESSION_RATE_LIMIT_MAX', { infer: true }),
+      authSessionRateLimitWindowMs: config.get('AUTH_SESSION_RATE_LIMIT_WINDOW_MS', {
+        infer: true,
+      }),
+    },
+    app.get(Logger),
   );
-  rateLimitRedis.on('error', (err: Error) => {
-    app.get(Logger).warn({ err }, 'Rate-limit Redis error');
-  });
-  fastify.addHook('onClose', async () => {
-    await rateLimitRedis.quit().catch(() => rateLimitRedis.disconnect());
-  });
-
-  await fastify.register(fastifyRateLimit, {
-    global: false,
-    redis: rateLimitRedis,
-    // Fail open on a store error instead of letting @fastify/rate-limit rethrow it as a 500 — a
-    // transient Redis reconnect would otherwise 500 every /api/auth/* call. The account bucket below
-    // still guards credential paths.
-    skipOnError: true,
-    // preHandler (not onRequest) so req.body is parsed before keyGenerator reads the email field.
-    hook: 'preHandler',
-    max: authRateLimitMax,
-    timeWindow: authRateLimitWindowMs,
-    keyGenerator: (req) => req.ip,
-    errorResponseBuilder: (req, context) => {
-      // Reuse the id already on req.raw so the global exception filter echoes the SAME id on the
-      // x-request-id header (rate-limit throws this body into setErrorHandler).
-      const { requestId } = ensureRequestIds(req.raw, req.headers);
-      return {
-        // Shared helper so a rate-limit 429 matches a ThrottlerGuard 429 byte for byte.
-        ...buildProblemDetails({
-          status: HttpStatus.TOO_MANY_REQUESTS,
-          title: 'Too Many Requests',
-          detail: `Rate limit exceeded. Try again in ${Math.ceil(context.ttl / 1000)} seconds.`,
-          code: ERROR_CODES.RATE_LIMITED,
-          instance: sanitizeUrlForLogging(req.url),
-          requestId,
-        }),
-        retryAfter: Math.ceil(context.ttl / 1000),
-      };
-    },
-    addHeaders: {
-      'x-ratelimit-limit': true,
-      'x-ratelimit-remaining': true,
-      'x-ratelimit-reset': true,
-      'retry-after': true,
-    },
-  });
-
-  // A second, account-wide bucket complements the per-IP route bucket. Without both, attackers
-  // can spray many accounts from one IP or distribute guesses for one account across many IPs.
-  // This bucket keys on the request's email, so it only augments credential paths that carry one
-  // (sign-in, sign-up, request-password-reset). reset-password submits only { token, newPassword }
-  // and is covered by the per-IP bucket alone — its token is unguessable, so that is sufficient.
-  fastify.addHook('preHandler', async (req, reply) => {
-    // Match on the ROUTE Fastify resolved, not the raw URL: find-my-way percent-decodes before
-    // routing, so a raw-string check on req.url (`/sign-in/%65mail`) would miss a request that
-    // actually hit the strict credential route and let it skip the account-wide limiter.
-    const matchedRoute = req.routeOptions?.url;
-    if (!matchedRoute || !STRICT_AUTH_PATHS.has(matchedRoute)) return;
-    const body = req.body as Record<string, unknown> | undefined;
-    const email = typeof body?.['email'] === 'string' ? body['email'].trim().toLowerCase() : '';
-    if (!email) return;
-
-    try {
-      const key = `auth:account:${createHash('sha256').update(email).digest('hex')}`;
-      const { count, ttlMs } = await redisFixedWindowIncr(
-        rateLimitRedis,
-        key,
-        authRateLimitWindowMs,
-      );
-      if (count <= authRateLimitMax) return;
-
-      const retryAfter = Math.max(1, Math.ceil(ttlMs / 1000));
-      const { requestId } = ensureRequestIds(req.raw, req.headers);
-      return reply
-        .status(HttpStatus.TOO_MANY_REQUESTS)
-        .header('content-type', 'application/problem+json')
-        .header('retry-after', String(retryAfter))
-        .send({
-          ...buildProblemDetails({
-            status: HttpStatus.TOO_MANY_REQUESTS,
-            title: 'Too Many Requests',
-            detail: `Rate limit exceeded. Try again in ${retryAfter} seconds.`,
-            code: ERROR_CODES.RATE_LIMITED,
-            instance: sanitizeUrlForLogging(req.url),
-            requestId,
-          }),
-          retryAfter,
-        });
-    } catch (err) {
-      if (authRateLimitFailOpen) {
-        app.get(Logger).warn({ err }, 'Account rate-limit Redis error (fail-open)');
-        return;
-      }
-
-      app.get(Logger).error({ err }, 'Account rate-limit Redis error (fail-closed)');
-      const { requestId } = ensureRequestIds(req.raw, req.headers);
-      return reply
-        .status(HttpStatus.SERVICE_UNAVAILABLE)
-        .header('content-type', 'application/problem+json')
-        .header('retry-after', String(RETRY_AFTER_AUTH_UNAVAILABLE_SECONDS))
-        .send(
-          buildProblemDetails({
-            status: HttpStatus.SERVICE_UNAVAILABLE,
-            title: 'Service Unavailable',
-            detail: 'Authentication is temporarily unavailable. Retry shortly.',
-            code: ERROR_CODES.SERVICE_UNAVAILABLE,
-            instance: sanitizeUrlForLogging(req.url),
-            requestId,
-          }),
-        );
-    }
-  });
 
   const auth = app.get<BetterAuthInstance>(BETTER_AUTH_INSTANCE);
-
-  // STRICT bucket: credential paths; LOOSE bucket: session ops.
-  const authSessionRateLimitMax = config.get('AUTH_SESSION_RATE_LIMIT_MAX', { infer: true });
-  const authSessionRateLimitWindowMs = config.get('AUTH_SESSION_RATE_LIMIT_WINDOW_MS', {
-    infer: true,
+  const authRouteHandler = createBetterAuthRouteHandler(auth, {
+    timeoutMs: config.get('HTTP_REQUEST_TIMEOUT_MS', { infer: true }),
+    logger: app.get(Logger),
   });
-  const strictAuthRouteConfig: RouteShorthandOptions = {
-    config: {
-      rateLimit: {
-        max: authIpRateLimitMax,
-        timeWindow: authRateLimitWindowMs,
-        keyGenerator: (req) => req.ip,
-      },
-    },
-  };
-  const looseAuthRouteConfig: RouteShorthandOptions = {
-    config: {
-      rateLimit: {
-        max: authSessionRateLimitMax,
-        timeWindow: authSessionRateLimitWindowMs,
-        keyGenerator: (req) => req.ip,
-      },
-    },
-  };
-
-  // reply.hijack() detaches the request from Fastify, so neither the Nest TimeoutInterceptor nor any
-  // Fastify timeout bounds this handler. Watchdog it so a Better Auth handler that hangs without
-  // throwing (e.g. an OAuth token exchange stuck on an unresponsive upstream) can't pin a connection
-  // open forever. 0 (timeout disabled) skips the watchdog.
-  const authHandlerTimeoutMs = config.get('HTTP_REQUEST_TIMEOUT_MS', { infer: true });
-
-  const authRouteHandler = async (req: FastifyRequest, reply: FastifyReply): Promise<void> => {
-    // Establish the IDs before hijacking the response lifecycle. ensureRequestIds reuses whatever
-    // Nest's CLS middleware already stamped for this request, so the hijacked response and the log
-    // lines around it never disagree.
-    const { requestId, correlationId } = ensureRequestIds(req.raw, req.headers);
-    reply.header('x-request-id', requestId);
-    reply.header('x-correlation-id', correlationId);
-
-    // Propagate Fastify's parsed body to req.raw so Better Auth's toNodeHandler can read it.
-    if (req.body !== undefined && (req.raw as unknown as { body?: unknown }).body === undefined) {
-      (req.raw as unknown as { body: unknown }).body = req.body;
-    }
-
-    // Preserve headers buffered by @fastify/cors (Access-Control-*) and the x-request-id/-correlation
-    // headers above across the hijack — Better Auth writes straight to reply.raw and drops whatever is
-    // still buffered. Shared with the e2e test app so the regression test exercises this exact path.
-    flushBufferedReplyHeaders(reply);
-    reply.hijack();
-
-    let timedOut = false;
-    let timer: NodeJS.Timeout | undefined;
-    // Better Auth can resolve an APIError as a 5xx Response instead of throwing. Wrap its Fetch
-    // handler before the Node adapter writes anything so that path is masked too.
-    const betterAuthHandler = toNodeHandler(async (request) =>
-      maskBetterAuthServerResponse(await auth.handler(request), {
-        instance: sanitizeUrlForLogging(req.url),
-        requestId,
-        correlationId,
-      }),
-    );
-    const handlerPromise = betterAuthHandler(req.raw, reply.raw);
-    // Node can't cancel the handler; if it settles AFTER the watchdog already responded, swallow the
-    // result/error here so it never surfaces as an unhandled rejection.
-    handlerPromise.catch((late: unknown) => {
-      if (timedOut) {
-        // The real failure only surfaces here (after the watchdog already sent 503), so report it to
-        // Sentry too — otherwise a genuine hung-then-failed handler would be invisible beyond a warn.
-        Sentry.captureException(late, { tags: { requestId, correlationId } });
-        app
-          .get(Logger)
-          .warn(
-            { err: late, requestId, correlationId, url: sanitizeUrlForLogging(req.url) },
-            `Better Auth handler rejected after the ${authHandlerTimeoutMs}ms watchdog fired`,
-          );
-      }
-    });
-
-    try {
-      if (authHandlerTimeoutMs > 0) {
-        await Promise.race([
-          handlerPromise,
-          new Promise<never>((_resolve, reject) => {
-            timer = setTimeout(() => {
-              timedOut = true;
-              reject(new Error('BETTER_AUTH_HANDLER_TIMEOUT'));
-            }, authHandlerTimeoutMs);
-            timer.unref();
-          }),
-        ]);
-      } else {
-        await handlerPromise;
-      }
-    } catch (err) {
-      // After hijack(), Fastify's error handler won't run — close manually to prevent slowloris hang.
-      Sentry.captureException(err, { tags: { requestId, correlationId } });
-      app
-        .get(Logger)
-        .error(
-          { err, requestId, correlationId, url: sanitizeUrlForLogging(req.url) },
-          timedOut ? 'Better Auth handler timed out' : 'Better Auth handler threw unexpectedly',
-        );
-      if (!reply.raw.headersSent) {
-        const status = timedOut ? HttpStatus.SERVICE_UNAVAILABLE : HttpStatus.INTERNAL_SERVER_ERROR;
-        const body = JSON.stringify(
-          buildProblemDetails({
-            status,
-            title: timedOut ? 'Service Unavailable' : 'Internal Server Error',
-            code: timedOut ? ERROR_CODES.SERVICE_UNAVAILABLE : ERROR_CODES.INTERNAL_SERVER_ERROR,
-            instance: sanitizeUrlForLogging(req.url),
-            requestId,
-          }),
-        );
-        const headers: Record<string, string | number> = {
-          'Content-Type': 'application/problem+json',
-          'Content-Length': Buffer.byteLength(body),
-          'X-Request-Id': requestId,
-          'X-Correlation-Id': correlationId,
-        };
-        if (timedOut) headers['Retry-After'] = String(RETRY_AFTER_AUTH_UNAVAILABLE_SECONDS);
-        reply.raw.writeHead(status, headers);
-        reply.raw.end(body);
-      } else if (!reply.raw.writableEnded) {
-        // The delegated handler may have started a response before throwing. It is too late to
-        // replace the status/body, but ending the stream avoids leaving a half-open connection.
-        reply.raw.end();
-      }
-    } finally {
-      if (timer) clearTimeout(timer);
-    }
-  };
 
   for (const path of STRICT_AUTH_PATHS) {
     fastify.all(path, strictAuthRouteConfig, authRouteHandler);

@@ -11,11 +11,6 @@ import type { ModuleGeneratorSchema } from './schema';
 
 type DirectoryEnum = 'modules' | 'composition';
 
-const DIRECTORY_MAP: Record<DirectoryEnum, string> = {
-  modules: 'libs/modules',
-  composition: 'libs/composition',
-};
-
 // Normalizes the raw --directory option to the canonical enum value.
 // Accepts full paths (libs/modules, libs/composition) for backward compat
 // with old tooling that passed absolute-style paths. Any other value is
@@ -34,7 +29,7 @@ function normalizeDirectory(raw: string): DirectoryEnum {
 export async function moduleGenerator(tree: Tree, options: ModuleGeneratorSchema): Promise<void> {
   const { name, withCqrs = true } = options;
   const rawDir = normalizeDirectory(options.directory ?? 'modules');
-  const directory = DIRECTORY_MAP[rawDir];
+  const directory = `libs/${rawDir}`;
   const moduleNames = names(name);
   const projectRoot = `${directory}/${moduleNames.fileName}`;
   const offset = offsetFromRoot(projectRoot);

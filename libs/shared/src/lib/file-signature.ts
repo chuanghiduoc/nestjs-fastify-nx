@@ -2,7 +2,6 @@ interface Signature {
   readonly mimeType: string;
   readonly extensions: readonly string[];
   readonly bytes: ReadonlyArray<number | null>; // null = wildcard
-  readonly offset?: number;
 }
 
 const SIGNATURES: readonly Signature[] = [
@@ -35,21 +34,10 @@ export interface DetectedFileType {
 }
 
 export function detectFileType(buffer: Buffer): DetectedFileType | null {
-  for (const sig of SIGNATURES) {
-    const offset = sig.offset ?? 0;
-    if (buffer.length < offset + sig.bytes.length) continue;
-    let match = true;
-    for (let i = 0; i < sig.bytes.length; i++) {
-      const expected = sig.bytes[i];
-      if (expected === null) continue;
-      if (buffer[offset + i] !== expected) {
-        match = false;
-        break;
-      }
-    }
-    if (match) {
-      return { mimeType: sig.mimeType, extension: sig.extensions[0] };
-    }
-  }
-  return null;
+  const signature = SIGNATURES.find(
+    (sig) =>
+      buffer.length >= sig.bytes.length &&
+      sig.bytes.every((expected, i) => expected === null || buffer[i] === expected),
+  );
+  return signature ? { mimeType: signature.mimeType, extension: signature.extensions[0] } : null;
 }

@@ -2,7 +2,7 @@ import { Inject } from '@nestjs/common';
 import { QueryHandler, type IQueryHandler } from '@nestjs/cqrs';
 import { DomainException } from '@nestjs-fastify-nx/core';
 import { invalidCursorProblem } from '@nestjs-fastify-nx/contracts';
-import { decodeCursor, encodeCursor, type DecodedCursor } from '@nestjs-fastify-nx/shared';
+import { decodeCursor, lastCursorOf, type DecodedCursor } from '@nestjs-fastify-nx/shared';
 import { SESSION_REPOSITORY } from '../../../domain/ports/session-repository.port';
 import type { SessionRepositoryPort } from '../../../domain/ports/session-repository.port';
 import type { SessionDto } from '../../dto/session.dto';
@@ -36,12 +36,7 @@ export class ListMySessionsHandler implements IQueryHandler<
       updatedAt: session.updatedAt,
     }));
 
-    const lastItem = items[items.length - 1];
-    return {
-      data,
-      hasMore,
-      lastCursor: lastItem ? encodeCursor(lastItem.createdAt, lastItem.id) : null,
-    };
+    return { data, hasMore, lastCursor: lastCursorOf(items) };
   }
 
   private decodeStartingAfter(raw?: string): DecodedCursor | undefined {

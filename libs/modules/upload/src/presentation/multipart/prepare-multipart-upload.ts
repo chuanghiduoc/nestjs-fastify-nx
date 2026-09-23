@@ -15,6 +15,7 @@ import {
   assertMimeAllowed,
   assertSizeWithinLimit,
 } from '../../domain/entities/stored-file.entity';
+import { readUploadLimits, UPLOAD_MAGIC_BYTE_COUNT } from '../../application/upload-limits';
 
 export interface PreparedMultipartUpload {
   filepath: string;
@@ -31,8 +32,6 @@ const UNCAPPED_PART_LIMITS = (fileSize: number) => ({
   parts: Number.MAX_SAFE_INTEGER,
 });
 
-const SIGNATURE_BYTES = 16;
-const DEFAULT_MAX_FILE_BYTES = 10 * 1024 * 1024;
 const DEFAULT_MAX_TOTAL_BYTES = 1024 * 1024 * 1024;
 const DEFAULT_TIMEOUT_MS = 900_000;
 const prepared = new WeakMap<FastifyRequest, Promise<PreparedMultipartUpload[]>>();
@@ -106,7 +105,7 @@ async function prepare(
 ): Promise<PreparedMultipartUpload[]> {
   if (!request.isMultipart()) throw new BadRequestException('Expected multipart/form-data.');
   const signal = acquireRequest(request, reply);
-  const maximum = positiveIntEnv('UPLOAD_MAX_FILE_BYTES', DEFAULT_MAX_FILE_BYTES);
+  const maximum = readUploadLimits().maxFileBytes;
   const maxFiles = positiveIntEnv('UPLOAD_MAX_FILES', 10);
   const budget = { remaining: positiveIntEnv('UPLOAD_MAX_TOTAL_BYTES', DEFAULT_MAX_TOTAL_BYTES) };
   const files: PreparedMultipartUpload[] = [];
@@ -155,11 +154,12 @@ async function saveFile(
   },
 ): Promise<PreparedMultipartUpload> {
   const hash = createHash('sha256');
-  const signature = Buffer.alloc(SIGNATURE_BYTES);
+  const signature = Buffer.alloc(UPLOAD_MAGIC_BYTE_COUNT);
   let size = 0;
   const inspect = new Transform({
     transform(chunk: Buffer, _encoding, callback) {
-      if (size < SIGNATURE_BYTES) chunk.copy(signature, size, 0, SIGNATURE_BYTES - size);
+      if (size < UPLOAD_MAGIC_BYTE_COUNT)
+        chunk.copy(signature, size, 0, UPLOAD_MAGIC_BYTE_COUNT - size);
       size += chunk.length;
       options.budget.remaining -= chunk.length;
       if (options.budget.remaining < 0 || size > options.maximum) {
@@ -179,7 +179,7 @@ async function saveFile(
   if (part.file.truncated) throw new PayloadTooLargeException('File exceeds the byte limit.');
   assertSizeWithinLimit(size, options.maximum);
   assertMagicBytesMatch(
-    signature.subarray(0, Math.min(size, SIGNATURE_BYTES)),
+    signature.subarray(0, Math.min(size, UPLOAD_MAGIC_BYTE_COUNT)),
     part.mimetype,
     'file',
   );

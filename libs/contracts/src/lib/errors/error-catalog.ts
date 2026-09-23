@@ -106,13 +106,6 @@ const DOCS: readonly ErrorTypeDoc[] = [
     resolution: 'Not a client error — the endpoint is unfinished. Do not retry.',
   },
   {
-    code: ERROR_CODES.ROUTE_NOT_FOUND,
-    status: 404,
-    title: 'Route not found',
-    meaning: 'No route matches this path. An unmatched method on an existing path also lands here.',
-    resolution: 'Check the path and version prefix (`/api/v1/...`) against the OpenAPI spec.',
-  },
-  {
     code: ERROR_CODES.VALIDATION_FAILED,
     status: 422,
     title: 'Validation failed',
@@ -230,25 +223,11 @@ const DOCS: readonly ErrorTypeDoc[] = [
     resolution: 'Declare the true content type, or upload the file the declaration described.',
   },
   {
-    code: ERROR_CODES.UPLOAD_COMMIT_FAILED,
-    status: 409,
-    title: 'Upload commit failed',
-    meaning: 'The object could not be moved out of quarantine into its committed location.',
-    resolution: 'Retry the confirm call. Presign again if it keeps failing.',
-  },
-  {
     code: ERROR_CODES.UPLOAD_IN_PROGRESS,
     status: 409,
     title: 'Upload already in progress',
     meaning: 'This object is already being verified by the worker.',
     resolution: 'Wait for verification to settle before confirming again.',
-  },
-  {
-    code: ERROR_CODES.STORAGE_BODY_EMPTY,
-    status: 400,
-    title: 'Storage body empty',
-    meaning: 'The upload body was empty — zero bytes.',
-    resolution: 'Send a non-empty payload.',
   },
   {
     code: ERROR_CODES.STORAGE_UPLOAD_FAILED,

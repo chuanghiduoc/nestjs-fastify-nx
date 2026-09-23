@@ -101,15 +101,6 @@ describe('PrismaSessionRepository', () => {
     expect(result.hasMore).toBe(true);
   });
 
-  it('scopes a single-session lookup to the owner', async () => {
-    const findFirst = vi.fn().mockResolvedValue(null);
-    const repository = new PrismaSessionRepository(prismaDouble({ findFirst }));
-    const id = generateId();
-
-    expect(await repository.findByIdForUser(USER_ID, id)).toBeNull();
-    expect(findFirst.mock.calls[0][0].where).toEqual({ id, userId: USER_ID });
-  });
-
   it('deletes only a session owned by the caller', async () => {
     const deleteMany = vi.fn().mockResolvedValue({ count: 0 });
     const repository = new PrismaSessionRepository(prismaDouble({ deleteMany }));

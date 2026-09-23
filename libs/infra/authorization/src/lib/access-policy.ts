@@ -77,7 +77,7 @@ export function decideWithoutOrganization(
   permissions: readonly Permission[],
 ): readonly AccessDecision[] {
   return permissions.map((permission) =>
-    !requiresMembership(permission) && MEMBERSHIP_INDEPENDENT_PERMISSIONS.includes(permission)
+    MEMBERSHIP_INDEPENDENT_PERMISSIONS.includes(permission)
       ? { allowed: true }
       : { allowed: false, reason: DENIAL_REASONS.permissionNotGranted },
   );

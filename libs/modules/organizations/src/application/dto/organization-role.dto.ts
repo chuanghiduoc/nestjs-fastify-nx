@@ -1,4 +1,6 @@
 import type { Permission } from '@nestjs-fastify-nx/shared';
+import type { OrganizationRole } from '../../domain/entities/organization-role.entity';
+import type { Team } from '../../domain/entities/team.entity';
 
 export interface OrganizationRoleDto {
   id: string | null;
@@ -37,4 +39,25 @@ export interface OrganizationDto {
   teamCount: number;
   pendingInvitationCount: number;
   createdAt: Date;
+}
+
+export function toRoleDto(role: OrganizationRole): OrganizationRoleDto {
+  return {
+    id: role.id,
+    role: role.role,
+    system: false,
+    permissions: role.permissions,
+    createdAt: role.createdAt,
+    updatedAt: role.updatedAt,
+  };
+}
+
+export function toTeamDto(team: Team, memberCount: number): TeamDto {
+  return {
+    id: team.id,
+    name: team.name,
+    memberCount,
+    createdAt: team.createdAt,
+    updatedAt: team.updatedAt,
+  };
 }

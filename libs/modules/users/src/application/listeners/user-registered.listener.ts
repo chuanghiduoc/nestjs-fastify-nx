@@ -20,8 +20,8 @@ export class UserRegisteredListener {
 
   // The outbox relay must await this deferred listener and receive queue failures. Nest's
   // default `suppressErrors: true` would otherwise log the error and mark the row processed.
-  // The relay reconstructs a plain DomainEvent from the outbox row — it is NEVER a UserRegistered
-  // instance, so the payload is parsed here rather than trusted.
+  // The relay reconstructs a plain DomainEvent from the outbox row, so the payload is parsed
+  // here rather than trusted.
   @OnEvent(DOMAIN_EVENTS.USERS_REGISTERED, { async: true, promisify: true, suppressErrors: false })
   async handle(event: DomainEvent): Promise<void> {
     const parsed = userEventPayloadSchema.safeParse(event.payload);

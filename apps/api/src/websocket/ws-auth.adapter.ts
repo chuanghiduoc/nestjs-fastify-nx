@@ -102,10 +102,6 @@ export interface WsAuthOptions {
 
 class WsPublicError extends Error {}
 
-function wsPublicError(message: string): WsPublicError {
-  return new WsPublicError(message);
-}
-
 export async function revalidateWsSession(auth: BetterAuthInstance, socket: Socket): Promise<void> {
   const cookieHeader = socket.handshake.headers['cookie'];
   const bearerToken =
@@ -120,7 +116,7 @@ export async function revalidateWsSession(auth: BetterAuthInstance, socket: Sock
   if (bearerToken) headers['authorization'] = `Bearer ${bearerToken}`;
 
   if (Object.keys(headers).length === 0) {
-    throw wsPublicError('UNAUTHORIZED: No session credentials provided');
+    throw new WsPublicError('UNAUTHORIZED: No session credentials provided');
   }
 
   const session = await auth.api.getSession({
@@ -129,12 +125,12 @@ export async function revalidateWsSession(auth: BetterAuthInstance, socket: Sock
   });
 
   if (!session?.user || !session.session) {
-    throw wsPublicError('UNAUTHORIZED: Invalid session');
+    throw new WsPublicError('UNAUTHORIZED: Invalid session');
   }
 
   const expiresAt = session.session.expiresAt;
   if (expiresAt && new Date(expiresAt).getTime() < Date.now()) {
-    throw wsPublicError('UNAUTHORIZED: Session expired');
+    throw new WsPublicError('UNAUTHORIZED: Session expired');
   }
 
   const user = session.user as {
@@ -144,7 +140,7 @@ export async function revalidateWsSession(auth: BetterAuthInstance, socket: Sock
     status: string;
   };
   if (user.status !== USER_STATUS.ACTIVE) {
-    throw wsPublicError('UNAUTHORIZED: Account not active');
+    throw new WsPublicError('UNAUTHORIZED: Account not active');
   }
 
   wsData(socket).user = {
@@ -205,7 +201,7 @@ export function createWsAuthMiddleware(auth: BetterAuthInstance, options: WsAuth
           }
           wsData(socket).connectionLease = { key, member: socket.id };
           socket.on('disconnect', () => {
-            void redis.eval(RELEASE_CONNECTION_SCRIPT, 1, key, socket.id).catch(() => undefined);
+            void releaseWsConnectionLease(redis, socket).catch(() => undefined);
           });
         } catch {
           // Fail open on Redis errors — session auth already passed; IP cap is secondary defence.
@@ -221,7 +217,7 @@ export function createWsAuthMiddleware(auth: BetterAuthInstance, options: WsAuth
       // Adapter/DB errors are not authentication facts. Keep the real cause server-side and expose
       // only a fixed denial; the Socket.IO handshake bypasses every HTTP/GraphQL exception filter.
       onSessionError?.(err);
-      next(wsPublicError('UNAUTHORIZED: Session validation failed'));
+      next(new WsPublicError('UNAUTHORIZED: Session validation failed'));
     }
   };
 }

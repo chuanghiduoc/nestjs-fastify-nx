@@ -12,3 +12,4 @@ export {
   LEASE_RENEW_INTERVAL_MS,
   type RedisLeaderLeaseOptions,
 } from './lib/redis-leader-lease';
+export { closeQuietly, closeQueueQuietly } from './lib/close-quietly';

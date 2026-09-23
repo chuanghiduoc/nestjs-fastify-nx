@@ -2,7 +2,7 @@ import { Inject } from '@nestjs/common';
 import { QueryHandler, type IQueryHandler } from '@nestjs/cqrs';
 import { DomainException } from '@nestjs-fastify-nx/core';
 import { invalidCursorProblem } from '@nestjs-fastify-nx/contracts';
-import { decodeCursor, encodeCursor, type DecodedCursor } from '@nestjs-fastify-nx/shared';
+import { decodeCursor, lastCursorOf, type DecodedCursor } from '@nestjs-fastify-nx/shared';
 import { NOTIFICATION_REPOSITORY } from '../../../domain/ports/notification-repository.port';
 import type { NotificationRepositoryPort } from '../../../domain/ports/notification-repository.port';
 import type { NotificationDto } from '../../dto/notification.dto';
@@ -36,12 +36,7 @@ export class ListNotificationsHandler implements IQueryHandler<
       createdAt: notification.createdAt,
     }));
 
-    const lastItem = items[items.length - 1];
-    return {
-      data,
-      hasMore,
-      lastCursor: lastItem ? encodeCursor(lastItem.createdAt, lastItem.id) : null,
-    };
+    return { data, hasMore, lastCursor: lastCursorOf(items) };
   }
 
   private decodeStartingAfter(raw?: string): DecodedCursor | undefined {

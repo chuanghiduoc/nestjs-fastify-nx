@@ -1,3 +1,4 @@
+import { paginateNewestFirst } from '@nestjs-fastify-nx/shared';
 import type {
   AuditLogRepositoryPort,
   FindAuditLogsCursorOptions,
@@ -14,17 +15,14 @@ export class MockAuditLogRepository implements AuditLogRepositoryPort {
   }
 
   findAllCursor(options: FindAuditLogsCursorOptions): Promise<FindAuditLogsCursorResult> {
-    const matching = [...this.entries.values()]
-      .filter((entry) => this.matches(entry, options))
-      .sort(compareNewestFirst);
+    const matching = [...this.entries.values()].filter((entry) => this.matches(entry, options));
 
-    const cursor = options.startingAfter;
-    const afterCursor = cursor ? matching.filter((entry) => isBefore(entry, cursor)) : matching;
-
-    return Promise.resolve({
-      items: afterCursor.slice(0, options.limit),
-      hasMore: afterCursor.length > options.limit,
-    });
+    return Promise.resolve(
+      paginateNewestFirst(matching, {
+        startingAfter: options.startingAfter,
+        limit: options.limit,
+      }),
+    );
   }
 
   clear(): void {
@@ -44,16 +42,4 @@ export class MockAuditLogRepository implements AuditLogRepositoryPort {
     }
     return true;
   }
-}
-
-function compareNewestFirst(left: AuditLog, right: AuditLog): number {
-  const byDate = right.createdAt.getTime() - left.createdAt.getTime();
-  return byDate !== 0 ? byDate : right.id.localeCompare(left.id);
-}
-
-function isBefore(entry: AuditLog, cursor: { createdAt: Date; id: string }): boolean {
-  const entryTime = entry.createdAt.getTime();
-  const cursorTime = cursor.createdAt.getTime();
-  if (entryTime !== cursorTime) return entryTime < cursorTime;
-  return entry.id.localeCompare(cursor.id) < 0;
 }

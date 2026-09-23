@@ -5,6 +5,7 @@ import {
   createTestApp,
   cookieHeaderFromSetCookies,
   E2E_CORS_ORIGIN,
+  resetRateLimitBudget,
   type TestAppContext,
 } from './test-app';
 
@@ -20,6 +21,7 @@ describe('Auth E2E (Better Auth)', () => {
 
   beforeEach(async () => {
     await ctx.cleaner.truncateAll();
+    await resetRateLimitBudget();
   });
 
   describe('POST /api/auth/sign-up/email', () => {

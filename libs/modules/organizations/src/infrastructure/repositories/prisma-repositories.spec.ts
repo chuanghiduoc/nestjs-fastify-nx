@@ -121,6 +121,36 @@ describe('PrismaOrganizationRoleRepository', () => {
     expect(await repository.deleteUnlessHeld(ORG_ID, 'ghost')).toBe('not_found');
   });
 
+  it('scopes the permission update to the organization', async () => {
+    const updateMany = vi.fn().mockResolvedValue({ count: 1 });
+    const prisma = prismaDouble('organizationRole', { updateMany });
+    const role = OrganizationRole.create({
+      organizationId: ORG_ID,
+      grantedToActor: ALL_PERMISSIONS,
+      role: 'auditor',
+      permissions: [PERMISSIONS.AUDIT_LOG_READ],
+    });
+
+    await new PrismaOrganizationRoleRepository(prisma).update(role);
+
+    expect(updateMany.mock.calls[0][0].where).toEqual({ organizationId: ORG_ID, role: 'auditor' });
+  });
+
+  it('reports whether the permission update matched a row', async () => {
+    const updateMany = vi.fn().mockResolvedValue({ count: 0 });
+    const prisma = prismaDouble('organizationRole', { updateMany });
+    const role = OrganizationRole.create({
+      organizationId: ORG_ID,
+      grantedToActor: ALL_PERMISSIONS,
+      role: 'auditor',
+      permissions: [PERMISSIONS.AUDIT_LOG_READ],
+    });
+
+    const changed = await new PrismaOrganizationRoleRepository(prisma).update(role);
+
+    expect(changed).toBe(false);
+  });
+
   it('sends Postgres a whitespace regex, not the letter s, when splitting the role column', async () => {
     const { queryRaw, repository } = deletionDouble([{ found: true, holders: 1, deleted: false }]);
 
@@ -177,7 +207,7 @@ describe('PrismaTeamRepository', () => {
 
     expect(findMany.mock.calls[0][0].where.AND[0].OR).toEqual([
       { createdAt: { lt: createdAt } },
-      { AND: [{ createdAt }, { id: { lt: id } }] },
+      { createdAt, id: { lt: id } },
     ]);
   });
 
@@ -212,12 +242,33 @@ describe('PrismaTeamRepository', () => {
 
   it('translates a duplicate name on rename too', async () => {
     const repository = new PrismaTeamRepository(
-      prismaDouble('team', { update: vi.fn().mockRejectedValue(uniqueViolation()) }),
+      prismaDouble('team', { updateMany: vi.fn().mockRejectedValue(uniqueViolation()) }),
     );
 
     await expect(
       repository.update(Team.create({ organizationId: ORG_ID, name: 'Platform' })),
     ).rejects.toMatchObject({ kind: 'conflict' });
+  });
+
+  it('scopes the rename to the organization', async () => {
+    const updateMany = vi.fn().mockResolvedValue({ count: 1 });
+    const repository = new PrismaTeamRepository(prismaDouble('team', { updateMany }));
+    const team = Team.create({ organizationId: ORG_ID, name: 'Renamed' });
+
+    await repository.update(team);
+
+    expect(updateMany.mock.calls[0][0].where).toEqual({ id: team.id, organizationId: ORG_ID });
+  });
+
+  it('reports whether the rename matched a row', async () => {
+    const updateMany = vi.fn().mockResolvedValue({ count: 0 });
+    const repository = new PrismaTeamRepository(prismaDouble('team', { updateMany }));
+
+    const changed = await repository.update(
+      Team.create({ organizationId: ORG_ID, name: 'Renamed' }),
+    );
+
+    expect(changed).toBe(false);
   });
 
   it('scopes findById to the organization', async () => {

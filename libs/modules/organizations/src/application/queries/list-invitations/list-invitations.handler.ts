@@ -2,7 +2,7 @@ import { Inject } from '@nestjs/common';
 import { QueryHandler, type IQueryHandler } from '@nestjs/cqrs';
 import { DomainException } from '@nestjs-fastify-nx/core';
 import { invalidCursorProblem } from '@nestjs-fastify-nx/contracts';
-import { decodeCursor, encodeCursor, type DecodedCursor } from '@nestjs-fastify-nx/shared';
+import { decodeCursor, lastCursorOf, type DecodedCursor } from '@nestjs-fastify-nx/shared';
 import { INVITATION_REPOSITORY } from '../../../domain/ports/invitation-repository.port';
 import type { InvitationRepositoryPort } from '../../../domain/ports/invitation-repository.port';
 import type { InvitationDto } from '../../dto/organization-role.dto';
@@ -37,12 +37,7 @@ export class ListInvitationsHandler implements IQueryHandler<
       createdAt: invitation.createdAt,
     }));
 
-    const lastItem = items[items.length - 1];
-    return {
-      data,
-      hasMore,
-      lastCursor: lastItem ? encodeCursor(lastItem.createdAt, lastItem.id) : null,
-    };
+    return { data, hasMore, lastCursor: lastCursorOf(items) };
   }
 
   private decodeStartingAfter(raw?: string): DecodedCursor | undefined {

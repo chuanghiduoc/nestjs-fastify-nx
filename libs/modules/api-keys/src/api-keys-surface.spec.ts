@@ -81,7 +81,7 @@ describe('PrismaApiKeyRepository', () => {
 
     expect(findMany.mock.calls[0][0].where.AND[0].OR).toEqual([
       { createdAt: { lt: createdAt } },
-      { AND: [{ createdAt }, { id: { lt: id } }] },
+      { createdAt, id: { lt: id } },
     ]);
   });
 

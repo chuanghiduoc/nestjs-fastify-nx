@@ -59,14 +59,13 @@ export class TeamsController {
 
   @Get()
   @RequirePermission(PERMISSIONS.TEAM_READ)
-  @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'List teams in the active organization',
     description:
       'Cursor-paginated, newest first. `search` matches the team name case-insensitively. Each entry carries the number of members currently assigned to the team.',
   })
   @ApiPaginatedResponse(TeamResponseDto, { description: 'Cursor-paginated list of teams.' })
-  @ApiCommonErrors({ auth: true, forbidden: true, validation: true })
+  @ApiCommonErrors()
   async list(
     @CurrentUser() user: AuthenticatedSession,
     @Query() filter: ListTeamsFilterDto,
@@ -88,10 +87,9 @@ export class TeamsController {
 
   @Post()
   @RequirePermission(PERMISSIONS.TEAM_CREATE)
-  @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Create a team in the active organization' })
   @ApiCreatedResponse({ type: TeamResponseDto, description: 'Team created.' })
-  @ApiCommonErrors({ auth: true, forbidden: true, validation: true, conflict: true })
+  @ApiCommonErrors({ conflict: true })
   create(@CurrentUser() user: AuthenticatedSession, @Body() dto: CreateTeamDto): Promise<TeamDto> {
     return this.commandBus.execute(new CreateTeamCommand(requireOrganizationId(user), dto.name));
   }
@@ -102,13 +100,7 @@ export class TeamsController {
   @ApiOperation({ summary: 'Rename a team' })
   @ApiParam({ name: 'id', format: 'uuid', description: 'Team id (UUID v7).' })
   @ApiOkResponse({ type: TeamResponseDto, description: 'Team updated.' })
-  @ApiCommonErrors({
-    auth: true,
-    forbidden: true,
-    validation: true,
-    notFound: true,
-    conflict: true,
-  })
+  @ApiCommonErrors({ notFound: true, conflict: true })
   update(
     @CurrentUser() user: AuthenticatedSession,
     @Param('id', new ParseUUIDPipe({ version: '7' })) id: string,
@@ -129,7 +121,7 @@ export class TeamsController {
   })
   @ApiParam({ name: 'id', format: 'uuid', description: 'Team id (UUID v7).' })
   @ApiNoContentResponse({ description: 'Team deleted.' })
-  @ApiCommonErrors({ auth: true, forbidden: true, notFound: true })
+  @ApiCommonErrors({ notFound: true })
   remove(
     @CurrentUser() user: AuthenticatedSession,
     @Param('id', new ParseUUIDPipe({ version: '7' })) id: string,

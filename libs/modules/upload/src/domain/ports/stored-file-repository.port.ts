@@ -9,14 +9,15 @@ export interface StoredFileTransitionFields {
   scanOutcome?: MalwareScanOutcome;
 }
 
+export type StoredFileCreateOutcome = 'created' | 'duplicate';
+
 export interface StoredFileRepositoryPort {
   createBatch(props: readonly StoredFileProps[]): Promise<void>;
   publishBatch(ids: readonly string[], status: 'READY' | 'VERIFYING'): Promise<void>;
   findBySourceKey(sourceKey: string): Promise<StoredFile | null>;
   findByKey(key: string): Promise<StoredFile | null>;
   findById(id: string): Promise<StoredFile | null>;
-  /** Rejects with a duplicate-key error the caller can recover from when sourceKey already exists. */
-  create(props: StoredFileProps): Promise<void>;
+  create(props: StoredFileProps): Promise<StoredFileCreateOutcome>;
   /**
    * Compare-and-set: applies the change only while the row still holds `from`. Returns false when
    * another execution already moved it, which is what makes a duplicate confirm or a retried verify
@@ -40,8 +41,4 @@ export interface StoredFileRepositoryPort {
    * DELETE is a no-op rather than moving the retention clock forward.
    */
   softDelete(id: string): Promise<boolean>;
-}
-
-export function isDuplicateKeyError(error: unknown): boolean {
-  return (error as { code?: string } | null)?.code === 'P2002';
 }

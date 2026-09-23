@@ -10,13 +10,11 @@
     "object_not_found": "Không tìm thấy đối tượng tại \"{key}\"",
     "size_out_of_range": "Kích thước {size} bytes nằm ngoài khoảng cho phép (1..{max})",
     "magic_bytes_mismatch": "Magic bytes nhận diện là \"{detected}\" nhưng Content-Type khai báo là \"{declared}\"",
-    "magic_bytes_unknown": "Đối tượng tại \"{key}\" không có chữ ký nhị phân được nhận diện",
-    "commit_failed": "Không commit được upload; vui lòng thử lại"
+    "magic_bytes_unknown": "Đối tượng tại \"{key}\" không có chữ ký nhị phân được nhận diện"
   },
   "users": {
     "not_found": "Không tìm thấy người dùng",
-    "already_exists": "Đã tồn tại bản ghi với giá trị này",
-    "database_error": "Lỗi cơ sở dữ liệu"
+    "already_exists": "Đã tồn tại bản ghi với giá trị này"
   },
   "auth": {
     "session_missing": "Phiên làm việc không tồn tại hoặc đã hết hạn",
@@ -26,7 +24,6 @@
     "organization_context_required": "Phiên đăng nhập chưa chọn tổ chức nào"
   },
   "storage": {
-    "body_empty": "Upload bị từ chối — nội dung rỗng cho key \"{key}\"",
     "upload_failed": "Upload thất bại",
     "presign_failed": "Cấp presigned URL thất bại",
     "head_failed": "Đọc metadata thất bại",

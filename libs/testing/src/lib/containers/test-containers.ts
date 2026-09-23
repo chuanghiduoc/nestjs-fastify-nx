@@ -41,17 +41,14 @@ export async function createTestContainers(): Promise<TestContainers> {
     ]);
   };
 
-  if (postgresResult.status === 'rejected') {
+  const resolveOrStop = async <T>(result: PromiseSettledResult<T>): Promise<T> => {
+    if (result.status === 'fulfilled') return result.value;
     await stopStarted();
-    throw postgresResult.reason;
-  }
-  if (redisResult.status === 'rejected') {
-    await stopStarted();
-    throw redisResult.reason;
-  }
+    throw result.reason;
+  };
 
-  const postgres = postgresResult.value;
-  const redis = redisResult.value;
+  const postgres = await resolveOrStop(postgresResult);
+  const redis = await resolveOrStop(redisResult);
 
   return {
     postgres,

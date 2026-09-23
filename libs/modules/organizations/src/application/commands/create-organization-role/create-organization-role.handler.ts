@@ -4,7 +4,7 @@ import { AUTHORIZATION_PORT, type AuthorizationPort } from '@nestjs-fastify-nx/c
 import { ORGANIZATION_ROLE_REPOSITORY } from '../../../domain/ports/organization-role-repository.port';
 import type { OrganizationRoleRepositoryPort } from '../../../domain/ports/organization-role-repository.port';
 import { OrganizationRole } from '../../../domain/entities/organization-role.entity';
-import type { OrganizationRoleDto } from '../../dto/organization-role.dto';
+import { toRoleDto, type OrganizationRoleDto } from '../../dto/organization-role.dto';
 import { roleAlreadyExists } from '../../organization-errors';
 import { CreateOrganizationRoleCommand } from './create-organization-role.command';
 
@@ -38,13 +38,6 @@ export class CreateOrganizationRoleHandler implements ICommandHandler<
 
     await this.roles.create(role);
 
-    return {
-      id: role.id,
-      role: role.role,
-      system: false,
-      permissions: role.permissions,
-      createdAt: role.createdAt,
-      updatedAt: role.updatedAt,
-    };
+    return toRoleDto(role);
   }
 }

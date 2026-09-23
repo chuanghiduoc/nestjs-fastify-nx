@@ -7,7 +7,6 @@ import {
   Inject,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { GqlContextType, GqlExecutionContext } from '@nestjs/graphql';
 import { fromNodeHeaders } from 'better-auth/node';
 import type { FastifyRequest } from 'fastify';
 import * as Sentry from '@sentry/nestjs';
@@ -19,7 +18,7 @@ import { PrismaService } from '@nestjs-fastify-nx/infra-database';
 import { BETTER_AUTH_INSTANCE } from './better-auth-instance.token';
 import type { BetterAuthInstance } from './better-auth.config';
 import type { AuthenticatedSession } from './better-auth.types';
-import { IS_PUBLIC_KEY } from './public.decorator';
+import { isPublic, requestOf } from './request-context';
 
 @Injectable()
 export class BetterAuthGuard implements CanActivate {
@@ -37,13 +36,9 @@ export class BetterAuthGuard implements CanActivate {
     // on @SubscribeMessage handlers, so skip the ws context here.
     if (context.getType() === 'ws') return true;
 
-    const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
-      context.getHandler(),
-      context.getClass(),
-    ]);
-    if (isPublic) return true;
+    if (isPublic(this.reflector, context)) return true;
 
-    const request = this.getRequest(context);
+    const request = requestOf<FastifyRequest>(context);
 
     // ApiKeyGuard runs first and only stamps this after verifying the key against a route that
     // opted into machine access, so there is no session to resolve and nothing to revalidate.
@@ -156,13 +151,5 @@ export class BetterAuthGuard implements CanActivate {
     if (!teamMembership) return { organizationId };
 
     return { organizationId, teamId: teamMembership.teamId };
-  }
-
-  private getRequest(context: ExecutionContext): FastifyRequest {
-    if (context.getType<GqlContextType>() === 'graphql') {
-      const gqlCtx = GqlExecutionContext.create(context);
-      return gqlCtx.getContext<{ req: FastifyRequest }>().req;
-    }
-    return context.switchToHttp().getRequest<FastifyRequest>();
   }
 }

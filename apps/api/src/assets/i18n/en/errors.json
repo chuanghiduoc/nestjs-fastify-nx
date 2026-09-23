@@ -10,13 +10,11 @@
     "object_not_found": "No object stored at \"{key}\"",
     "size_out_of_range": "Object size {size} bytes is outside the allowed range (1..{max})",
     "magic_bytes_mismatch": "Magic bytes indicate \"{detected}\" but Content-Type is \"{declared}\"",
-    "magic_bytes_unknown": "Object at \"{key}\" has no recognized binary signature",
-    "commit_failed": "Failed to commit upload; please retry"
+    "magic_bytes_unknown": "Object at \"{key}\" has no recognized binary signature"
   },
   "users": {
     "not_found": "User not found",
-    "already_exists": "A record with this value already exists",
-    "database_error": "Database error"
+    "already_exists": "A record with this value already exists"
   },
   "auth": {
     "session_missing": "Session not found or expired",
@@ -26,7 +24,6 @@
     "organization_context_required": "No active organization selected for this session"
   },
   "storage": {
-    "body_empty": "Upload rejected — body is empty for key \"{key}\"",
     "upload_failed": "Storage upload failed",
     "presign_failed": "Storage presign failed",
     "head_failed": "Storage head failed",

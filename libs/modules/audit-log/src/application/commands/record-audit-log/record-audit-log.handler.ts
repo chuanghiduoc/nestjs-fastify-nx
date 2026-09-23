@@ -12,18 +12,8 @@ export class RecordAuditLogHandler implements ICommandHandler<RecordAuditLogComm
   ) {}
 
   async execute(command: RecordAuditLogCommand): Promise<void> {
-    const entry = AuditLog.create({
-      // id derived from eventId so outbox redelivery reproduces the same PK; repo treats P2002 as no-op.
-      id: command.eventId,
-      organizationId: command.organizationId,
-      userId: command.userId,
-      action: command.action,
-      resource: command.resource,
-      metadata: command.metadata,
-      ipAddress: command.ipAddress,
-      userAgent: command.userAgent,
-      occurredAt: command.occurredAt,
-    });
+    // id derived from eventId so outbox redelivery reproduces the same PK; repo treats P2002 as no-op.
+    const entry = AuditLog.create({ id: command.eventId, ...command });
 
     await this.repository.append(entry);
   }

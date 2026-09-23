@@ -2,16 +2,20 @@ import { Injectable, Logger, type OnApplicationShutdown } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { Queue } from 'bullmq';
 import { ConfigService } from '@nestjs/config';
-import { dlqJobIdFor, dlqNameFor, routeFailedJobToDlq } from '@nestjs-fastify-nx/infra-redis';
+import {
+  closeQueueQuietly,
+  dlqJobIdFor,
+  dlqNameFor,
+  routeFailedJobToDlq,
+} from '@nestjs-fastify-nx/infra-redis';
 import { QUEUE_NAMES, positiveIntEnv } from '@nestjs-fastify-nx/shared';
 import { SchedulerLeaderService } from '../leadership/scheduler-leader.service';
+import type { SchedulerEnvConfig } from '../../config/env.validation';
 
-interface DlqMonitorEnv {
-  REDIS_QUEUE_HOST: string;
-  REDIS_QUEUE_PORT: number;
-  REDIS_QUEUE_PREFIX: string;
-  REDIS_QUEUE_PASSWORD?: string;
-}
+type DlqMonitorEnv = Pick<
+  SchedulerEnvConfig,
+  'REDIS_QUEUE_HOST' | 'REDIS_QUEUE_PORT' | 'REDIS_QUEUE_PREFIX' | 'REDIS_QUEUE_PASSWORD'
+>;
 
 // Cap the per-queue scan so one enormous failed set can't stall a reconcile tick.
 const RECONCILE_SCAN_LIMIT = 1000;
@@ -129,14 +133,6 @@ export class DlqMonitorTask implements OnApplicationShutdown {
 
   async onApplicationShutdown(): Promise<void> {
     const queues = this.pairs.flatMap(({ source, dlq }) => [source, dlq]);
-    await Promise.all(
-      queues.map(async (queue) => {
-        try {
-          await queue.close();
-        } catch {
-          await queue.disconnect().catch(() => undefined);
-        }
-      }),
-    );
+    await Promise.all(queues.map((queue) => closeQueueQuietly(queue)));
   }
 }

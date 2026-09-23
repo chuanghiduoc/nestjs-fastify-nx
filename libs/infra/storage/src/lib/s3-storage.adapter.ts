@@ -23,7 +23,6 @@ import type {
   StorageReadStream,
   StreamUploadOptions,
   StoredFile,
-  UploadOptions,
 } from './storage.port';
 
 type ChecksumMode = 'WHEN_SUPPORTED' | 'WHEN_REQUIRED';
@@ -83,12 +82,6 @@ const FAILURES = {
     messageKey: I18N_KEYS.errors.storage.read_range_failed,
     message: 'Storage readStream failed',
     log: 'S3 readStream failed',
-  },
-  read: {
-    code: ERROR_CODES.STORAGE_READ_FAILED,
-    messageKey: I18N_KEYS.errors.storage.read_range_failed,
-    message: 'Storage read failed',
-    log: 'S3 full-object read failed',
   },
 } as const satisfies Record<string, FailureContract>;
 
@@ -274,7 +267,6 @@ export class S3StorageAdapter implements StoragePort, OnModuleInit, OnModuleDest
     return new DomainException({
       kind: 'unavailable',
       code: failure.code,
-      permanent: false,
       messageKey: failure.messageKey,
       violations: [
         {
@@ -285,46 +277,6 @@ export class S3StorageAdapter implements StoragePort, OnModuleInit, OnModuleDest
         },
       ],
     });
-  }
-
-  async upload(key: string, body: Buffer, options?: UploadOptions): Promise<StoredFile> {
-    if (body.length === 0) {
-      throw new DomainException({
-        kind: 'validation',
-        code: ERROR_CODES.STORAGE_BODY_EMPTY,
-        messageKey: I18N_KEYS.errors.storage.body_empty,
-        args: { key },
-        violations: [
-          {
-            path: 'body',
-            code: ERROR_CODES.STORAGE_BODY_EMPTY,
-            message: `Upload rejected — body is empty for key "${key}"`,
-            messageKey: I18N_KEYS.errors.storage.body_empty,
-          },
-        ],
-      });
-    }
-
-    const bucket = options?.bucket ?? this.bucket;
-
-    try {
-      await this.client.send(
-        new PutObjectCommand({
-          Bucket: bucket,
-          Key: key,
-          Body: body,
-          ContentType: options?.contentType ?? 'application/octet-stream',
-          ContentLength: body.length,
-          Metadata: options?.metadata,
-        }),
-      );
-    } catch (err) {
-      throw this.failure(FAILURES.upload, { key }, err);
-    }
-
-    const url = `${this.publicEndpoint}/${bucket}/${key}`;
-
-    return { key, bucket, url, size: body.length };
   }
 
   async uploadStream(
@@ -497,17 +449,6 @@ export class S3StorageAdapter implements StoragePort, OnModuleInit, OnModuleDest
       return assertStream(res.Body);
     } catch (err) {
       throw this.failure(FAILURES.readStream, { key }, err);
-    }
-  }
-
-  async read(key: string, bucket?: string): Promise<Buffer> {
-    try {
-      const res = await this.client.send(
-        new GetObjectCommand({ Bucket: bucket ?? this.bucket, Key: key }),
-      );
-      return Buffer.from(await assertByteArray(res.Body).transformToByteArray());
-    } catch (err) {
-      throw this.failure(FAILURES.read, { key }, err);
     }
   }
 }

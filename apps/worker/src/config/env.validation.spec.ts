@@ -57,6 +57,21 @@ describe('validateWorkerConfig', () => {
     expect(() => validateWorkerConfig({ NODE_ENV: 'development' })).toThrow('DATABASE_URL');
   });
 
+  it('rejects a non-postgres DATABASE_URL in production', () => {
+    expect(() =>
+      validateWorkerConfig({
+        NODE_ENV: 'production',
+        DATABASE_URL: 'mysql://user:pass@db:5432/app',
+        STORAGE_ACCESS_KEY: 'production-key',
+        STORAGE_SECRET_KEY: 'production-secret',
+        MALWARE_SCANNER_ENABLED: 'true',
+        MAIL_HOST: 'smtp.company.example',
+        MAIL_DEFAULT_EMAIL: 'noreply@company.example',
+        REDIS_QUEUE_PASSWORD: 'queue-pw',
+      }),
+    ).toThrow(/DATABASE_URL/);
+  });
+
   // Anything above ClamAV's own 2 GiB ceiling would stream an oversized object to clamd and put
   // back the mid-stream refusal the size gate exists to avoid.
   it('refuses a scanner ceiling above what ClamAV can actually scan', () => {

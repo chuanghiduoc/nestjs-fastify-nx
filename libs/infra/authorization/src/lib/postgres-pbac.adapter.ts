@@ -5,22 +5,16 @@ import {
   isSystemRole,
   parsePermissionStatements,
   type Permission,
-  type ResourceType,
 } from '@nestjs-fastify-nx/shared';
-import type {
-  AccessDecision,
-  AccessFilter,
-  AuthorizationCapabilities,
-  AuthorizationPort,
-  CheckRequest,
-  Principal,
-  RelationInput,
-  ResourceRef,
-} from '@nestjs-fastify-nx/core';
-import { decideAccess, decideFilter, type PolicyContext } from './access-policy';
+import type { AuthorizationCapabilities, Principal } from '@nestjs-fastify-nx/core';
+import type { PolicyContext } from './access-policy';
+import {
+  BaseAuthorizationAdapter,
+  permissionsForNonUserPrincipal,
+} from './base-authorization.adapter';
 
 @Injectable()
-export class PostgresPbacAdapter implements AuthorizationPort {
+export class PostgresPbacAdapter extends BaseAuthorizationAdapter {
   private readonly logger = new Logger(PostgresPbacAdapter.name);
 
   readonly capabilities: AuthorizationCapabilities = {
@@ -29,13 +23,12 @@ export class PostgresPbacAdapter implements AuthorizationPort {
     consistency: 'strong',
   };
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) {
+    super();
+  }
 
   async permissionsFor(principal: Principal): Promise<readonly Permission[]> {
-    if (principal.type === 'system') return SYSTEM_ROLE_PERMISSIONS.owner;
-    if (principal.type === 'api_key') {
-      return principal.scopes.filter((scope): scope is Permission => scope.includes(':'));
-    }
+    if (principal.type !== 'user') return permissionsForNonUserPrincipal(principal) ?? [];
 
     const role = await this.membershipRole(principal);
     if (role === null) return [];
@@ -107,33 +100,7 @@ export class PostgresPbacAdapter implements AuthorizationPort {
     return [...granted];
   }
 
-  async check(
-    principal: Principal,
-    permission: Permission,
-    resource?: ResourceRef,
-  ): Promise<AccessDecision> {
-    const [decision] = decideAccess(await this.policyContext(principal), [
-      { permission, resource },
-    ]);
-    return decision ?? { allowed: false, reason: 'no decision produced' };
-  }
-
-  async checkMany(
-    principal: Principal,
-    requests: readonly CheckRequest[],
-  ): Promise<readonly AccessDecision[]> {
-    return decideAccess(await this.policyContext(principal), requests);
-  }
-
-  async filter(
-    principal: Principal,
-    permission: Permission,
-    resourceType: ResourceType,
-  ): Promise<AccessFilter> {
-    return decideFilter(await this.policyContext(principal), permission, resourceType);
-  }
-
-  private async policyContext(principal: Principal): Promise<PolicyContext> {
+  protected async policyContext(principal: Principal): Promise<PolicyContext> {
     if (principal.type !== 'user') {
       return { principal, permissions: await this.permissionsFor(principal), isMember: true };
     }
@@ -146,17 +113,5 @@ export class PostgresPbacAdapter implements AuthorizationPort {
       permissions: await this.resolvePermissions(principal.organizationId, role),
       isMember: true,
     };
-  }
-
-  async onResourceCreated(_input: {
-    actor: Principal;
-    resource: ResourceRef;
-    relations?: readonly RelationInput[];
-  }): Promise<void> {
-    // Reachability is derivable from organizationId/ownerId here, so there is nothing to write.
-  }
-
-  async onResourceDeleted(_resource: ResourceRef): Promise<void> {
-    // See onResourceCreated.
   }
 }

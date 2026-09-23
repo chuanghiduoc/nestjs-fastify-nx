@@ -1,4 +1,4 @@
-import type { TermType } from '../../domain/entities/term.entity';
+import type { Term, TermType } from '../../domain/entities/term.entity';
 
 export interface TermDto {
   id: string;
@@ -14,4 +14,15 @@ export interface TermAcceptanceDto {
   type: TermType;
   version: string;
   acceptedAt: Date;
+}
+
+export function toTermDto(term: Term): TermDto {
+  return {
+    id: term.id,
+    type: term.type,
+    version: term.version,
+    content: term.content,
+    publishedAt: term.publishedAt,
+    createdAt: term.createdAt,
+  };
 }

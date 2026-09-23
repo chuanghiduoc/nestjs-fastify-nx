@@ -61,7 +61,6 @@ export const PERMISSIONS = {
 
   TERM_READ: 'term:read',
   TERM_ACCEPT: 'term:accept',
-  TERM_MANAGE: 'term:manage',
 } as const;
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];

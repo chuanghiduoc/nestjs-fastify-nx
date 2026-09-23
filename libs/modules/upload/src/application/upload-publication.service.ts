@@ -7,10 +7,6 @@ import {
 } from '@nestjs-fastify-nx/infra-storage';
 import { StoredFile } from '../domain/entities/stored-file.entity';
 import {
-  STORED_FILE_REPOSITORY,
-  type StoredFileRepositoryPort,
-} from '../domain/ports/stored-file-repository.port';
-import {
   UPLOAD_VERIFICATION_DISPATCHER,
   type UploadVerificationDispatcher,
 } from './ports/upload-verification.dispatcher';
@@ -21,7 +17,6 @@ export class UploadPublicationService {
 
   constructor(
     @Inject(STORAGE_PORT) private readonly storage: StoragePort,
-    @Inject(STORED_FILE_REPOSITORY) private readonly files: StoredFileRepositoryPort,
     @Inject(UPLOAD_VERIFICATION_DISPATCHER)
     private readonly verification: UploadVerificationDispatcher,
   ) {}
@@ -53,11 +48,5 @@ export class UploadPublicationService {
           ? await this.storage.getSignedUrl(file.key, undefined, file.bucket)
           : undefined,
     };
-  }
-
-  async loadResult(id: string, correlationId?: string): Promise<StoredFileResult> {
-    const file = await this.files.findById(id);
-    if (!file || file.isDeleted()) throw new Error('Stored file disappeared before publication');
-    return this.result(file, correlationId);
   }
 }

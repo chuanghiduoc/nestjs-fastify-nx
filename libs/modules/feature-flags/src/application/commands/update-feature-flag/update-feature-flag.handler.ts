@@ -2,7 +2,8 @@ import { Inject } from '@nestjs/common';
 import { CommandHandler, type ICommandHandler } from '@nestjs/cqrs';
 import { FEATURE_FLAG_REPOSITORY } from '../../../domain/ports/feature-flag-repository.port';
 import type { FeatureFlagRepositoryPort } from '../../../domain/ports/feature-flag-repository.port';
-import type { FeatureFlagDto } from '../../dto/feature-flag.dto';
+import type { FeatureFlagChanges } from '../../../domain/entities/feature-flag.entity';
+import { toFeatureFlagDto, type FeatureFlagDto } from '../../dto/feature-flag.dto';
 import { featureFlagNotFound } from '../../feature-flag-errors';
 import { UpdateFeatureFlagCommand } from './update-feature-flag.command';
 
@@ -17,21 +18,21 @@ export class UpdateFeatureFlagHandler implements ICommandHandler<
     const existing = await this.flags.findById(command.organizationId, command.id);
     if (!existing) throw featureFlagNotFound();
 
-    const updated = existing.withChanges({
+    const changes: FeatureFlagChanges = {
       description: command.description,
       enabled: command.enabled,
       rolloutPercentage: command.rolloutPercentage,
-    });
-    await this.flags.update(updated);
-
-    return {
-      id: updated.id,
-      key: updated.key,
-      description: updated.description,
-      enabled: updated.enabled,
-      rolloutPercentage: updated.rolloutPercentage,
-      createdAt: updated.createdAt,
-      updatedAt: updated.updatedAt,
     };
+    const updated = existing.withChanges(changes);
+
+    const applied = await this.flags.update(
+      command.organizationId,
+      command.id,
+      changes,
+      updated.updatedAt,
+    );
+    if (!applied) throw featureFlagNotFound();
+
+    return toFeatureFlagDto(updated);
   }
 }

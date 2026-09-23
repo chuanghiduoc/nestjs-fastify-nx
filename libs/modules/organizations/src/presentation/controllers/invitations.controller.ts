@@ -47,7 +47,6 @@ export class InvitationsController {
 
   @Get()
   @RequirePermission(PERMISSIONS.INVITATION_READ)
-  @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'List invitations issued by the active organization',
     description:
@@ -56,7 +55,7 @@ export class InvitationsController {
   @ApiPaginatedResponse(InvitationResponseDto, {
     description: 'Cursor-paginated list of invitations.',
   })
-  @ApiCommonErrors({ auth: true, forbidden: true, validation: true })
+  @ApiCommonErrors()
   async list(
     @CurrentUser() user: AuthenticatedSession,
     @Query() filter: ListInvitationsFilterDto,
@@ -87,7 +86,7 @@ export class InvitationsController {
   })
   @ApiParam({ name: 'id', format: 'uuid', description: 'Invitation id (UUID v7).' })
   @ApiNoContentResponse({ description: 'Invitation canceled.' })
-  @ApiCommonErrors({ auth: true, forbidden: true, notFound: true, conflict: true })
+  @ApiCommonErrors({ notFound: true, conflict: true })
   cancel(
     @CurrentUser() user: AuthenticatedSession,
     @Param('id', new ParseUUIDPipe({ version: '7' })) id: string,

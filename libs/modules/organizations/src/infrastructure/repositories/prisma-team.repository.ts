@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
-import { PrismaService } from '@nestjs-fastify-nx/infra-database';
+import { PrismaService, escapeLikePattern } from '@nestjs-fastify-nx/infra-database';
 import { Prisma } from '@nestjs-fastify-nx/infra-database';
+import { keysetAfter, takePage } from '@nestjs-fastify-nx/shared';
 import { Team } from '../../domain/entities/team.entity';
 import type {
   FindTeamsCursorOptions,
@@ -18,10 +19,6 @@ type TeamRow = {
   updatedAt: Date | null;
   _count?: { members: number };
 };
-
-function escapeLikePattern(value: string): string {
-  return value.replace(/[\\%_]/g, (char) => `\\${char}`);
-}
 
 function toEntity(row: TeamRow): TeamWithMemberCount {
   return Object.assign(
@@ -47,16 +44,7 @@ export class PrismaTeamRepository implements TeamRepositoryPort {
     if (search) {
       where.name = { contains: escapeLikePattern(search), mode: 'insensitive' };
     }
-    if (startingAfter) {
-      where.AND = [
-        {
-          OR: [
-            { createdAt: { lt: startingAfter.createdAt } },
-            { AND: [{ createdAt: startingAfter.createdAt }, { id: { lt: startingAfter.id } }] },
-          ],
-        },
-      ];
-    }
+    if (startingAfter) where.AND = [keysetAfter(startingAfter)];
 
     const rows = await this.prisma.readTarget().team.findMany({
       where,
@@ -65,8 +53,8 @@ export class PrismaTeamRepository implements TeamRepositoryPort {
       take: limit + 1,
     });
 
-    const hasMore = rows.length > limit;
-    return { items: (hasMore ? rows.slice(0, limit) : rows).map(toEntity), hasMore };
+    const { items, hasMore } = takePage(rows, limit);
+    return { items: items.map(toEntity), hasMore };
   }
 
   async findById(organizationId: string, id: string): Promise<TeamWithMemberCount | null> {
@@ -92,11 +80,13 @@ export class PrismaTeamRepository implements TeamRepositoryPort {
     }
   }
 
-  async update(team: Team): Promise<void> {
+  async update(team: Team): Promise<boolean> {
     try {
-      await this.prisma
-        .writeTarget()
-        .team.update({ where: { id: team.id }, data: { name: team.name } });
+      const { count } = await this.prisma.writeTarget().team.updateMany({
+        where: { id: team.id, organizationId: team.organizationId },
+        data: { name: team.name },
+      });
+      return count > 0;
     } catch (err) {
       throw this.translate(err);
     }

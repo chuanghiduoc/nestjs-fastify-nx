@@ -138,6 +138,48 @@ describe('notification handlers', () => {
 
     await expect(execute).rejects.toMatchObject({ kind: 'malformed' });
   });
+
+  it('resumes strictly after the cursor, tiebreaking on id among rows sharing a timestamp', async () => {
+    const sameTime = new Date('2026-08-01T00:00:00.000Z');
+    const idA = '01900000-0000-7000-8000-000000000001';
+    const idB = '01900000-0000-7000-8000-000000000002';
+    await new CreateNotificationHandler(repository).execute(
+      new CreateNotificationCommand({
+        id: idA,
+        organizationId: ORG_ID,
+        userId: USER_ID,
+        type: 'test',
+        title: 'A',
+        body: 'Body',
+        occurredAt: sameTime,
+      }),
+    );
+    await new CreateNotificationHandler(repository).execute(
+      new CreateNotificationCommand({
+        id: idB,
+        organizationId: ORG_ID,
+        userId: USER_ID,
+        type: 'test',
+        title: 'B',
+        body: 'Body',
+        occurredAt: sameTime,
+      }),
+    );
+
+    const firstPage = await new ListNotificationsHandler(repository).execute(
+      new ListNotificationsQuery(ORG_ID, USER_ID, 1),
+    );
+    expect(firstPage.data.map((item) => item.id)).toEqual([idB]);
+    expect(firstPage.hasMore).toBe(true);
+
+    const secondPage = await new ListNotificationsHandler(repository).execute(
+      new ListNotificationsQuery(ORG_ID, USER_ID, 1, {
+        startingAfter: firstPage.lastCursor ?? undefined,
+      }),
+    );
+    expect(secondPage.data.map((item) => item.id)).toEqual([idA]);
+    expect(secondPage.hasMore).toBe(false);
+  });
 });
 
 describe('MembershipNotificationListener', () => {

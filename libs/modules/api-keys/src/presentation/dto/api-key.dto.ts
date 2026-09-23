@@ -17,6 +17,7 @@ import { ALL_PERMISSIONS } from '@nestjs-fastify-nx/shared';
 export class CreateApiKeyDto {
   @ApiProperty({ description: 'Human-readable label for the key.', example: 'CI deploy bot' })
   @IsString()
+  @Transform(({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value))
   @MinLength(1)
   @MaxLength(100)
   name!: string;

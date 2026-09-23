@@ -123,14 +123,6 @@ describe('PermissionGuard', () => {
       expect(spy).not.toHaveBeenCalled();
     });
 
-    it('is refused a global permission that is not self-service', async () => {
-      const guard = build({ permissions: [PERMISSIONS.TERM_MANAGE] });
-
-      await expect(
-        guard.canActivate(contextFor(session({ organizationId: undefined }))),
-      ).rejects.toSatisfy((err: unknown) => isDomainException(err) && err.kind === 'forbidden');
-    });
-
     it('still needs an organization when any declared permission is tenant-bound', async () => {
       const guard = build({ permissions: [PERMISSIONS.SESSION_READ, PERMISSIONS.FILE_CREATE] });
 

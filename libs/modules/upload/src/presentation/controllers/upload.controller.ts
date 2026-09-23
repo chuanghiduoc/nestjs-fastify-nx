@@ -50,6 +50,7 @@ import { StoredFileDto } from '../dto/stored-file.dto';
 import {
   prepareMultipartUpload,
   prepareMultipartUploads,
+  type PreparedMultipartUpload,
 } from '../multipart/prepare-multipart-upload';
 import { UploadFilesCommand } from '../../application/commands/upload-files/upload-files.command';
 import { GetUploadQuery } from '../../application/queries/get-upload/get-upload.query';
@@ -68,6 +69,19 @@ export class UploadController {
     private readonly queryBus: QueryBus,
   ) {}
 
+  private buildUploadFilesCommand(
+    user: AuthenticatedSession,
+    files: readonly PreparedMultipartUpload[],
+  ): UploadFilesCommand {
+    return new UploadFilesCommand({
+      organizationId: requireOrganizationId(user),
+      userId: user.userId,
+      files,
+      signal: files[0].signal,
+      correlationId: this.cls.get(REQUEST_CONTEXT_KEYS.correlationId),
+    });
+  }
+
   @Post()
   @RequirePermission(PERMISSIONS.FILE_CREATE)
   @Throttle(PRESIGN_LIMIT)
@@ -80,7 +94,7 @@ export class UploadController {
     },
   })
   @ApiCreatedResponse({ type: StoredFileDto })
-  @ApiCommonErrors({ auth: true })
+  @ApiCommonErrors()
   @ApiOperation({ summary: 'Upload one file through the backend.' })
   async upload(
     @CurrentUser() user: AuthenticatedSession,
@@ -88,15 +102,7 @@ export class UploadController {
     @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<StoredFile> {
     const file = await prepareMultipartUpload(request, reply);
-    const [result] = await this.commandBus.execute(
-      new UploadFilesCommand({
-        organizationId: requireOrganizationId(user),
-        userId: user.userId,
-        files: [file],
-        signal: file.signal,
-        correlationId: this.cls.get(REQUEST_CONTEXT_KEYS.correlationId),
-      }),
-    );
+    const [result] = await this.commandBus.execute(this.buildUploadFilesCommand(user, [file]));
     return result;
   }
 
@@ -112,7 +118,7 @@ export class UploadController {
     },
   })
   @ApiPaginatedResponse(StoredFileDto)
-  @ApiCommonErrors({ auth: true })
+  @ApiCommonErrors()
   @ApiOperation({ summary: 'Upload multiple files through the backend as one batch.' })
   async uploadBatch(
     @CurrentUser() user: AuthenticatedSession,
@@ -120,21 +126,13 @@ export class UploadController {
     @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<ListResponseDto<StoredFile>> {
     const files = await prepareMultipartUploads(request, reply);
-    const data = await this.commandBus.execute(
-      new UploadFilesCommand({
-        organizationId: requireOrganizationId(user),
-        userId: user.userId,
-        files,
-        signal: files[0].signal,
-        correlationId: this.cls.get(REQUEST_CONTEXT_KEYS.correlationId),
-      }),
-    );
+    const data = await this.commandBus.execute(this.buildUploadFilesCommand(user, files));
     return { object: 'list', url: '/api/v1/upload/batch', data, hasMore: false };
   }
 
   @Get(':id')
   @ApiOkResponse({ type: StoredFileDto })
-  @ApiCommonErrors({ auth: true, notFound: true })
+  @ApiCommonErrors({ notFound: true })
   @ApiOperation({ summary: 'Read upload status and a download URL when ready.' })
   getUpload(
     @CurrentUser() user: AuthenticatedSession,
@@ -146,7 +144,6 @@ export class UploadController {
   @Post('presign')
   @RequirePermission(PERMISSIONS.FILE_CREATE)
   @Throttle(PRESIGN_LIMIT)
-  @HttpCode(HttpStatus.CREATED)
   @ApiOperation({
     summary: 'Issue a presigned POST policy for a direct browser→S3 upload.',
     description:
@@ -154,7 +151,7 @@ export class UploadController {
   })
   @ApiBody({ type: PresignUploadDto })
   @ApiCreatedResponse({ type: PresignedUploadDto, description: 'Presigned upload policy issued.' })
-  @ApiCommonErrors({ auth: true })
+  @ApiCommonErrors()
   presign(
     @CurrentUser() user: AuthenticatedSession,
     @Body() dto: PresignUploadDto,
@@ -175,7 +172,7 @@ export class UploadController {
   @ApiOkResponse({ type: StoredFileDto, description: 'Object verified.' })
   // 409: a concurrent confirm of the same key can still be finalizing when this one recovers it.
   // notFound: cross-user or missing key.
-  @ApiCommonErrors({ auth: true, notFound: true, conflict: true })
+  @ApiCommonErrors({ notFound: true, conflict: true })
   confirm(
     @CurrentUser() user: AuthenticatedSession,
     @Body() dto: ConfirmUploadDto,
@@ -200,7 +197,7 @@ export class UploadController {
   })
   @ApiParam({ name: 'id', format: 'uuid', description: 'Stored file id (UUID v7).' })
   @ApiNoContentResponse({ description: 'File soft-deleted.' })
-  @ApiCommonErrors({ auth: true, notFound: true })
+  @ApiCommonErrors({ notFound: true })
   deleteFile(
     @CurrentUser() user: AuthenticatedSession,
     @Param('id', new ParseUUIDPipe({ version: '7' })) id: string,

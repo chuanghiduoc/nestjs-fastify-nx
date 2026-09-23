@@ -1,5 +1,5 @@
 import { DomainException } from '@nestjs-fastify-nx/core';
-import { ERROR_CODES, I18N_KEYS } from '@nestjs-fastify-nx/contracts';
+import { ERROR_CODES, I18N_KEYS, fieldProblem } from '@nestjs-fastify-nx/contracts';
 import {
   ALL_PERMISSIONS,
   generateApiKey,
@@ -39,13 +39,20 @@ export interface IssuedApiKey {
 }
 
 function validation(path: string, code: string, message: string, messageKey: string): never {
-  throw new DomainException({
-    kind: 'validation',
-    code,
-    title: I18N_KEYS.common.unprocessable_entity,
-    messageKey,
-    violations: [{ path, code, message, messageKey }],
-  });
+  throw new DomainException(fieldProblem({ kind: 'validation', code, messageKey, path, message }));
+}
+
+function assertNonEmptyName(name: string): string {
+  const trimmed = name.trim();
+  if (trimmed.length === 0) {
+    validation(
+      'name',
+      ERROR_CODES.VALIDATION_FAILED,
+      'name must not be empty',
+      I18N_KEYS.validation.too_short,
+    );
+  }
+  return trimmed;
 }
 
 function assertScopes(
@@ -111,7 +118,7 @@ export class ApiKey {
     const entity = new ApiKey({
       id: generateId(),
       organizationId: input.organizationId,
-      name: input.name.trim(),
+      name: assertNonEmptyName(input.name),
       prefix: secret.prefix,
       keyHash: secret.hash,
       scopes,
@@ -128,11 +135,6 @@ export class ApiKey {
 
   static reconstitute(raw: ApiKeyProps): ApiKey {
     return new ApiKey(raw);
-  }
-
-  isUsableAt(now: Date): boolean {
-    if (this.props.revokedAt !== null) return false;
-    return this.props.expiresAt === null || this.props.expiresAt.getTime() > now.getTime();
   }
 
   get id(): string {

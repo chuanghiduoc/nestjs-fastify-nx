@@ -233,44 +233,6 @@ describe('S3StorageAdapter', () => {
     });
   });
 
-  describe('upload', () => {
-    it('rejects an empty body as a permanent validation failure (no S3 call)', async () => {
-      const send = mockSend(adapter);
-      await expectDomainFailure(adapter.upload('uploads/x', Buffer.alloc(0)), {
-        kind: 'validation',
-        code: ERROR_CODES.STORAGE_BODY_EMPTY,
-        permanent: true,
-      });
-      expect(send).not.toHaveBeenCalled();
-    });
-
-    it('sends a PutObjectCommand and returns path-style URL on success', async () => {
-      const send = mockSend(adapter);
-      send.mockResolvedValueOnce({});
-      const result = await adapter.upload('uploads/x', Buffer.from('payload'), {
-        contentType: 'image/png',
-      });
-      expect(send).toHaveBeenCalledOnce();
-      expect(send.mock.calls[0][0]).toBeInstanceOf(PutObjectCommand);
-      expect(result).toEqual({
-        key: 'uploads/x',
-        bucket: 'uploads',
-        url: 'http://minio:9000/uploads/uploads/x',
-        size: 7,
-      });
-    });
-
-    it('wraps S3 errors as a retryable unavailable failure', async () => {
-      const send = mockSend(adapter);
-      send.mockRejectedValueOnce(new Error('NoSuchBucket'));
-      await expectDomainFailure(adapter.upload('uploads/x', Buffer.from('p')), {
-        kind: 'unavailable',
-        code: ERROR_CODES.STORAGE_UPLOAD_FAILED,
-        permanent: false,
-      });
-    });
-  });
-
   describe('head', () => {
     it('returns null on 404 (object not yet uploaded)', async () => {
       const send = mockSend(adapter);

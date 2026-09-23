@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '@nestjs-fastify-nx/infra-database';
 import { Prisma } from '@nestjs-fastify-nx/infra-database';
+import { keysetAfter, takePage } from '@nestjs-fastify-nx/shared';
 import type {
   FindInvitationsCursorOptions,
   FindInvitationsCursorResult,
@@ -42,16 +43,7 @@ export class PrismaInvitationRepository implements InvitationRepositoryPort {
       ...(status ? statusWhere(status, new Date()) : {}),
     };
     if (email) where.email = email.toLowerCase();
-    if (startingAfter) {
-      where.AND = [
-        {
-          OR: [
-            { createdAt: { lt: startingAfter.createdAt } },
-            { AND: [{ createdAt: startingAfter.createdAt }, { id: { lt: startingAfter.id } }] },
-          ],
-        },
-      ];
-    }
+    if (startingAfter) where.AND = [keysetAfter(startingAfter)];
 
     const rows = await this.prisma.readTarget().invitation.findMany({
       where,
@@ -59,8 +51,8 @@ export class PrismaInvitationRepository implements InvitationRepositoryPort {
       take: limit + 1,
     });
 
-    const hasMore = rows.length > limit;
-    return { items: (hasMore ? rows.slice(0, limit) : rows).map(toRecord), hasMore };
+    const { items, hasMore } = takePage(rows, limit);
+    return { items: items.map(toRecord), hasMore };
   }
 
   async findById(organizationId: string, id: string): Promise<InvitationRecord | null> {

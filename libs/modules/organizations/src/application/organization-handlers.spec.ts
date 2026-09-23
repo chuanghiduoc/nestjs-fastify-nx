@@ -335,6 +335,36 @@ describe('team handlers', () => {
       kind: 'not_found',
     });
   });
+
+  it('honours startingAfter with an id tiebreak on same-timestamp teams', async () => {
+    const createdAt = new Date('2026-01-01T00:00:00.000Z');
+    const lower = Team.reconstitute({
+      id: '019dd1a5-9235-70db-8d57-54ef90700010',
+      organizationId: ORG_ID,
+      name: 'Alpha',
+      createdAt,
+      updatedAt: null,
+    });
+    const higher = Team.reconstitute({
+      id: '019dd1a5-9235-70db-8d57-54ef90700020',
+      organizationId: ORG_ID,
+      name: 'Beta',
+      createdAt,
+      updatedAt: null,
+    });
+    teams.seed(lower);
+    teams.seed(higher);
+
+    const page1 = await new ListTeamsHandler(teams).execute(new ListTeamsQuery(ORG_ID, 1));
+    expect(page1.data.map((team) => team.name)).toEqual(['Beta']);
+    expect(page1.hasMore).toBe(true);
+
+    const page2 = await new ListTeamsHandler(teams).execute(
+      new ListTeamsQuery(ORG_ID, 1, { startingAfter: page1.lastCursor ?? undefined }),
+    );
+    expect(page2.data.map((team) => team.name)).toEqual(['Alpha']);
+    expect(page2.hasMore).toBe(false);
+  });
 });
 
 describe('invitation handlers', () => {
@@ -423,6 +453,35 @@ describe('invitation handlers', () => {
     );
 
     await expect(execute).rejects.toMatchObject({ kind: 'not_found' });
+  });
+
+  it('honours startingAfter with an id tiebreak on same-timestamp invitations', async () => {
+    const createdAt = new Date('2026-01-01T00:00:00.000Z');
+    const base = {
+      organizationId: ORG_ID,
+      role: 'member',
+      teamId: null,
+      status: 'pending' as const,
+      expiresAt: new Date(Date.now() + ONE_DAY_MS),
+      inviterId: INVITER_ID,
+      createdAt,
+    };
+    const lower = { ...base, id: '019dd1a5-9235-70db-8d57-54ef90700010', email: 'a@test.com' };
+    const higher = { ...base, id: '019dd1a5-9235-70db-8d57-54ef90700020', email: 'b@test.com' };
+    invitations.seed(lower);
+    invitations.seed(higher);
+
+    const page1 = await new ListInvitationsHandler(invitations).execute(
+      new ListInvitationsQuery(ORG_ID, 1),
+    );
+    expect(page1.data.map((invitation) => invitation.email)).toEqual(['b@test.com']);
+    expect(page1.hasMore).toBe(true);
+
+    const page2 = await new ListInvitationsHandler(invitations).execute(
+      new ListInvitationsQuery(ORG_ID, 1, { startingAfter: page1.lastCursor ?? undefined }),
+    );
+    expect(page2.data.map((invitation) => invitation.email)).toEqual(['a@test.com']);
+    expect(page2.hasMore).toBe(false);
   });
 });
 

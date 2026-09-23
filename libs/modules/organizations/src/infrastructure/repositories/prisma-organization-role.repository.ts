@@ -84,11 +84,12 @@ export class PrismaOrganizationRoleRepository implements OrganizationRoleReposit
     }
   }
 
-  async update(role: OrganizationRole): Promise<void> {
-    await this.prisma.writeTarget().organizationRole.update({
-      where: { organizationId_role: { organizationId: role.organizationId, role: role.role } },
+  async update(role: OrganizationRole): Promise<boolean> {
+    const { count } = await this.prisma.writeTarget().organizationRole.updateMany({
+      where: { organizationId: role.organizationId, role: role.role },
       data: { permission: serializePermissionStatements(role.permissions) },
     });
+    return count > 0;
   }
 
   async deleteUnlessHeld(organizationId: string, role: string): Promise<RoleDeletionOutcome> {

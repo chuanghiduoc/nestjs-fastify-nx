@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { OutboxCleanupTask } from './outbox-cleanup.task';
+import { BatchedPurgeRunner } from './batched-purge.runner';
 import type { PrismaService } from '@nestjs-fastify-nx/infra-database';
 
 function makePrismaMock() {
@@ -13,10 +14,12 @@ function makePrismaMock() {
 describe('OutboxCleanupTask', () => {
   let task: OutboxCleanupTask;
   let prisma: ReturnType<typeof makePrismaMock>;
+  let purgeRunner: BatchedPurgeRunner;
 
   beforeEach(() => {
     prisma = makePrismaMock();
-    task = new OutboxCleanupTask(prisma, { isLeader: () => true } as never);
+    purgeRunner = new BatchedPurgeRunner(prisma);
+    task = new OutboxCleanupTask(prisma, { isLeader: () => true } as never, purgeRunner);
   });
 
   describe('purgeOldOutboxEvents', () => {
@@ -65,7 +68,7 @@ describe('OutboxCleanupTask', () => {
         .mockResolvedValueOnce(1000)
         .mockResolvedValueOnce(0);
 
-      const logSpy = vi.spyOn(task['logger'], 'log');
+      const logSpy = vi.spyOn(purgeRunner['logger'], 'log');
 
       await task.purgeOldOutboxEvents();
 
@@ -88,7 +91,7 @@ describe('OutboxCleanupTask', () => {
         .mockResolvedValueOnce(500)
         .mockRejectedValueOnce(new Error('DB connection lost'));
 
-      const errorSpy = vi.spyOn(task['logger'], 'error');
+      const errorSpy = vi.spyOn(purgeRunner['logger'], 'error');
 
       await expect(task.purgeOldOutboxEvents()).resolves.toBeUndefined();
 

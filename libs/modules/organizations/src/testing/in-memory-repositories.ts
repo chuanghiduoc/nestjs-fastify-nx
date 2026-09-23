@@ -1,3 +1,4 @@
+import { paginateNewestFirst } from '@nestjs-fastify-nx/shared';
 import type { OrganizationRole } from '../domain/entities/organization-role.entity';
 import type { Team } from '../domain/entities/team.entity';
 import type {
@@ -48,9 +49,11 @@ export class InMemoryOrganizationRoleRepository implements OrganizationRoleRepos
     return Promise.resolve();
   }
 
-  update(role: OrganizationRole): Promise<void> {
-    this.roles.set(this.key(role.organizationId, role.role), role);
-    return Promise.resolve();
+  update(role: OrganizationRole): Promise<boolean> {
+    const key = this.key(role.organizationId, role.role);
+    if (!this.roles.has(key)) return Promise.resolve(false);
+    this.roles.set(key, role);
+    return Promise.resolve(true);
   }
 
   deleteUnlessHeld(organizationId: string, role: string): Promise<RoleDeletionOutcome> {
@@ -74,13 +77,11 @@ export class InMemoryTeamRepository implements TeamRepositoryPort {
       .filter((team) => team.organizationId === options.organizationId)
       .filter((team) =>
         options.search ? team.name.toLowerCase().includes(options.search.toLowerCase()) : true,
-      )
-      .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime());
+      );
 
-    return Promise.resolve({
-      items: matching.slice(0, options.limit),
-      hasMore: matching.length > options.limit,
-    });
+    return Promise.resolve(
+      paginateNewestFirst(matching, { startingAfter: options.startingAfter, limit: options.limit }),
+    );
   }
 
   findById(organizationId: string, id: string): Promise<TeamWithMemberCount | null> {
@@ -93,10 +94,11 @@ export class InMemoryTeamRepository implements TeamRepositoryPort {
     return Promise.resolve();
   }
 
-  update(team: Team): Promise<void> {
+  update(team: Team): Promise<boolean> {
     const existing = this.teams.get(team.id);
-    this.teams.set(team.id, Object.assign(team, { memberCount: existing?.memberCount ?? 0 }));
-    return Promise.resolve();
+    if (!existing || existing.organizationId !== team.organizationId) return Promise.resolve(false);
+    this.teams.set(team.id, Object.assign(team, { memberCount: existing.memberCount }));
+    return Promise.resolve(true);
   }
 
   delete(organizationId: string, id: string): Promise<boolean> {
@@ -123,13 +125,11 @@ export class InMemoryInvitationRepository implements InvitationRepositoryPort {
       )
       .filter((invitation) =>
         options.email ? invitation.email === options.email.toLowerCase() : true,
-      )
-      .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime());
+      );
 
-    return Promise.resolve({
-      items: matching.slice(0, options.limit),
-      hasMore: matching.length > options.limit,
-    });
+    return Promise.resolve(
+      paginateNewestFirst(matching, { startingAfter: options.startingAfter, limit: options.limit }),
+    );
   }
 
   findById(organizationId: string, id: string): Promise<InvitationRecord | null> {

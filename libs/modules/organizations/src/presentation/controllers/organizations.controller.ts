@@ -1,4 +1,4 @@
-import { Controller, Get, HttpCode, HttpStatus } from '@nestjs/common';
+import { Controller, Get } from '@nestjs/common';
 import { QueryBus } from '@nestjs/cqrs';
 import { ApiCookieAuth, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { ApiCommonErrors } from '@nestjs-fastify-nx/contracts';
@@ -21,14 +21,13 @@ export class OrganizationsController {
 
   @Get('current')
   @RequirePermission(PERMISSIONS.ORGANIZATION_READ)
-  @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: "Read the session's active organization",
     description:
       'Returns the organization the current session is scoped to, with member, team and pending-invitation counts. Switching organizations is done through the Better Auth surface (`POST /api/auth/organization/set-active`).',
   })
   @ApiOkResponse({ type: OrganizationResponseDto, description: 'Active organization.' })
-  @ApiCommonErrors({ auth: true, forbidden: true, notFound: true })
+  @ApiCommonErrors({ notFound: true })
   current(@CurrentUser() user: AuthenticatedSession): Promise<OrganizationDto> {
     return this.queryBus.execute(new GetCurrentOrganizationQuery(requireOrganizationId(user)));
   }

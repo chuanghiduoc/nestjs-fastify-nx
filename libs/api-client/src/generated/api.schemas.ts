@@ -283,7 +283,6 @@ export const CreateOrganizationRoleDtoPermissionsItem = {
   'session:revoke': 'session:revoke',
   'term:read': 'term:read',
   'term:accept': 'term:accept',
-  'term:manage': 'term:manage',
 } as const;
 
 export interface CreateOrganizationRoleDto {
@@ -329,7 +328,6 @@ export const OrganizationRoleResponseDtoPermissionsItem = {
   'session:revoke': 'session:revoke',
   'term:read': 'term:read',
   'term:accept': 'term:accept',
-  'term:manage': 'term:manage',
 } as const;
 
 export interface OrganizationRoleResponseDto {
@@ -386,7 +384,6 @@ export const UpdateOrganizationRoleDtoPermissionsItem = {
   'session:revoke': 'session:revoke',
   'term:read': 'term:read',
   'term:accept': 'term:accept',
-  'term:manage': 'term:manage',
 } as const;
 
 export interface UpdateOrganizationRoleDto {
@@ -580,7 +577,6 @@ export const ApiKeyResponseDtoScopesItem = {
   'session:revoke': 'session:revoke',
   'term:read': 'term:read',
   'term:accept': 'term:accept',
-  'term:manage': 'term:manage',
 } as const;
 
 export interface ApiKeyResponseDto {
@@ -636,7 +632,6 @@ export const CreateApiKeyDtoScopesItem = {
   'session:revoke': 'session:revoke',
   'term:read': 'term:read',
   'term:accept': 'term:accept',
-  'term:manage': 'term:manage',
 } as const;
 
 export interface CreateApiKeyDto {
@@ -684,7 +679,6 @@ export const IssuedApiKeyResponseDtoScopesItem = {
   'session:revoke': 'session:revoke',
   'term:read': 'term:read',
   'term:accept': 'term:accept',
-  'term:manage': 'term:manage',
 } as const;
 
 export interface IssuedApiKeyResponseDto {
@@ -804,6 +798,22 @@ export interface TermResponseDto {
   /** @nullable */
   publishedAt: string | null;
   createdAt: string;
+}
+
+export type TermAcceptanceResponseDtoType =
+  (typeof TermAcceptanceResponseDtoType)[keyof typeof TermAcceptanceResponseDtoType];
+
+export const TermAcceptanceResponseDtoType = {
+  terms_of_service: 'terms_of_service',
+  privacy_policy: 'privacy_policy',
+  cookie_policy: 'cookie_policy',
+} as const;
+
+export interface TermAcceptanceResponseDto {
+  termId: string;
+  type: TermAcceptanceResponseDtoType;
+  version: string;
+  acceptedAt: string;
 }
 
 /**
@@ -1201,6 +1211,14 @@ export type FeatureFlagsListParams = {
 
 export type FeatureFlagsList200 = ListResponseDto & {
   data?: FeatureFlagResponseDto[];
+};
+
+export type TermsList200 = ListResponseDto & {
+  data?: TermResponseDto[];
+};
+
+export type TermsAcceptances200 = ListResponseDto & {
+  data?: TermAcceptanceResponseDto[];
 };
 
 export type SessionsListParams = {

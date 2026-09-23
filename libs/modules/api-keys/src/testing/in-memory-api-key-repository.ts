@@ -1,3 +1,4 @@
+import { paginateNewestFirst } from '@nestjs-fastify-nx/shared';
 import type { ApiKey } from '../domain/entities/api-key.entity';
 import type {
   ApiKeyRepositoryPort,
@@ -16,13 +17,14 @@ export class InMemoryApiKeyRepository implements ApiKeyRepositoryPort {
   findAllCursor(options: FindApiKeysCursorOptions): Promise<FindApiKeysCursorResult> {
     const matching = [...this.keys.values()]
       .filter((key) => key.organizationId === options.organizationId)
-      .filter((key) => options.includeRevoked || !this.revoked.has(key.id))
-      .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime());
+      .filter((key) => options.includeRevoked || !this.revoked.has(key.id));
 
-    return Promise.resolve({
-      items: matching.slice(0, options.limit),
-      hasMore: matching.length > options.limit,
-    });
+    return Promise.resolve(
+      paginateNewestFirst(matching, {
+        startingAfter: options.startingAfter,
+        limit: options.limit,
+      }),
+    );
   }
 
   create(apiKey: ApiKey): Promise<void> {

@@ -1,5 +1,23 @@
 import { z } from 'zod';
-import { stripEmptyEnvStrings } from '@nestjs-fastify-nx/shared';
+import {
+  databaseEnvShape,
+  envFlag,
+  mailEnvShape,
+  nodeEnvShape,
+  otelEnvShape,
+  outboxPurgeEnvShape,
+  outboxRelayEnvShape,
+  parseEnvOrThrow,
+  redisQueueEnvShape,
+  refineDatabasePoolBounds,
+  refineDatabaseUrlProd,
+  refineMailProd,
+  refineOutboxRetryBounds,
+  refineRedisQueuePasswordProd,
+  refineStorageProd,
+  sentryEnvShape,
+  storageEnvShape,
+} from '@nestjs-fastify-nx/shared';
 // The package version is the single source of truth for APP_VERSION's default; nx release bumps it
 // (and root) in lockstep. Operators can still override APP_VERSION/APP_NAME via env.
 import pkg from '../../package.json';
@@ -13,30 +31,10 @@ const envSchema = z
     APP_NAME: z.string().default('nestjs-fastify-nx'),
     APP_VERSION: z.string().default(pkg.version),
     // Database
-    DATABASE_URL: z.string().trim().min(1),
-    // Prisma CLI uses this to bypass transaction-mode poolers (pgbouncer, RDS Proxy) for migrations.
-    DATABASE_DIRECT_URL: z.string().trim().min(1).optional(),
-    // Physical replica for read-only queries. When unset, dbRead aliases to db.
-    DATABASE_REPLICA_URL: z.string().trim().min(1).optional(),
-    DATABASE_REPLICA_POOL_MAX: z.coerce.number().int().min(1).max(1000).default(10),
+    ...databaseEnvShape('nestjs-fastify-api'),
     // Flips /health/dependencies to 503 when exceeded (NOT the readiness probe — see HealthController).
     // 30s suits most streaming replication topologies.
     DB_REPLICATION_LAG_THRESHOLD_MS: z.coerce.number().int().min(1_000).default(30_000),
-    DATABASE_POOL_MAX: z.coerce.number().int().min(1).max(1000).default(20),
-    DATABASE_POOL_MIN: z.coerce.number().int().min(0).max(1000).default(0),
-    DATABASE_IDLE_TIMEOUT_MS: z.coerce.number().int().min(0).default(10_000),
-    DATABASE_CONNECTION_TIMEOUT_MS: z.coerce.number().int().min(0).default(5_000),
-    DATABASE_STATEMENT_TIMEOUT_MS: z.coerce.number().int().min(0).default(30_000),
-    DATABASE_APPLICATION_NAME: z.string().default('nestjs-fastify-api'),
-    DB_PASSWORD_FILE: z.string().trim().min(1).optional(),
-    // Prisma query events above this duration are logged as `warn` (query template + duration
-    // only — never params, which can carry PII/secrets). See PrismaService.
-    DATABASE_SLOW_QUERY_MS: z.coerce.number().int().min(1).default(200),
-    // Dev-only full query logging (incl. params) at debug level. PrismaService ignores it in production.
-    DATABASE_LOG_QUERIES: z
-      .string()
-      .default('false')
-      .transform((v) => v === 'true'),
 
     // Redis cache instance (rate-limit counters, idempotency replay, Socket.io pub/sub, health probe)
     REDIS_CACHE_HOST: z.string().default('localhost'),
@@ -44,10 +42,7 @@ const envSchema = z
     REDIS_CACHE_PASSWORD: z.string().min(1).optional(),
 
     // Redis queue
-    REDIS_QUEUE_HOST: z.string().default('localhost'),
-    REDIS_QUEUE_PORT: z.coerce.number().int().min(1).max(65535).default(6380),
-    REDIS_QUEUE_PREFIX: z.string().default('bull'),
-    REDIS_QUEUE_PASSWORD: z.string().min(1).optional(),
+    ...redisQueueEnvShape(),
     // Separate from cache (db=0) and BullMQ to avoid keyspace-event noise in pub/sub.
     REDIS_PUBSUB_DB: z.coerce.number().int().min(0).max(15).default(2),
 
@@ -65,25 +60,7 @@ const envSchema = z
     FACEBOOK_CLIENT_SECRET: z.string().optional(),
 
     // Storage (S3 / MinIO)
-    STORAGE_ENDPOINT: z.string().default('http://localhost:9000'),
-    // Browser-facing endpoint for presigned URLs; overrides STORAGE_ENDPOINT for
-    // signing when the app reaches storage at an internal hostname (containers).
-    STORAGE_PUBLIC_ENDPOINT: z.string().optional(),
-    STORAGE_BUCKET: z.string().default('uploads'),
-    STORAGE_REGION: z.string().default('us-east-1'),
-    // Self-hosted backends serve path-style; real AWS S3 documents virtual-hosted-style.
-    STORAGE_FORCE_PATH_STYLE: z.enum(['true', 'false']).default('true'),
-    // WHEN_REQUIRED stops the SDK attaching x-amz-checksum-crc32, which some S3-compatible
-    // backends reject outright.
-    STORAGE_CHECKSUM_MODE: z.enum(['WHEN_SUPPORTED', 'WHEN_REQUIRED']).default('WHEN_SUPPORTED'),
-    STORAGE_ACCESS_KEY: z.string().default('minioadmin'),
-    STORAGE_SECRET_KEY: z.string().default('minioadmin'),
-    STORAGE_DOWNLOAD_URL_EXPIRES_SECONDS: z.coerce
-      .number()
-      .int()
-      .min(60)
-      .max(86_400)
-      .default(3_600),
+    ...storageEnvShape(),
     UPLOAD_PRESIGN_EXPIRES_SECONDS: z.coerce.number().int().min(60).max(3_600).default(300),
     MALWARE_SCANNER_ENABLED: z
       .enum(['true', 'false'])
@@ -100,41 +77,20 @@ const envSchema = z
     UPLOAD_REQUEST_TIMEOUT_MS: z.coerce.number().int().min(1000).max(3_600_000).default(900_000),
 
     // Throttler
-    THROTTLER_ENABLED: z
-      .string()
-      .default('true')
-      .transform((v) => v === 'true'),
+    THROTTLER_ENABLED: envFlag(true),
     THROTTLER_LIMIT: z.coerce.number().int().min(1).default(100),
     THROTTLER_TTL: z.coerce.number().int().min(1).default(60),
 
     // Mail
-    MAIL_HOST: z.string().default('localhost'),
-    MAIL_PORT: z.coerce.number().int().min(1).max(65535).default(1025),
-    MAIL_USER: z.string().default(''),
-    MAIL_PASSWORD: z.string().default(''),
-    MAIL_IGNORE_TLS: z
-      .string()
-      .default('true')
-      .transform((v) => v === 'true'),
-    MAIL_SECURE: z
-      .string()
-      .default('false')
-      .transform((v) => v === 'true'),
-    MAIL_REQUIRE_TLS: z
-      .string()
-      .default('false')
-      .transform((v) => v === 'true'),
-    MAIL_DEFAULT_EMAIL: z.email().default('noreply@example.com'),
-    MAIL_DEFAULT_NAME: z.string().default('No Reply'),
+    ...mailEnvShape(),
 
     // App
-    NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
+    ...nodeEnvShape(),
     PORT: z.coerce.number().int().min(1).max(65535).default(3000),
     // Defaults to every interface because a container must bind that way to be reachable through a
     // published port. Running on the host (./scripts/dev.sh) that also exposes the api to the local
     // network — set 127.0.0.1 to keep a laptop's dev stack off untrusted WiFi.
     HOST: z.string().default('0.0.0.0'),
-    LOG_LEVEL: z.string().default('info'),
     ERROR_DOCS_BASE_URL: z.url().optional(),
     HTTP_MAX_EVENT_LOOP_DELAY_MS: z.coerce.number().int().min(10).max(60_000).default(1_000),
     CORS_ORIGINS: z
@@ -174,69 +130,23 @@ const envSchema = z
       .max(600_000)
       .default(10_000),
     // Allow requests through when Redis is unreachable (brief unbounded rate) instead of cascading 500s.
-    THROTTLER_FAIL_OPEN: z
-      .string()
-      .default('true')
-      .transform((v) => v === 'true'),
-    ENABLE_METRICS: z
-      .string()
-      .default('false')
-      .transform((v) => v === 'true'),
+    THROTTLER_FAIL_OPEN: envFlag(true),
+    ENABLE_METRICS: envFlag(false),
     // Comma-separated CIDRs/IPs allowed to scrape /metrics. Loopback always allowed. Empty = loopback-only.
     METRICS_ALLOW_CIDRS: z.string().default(''),
 
     // OpenTelemetry
-    OTEL_ENABLED: z
-      .string()
-      .default('false')
-      .transform((v) => v === 'true'),
-    OTEL_SERVICE_NAME: z.string().default('nestjs-fastify-api'),
-    OTEL_SERVICE_NAMESPACE: z.string().default('app'),
-    OTEL_SERVICE_VERSION: z.string().default('0.0.0'),
-    OTEL_EXPORTER_OTLP_ENDPOINT: z.string().default('http://localhost:4318'),
-    OTEL_EXPORTER_OTLP_HEADERS: z.string().default(''),
-    OTEL_TRACES_SAMPLER_RATIO: z.coerce.number().min(0).max(1).default(1),
-    // Trust inbound W3C traceparent/baggage. Keep false on a public edge so clients can't inject or
-    // collide trace ids / force sampling; set true only behind a trusted mesh/gateway that owns the
-    // root span. Read by startTracing() via process.env; declared here for .env.example parity.
-    OTEL_TRUST_INBOUND_TRACEPARENT: z
-      .string()
-      .default('false')
-      .transform((v) => v === 'true'),
-    // Push OTLP metrics from this process. Keep false in the API — @prometheus-io/client (/metrics) is the
-    // metrics source of truth, so enabling both would double-count. Enable only in processes with no
-    // Prometheus scrape endpoint (worker, scheduler). Read by startTracing() via process.env.
-    OTEL_METRICS_EXPORT_ENABLED: z
-      .string()
-      .default('false')
-      .transform((v) => v === 'true'),
-    OTEL_DEBUG: z
-      .string()
-      .default('false')
-      .transform((v) => v === 'true'),
+    ...otelEnvShape('nestjs-fastify-api'),
     // Only a trusted gateway should be allowed to assign the support/log lookup id.
-    TRUST_INBOUND_REQUEST_ID: z
-      .string()
-      .default('false')
-      .transform((v) => v === 'true'),
+    TRUST_INBOUND_REQUEST_ID: envFlag(false),
 
     // Domain event publisher
     EVENT_PUBLISHER_DRIVER: z.enum(['inprocess', 'outbox']).default('inprocess'),
-    OUTBOX_POLL_INTERVAL_MS: z.coerce.number().int().min(50).default(1_000),
-    OUTBOX_BATCH_SIZE: z.coerce.number().int().min(1).max(1_000).default(50),
-    OUTBOX_MAX_ATTEMPTS: z.coerce.number().int().min(1).max(1_000).default(10),
-    // Retry backoff between delivery attempts (validated here for .env.example parity; the
-    // scheduler's relay is the runtime consumer). See the scheduler validator for the rationale.
-    OUTBOX_RETRY_BASE_MS: z.coerce.number().int().min(100).max(600_000).default(2_000),
-    OUTBOX_RETRY_MAX_MS: z.coerce.number().int().min(1_000).max(3_600_000).default(300_000),
+    ...outboxRelayEnvShape(),
+    ...outboxPurgeEnvShape(),
 
     // Monthly partitions kept; min=1 prevents zero-retention misconfiguration from purging the active partition.
     AUDIT_LOG_RETENTION_MONTHS: z.coerce.number().int().min(1).max(120).default(12),
-
-    // Hard-deletes processed outbox rows older than this; unprocessed rows are never touched.
-    OUTBOX_RETENTION_DAYS: z.coerce.number().int().min(1).max(365).default(7),
-    OUTBOX_PURGE_BATCH_SIZE: z.coerce.number().int().min(100).max(10000).default(1000),
-    OUTBOX_PURGE_MAX_BATCHES: z.coerce.number().int().min(1).max(10000).default(200),
 
     // Two-tier auth rate limit (bypasses NestJS ThrottlerGuard via reply.hijack). See main.ts.
     AUTH_RATE_LIMIT_MAX: z.coerce.number().int().min(1).default(5),
@@ -244,10 +154,7 @@ const envSchema = z
     AUTH_RATE_LIMIT_WINDOW_MS: z.coerce.number().int().min(1000).default(900_000),
     AUTH_SESSION_RATE_LIMIT_MAX: z.coerce.number().int().min(1).default(60),
     AUTH_SESSION_RATE_LIMIT_WINDOW_MS: z.coerce.number().int().min(1000).default(60_000),
-    AUTH_RATE_LIMIT_FAIL_OPEN: z
-      .string()
-      .default('false')
-      .transform((v) => v === 'true'),
+    AUTH_RATE_LIMIT_FAIL_OPEN: envFlag(false),
 
     HTTP_BODY_LIMIT_BYTES: z.coerce.number().int().min(1024).default(1_048_576),
     UPLOAD_MAX_FILE_BYTES: z.coerce
@@ -263,10 +170,7 @@ const envSchema = z
     HTTP_REQUEST_TIMEOUT_MS: z.coerce.number().int().min(0).default(30_000),
 
     // Idempotency-Key replay for mutating /api/v1/* requests (Stripe pattern).
-    IDEMPOTENCY_ENABLED: z
-      .string()
-      .default('true')
-      .transform((v) => v === 'true'),
+    IDEMPOTENCY_ENABLED: envFlag(true),
     // How long a completed response is replayable. 24h matches Stripe.
     IDEMPOTENCY_TTL_SECONDS: z.coerce.number().int().min(1).default(86_400),
     // In-flight lock lifetime. Must exceed HTTP_REQUEST_TIMEOUT_MS so the finishing request always
@@ -274,10 +178,7 @@ const envSchema = z
     IDEMPOTENCY_LOCK_TTL_SECONDS: z.coerce.number().int().min(1).default(60),
 
     // Bull Board
-    BULL_BOARD_ENABLED: z
-      .string()
-      .default('true')
-      .transform((v) => v === 'true'),
+    BULL_BOARD_ENABLED: envFlag(true),
     BULL_BOARD_USER: z.string().default('admin'),
     BULL_BOARD_PASSWORD: z.string().default('admin'),
 
@@ -286,29 +187,14 @@ const envSchema = z
     WORKER_UPLOAD_CONCURRENCY: z.coerce.number().int().min(1).max(500).default(5),
 
     // 0.01 (1%) default — 0.1 at 1k RPS burns 26M traces/day, exceeding most Business-plan quotas.
-    SENTRY_DSN: z.string().optional().default(''),
-    SENTRY_TRACES_SAMPLE_RATE: z.coerce.number().min(0).max(1).default(0.01),
-    SENTRY_ENVIRONMENT: z.string().default('development'),
+    ...sentryEnvShape(0.01),
   })
   .superRefine((data, ctx) => {
     // Mirrors the scheduler validator. The relay only runs there, but api and scheduler share one
     // .env in production — so without this check the same file boots green here and is rejected
     // there, which reads as an api/scheduler discrepancy rather than the config error it is.
-    if (data.OUTBOX_RETRY_BASE_MS > data.OUTBOX_RETRY_MAX_MS) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['OUTBOX_RETRY_BASE_MS'],
-        message: 'OUTBOX_RETRY_BASE_MS must be less than or equal to OUTBOX_RETRY_MAX_MS',
-      });
-    }
-
-    if (data.DATABASE_POOL_MIN > data.DATABASE_POOL_MAX) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['DATABASE_POOL_MIN'],
-        message: 'DATABASE_POOL_MIN must be less than or equal to DATABASE_POOL_MAX',
-      });
-    }
+    refineOutboxRetryBounds(data, ctx);
+    refineDatabasePoolBounds(data, ctx);
 
     // A timed-out request must release its idempotency lock before the lock expires, otherwise a
     // slow completion could overwrite a newer request's lock. Only enforced when both are active.
@@ -327,20 +213,11 @@ const envSchema = z
 
     if (data.NODE_ENV !== 'production') return;
 
-    if (data.STORAGE_ACCESS_KEY === 'minioadmin') {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['STORAGE_ACCESS_KEY'],
-        message: 'Must not use default value in production',
-      });
-    }
-    if (data.STORAGE_SECRET_KEY === 'minioadmin') {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['STORAGE_SECRET_KEY'],
-        message: 'Must not use default value in production',
-      });
-    }
+    refineStorageProd(data, ctx);
+    refineRedisQueuePasswordProd(data, ctx);
+    refineDatabaseUrlProd(data, ctx);
+    refineMailProd(data, ctx);
+
     if (data.BULL_BOARD_PASSWORD === 'admin') {
       ctx.addIssue({
         code: 'custom',
@@ -361,14 +238,6 @@ const envSchema = z
         path: ['REDIS_CACHE_PASSWORD'],
         message:
           'REDIS_CACHE_PASSWORD must be set in production — the cache holds session rate-limit and idempotency keys',
-      });
-    }
-    if (!data.REDIS_QUEUE_PASSWORD) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['REDIS_QUEUE_PASSWORD'],
-        message:
-          'REDIS_QUEUE_PASSWORD must be set in production — an unauthenticated queue exposes every job payload and the DLQ',
       });
     }
     if (!data.BETTER_AUTH_URL) {
@@ -397,54 +266,6 @@ const envSchema = z
       });
     }
 
-    if (!/^postgres(ql)?:\/\//.test(data.DATABASE_URL)) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['DATABASE_URL'],
-        message: 'DATABASE_URL must use the postgres:// or postgresql:// scheme in production',
-      });
-    }
-
-    if (data.MAIL_HOST === 'localhost') {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['MAIL_HOST'],
-        message: 'MAIL_HOST must point to a real SMTP server in production',
-      });
-    }
-
-    if (data.MAIL_DEFAULT_EMAIL === 'noreply@example.com') {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['MAIL_DEFAULT_EMAIL'],
-        message: 'MAIL_DEFAULT_EMAIL must be set to a real address in production',
-      });
-    }
-
-    // SMTP runs in the worker, but api and worker share one .env in prod, so both
-    // validators enforce TLS. The rule's intent is to keep CREDENTIALS off the wire,
-    // so it only applies when auth is actually used (MAIL_USER set). A relay without
-    // auth (e.g. a local mailpit in a prod-parity smoke) sends nothing secret in
-    // plaintext, so requiring TLS there adds no security — only friction.
-    if (data.MAIL_USER) {
-      if (data.MAIL_IGNORE_TLS) {
-        ctx.addIssue({
-          code: 'custom',
-          path: ['MAIL_IGNORE_TLS'],
-          message:
-            'MAIL_IGNORE_TLS must be false in production when MAIL_USER is set — sending SMTP credentials without TLS exposes them in plaintext',
-        });
-      }
-      if (!data.MAIL_SECURE && !data.MAIL_REQUIRE_TLS) {
-        ctx.addIssue({
-          code: 'custom',
-          path: ['MAIL_REQUIRE_TLS'],
-          message:
-            'Enable MAIL_SECURE or MAIL_REQUIRE_TLS in production when MAIL_USER is set so SMTP credentials negotiate TLS',
-        });
-      }
-    }
-
     if (data.CORS_ORIGINS.length === 0) {
       ctx.addIssue({
         code: 'custom',
@@ -457,14 +278,5 @@ const envSchema = z
 export type EnvConfig = z.infer<typeof envSchema>;
 
 export function validateConfig(config: Record<string, unknown>): EnvConfig {
-  const result = envSchema.safeParse(stripEmptyEnvStrings(config));
-
-  if (!result.success) {
-    const formatted = result.error.issues
-      .map((issue) => `  - ${issue.path.join('.')}: ${issue.message}`)
-      .join('\n');
-    throw new Error(`Environment validation failed. Fix the following variables:\n${formatted}`);
-  }
-
-  return result.data;
+  return parseEnvOrThrow(envSchema, config, 'Environment');
 }

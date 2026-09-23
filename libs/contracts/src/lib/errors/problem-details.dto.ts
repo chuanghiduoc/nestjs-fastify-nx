@@ -45,7 +45,7 @@ export class ProblemDetailsDto {
     description:
       'Stable, machine-readable error code (snake_case). Use this for client-side i18n keys and logic switching — message text may change without notice.',
     // Kept in sync with the `type`/`title`/`status` example above so the schema view renders one
-    // coherent 404 example (not a mix of 404 + route_not_found + 503 checks).
+    // coherent 404 example (not a mix of 404 + not_found + 503 checks).
     example: 'not_found',
   })
   code!: string;

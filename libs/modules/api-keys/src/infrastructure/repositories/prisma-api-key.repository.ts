@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '@nestjs-fastify-nx/infra-database';
 import { Prisma } from '@nestjs-fastify-nx/infra-database';
-import type { Permission } from '@nestjs-fastify-nx/shared';
+import { keysetAfter, takePage, type Permission } from '@nestjs-fastify-nx/shared';
 import { ApiKey } from '../../domain/entities/api-key.entity';
 import type {
   ApiKeyRepositoryPort,
@@ -37,16 +37,7 @@ export class PrismaApiKeyRepository implements ApiKeyRepositoryPort {
 
     const where: Prisma.ApiKeyWhereInput = { organizationId };
     if (!includeRevoked) where.revokedAt = null;
-    if (startingAfter) {
-      where.AND = [
-        {
-          OR: [
-            { createdAt: { lt: startingAfter.createdAt } },
-            { AND: [{ createdAt: startingAfter.createdAt }, { id: { lt: startingAfter.id } }] },
-          ],
-        },
-      ];
-    }
+    if (startingAfter) where.AND = [keysetAfter(startingAfter)];
 
     const rows = await this.prisma.readTarget().apiKey.findMany({
       where,
@@ -54,8 +45,8 @@ export class PrismaApiKeyRepository implements ApiKeyRepositoryPort {
       take: limit + 1,
     });
 
-    const hasMore = rows.length > limit;
-    return { items: (hasMore ? rows.slice(0, limit) : rows).map(toEntity), hasMore };
+    const { items, hasMore } = takePage(rows, limit);
+    return { items: items.map(toEntity), hasMore };
   }
 
   async create(apiKey: ApiKey): Promise<void> {

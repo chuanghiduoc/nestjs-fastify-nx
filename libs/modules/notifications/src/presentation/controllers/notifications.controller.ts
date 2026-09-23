@@ -58,7 +58,6 @@ export class NotificationsController {
 
   @Get()
   @RequirePermission(PERMISSIONS.NOTIFICATION_READ)
-  @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'List the caller’s notifications',
     description:
@@ -67,7 +66,7 @@ export class NotificationsController {
   @ApiPaginatedResponse(NotificationResponseDto, {
     description: 'Cursor-paginated list of notifications.',
   })
-  @ApiCommonErrors({ auth: true, forbidden: true, validation: true })
+  @ApiCommonErrors({ validation: true })
   async list(
     @CurrentUser() user: AuthenticatedSession,
     @Query() filter: ListNotificationsFilterDto,
@@ -89,10 +88,9 @@ export class NotificationsController {
 
   @Get('unread-count')
   @RequirePermission(PERMISSIONS.NOTIFICATION_READ)
-  @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Count the caller’s unread notifications' })
   @ApiOkResponse({ type: UnreadCountResponseDto, description: 'Unread count.' })
-  @ApiCommonErrors({ auth: true, forbidden: true })
+  @ApiCommonErrors()
   unreadCount(@CurrentUser() user: AuthenticatedSession): Promise<UnreadCountDto> {
     return this.queryBus.execute(
       new CountUnreadNotificationsQuery(requireOrganizationId(user), user.userId),
@@ -108,7 +106,7 @@ export class NotificationsController {
   })
   @ApiParam({ name: 'id', format: 'uuid', description: 'Notification id (UUID v7).' })
   @ApiNoContentResponse({ description: 'Notification marked read.' })
-  @ApiCommonErrors({ auth: true, forbidden: true, notFound: true })
+  @ApiCommonErrors({ notFound: true })
   markRead(
     @CurrentUser() user: AuthenticatedSession,
     @Param('id', new ParseUUIDPipe({ version: '7' })) id: string,
@@ -123,7 +121,7 @@ export class NotificationsController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Mark every unread notification as read' })
   @ApiOkResponse({ type: MarkAllReadResponseDto, description: 'Number of rows marked.' })
-  @ApiCommonErrors({ auth: true, forbidden: true })
+  @ApiCommonErrors()
   markAllRead(@CurrentUser() user: AuthenticatedSession): Promise<MarkAllNotificationsReadResult> {
     return this.commandBus.execute(
       new MarkAllNotificationsReadCommand(requireOrganizationId(user), user.userId),

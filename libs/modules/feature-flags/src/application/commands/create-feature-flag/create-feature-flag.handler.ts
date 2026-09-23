@@ -3,7 +3,7 @@ import { CommandHandler, type ICommandHandler } from '@nestjs/cqrs';
 import { FEATURE_FLAG_REPOSITORY } from '../../../domain/ports/feature-flag-repository.port';
 import type { FeatureFlagRepositoryPort } from '../../../domain/ports/feature-flag-repository.port';
 import { FeatureFlag } from '../../../domain/entities/feature-flag.entity';
-import type { FeatureFlagDto } from '../../dto/feature-flag.dto';
+import { toFeatureFlagDto, type FeatureFlagDto } from '../../dto/feature-flag.dto';
 import { CreateFeatureFlagCommand } from './create-feature-flag.command';
 
 @CommandHandler(CreateFeatureFlagCommand)
@@ -24,14 +24,6 @@ export class CreateFeatureFlagHandler implements ICommandHandler<
 
     await this.flags.create(flag);
 
-    return {
-      id: flag.id,
-      key: flag.key,
-      description: flag.description,
-      enabled: flag.enabled,
-      rolloutPercentage: flag.rolloutPercentage,
-      createdAt: flag.createdAt,
-      updatedAt: flag.updatedAt,
-    };
+    return toFeatureFlagDto(flag);
   }
 }

@@ -4,17 +4,12 @@ import { CommandBus } from '@nestjs/cqrs';
 import { ConfigService } from '@nestjs/config';
 import type { Job } from 'bullmq';
 import { QUEUE_NAMES, positiveIntEnv } from '@nestjs-fastify-nx/shared';
-import { VerifyUploadCommand } from '@nestjs-fastify-nx/modules-upload';
+import {
+  VerifyUploadCommand,
+  type UploadVerificationRequest,
+} from '@nestjs-fastify-nx/modules-upload';
 import type { WorkerEnvConfig } from '../../config/env.validation';
 import { applyWorkerConcurrency } from './apply-worker-concurrency';
-
-export interface UploadVerificationPayload {
-  key: string;
-  declaredContentType: string;
-  bucket: string;
-  // Propagated from the originating /upload/confirm request so worker logs correlate with it.
-  correlationId?: string;
-}
 
 // Seed only — decorator options evaluate before ConfigModule parses .env; see applyWorkerConcurrency.
 const UPLOAD_CONCURRENCY = positiveIntEnv('WORKER_UPLOAD_CONCURRENCY', 5);
@@ -40,7 +35,7 @@ export class UploadVerificationProcessor extends WorkerHost implements OnApplica
     );
   }
 
-  async process(job: Job<UploadVerificationPayload>): Promise<void> {
+  async process(job: Job<UploadVerificationRequest>): Promise<void> {
     const { key, declaredContentType, bucket, correlationId } = job.data;
 
     await this.commandBus.execute(

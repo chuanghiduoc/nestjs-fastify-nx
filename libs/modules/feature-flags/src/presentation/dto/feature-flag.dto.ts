@@ -10,8 +10,7 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
-
-const KEY_PATTERN = /^[a-z][a-z0-9._-]{1,99}$/;
+import { KEY_PATTERN } from '../../domain/entities/feature-flag.entity';
 
 export class CreateFeatureFlagDto {
   @ApiProperty({

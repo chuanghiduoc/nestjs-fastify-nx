@@ -21,7 +21,7 @@ export class UsersController {
   @ApiOkResponse({ type: UserProfileResponseDto, description: 'The current user profile.' })
   // 404: the session is valid but the account was hard-deleted mid-session — the handler raises a
   // not_found DomainException that the filter turns into a 404 here (GraphQL `me` maps it to null).
-  @ApiCommonErrors({ auth: true, validation: false, notFound: true })
+  @ApiCommonErrors({ validation: false, notFound: true })
   getProfile(@CurrentUser() user: AuthenticatedSession): Promise<UserProfileResponseDto> {
     return this.queryBus.execute(new GetUserProfileQuery(user.userId));
   }

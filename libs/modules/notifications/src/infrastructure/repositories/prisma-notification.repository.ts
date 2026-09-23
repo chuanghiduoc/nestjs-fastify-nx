@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { PrismaService } from '@nestjs-fastify-nx/infra-database';
+import { PrismaService, jsonObjectOrEmpty } from '@nestjs-fastify-nx/infra-database';
 import { Prisma } from '@nestjs-fastify-nx/infra-database';
+import { keysetAfter, takePage } from '@nestjs-fastify-nx/shared';
 import { Notification } from '../../domain/entities/notification.entity';
 import type {
   FindNotificationsCursorOptions,
@@ -20,12 +21,8 @@ type NotificationRow = {
   createdAt: Date;
 };
 
-function toData(raw: Prisma.JsonValue): Record<string, unknown> {
-  return typeof raw === 'object' && raw !== null && !Array.isArray(raw) ? raw : {};
-}
-
 function toEntity(row: NotificationRow): Notification {
-  return Notification.reconstitute({ ...row, data: toData(row.data) });
+  return Notification.reconstitute({ ...row, data: jsonObjectOrEmpty(row.data) });
 }
 
 @Injectable()
@@ -41,16 +38,7 @@ export class PrismaNotificationRepository implements NotificationRepositoryPort 
 
     const where: Prisma.NotificationWhereInput = { organizationId, userId };
     if (unreadOnly) where.readAt = null;
-    if (startingAfter) {
-      where.AND = [
-        {
-          OR: [
-            { createdAt: { lt: startingAfter.createdAt } },
-            { AND: [{ createdAt: startingAfter.createdAt }, { id: { lt: startingAfter.id } }] },
-          ],
-        },
-      ];
-    }
+    if (startingAfter) where.AND = [keysetAfter(startingAfter)];
 
     const rows = await this.prisma.readTarget().notification.findMany({
       where,
@@ -58,8 +46,8 @@ export class PrismaNotificationRepository implements NotificationRepositoryPort 
       take: limit + 1,
     });
 
-    const hasMore = rows.length > limit;
-    return { items: (hasMore ? rows.slice(0, limit) : rows).map(toEntity), hasMore };
+    const { items, hasMore } = takePage(rows, limit);
+    return { items: items.map(toEntity), hasMore };
   }
 
   async countUnread(organizationId: string, userId: string): Promise<number> {
