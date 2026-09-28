@@ -2,7 +2,7 @@
 # Generates the environment files the stack needs, with real secrets.
 #
 # Dev needs one .env and the example's defaults are already usable. Production needs that same .env
-# (compose reads the DB role names, MinIO root credentials and image refs from it) PLUS one file per
+# (compose reads the DB role names, Garage node secrets and image refs from it) PLUS one file per
 # app, because each runtime connects as its own least-privilege Postgres role. Assembling those by
 # hand means writing nine credentials and four DSNs consistently — and compose reports only the
 # FIRST missing one per run, so getting it wrong costs a boot cycle per mistake.
@@ -45,6 +45,18 @@ done
 # openssl is not guaranteed on a dev box; node is, because the repo cannot be built without it.
 random_secret() {
   node -e "process.stdout.write(require('node:crypto').randomBytes(${1:-24}).toString('base64url'))"
+}
+
+random_hex() {
+  node -e "process.stdout.write(require('node:crypto').randomBytes(${1}).toString('hex'))"
+}
+
+GARAGE_KEY_ID_PATTERN='^GK[0-9a-f]{24}$'
+GARAGE_SECRET_PATTERN='^[0-9a-f]{64}$'
+
+is_garage_storage_key() {
+  [[ "$(env_value STORAGE_ACCESS_KEY)" =~ $GARAGE_KEY_ID_PATTERN &&
+    "$(env_value STORAGE_SECRET_KEY)" =~ $GARAGE_SECRET_PATTERN ]]
 }
 
 # Reads a key from .env, returning empty when absent or commented out.
@@ -144,7 +156,7 @@ if [[ $CHECK_ONLY -eq 1 ]]; then
   MISSING=()
   for key in BETTER_AUTH_SECRET POSTGRES_ADMIN_USER POSTGRES_ADMIN_PASSWORD \
     API_DB_USER API_DB_PASSWORD WORKER_DB_USER WORKER_DB_PASSWORD \
-    SCHEDULER_DB_USER SCHEDULER_DB_PASSWORD MINIO_ROOT_USER MINIO_ROOT_PASSWORD \
+    SCHEDULER_DB_USER SCHEDULER_DB_PASSWORD GARAGE_RPC_SECRET GARAGE_ADMIN_TOKEN \
     STORAGE_ACCESS_KEY STORAGE_SECRET_KEY REDIS_CACHE_PASSWORD REDIS_QUEUE_PASSWORD; do
     [[ -n "$(env_value "$key")" ]] || MISSING+=("$key")
   done
@@ -205,16 +217,15 @@ if [[ $CHECK_ONLY -eq 1 ]]; then
   reject_app_env_keys .env.migration BETTER_AUTH_SECRET REDIS_CACHE_PASSWORD REDIS_QUEUE_PASSWORD \
     STORAGE_ACCESS_KEY STORAGE_SECRET_KEY
 
-  EQUAL_STORAGE_KEY=0
-  if [[ -n "$(env_value STORAGE_ACCESS_KEY)" &&
-    "$(env_value STORAGE_ACCESS_KEY)" == "$(env_value MINIO_ROOT_USER)" ]]; then
-    sec::err "STORAGE_ACCESS_KEY equals MINIO_ROOT_USER — provisioning refuses to scope down the root account, so the apps would run on it."
-    EQUAL_STORAGE_KEY=1
+  INVALID_STORAGE_KEY=0
+  if ! is_garage_storage_key; then
+    sec::err "STORAGE_ACCESS_KEY / STORAGE_SECRET_KEY are not Garage-format keys ('GK' + 24 hex, 64 hex) — garage-init will refuse them."
+    INVALID_STORAGE_KEY=1
   fi
 
   # A preflight that always exits 0 cannot gate anything — CI and build-prod.sh rely on the status.
   if [[ ${#MISSING[@]} -gt 0 || ${#MISSING_FILES[@]} -gt 0 || ${#STALE_FILES[@]} -gt 0 ||
-    ${#OVERBROAD_FILES[@]} -gt 0 || $EQUAL_STORAGE_KEY -eq 1 ]]; then
+    ${#OVERBROAD_FILES[@]} -gt 0 || $INVALID_STORAGE_KEY -eq 1 ]]; then
     sec::err "Environment is incomplete for a production boot."
     [[ ${#STALE_FILES[@]} -gt 0 ]] && sec::log "Re-run ./scripts/gen-env.sh --prod to regenerate: ${STALE_FILES[*]}"
     [[ ${#OVERBROAD_FILES[@]} -gt 0 ]] && sec::log "Delete and regenerate with --force: ${OVERBROAD_FILES[*]}"
@@ -227,6 +238,16 @@ fi
 # example ships a placeholder that would otherwise be shared by every clone of this repo.
 ensure_secret BETTER_AUTH_SECRET 32
 
+ensure_storage_key() {
+  if [[ $FORCE -eq 0 ]] && is_garage_storage_key &&
+    [[ "$(env_value STORAGE_ACCESS_KEY)" != "$(example_value STORAGE_ACCESS_KEY)" ]]; then
+    return 0
+  fi
+  set_env_value STORAGE_ACCESS_KEY "GK$(random_hex 12)"
+  set_env_value STORAGE_SECRET_KEY "$(random_hex 32)"
+  GENERATED+=(STORAGE_ACCESS_KEY STORAGE_SECRET_KEY)
+}
+
 ensure_runtime_credentials() {
   ensure_value API_DB_USER api_user
   ensure_secret API_DB_PASSWORD 24
@@ -234,8 +255,7 @@ ensure_runtime_credentials() {
   ensure_secret WORKER_DB_PASSWORD 24
   ensure_value SCHEDULER_DB_USER scheduler_user
   ensure_secret SCHEDULER_DB_PASSWORD 24
-  ensure_value_over_example STORAGE_ACCESS_KEY app_storage
-  ensure_secret STORAGE_SECRET_KEY 24
+  ensure_storage_key
   ensure_secret REDIS_CACHE_PASSWORD 24
   ensure_secret REDIS_QUEUE_PASSWORD 24
 }
@@ -261,8 +281,8 @@ ensure_value POSTGRES_ADMIN_USER postgres
 ensure_secret POSTGRES_ADMIN_PASSWORD 24
 ensure_runtime_credentials
 
-ensure_value_over_example MINIO_ROOT_USER minio_admin
-ensure_secret MINIO_ROOT_PASSWORD 24
+ensure_value_over_example GARAGE_RPC_SECRET "$(random_hex 32)"
+ensure_secret GARAGE_ADMIN_TOKEN 32
 ensure_value STORAGE_BUCKET uploads
 ensure_secret BULL_BOARD_PASSWORD 18
 ensure_value BULL_BOARD_USER admin
@@ -291,7 +311,7 @@ WORKER_DSN="$(dsn_for "$(env_value WORKER_DB_USER)" "$(env_value WORKER_DB_PASSW
 SCHEDULER_DSN="$(dsn_for "$(env_value SCHEDULER_DB_USER)" "$(env_value SCHEDULER_DB_PASSWORD)")"
 ADMIN_DSN="$(dsn_for "$ADMIN_USER" "$ADMIN_PASSWORD")"
 
-SHARED_STORAGE="STORAGE_ENDPOINT=http://minio:9000
+SHARED_STORAGE="STORAGE_ENDPOINT=http://garage:3900
 STORAGE_ACCESS_KEY=${STORAGE_KEY}
 STORAGE_SECRET_KEY=${STORAGE_SECRET}
 STORAGE_BUCKET=${BUCKET}

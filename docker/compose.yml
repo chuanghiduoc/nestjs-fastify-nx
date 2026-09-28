@@ -3,7 +3,7 @@
 #
 # PORT CONVENTIONS:
 #   - INTERNAL (container) ports are FIXED: postgres=5432, redis-cache=6379,
-#     redis-queue=6380, minio=9000/9001, mailpit=1025/8025.
+#     redis-queue=6380, garage=3900 (S3) / 3903 (admin), mailpit=1025/8025.
 #   - HOST (publish) ports use env vars for flexibility: ${POSTGRES_PORT:-5432}:5432
 #     means "publish internal 5432 to host ${POSTGRES_PORT} (default 5432)".
 #   - Container-to-container traffic uses service names + internal ports
@@ -110,25 +110,22 @@ services:
       timeout: 5s
       retries: 5
 
-  minio:
-    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z@sha256:a1a8bd4ac40ad7881a245bab97323e18f971e4d4cba2c2007ec1bedd21cbaba2
+  garage:
+    image: dxflrs/garage:v2.4.1@sha256:9c96caa2612d3411acc5b0e6701fb238dbfba33e533a6d7d3d811a4b12d0d020
     restart: unless-stopped
     mem_limit: 256m
     cpus: 0.5
-    # Internal ports: API=9000, Console=9001
-    command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      GARAGE_RPC_SECRET: ${GARAGE_RPC_SECRET:?GARAGE_RPC_SECRET is required — run ./scripts/gen-env.sh}
+      GARAGE_ADMIN_TOKEN: ${GARAGE_ADMIN_TOKEN:?GARAGE_ADMIN_TOKEN is required — run ./scripts/gen-env.sh}
       TZ: ${TZ:-UTC}
     volumes:
-      - minio_data:/data
+      - ./garage/garage.toml:/etc/garage.toml:ro
+      - garage_data:/var/lib/garage
     ports:
-      # Host ports (env) : Container ports (fixed 9000, 9001)
-      - '127.0.0.1:${MINIO_PORT:-9000}:9000'
-      - '127.0.0.1:${MINIO_CONSOLE_PORT:-9001}:9001'
+      - '127.0.0.1:${GARAGE_PORT:-9000}:3900'
     healthcheck:
-      test: ['CMD', 'curl', '-f', 'http://localhost:9000/minio/health/ready']
+      test: ['CMD', '/garage', 'status']
       interval: 10s
       timeout: 3s
       retries: 5
@@ -191,5 +188,5 @@ services:
 
 volumes:
   postgres_data:
-  minio_data:
+  garage_data:
   redis_queue_data:

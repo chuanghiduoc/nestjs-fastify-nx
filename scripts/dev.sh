@@ -4,7 +4,7 @@
 # Why not docker compose? The `*-dev` image stages run `node dist/.../main.js`
 # with no source tree mounted, so editing source means rebuilding an image.
 # Nx serve runs Webpack watch and restarts Node on the host while
-# Postgres/Redis/MinIO/Mailpit
+# Postgres/Redis/Garage/Mailpit
 # stay in their containers. `.env` already points every connection at
 # localhost, and compose.dev.yml overrides those same vars to service names for
 # the containerised api — so the two modes coexist without editing .env.
@@ -57,7 +57,7 @@ esac
 COMPOSE_ARGS=(--env-file .env -f docker/compose.yml -f docker/compose.dev.yml)
 
 # Infra only — never the app services (api/worker/scheduler run on the host).
-INFRA_SERVICES=(postgres redis-cache redis-queue minio mailpit)
+INFRA_SERVICES=(postgres redis-cache redis-queue garage mailpit)
 
 cleanup() {
   [[ $CLEANED_UP -eq 1 ]] && return
@@ -86,9 +86,9 @@ if [[ $NO_INFRA -eq 0 ]]; then
   # shellcheck disable=SC2086
   docker compose "${COMPOSE_ARGS[@]}" up -d --wait "${INFRA_SERVICES[@]}"
 
-  # One-shot: creates the MinIO bucket the upload module expects. Idempotent.
+  # One-shot: provisions the Garage bucket the upload module expects. Idempotent.
   # shellcheck disable=SC2086
-  docker compose "${COMPOSE_ARGS[@]}" up --no-log-prefix minio-init
+  docker compose "${COMPOSE_ARGS[@]}" up --no-log-prefix garage-init
 
   # Apply migrations from the host (DATABASE_URL already points at localhost).
   # `deploy` only runs committed migrations — no schema drift prompts.

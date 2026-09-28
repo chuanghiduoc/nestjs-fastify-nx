@@ -14,6 +14,7 @@ the old file stays for the reasoning trail.
 | [0006](0006-shared-e2e-application-instance.md) | The e2e suite shares one module registry, one application and one database container | Accepted |
 | [0007](0007-api-key-authentication.md)          | API keys are hashed bearer credentials, and routes opt into them                     | Accepted |
 | [0008](0008-session-organization-policy.md)     | Session organization provisioning belongs to Organizations                           | Proposed |
+| [0009](0009-bundled-object-storage-garage.md)   | The bundled object store is Garage                                                   | Accepted |
 
 ## Template
 

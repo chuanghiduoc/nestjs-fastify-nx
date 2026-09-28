@@ -59,7 +59,7 @@ const envSchema = z
     FACEBOOK_CLIENT_ID: z.string().optional(),
     FACEBOOK_CLIENT_SECRET: z.string().optional(),
 
-    // Storage (S3 / MinIO)
+    // Storage (S3 / Garage)
     ...storageEnvShape(),
     UPLOAD_PRESIGN_EXPIRES_SECONDS: z.coerce.number().int().min(60).max(3_600).default(300),
     MALWARE_SCANNER_ENABLED: z

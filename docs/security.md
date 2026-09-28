@@ -195,7 +195,7 @@ itself.
 No process holds a credential it cannot use. A compromise of one app is bounded by that app's
 own grants rather than by the whole data tier.
 
-| Runtime     | Postgres role                                                                                   | Redis                        | MinIO             |
+| Runtime     | Postgres role                                                                                   | Redis                        | Garage            |
 | ----------- | ----------------------------------------------------------------------------------------------- | ---------------------------- | ----------------- |
 | `migration` | admin (schema owner)                                                                            | —                            | —                 |
 | `api`       | `api_user` — `NOBYPASSRLS`, no `_prisma_migrations`, no `UPDATE`/`DELETE` on `outbox_events`    | cache **and** queue password | bucket-scoped key |
@@ -203,9 +203,9 @@ own grants rather than by the whole data tier.
 | `scheduler` | `scheduler_user` — `MAINTAIN` schema-wide, DML on its seven tables, `SELECT` on `organizations` | queue password only          | bucket-scoped key |
 
 Provisioned by `docker/postgres/provision-runtime-roles.sh` and
-`docker/minio/provision-bucket.sh`, both run as one-shot compose services gated ahead of the apps.
+`docker/garage/provision.sh`, both run as one-shot compose services gated ahead of the apps.
 `scripts/gen-env.sh --prod` generates every secret and writes one env file per runtime, so the
-admin database password, `MINIO_ROOT_*` and `BETTER_AUTH_SECRET` never reach a process that has no
+admin database password, `GARAGE_ADMIN_TOKEN`, `GARAGE_RPC_SECRET` and `BETTER_AUTH_SECRET` never reach a process that has no
 use for them.
 
 Three properties worth stating because they are easy to regress:
@@ -214,11 +214,12 @@ Three properties worth stating because they are easy to regress:
   rate-limit counters and idempotency replay keys; the queue holds every job payload and the DLQ.
   An unauthenticated instance also exposes `CONFIG SET dir`, which is a file-write primitive.
   Production env validation in all three apps refuses to boot without the password it needs.
-- **The apps never hold the MinIO root credential.** They sign presigned URLs with a user whose
-  policy is limited to `STORAGE_BUCKET`, so a compromised api cannot read another bucket, create
-  MinIO users, or remove the orphan-expiry lifecycle rule. `provision-bucket.sh` exits non-zero when
-  `STORAGE_ACCESS_KEY` equals `MINIO_ROOT_USER` rather than quietly leaving the apps on the root
-  account, and `gen-env.sh --check` fails on the same condition.
+- **The apps never hold the Garage admin token.** They sign presigned URLs with a key granted
+  `read` + `write` on `STORAGE_BUCKET` only — no `owner`, no `createBucket` — so a compromised api
+  cannot read another bucket, create buckets, or mint keys. Garage has no finer-grained policy than
+  that: a `write` key can replace the bucket's lifecycle configuration, which is no wider than the
+  `DeleteObject` it already holds. `provision.sh` refuses a key that is not Garage-format, and
+  `gen-env.sh --check` fails on the same condition.
 - **The dev stack uses the same roles and passwords as production.** Running dev on the Postgres
   superuser would bypass RLS unconditionally and leave every tenant-isolation policy unexercised
   until a deploy.
@@ -260,7 +261,7 @@ Per-service Dockerfile properties relied on by the scanners above:
   tag mutation).
 - Non-root user (UID 1001), `STOPSIGNAL SIGTERM`, tini PID 1.
 - `compose.prod.yml` drops every capability on **both** tiers. Apps additionally run
-  `read_only: true` with a `noexec,nosuid` tmpfs; postgres, redis and minio cannot
+  `read_only: true` with a `noexec,nosuid` tmpfs; postgres, redis and garage cannot
   (they write to their volumes) and instead keep only the five capabilities their
   entrypoints need to chown the data directory and drop to a service account —
   `CHOWN`, `DAC_OVERRIDE`, `FOWNER`, `SETGID`, `SETUID`. `no-new-privileges:true`

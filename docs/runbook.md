@@ -429,11 +429,7 @@ The `bullmq_job_duration_seconds` histogram is NOT inflated — each replica obs
 
 Because presign tags objects `committed=false` upfront, the single tag-filtered rule above matches every orphan — no separate untagged sweep is needed (apply via `aws s3api put-bucket-lifecycle-configuration --bucket <name> --lifecycle-configuration file://lifecycle.json`).
 
-**MinIO equivalent (`mc`):**
-
-```bash
-mc ilm rule add --expire-days 1 --tags "committed=false" myminio/<your-bucket>
-```
+**Bundled Garage:** `garage-init` applies a prefix-filtered expiry rule on every boot (`docker/garage/provision.sh`). Garage has no tag filters, so it expires everything under `uploads/` after `STORAGE_ORPHAN_EXPIRY_DAYS`.
 
 **Action when bucket already bloated:** list orphan objects via `aws s3api list-objects-v2` + filter by the `committed=false` tag, then bulk delete. Cost-wise the lifecycle rule is the right long-term fix; manual cleanup is one-time.
 
@@ -630,7 +626,7 @@ signal.
 
 ```bash
 ./scripts/pg-backup.sh backup ./backups        # writes ./backups/<db>-<UTC-timestamp>.dump
-# then copy the artifact OFF-HOST (object storage that is NOT the app's own MinIO/S3)
+# then copy the artifact OFF-HOST (object storage that is NOT the app's own Garage/S3)
 ```
 
 **Restore (destructive — overwrites the target DB):**

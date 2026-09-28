@@ -90,7 +90,7 @@ Upload flow:
 
 ```text
 POST /api/v1/upload/presign { "contentType": "image/png" }
-  -> browser POSTs multipart data directly to S3/MinIO
+  -> browser POSTs multipart data directly to S3/Garage
   -> POST /api/v1/upload/confirm { "key": "uploads/<user>/<file>.png" }
   -> VERIFYING -> worker checks magic bytes + ClamAV -> READY
 ```

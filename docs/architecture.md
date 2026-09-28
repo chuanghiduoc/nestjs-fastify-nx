@@ -27,7 +27,7 @@ nestjs-fastify-nx/
 │   │   ├── database/     # Prisma service + module
 │   │   ├── redis/        # Cache + Queue modules + DLQ helpers
 │   │   ├── messaging/    # Event bus, transactional outbox publisher + relay
-│   │   ├── storage/      # S3 / MinIO adapter (StoragePort)
+│   │   ├── storage/      # S3 adapter (StoragePort)
 │   │   ├── i18n/         # I18N_KEYS + locale resolution used by the error filter
 │   │   └── observability/# OpenTelemetry SDK bootstrap, metrics, Sentry init
 │   ├── core/         # Cross-cutting: base classes, decorators, errors

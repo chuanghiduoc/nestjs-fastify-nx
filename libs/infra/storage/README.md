@@ -1,6 +1,6 @@
 # infra-storage
 
-Object storage adapter — S3 SDK v3 with presigned URLs, MinIO-compatible in
+Object storage adapter — S3 SDK v3 with presigned URLs, served by Garage in
 dev. The application talks to a `StoragePort` interface; the concrete S3
 implementation is owned by this lib.
 
@@ -50,13 +50,13 @@ returned `key`.
 
 All settings come from environment variables:
 
-| Variable             | Default                 | Notes                  |
-| -------------------- | ----------------------- | ---------------------- |
-| `STORAGE_ENDPOINT`   | `http://localhost:9000` | S3-compatible endpoint |
-| `STORAGE_ACCESS_KEY` | `minioadmin`            | Rotate in production   |
-| `STORAGE_SECRET_KEY` | `minioadmin`            | Rotate in production   |
-| `STORAGE_BUCKET`     | `uploads`               | Default bucket name    |
-| `STORAGE_REGION`     | `us-east-1`             | S3 region              |
+| Variable             | Default                 | Notes                                      |
+| -------------------- | ----------------------- | ------------------------------------------ |
+| `STORAGE_ENDPOINT`   | `http://localhost:9000` | S3-compatible endpoint                     |
+| `STORAGE_ACCESS_KEY` | `minioadmin`            | Set explicitly; Garage needs `GK` + 24 hex |
+| `STORAGE_SECRET_KEY` | `minioadmin`            | Set explicitly; Garage needs 64 hex        |
+| `STORAGE_BUCKET`     | `uploads`               | Default bucket name                        |
+| `STORAGE_REGION`     | `us-east-1`             | S3 region                                  |
 
-In dev, MinIO runs as a Docker service with the console at
-[http://localhost:9001](http://localhost:9001).
+In dev, Garage runs as a Docker service exposing the S3 API at
+[http://localhost:9000](http://localhost:9000); `garage-init` provisions the bucket and key.
