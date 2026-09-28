@@ -140,7 +140,7 @@ jobs:
             echo "SEED_ADMIN_PASSWORD=SmokeAdmin123!"
           } >> .env
 
-      # depends_on chains every service (infra + migration + minio-init), so this
+      # depends_on chains every service (infra + migration + garage-init), so this
       # one command builds all four app images and boots the whole stack. --wait
       # blocks on worker/scheduler healthchecks and migration completing; a crash
       # loop or failed migration trips --wait-timeout and fails.

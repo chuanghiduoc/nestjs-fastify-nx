@@ -107,7 +107,7 @@ If you've ever shipped a Node service to production, you've written this code al
 | Authentication | Better Auth 1.6 (cookie sessions, scrypt password hashing)               |
 | API surfaces   | REST (`@nestjs/swagger`), GraphQL (`@nestjs/mercurius`), Socket.io       |
 | Realtime       | Socket.io 4 + `@socket.io/redis-adapter`                                 |
-| Object storage | AWS S3 SDK v3 + presigned URLs (MinIO compatible in dev)                 |
+| Object storage | AWS S3 SDK v3 + presigned URLs (Garage in dev)                           |
 | Email          | Nodemailer (SMTP) — Mailpit in dev                                       |
 | Validation     | Zod 4 + class-validator + class-transformer                              |
 | Observability  | OpenTelemetry SDK + Sentry NestJS + Prometheus (`@prometheus-io/client`) |
@@ -162,7 +162,7 @@ cd nestjs-fastify-nx
 pnpm install                    # generates Prisma client via postinstall
 
 ./scripts/doctor.sh             # verify prerequisites (Docker, Node, pnpm, ports)
-./scripts/build-dev.sh          # builds + starts the dev stack (MinIO bucket auto-created)
+./scripts/build-dev.sh          # builds + starts the dev stack (Garage bucket auto-created)
 ```
 
 When done:
@@ -195,7 +195,7 @@ Once the stack is up:
 | GraphiQL IDE     | [http://localhost:3000/graphiql](http://localhost:3000/graphiql) (dev only)        |
 | Bull Board       | [http://localhost:3000/api/admin/queues](http://localhost:3000/api/admin/queues)   |
 | Prometheus       | [http://localhost:3000/metrics](http://localhost:3000/metrics)                     |
-| MinIO console    | [http://localhost:9001](http://localhost:9001)                                     |
+| Garage S3 API    | [http://localhost:9000](http://localhost:9000) (no web console)                    |
 | Mailpit (SMTP)   | [http://localhost:8025](http://localhost:8025)                                     |
 
 For deeper setup steps see [docs/getting-started.md](docs/getting-started.md).

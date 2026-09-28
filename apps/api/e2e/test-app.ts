@@ -169,7 +169,7 @@ async function bootstrapTestApp(): Promise<TestAppContext> {
   const moduleRef = await Test.createTestingModule({
     imports: [AppModule],
   })
-    // Override S3 adapter — no minio container in e2e; controller-level tests
+    // Override S3 adapter — no object-storage container in e2e; controller-level tests
     // only need head()=null / presign-roundtrip behaviour.
     .overrideProvider(STORAGE_PORT)
     .useValue(e2eStorageStub)

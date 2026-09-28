@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- Docker Desktop (required for PostgreSQL, Redis, MinIO)
+- Docker Desktop (required for PostgreSQL, Redis, Garage)
 - Node.js 24+ and pnpm 11.14+ (`corepack enable && corepack prepare pnpm@11.14.0 --activate`)
 
 ## Setup
@@ -15,20 +15,20 @@ cd nestjs-fastify-nx
 # 2. Copy environment file
 ./scripts/gen-env.sh             # creates .env and generates a real BETTER_AUTH_SECRET
 
-# 3. Start all services (DB + Redis + MinIO + API with hot-reload)
+# 3. Start all services (DB + Redis + Garage + API with hot-reload)
 docker compose --env-file .env -f docker/compose.yml -f docker/compose.dev.yml up
 ```
 
 ## Services
 
-| Service       | URL                                                      | Credentials             |
-| ------------- | -------------------------------------------------------- | ----------------------- |
-| API           | [http://localhost:3000](http://localhost:3000)           | —                       |
-| API Docs      | [http://localhost:3000/docs](http://localhost:3000/docs) | Scalar (dev only)       |
-| MinIO Console | [http://localhost:9001](http://localhost:9001)           | minioadmin / minioadmin |
-| PostgreSQL    | localhost:5432                                           | postgres / postgres     |
-| Redis Cache   | localhost:6379                                           | —                       |
-| Redis Queue   | localhost:6380                                           | —                       |
+| Service       | URL                                                      | Credentials                                             |
+| ------------- | -------------------------------------------------------- | ------------------------------------------------------- |
+| API           | [http://localhost:3000](http://localhost:3000)           | —                                                       |
+| API Docs      | [http://localhost:3000/docs](http://localhost:3000/docs) | Scalar (dev only)                                       |
+| Garage S3 API | [http://localhost:9000](http://localhost:9000)           | `STORAGE_ACCESS_KEY` / `STORAGE_SECRET_KEY` from `.env` |
+| PostgreSQL    | localhost:5432                                           | postgres / postgres                                     |
+| Redis Cache   | localhost:6379                                           | —                                                       |
+| Redis Queue   | localhost:6380                                           | —                                                       |
 
 ## Verify Installation
 

@@ -24,7 +24,7 @@ const workerEnvSchema = z
     // Redis queue
     ...redisQueueEnvShape(),
 
-    // Storage (S3 / MinIO) — needed by the upload-verification processor.
+    // Storage (S3 / Garage) — needed by the upload-verification processor.
     ...storageEnvShape(),
     MALWARE_SCANNER_ENABLED: z
       .enum(['true', 'false'])

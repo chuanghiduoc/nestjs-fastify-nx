@@ -8,7 +8,7 @@
 #   - pnpm >= 10
 #   - .env file exists
 #   - .env drift against .env.example
-#   - Ports free: 3000, 5432, 6379, 6380, 9000, 9001, 1025, 8025
+#   - Ports free: 3000, 5432, 6379, 6380, 9000, 1025, 8025
 #
 # Usage:
 #   ./scripts/doctor.sh         # run all checks
@@ -29,7 +29,7 @@ if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
   echo "  - Docker daemon and Compose v2"
   echo "  - Node.js >= 24, pnpm >= 10"
   echo "  - .env file present with required keys"
-  echo "  - Host ports free: 3000 5432 6379 6380 9000 9001 1025 8025"
+  echo "  - Host ports free: 3000 5432 6379 6380 9000 1025 8025"
   echo ""
   echo "Exits 0 if all checks pass, 1 if any check fails."
   exit 0
@@ -179,7 +179,7 @@ fi
 # 7. Required ports free
 # ---------------------------------------------------------------------------
 sec::source_env API_PORT POSTGRES_PORT REDIS_CACHE_PORT REDIS_QUEUE_PORT \
-  MINIO_PORT MINIO_CONSOLE_PORT MAIL_PORT MAILPIT_UI_PORT COMPOSE_PROJECT_NAME
+  GARAGE_PORT MAIL_PORT MAILPIT_UI_PORT COMPOSE_PROJECT_NAME
 
 # A port published by this project's own containers is the stack already running, not a conflict.
 COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-$(basename "$(pwd)")}"
@@ -200,8 +200,7 @@ PORTS_TO_CHECK=(
   "${POSTGRES_PORT:-5432}:PostgreSQL"
   "${REDIS_CACHE_PORT:-6379}:Redis-cache"
   "${REDIS_QUEUE_PORT:-6380}:Redis-queue"
-  "${MINIO_PORT:-9000}:MinIO-API"
-  "${MINIO_CONSOLE_PORT:-9001}:MinIO-console"
+  "${GARAGE_PORT:-9000}:Garage-S3"
   "${MAIL_PORT:-1025}:Mailpit-SMTP"
   "${MAILPIT_UI_PORT:-8025}:Mailpit-UI"
 )

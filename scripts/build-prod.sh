@@ -26,7 +26,7 @@ if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
   echo "Reads IMAGE_REGISTRY / IMAGE_NAMESPACE / IMAGE_TAG from .env or environment."
   echo ""
   echo "Auto-detection (after build, before up):"
-  echo "  STORAGE_ENDPOINT      empty / localhost / minio  -> bundle local MinIO"
+  echo "  STORAGE_ENDPOINT      empty / localhost / garage -> bundle local Garage"
   echo "  MAIL_HOST             empty / localhost / mailpit -> bundle local Mailpit"
   echo ""
   echo "Env flags:"
@@ -46,7 +46,7 @@ fi
 cd "$(sec::repo_root)"
 
 sec::source_env IMAGE_REGISTRY IMAGE_NAMESPACE IMAGE_TAG STORAGE_ENDPOINT MAIL_HOST \
-  API_PORT MINIO_PORT MINIO_CONSOLE_PORT MAILPIT_HTTP_PORT COMPOSE_PROJECT_NAME SWARM_STACK_NAME
+  API_PORT GARAGE_PORT MAILPIT_HTTP_PORT COMPOSE_PROJECT_NAME SWARM_STACK_NAME
 sec::source_env PROD_STARTUP_TIMEOUT_SECONDS
 
 IMAGE_REGISTRY="${IMAGE_REGISTRY:-ghcr.io}"
@@ -143,7 +143,7 @@ done
 
 # ---------------------------------------------------------------------------
 # Detect whether the operator has wired external S3 / SMTP. If not, fold in
-# the swarm-local-test overlay which bundles MinIO + Mailpit + valid prod-env
+# the swarm-local-test overlay which bundles Garage + Mailpit + valid prod-env
 # overrides so the strict NODE_ENV=production validator passes.
 # ---------------------------------------------------------------------------
 echo ""
@@ -155,7 +155,7 @@ STORAGE_HINT="${STORAGE_ENDPOINT:-}"
 MAIL_HINT="${MAIL_HOST:-}"
 
 case "${STORAGE_HINT}" in
-  ''|*localhost*|*127.0.0.1*|*minio*) USE_LOCAL_S3=1 ;;
+  ''|*localhost*|*127.0.0.1*|*garage*) USE_LOCAL_S3=1 ;;
   *)                                   USE_LOCAL_S3=0 ;;
 esac
 
@@ -168,13 +168,13 @@ COMPOSE_FILES=(-f docker/compose.yml -f docker/compose.prod.yml)
 if [[ $USE_LOCAL_S3 -eq 1 ]] || [[ $USE_LOCAL_SMTP -eq 1 ]]; then
   COMPOSE_FILES+=(-f docker/compose.swarm-local-test.yml)
   if [[ $USE_LOCAL_S3 -eq 1 ]]; then
-    sec::log "STORAGE_ENDPOINT not set to external S3 -> bundling MinIO"
+    sec::log "STORAGE_ENDPOINT not set to external S3 -> bundling Garage"
   fi
   if [[ $USE_LOCAL_SMTP -eq 1 ]]; then
     sec::log "MAIL_HOST not set to external SMTP -> bundling Mailpit"
   fi
 else
-  sec::log "External S3 + SMTP detected — bundled MinIO / Mailpit skipped"
+  sec::log "External S3 + SMTP detected — bundled Garage / Mailpit skipped"
 fi
 
 echo ""
@@ -194,7 +194,7 @@ if ! docker compose -p "$COMPOSE_PROJECT" --env-file .env "${COMPOSE_FILES[@]}" 
   fi
   docker compose -p "$COMPOSE_PROJECT" --env-file .env "${COMPOSE_FILES[@]}" ps -a || true
   docker compose -p "$COMPOSE_PROJECT" --env-file .env "${COMPOSE_FILES[@]}" logs \
-    --tail=100 api worker scheduler migration minio-init || true
+    --tail=100 api worker scheduler migration garage-init || true
   exit 1
 fi
 
@@ -220,8 +220,7 @@ echo "    Healthcheck: http://localhost:${API_PORT:-3000}/api/v1/health"
 echo "    OpenAPI:     http://localhost:${API_PORT:-3000}/docs-json  (gated by NODE_ENV — prod hides it)"
 echo "    Bull Board:  http://localhost:${API_PORT:-3000}/api/admin/queues"
 if [[ $USE_LOCAL_S3 -eq 1 ]]; then
-  echo "    MinIO API:   http://localhost:${MINIO_PORT:-9000}"
-  echo "    MinIO UI:    http://localhost:${MINIO_CONSOLE_PORT:-9001}  (user: localtest-access-key)"
+  echo "    Garage S3:   http://localhost:${GARAGE_PORT:-9000}"
 fi
 if [[ $USE_LOCAL_SMTP -eq 1 ]]; then
   echo "    Mailpit UI:  http://localhost:${MAILPIT_HTTP_PORT:-8025}"

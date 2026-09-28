@@ -162,7 +162,7 @@ export class S3StorageAdapter implements StoragePort, OnModuleInit, OnModuleDest
     this.client = new S3Client({ ...clientConfig, endpoint: this.endpoint });
 
     // Presigned URLs must be signed against a host the browser can reach; in
-    // containers STORAGE_ENDPOINT is internal (http://minio:9000), so
+    // containers STORAGE_ENDPOINT is internal (http://garage:3900), so
     // STORAGE_PUBLIC_ENDPOINT overrides it for signing. Unset means both equal.
     const configuredPublic = this.config.get<string>('STORAGE_PUBLIC_ENDPOINT');
     this.publicEndpoint = configuredPublic ? configuredPublic : this.endpoint;
@@ -187,7 +187,7 @@ export class S3StorageAdapter implements StoragePort, OnModuleInit, OnModuleDest
     return configured as ChecksumMode;
   }
 
-  // Development MinIO is bootstrapped automatically. Production storage is infrastructure-owned,
+  // Development storage is bootstrapped automatically. Production storage is infrastructure-owned,
   // so the runtime identity needs no CreateBucket permission.
   async onModuleInit(): Promise<void> {
     try {

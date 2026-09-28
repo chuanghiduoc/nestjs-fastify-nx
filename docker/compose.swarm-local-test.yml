@@ -17,24 +17,18 @@ services:
       - '127.0.0.1:${MAILPIT_SMTP_PORT:-1025}:1025'
       - '127.0.0.1:${MAILPIT_HTTP_PORT:-8025}:8025'
 
-  minio:
-    environment:
-      MINIO_ROOT_USER: localtest-root-user
-      MINIO_ROOT_PASSWORD: localtest-root-password-min-16
-    # The production overlay strips all data-tier host ports. Re-enable MinIO only for this
-    # explicitly local smoke overlay, loopback-bound so the script's advertised UI is reachable.
+  garage:
+    # The production overlay strips all data-tier host ports. Re-enable the S3 API only for this
+    # explicitly local smoke overlay, loopback-bound so the script's advertised endpoint is reachable.
     ports: !override
-      - '127.0.0.1:${MINIO_PORT:-9000}:9000'
-      - '127.0.0.1:${MINIO_CONSOLE_PORT:-9001}:9001'
+      - '127.0.0.1:${GARAGE_PORT:-9000}:3900'
 
-  minio-init:
+  garage-init:
     environment:
-      MINIO_ROOT_USER: localtest-root-user
-      MINIO_ROOT_PASSWORD: localtest-root-password-min-16
-      STORAGE_ACCESS_KEY: localtest-access-key
-      STORAGE_SECRET_KEY: localtest-secret-key-min-16
+      STORAGE_ACCESS_KEY: GKc0ffee0000000000000000aa
+      STORAGE_SECRET_KEY: 10ca17e510ca17e510ca17e510ca17e510ca17e510ca17e510ca17e510ca17e5
       STORAGE_BUCKET: uploads
-      MINIO_ORPHAN_EXPIRY_DAYS: ${MINIO_ORPHAN_EXPIRY_DAYS:-1}
+      STORAGE_ORPHAN_EXPIRY_DAYS: ${STORAGE_ORPHAN_EXPIRY_DAYS:-1}
     deploy:
       restart_policy:
         condition: none
@@ -44,9 +38,9 @@ services:
       NODE_ENV: production
       REDIS_CACHE_PASSWORD: ${REDIS_CACHE_PASSWORD:?REDIS_CACHE_PASSWORD is required}
       REDIS_QUEUE_PASSWORD: ${REDIS_QUEUE_PASSWORD:?REDIS_QUEUE_PASSWORD is required}
-      STORAGE_ACCESS_KEY: localtest-access-key
-      STORAGE_SECRET_KEY: localtest-secret-key-min-16
-      STORAGE_ENDPOINT: http://minio:9000
+      STORAGE_ACCESS_KEY: GKc0ffee0000000000000000aa
+      STORAGE_SECRET_KEY: 10ca17e510ca17e510ca17e510ca17e510ca17e510ca17e510ca17e510ca17e5
+      STORAGE_ENDPOINT: http://garage:3900
       STORAGE_BUCKET: uploads
       MAIL_HOST: mailpit
       MAIL_PORT: '1025'
@@ -56,35 +50,35 @@ services:
       FRONTEND_BASE_URL: http://localhost:3000
       CORS_ORIGINS: http://localhost:3000
     depends_on:
-      minio-init:
+      garage-init:
         condition: service_completed_successfully
 
   worker:
     environment:
       NODE_ENV: production
       REDIS_QUEUE_PASSWORD: ${REDIS_QUEUE_PASSWORD:?REDIS_QUEUE_PASSWORD is required}
-      STORAGE_ACCESS_KEY: localtest-access-key
-      STORAGE_SECRET_KEY: localtest-secret-key-min-16
-      STORAGE_ENDPOINT: http://minio:9000
+      STORAGE_ACCESS_KEY: GKc0ffee0000000000000000aa
+      STORAGE_SECRET_KEY: 10ca17e510ca17e510ca17e510ca17e510ca17e510ca17e510ca17e510ca17e5
+      STORAGE_ENDPOINT: http://garage:3900
       STORAGE_BUCKET: uploads
       MAIL_HOST: mailpit
       MAIL_PORT: '1025'
       MAIL_DEFAULT_EMAIL: test@localtest.local
     depends_on:
-      minio-init:
+      garage-init:
         condition: service_completed_successfully
 
   scheduler:
     environment:
       NODE_ENV: production
       REDIS_QUEUE_PASSWORD: ${REDIS_QUEUE_PASSWORD:?REDIS_QUEUE_PASSWORD is required}
-      STORAGE_ACCESS_KEY: localtest-access-key
-      STORAGE_SECRET_KEY: localtest-secret-key-min-16
-      STORAGE_ENDPOINT: http://minio:9000
+      STORAGE_ACCESS_KEY: GKc0ffee0000000000000000aa
+      STORAGE_SECRET_KEY: 10ca17e510ca17e510ca17e510ca17e510ca17e510ca17e510ca17e510ca17e5
+      STORAGE_ENDPOINT: http://garage:3900
       STORAGE_BUCKET: uploads
       MAIL_HOST: mailpit
       MAIL_PORT: '1025'
       MAIL_DEFAULT_EMAIL: test@localtest.local
     depends_on:
-      minio-init:
+      garage-init:
         condition: service_completed_successfully

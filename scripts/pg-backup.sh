@@ -7,7 +7,7 @@
 # and OFF-HOST retention are the operator's responsibility — a backup that lives
 # on the same volume as the database it protects is not a backup. Wire this into
 # cron / a systemd timer / a CI job and copy the artifact to object storage that
-# is NOT the same MinIO/S3 instance the app writes uploads to.
+# is NOT the same Garage/S3 instance the app writes uploads to.
 #
 # Usage:
 #   ./scripts/pg-backup.sh backup [OUT_DIR]      # default OUT_DIR=./backups

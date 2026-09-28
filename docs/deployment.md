@@ -5,7 +5,7 @@
 - Docker 24+ and Docker Compose v2
 - Access to a container registry (GHCR, ECR, Docker Hub)
 - PostgreSQL 18 and Redis 8 in production
-- MinIO or S3-compatible storage
+- S3-compatible storage (bundled Garage, or an external S3)
 
 ## Environment Variables
 
@@ -74,15 +74,15 @@ docker run --rm \
 ## Docker Compose (Production)
 
 Each runtime connects as its own least-privilege Postgres role, its own Redis credentials and a
-bucket-scoped MinIO key, so production needs `.env` (compose interpolation: role credentials,
-MinIO root, Redis passwords, image refs) plus one mode-0600 file per process containing only what
+bucket-scoped Garage key, so production needs `.env` (compose interpolation: role credentials,
+Garage node secrets, Redis passwords, image refs) plus one mode-0600 file per process containing only what
 that process uses. `gen-env.sh` writes all five with generated secrets and the right DSN in each —
 done by hand it is fifteen credentials and four DSNs, and compose reports only the first missing
 variable per run.
 
-`MINIO_ROOT_USER`/`MINIO_ROOT_PASSWORD` stay in `.env` for the `minio` and `minio-init` containers
-only; the apps receive `STORAGE_ACCESS_KEY`/`STORAGE_SECRET_KEY`, the bucket-scoped user
-`minio-init` provisions. `REDIS_CACHE_PASSWORD` reaches only `.env.api`; `REDIS_QUEUE_PASSWORD`
+`GARAGE_RPC_SECRET`/`GARAGE_ADMIN_TOKEN` stay in `.env` for the `garage` and `garage-init` containers
+only; the apps receive `STORAGE_ACCESS_KEY`/`STORAGE_SECRET_KEY`, the bucket-scoped key
+`garage-init` imports. `REDIS_CACHE_PASSWORD` reaches only `.env.api`; `REDIS_QUEUE_PASSWORD`
 reaches all three app env files.
 
 ```bash
@@ -98,7 +98,7 @@ docker compose --env-file .env -f docker/compose.yml -f docker/compose.prod.yml 
 ```
 
 The base `compose.yml` defines the infrastructure services (PostgreSQL, Redis,
-MinIO) and healthcheck specs for worker/scheduler. The
+Garage) and healthcheck specs for worker/scheduler. The
 `compose.prod.yml` requires digest-pinned `API_IMAGE`, `WORKER_IMAGE`,
 `SCHEDULER_IMAGE`, and `MIGRATION_IMAGE`. It provisions separate database roles
 after migrations and gives each process its own env file, preventing the API,
@@ -106,16 +106,16 @@ worker, scheduler, and migration containers from inheriting one shared secret se
 
 ## Network Exposure & Port Binding
 
-The base `compose.yml` publishes host ports for Postgres, Redis, and MinIO as a
+The base `compose.yml` publishes host ports for Postgres, Redis, and Garage as a
 **dev convenience**. Short-form mappings (`5432:5432`) bind `0.0.0.0` _through
 Docker's own iptables chain, which bypasses `ufw`/`firewalld`_ — on a public-IP
 host they are internet-reachable even behind a "deny" rule. The
 `compose.prod.yml` overlay closes this:
 
-| Service                                      | Host port in prod overlay                                     | Reachable by                                                                    |
-| -------------------------------------------- | ------------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| postgres / redis-cache / redis-queue / minio | none — stripped via `ports: !override []`                     | other containers only, by service name (`postgres:5432`, `redis-cache:6379`, …) |
-| api                                          | `${API_BIND_HOST:-127.0.0.1}:${API_PORT:-3000}:${PORT:-3000}` | loopback only by default — **not** the public internet                          |
+| Service                                       | Host port in prod overlay                                     | Reachable by                                                                    |
+| --------------------------------------------- | ------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| postgres / redis-cache / redis-queue / garage | none — stripped via `ports: !override []`                     | other containers only, by service name (`postgres:5432`, `redis-cache:6379`, …) |
+| api                                           | `${API_BIND_HOST:-127.0.0.1}:${API_PORT:-3000}:${PORT:-3000}` | loopback only by default — **not** the public internet                          |
 
 ### Exposing the api
 

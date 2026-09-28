@@ -54,7 +54,7 @@
 #
 # ─── Hardening notes ────────────────────────────────────────────────────────
 #
-# - Postgres / Redis / MinIO ports are reset (`!override []`) so they only
+# - Postgres / Redis / Garage ports are reset (`!override []`) so they only
 #   exist on the encrypted overlay — never published on host interfaces.
 # - `api` publishes via `mode: ingress` so any node IP routes to a healthy
 #   replica via Swarm's L4 routing mesh. Terminate TLS in front of it with
@@ -126,7 +126,7 @@ services:
         constraints: [node.labels.role.db == true]
         max_replicas_per_node: 1
 
-  minio:
+  garage:
     networks: [app-net]
     ports: !override []
     deploy:

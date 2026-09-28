@@ -150,7 +150,7 @@ if ! API_REPLICAS="${API_REPLICAS:-1}" WORKER_REPLICAS="${WORKER_REPLICAS:-1}" \
   sec::err "Compose startup failed. Container status and recent dependency logs follow."
   docker compose "${COMPOSE_ARGS[@]}" ps -a || true
   docker compose "${COMPOSE_ARGS[@]}" logs --tail=100 \
-    postgres redis-cache redis-queue minio minio-init mailpit migration "${SERVICES[@]}" || true
+    postgres redis-cache redis-queue garage garage-init mailpit migration "${SERVICES[@]}" || true
   exit 1
 fi
 
