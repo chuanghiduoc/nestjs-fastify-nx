@@ -35,7 +35,7 @@ jobs:
         # the job has nothing to recover, so the WAL fsync on every TRUNCATE is pure cost.
         # actionlint's service schema does not list `command` and flags it, but the runner does
         # honour it — verified in the job log, which shows `docker create ... postgres:18-alpine
-        # postgres -c fsync=off …`. The redis-queue and minio services below rely on it too.
+        # postgres -c fsync=off …`. The redis-queue service below relies on it too.
         command: postgres -c fsync=off -c synchronous_commit=off -c full_page_writes=off
 
       redis-cache:
@@ -54,20 +54,6 @@ jobs:
           --health-cmd "redis-cli -p 6380 ping"
           --health-interval 10s
         command: redis-server --port 6380
-
-      minio:
-        image: quay.io/minio/minio:RELEASE.2025-04-22T22-12-26Z
-        ports:
-          - 9000:9000
-        env:
-          MINIO_ROOT_USER: minioadmin
-          MINIO_ROOT_PASSWORD: minioadmin
-        options: >-
-          --health-cmd "curl -f http://localhost:9000/minio/health/live"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-        command: server /data
 
     env:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/nestjs_test_db
