@@ -130,7 +130,8 @@ if [[ -n "$ROLE_USER" ]]; then
     sec::err "No password for '${ROLE_USER}' — run ./scripts/gen-env.sh to generate the runtime role credentials."
     exit 1
   fi
-  export DATABASE_URL="postgresql://$(sec::urlencode "$ROLE_USER"):$(sec::urlencode "$ROLE_PASSWORD")@localhost:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-nestjs_db}"
+  DATABASE_URL="postgresql://$(sec::urlencode "$ROLE_USER"):$(sec::urlencode "$ROLE_PASSWORD")@localhost:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-nestjs_db}"
+  export DATABASE_URL
   sec::log "  database role: ${ROLE_USER} (admin DSN stays in .env for the Prisma CLI)"
 fi
 

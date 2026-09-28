@@ -36,7 +36,8 @@ ENTRYPOINT ["/sbin/tini", "--"]
 
 FROM base AS workspace
 ENV CI=true \
-    NX_DAEMON=false
+    NX_DAEMON=false \
+    NX_NO_CLOUD=true
 COPY pnpm-lock.yaml pnpm-workspace.yaml .npmrc* ./
 RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
     pnpm config set store-dir /pnpm/store \
