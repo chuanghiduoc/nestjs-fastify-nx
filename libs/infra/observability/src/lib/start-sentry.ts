@@ -11,9 +11,9 @@ export interface StartSentryOptions {
   readonly profiling?: boolean;
 }
 
-// Defense-in-depth key-name redaction on every Sentry event (sendDefaultPii is
-// already false). Covers auth secrets and direct PII so a stray breadcrumb or
-// `extra` field never ships credentials or personal data off-box.
+// Defense-in-depth key-name redaction on every Sentry event (dataCollection already
+// withholds user, cookie and payload data). Covers auth secrets and direct PII so a stray
+// breadcrumb or `extra` field never ships credentials or personal data off-box.
 const SENSITIVE_KEY =
   /authorization|password|token|secret|cookie|api[-_]?key|email|phone|ssn|credit[-_]?card|card[-_]?number|tax[-_]?id/i;
 const MAX_SCRUB_DEPTH = 8;
@@ -57,9 +57,19 @@ export function startSentry(options: StartSentryOptions): boolean {
     release: process.env['OTEL_SERVICE_VERSION'],
     initialScope: { tags: { service: options.serviceName } },
     tracesSampleRate,
-    profilesSampleRate: options.profiling ? Math.min(PRODUCTION_SAMPLE_RATE_CAP, cap) : 0,
+    profileSessionSampleRate: options.profiling ? Math.min(PRODUCTION_SAMPLE_RATE_CAP, cap) : 0,
+    profileLifecycle: 'trace',
     integrations: options.profiling ? [nodeProfilingIntegration()] : undefined,
-    sendDefaultPii: false,
+    dataCollection: {
+      userInfo: false,
+      cookies: false,
+      httpBodies: [],
+      databaseQueryData: false,
+      queues: false,
+      stackFrameVariables: false,
+      graphQL: { document: false, variables: false },
+      genAI: { inputs: false, outputs: false },
+    },
     beforeSend(event) {
       scrub(event);
       return event;

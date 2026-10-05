@@ -55,6 +55,37 @@ describe('startSentry', () => {
     });
   });
 
+  it('enables trace-scoped profiling only when requested', () => {
+    process.env['SENTRY_DSN'] = 'https://public@example.invalid/1';
+    process.env['NODE_ENV'] = 'production';
+
+    startSentry({ serviceName: 'api', profiling: true });
+    startSentry({ serviceName: 'worker' });
+
+    const [profiled, unprofiled] = vi.mocked(Sentry.init).mock.calls.map(([options]) => options);
+    expect(profiled?.profileSessionSampleRate).toBe(0.1);
+    expect(profiled?.profileLifecycle).toBe('trace');
+    expect(profiled?.integrations).toEqual(['profiling']);
+    expect(unprofiled?.profileSessionSampleRate).toBe(0);
+    expect(unprofiled?.integrations).toBeUndefined();
+  });
+
+  it('keeps personal and payload data out of every event', () => {
+    process.env['SENTRY_DSN'] = 'https://public@example.invalid/1';
+    startSentry({ serviceName: 'api' });
+
+    expect(vi.mocked(Sentry.init).mock.calls[0]?.[0]?.dataCollection).toEqual({
+      userInfo: false,
+      cookies: false,
+      httpBodies: [],
+      databaseQueryData: false,
+      queues: false,
+      stackFrameVariables: false,
+      graphQL: { document: false, variables: false },
+      genAI: { inputs: false, outputs: false },
+    });
+  });
+
   it('reports fatal errors without writing their message or stack to stderr', async () => {
     const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
     const exit = vi.spyOn(process, 'exit').mockImplementation((() => undefined) as never);
