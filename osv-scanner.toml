@@ -1,0 +1,4 @@
+[[IgnoredVulns]]
+id = "GHSA-vfj7-8cjw-p6xm"
+ignoreUntil = 2026-12-01
+reason = "braces 3.0.3 reaches the tree only through chokidar 3 via nestjs-i18n. Input is file paths from the i18n directory, not user input. No patched release exists. Review when braces publishes a fix."

@@ -100,8 +100,11 @@ overrides:
   # GHSA-5jgf-p345-68v8, GHSA-f65p-4m7j-42xc, GHSA-fph4-wmhf-6fwf, GHSA-jqff-g426-hqxp (high, 7.5).
   # Reached through @fastify/ajv-compiler (a fastify core dep) and ajv, neither of which offers a
   # range that resolves 4.1.3, so the floor has to move here. Capped below the next major.
-  fast-uri: '>=4.1.3 <5'
+  fast-uri: '>=4.1.5 <5'
   fast-xml-builder: '>=1.2.0'
+  ip-address: '>=10.7.1 <11'
+  serialize-javascript: '>=7.1.2 <8'
+  '@grpc/grpc-js': '>=1.14.5 <2'
   hono: '4.12.27'
   immutable: '5.1.8'
   # Patched floors for OSV findings; keep resolutions within the current major.
