@@ -109,7 +109,8 @@ describe('PrismaAuditLogRepository (integration)', () => {
     const ORG_ID = '019dd1a5-9235-70db-8d57-54ef90500001';
     const OTHER_ORG_ID = '019dd1a5-9235-70db-8d57-54ef90500002';
     const ACTOR_ID = '019dd1a5-9235-70db-8d57-54ef90500010';
-    const BASE_TIME = new Date('2026-08-01T00:00:00.000Z');
+    const NOW = new Date();
+    const BASE_TIME = new Date(Date.UTC(NOW.getUTCFullYear(), NOW.getUTCMonth(), 1));
 
     // audit_logs is behind row-level security, and the repository binds the tenant from the
     // request context. Reads therefore have to run inside a CLS scope, exactly as they do in a
