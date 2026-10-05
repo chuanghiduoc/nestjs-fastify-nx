@@ -4,7 +4,8 @@ import { PrismaService } from '@nestjs-fastify-nx/infra-database';
 import { generateId } from '@nestjs-fastify-nx/shared';
 import { createTestApp, cookieHeaderFromSetCookies, type TestAppContext } from './test-app';
 
-const BASE_TIME = new Date('2026-08-01T00:00:00.000Z');
+const NOW = new Date();
+const BASE_TIME = new Date(Date.UTC(NOW.getUTCFullYear(), NOW.getUTCMonth(), 1));
 
 describe('Audit logs E2E', () => {
   let ctx: TestAppContext;
