@@ -109,7 +109,14 @@ overrides:
   immutable: '5.1.8'
   # Patched floors for OSV findings; keep resolutions within the current major.
   svgo: '>=4.1.0 <5'
-  smol-toml: '>=1.7.1 <2'
+  # GHSA-r4xh-jqrq-34v2 (moderate, quadratic-time parseKey). Reached only through nx@23, which pins
+  # 1.8.0; 1.9.0 makes key parsing linear.
+  smol-toml: '>=1.9.0 <2'
+  # GHSA-68fv-2mgg-jv7q (high, 8.7 — event-loop DoS on indexed source maps with oversized section
+  # offsets). Reached only at build time through postcss, sass, css-tree (svgo), magicast and
+  # source-map-loader, none of which accepts an untrusted map, but the lockfile the images install
+  # from still ships it. No consumer offers a range that reaches 1.2.2, so the floor has to move.
+  source-map-js: '>=1.2.2 <2'
   # Security floor (>=7.29.4) but capped below 8: 8.x demands @babel/core ^8 while the toolchain
   # (nx → @babel/preset-env 7.x) pins @babel/core 7, so an open >= let pnpm jump to 8.0.1 and fail
   # strictPeerDependencies on any lockfile-updating install. 7.29.7 carries the same fix.
