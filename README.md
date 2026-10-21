@@ -20,7 +20,7 @@
 </p>
 
 <p align="center">
-  <img alt="NestJS" src="https://img.shields.io/badge/NestJS-11-E0234E?logo=nestjs&logoColor=white&style=flat-square" />
+  <img alt="NestJS" src="https://img.shields.io/badge/NestJS-12-E0234E?logo=nestjs&logoColor=white&style=flat-square" />
   <img alt="Fastify" src="https://img.shields.io/badge/Fastify-5-000000?logo=fastify&logoColor=white&style=flat-square" />
   <img alt="Nx" src="https://img.shields.io/badge/Nx-23-143055?logo=nx&logoColor=white&style=flat-square" />
   <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-6-3178C6?logo=typescript&logoColor=white&style=flat-square" />
@@ -29,7 +29,7 @@
   <img alt="Prisma" src="https://img.shields.io/badge/Prisma-7-2D3748?logo=prisma&logoColor=white&style=flat-square" />
   <img alt="PostgreSQL" src="https://img.shields.io/badge/PostgreSQL-18-336791?logo=postgresql&logoColor=white&style=flat-square" />
   <img alt="Redis" src="https://img.shields.io/badge/Redis-8-DC382D?logo=redis&logoColor=white&style=flat-square" />
-  <img alt="Vitest" src="https://img.shields.io/badge/Vitest-4-6E9F18?logo=vitest&logoColor=white&style=flat-square" />
+  <img alt="Vitest" src="https://img.shields.io/badge/Vitest-5-6E9F18?logo=vitest&logoColor=white&style=flat-square" />
   <img alt="Docker" src="https://img.shields.io/badge/Docker-multi--stage-2496ED?logo=docker&logoColor=white&style=flat-square" />
   <img alt="Cosign" src="https://img.shields.io/badge/Cosign-keyless-1F4B8E?logo=sigstore&logoColor=white&style=flat-square" />
 </p>
