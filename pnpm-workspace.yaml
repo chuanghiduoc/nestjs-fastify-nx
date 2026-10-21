@@ -94,7 +94,8 @@ overrides:
   # @babel/plugin-transform-modules-systemjs incident documented in CLAUDE.md).
   brace-expansion: '>=5.0.9 <6'
   yaml: '>=2.8.3'
-  follow-redirects: '>=1.16.0'
+  follow-redirects: '>=1.16.1 <2'
+  markdown-it: '>=14.3.3 <15'
   picomatch: '>=4.0.4'
   uuid: '^14.0.1'
   # GHSA-5jgf-p345-68v8, GHSA-f65p-4m7j-42xc, GHSA-fph4-wmhf-6fwf, GHSA-jqff-g426-hqxp (high, 7.5).
