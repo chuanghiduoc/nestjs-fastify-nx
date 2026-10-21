@@ -5,7 +5,7 @@
 <h1 align="center">nestjs-fastify-nx</h1>
 
 <p align="center">
-  <strong>Production-grade NestJS 11 + Fastify 5 + Nx 23 monorepo boilerplate.</strong><br/>
+  <strong>Production-grade NestJS 12 + Fastify 5 + Nx 23 monorepo boilerplate.</strong><br/>
   DDD · CQRS · Better Auth · GraphQL · Socket.io · BullMQ · OpenTelemetry · Sentry — wired and tested.
 </p>
 
@@ -92,14 +92,14 @@ If you've ever shipped a Node service to production, you've written this code al
 - **Production Dockerfiles** pinned by SHA256 digest, non-root, tini PID 1, npm CLI vendored stripped, healthchecks via Node `http`.
 - **Five-layer security pipeline** — Gitleaks, OSV-Scanner, Semgrep, Trivy, Cosign — running both locally (`scripts/security/scan-all.sh`) and in CI.
 - **Code generation** — Orval emits a typed REST client into `libs/api-client` from the live OpenAPI spec.
-- **Test stack** — Vitest 4 + Testcontainers (Postgres, Redis) for real-DB integration tests; Supertest for HTTP.
+- **Test stack** — Vitest 5 + Testcontainers (Postgres, Redis) for real-DB integration tests; Supertest for HTTP.
 
 ## Stack
 
 | Layer          | Technology                                                               |
 | -------------- | ------------------------------------------------------------------------ |
 | Runtime        | Node.js 24, pnpm 11.14, TypeScript 6                                     |
-| Framework      | NestJS 11 + Fastify 5                                                    |
+| Framework      | NestJS 12 + Fastify 5                                                    |
 | ORM            | Prisma 7 (driver adapter `@prisma/adapter-pg`)                           |
 | Database       | PostgreSQL 18 (native `uuidv7()`, async I/O via io_uring)                |
 | Cache          | Redis 8 (rate-limit, idempotency, Socket.io pub/sub)                     |
@@ -115,7 +115,7 @@ If you've ever shipped a Node service to production, you've written this code al
 | Scheduling     | `@nestjs/schedule` + cron in the dedicated `scheduler` app               |
 | Monorepo       | Nx 23 (`@nx/nest`, `@nx/webpack`, `@nx/vite`, `@nx/vitest`)              |
 | Bundler        | Webpack 5 (NestJS-correct decorator metadata via `tsc` compiler)         |
-| Test runner    | Vitest 4 + Testcontainers + Supertest                                    |
+| Test runner    | Vitest 5 + Testcontainers + Supertest                                    |
 | API codegen    | Orval 8 → `libs/api-client`                                              |
 | Lint / format  | ESLint 10 + typescript-eslint, Prettier 3.6                              |
 | Git hygiene    | Lefthook + commitlint (Conventional Commits)                             |
@@ -296,7 +296,7 @@ Found a vulnerability? Please report it privately via [GitHub Security Advisorie
 
 | Layer       | Tool                    | Where                                 |
 | ----------- | ----------------------- | ------------------------------------- |
-| Unit        | Vitest 4                | `*.spec.ts` next to source            |
+| Unit        | Vitest 5                | `*.spec.ts` next to source            |
 | Integration | Vitest + Testcontainers | uses real Postgres + Redis containers |
 | HTTP / e2e  | Supertest               | `apps/api/e2e/`                       |
 
