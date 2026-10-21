@@ -12,7 +12,8 @@ overrides:
   '@hono/node-server': 2.0.10
   brace-expansion: '>=5.0.9 <6'
   yaml: '>=2.8.3'
-  follow-redirects: '>=1.16.0'
+  follow-redirects: '>=1.16.1 <2'
+  markdown-it: '>=14.3.3 <15'
   picomatch: '>=4.0.4'
   uuid: ^14.0.1
   fast-uri: '>=4.1.5 <5'
@@ -3478,6 +3479,7 @@ packages:
   '@opentelemetry/propagator-jaeger@2.12.0':
     resolution: {integrity: sha512-Kz2Vz+NILW7S1WtN4rV1wr76fMtT/RRWvAMFBc91uTIi2dDMXxrfBKNe2KH7yaCfFp1X0xfAuabzuFczvoPB6A==}
     engines: {node: ^18.19.0 || >=20.6.0}
+    deprecated: Package no longer supported. See https://github.com/open-telemetry/opentelemetry-js/pull/7077
     peerDependencies:
       '@opentelemetry/api': '>=1.0.0 <1.10.0'
 
@@ -3542,12 +3544,14 @@ packages:
   '@opentelemetry/sdk-trace-base@2.12.0':
     resolution: {integrity: sha512-JOERgZCxRM06FEJ5kEWxlSRChah6MmXDx3KwCruqEv/iEyLkTokCSemf2y1w8oIHtfrr8EVTpzebq/31vn2Cpg==}
     engines: {node: ^18.19.0 || >=20.6.0}
+    deprecated: Use @opentelemetry/sdk-trace package
     peerDependencies:
       '@opentelemetry/api': '>=1.3.0 <1.10.0'
 
   '@opentelemetry/sdk-trace-node@2.12.0':
     resolution: {integrity: sha512-9DufH1IlmQMoKAfot5y/FhTP1RnmhLb5K6eKmJO/bvzPjYwPAazoiAUbTZFdPbqxOXN0FEbhZx/e6SB1Og4jmg==}
     engines: {node: ^18.19.0 || >=20.6.0}
+    deprecated: Use @opentelemetry/sdk-trace package
     peerDependencies:
       '@opentelemetry/api': '>=1.0.0 <1.10.0'
 
@@ -6712,8 +6716,8 @@ packages:
   flatted@3.4.4:
     resolution: {integrity: sha512-5+ybhBZANEJxaH3X5evAFatUxLfEHSr7n6kYJ+1Qd0mUqr4eu9gIf6GDbWHf8RJijHrjjO8G+la14SlL2SeS1Q==}
 
-  follow-redirects@1.16.0:
-    resolution: {integrity: sha512-y5rN/uOsadFT/JfYwhxRS5R7Qce+g3zG97+JrtFZlC9klX/W5hD7iiLzScI4nZqUS7DNUdhPgw4xI8W2LuXlUw==}
+  follow-redirects@1.16.1:
+    resolution: {integrity: sha512-FNvFGzoMLWmE6Yj9spb/zjd7yiNCHiAW9/Tg9CXrQ8wuu32HtlJOwWO11OJafl5FfY3DxTdQ0vj42zU1kvv5jg==}
     engines: {node: '>=4.0'}
     peerDependencies:
       debug: '*'
@@ -7693,8 +7697,8 @@ packages:
   make-plural@7.5.0:
     resolution: {integrity: sha512-0booA+aVYyVFoR67JBHdfVk0U08HmrBH2FrtmBqBa+NldlqXv/G2Z9VQuQq6Wgp2jDWdybEWGfBkk1cq5264WA==}
 
-  markdown-it@14.3.2:
-    resolution: {integrity: sha512-sHHjZ5fJKlgrG4qns2YwVcdNep35h5fERrfkD2YNsb9UFk0UIHarbiTaHKVMlPuWAoiilyK8Fv/jAm11slsY7Q==}
+  markdown-it@14.3.3:
+    resolution: {integrity: sha512-L//tDAkjTjJCU6pBUSBTgs3Kg4InVaZuUZog/b6V12UKhcDQ7S78877ibbCanRExwPuYP1CZD7Gd2dxSy1GXRg==}
     hasBin: true
 
   math-intrinsics@1.1.0:
@@ -15001,7 +15005,7 @@ snapshots:
 
   axios@1.20.0(debug@4.4.3(supports-color@7.2.0))(supports-color@7.2.0):
     dependencies:
-      follow-redirects: 1.16.0(debug@4.4.3(supports-color@7.2.0))
+      follow-redirects: 1.16.1(debug@4.4.3(supports-color@7.2.0))
       form-data: 4.0.6
       https-proxy-agent: 5.0.1(supports-color@7.2.0)
       proxy-from-env: 2.1.0
@@ -16431,7 +16435,7 @@ snapshots:
 
   flatted@3.4.4: {}
 
-  follow-redirects@1.16.0(debug@4.4.3(supports-color@7.2.0)):
+  follow-redirects@1.16.1(debug@4.4.3(supports-color@7.2.0)):
     optionalDependencies:
       debug: 4.4.3(supports-color@7.2.0)
 
@@ -16677,7 +16681,7 @@ snapshots:
   http-proxy@1.18.1:
     dependencies:
       eventemitter3: 4.0.7
-      follow-redirects: 1.16.0(debug@4.4.3(supports-color@7.2.0))
+      follow-redirects: 1.16.1(debug@4.4.3(supports-color@7.2.0))
       requires-port: 1.0.0
     transitivePeerDependencies:
       - debug
@@ -17498,7 +17502,7 @@ snapshots:
 
   make-plural@7.5.0: {}
 
-  markdown-it@14.3.2:
+  markdown-it@14.3.3:
     dependencies:
       argparse: 2.0.1
       entities: 4.5.0
@@ -17823,7 +17827,7 @@ snapshots:
       fast-wrap-ansi: 0.2.0
       figures: 3.2.0
       flat: 5.0.2
-      follow-redirects: 1.16.0(debug@4.4.3(supports-color@7.2.0))
+      follow-redirects: 1.16.1(debug@4.4.3(supports-color@7.2.0))
       form-data: 4.0.6
       fs-constants: 1.0.0
       function-bind: 1.1.2
@@ -19631,7 +19635,7 @@ snapshots:
     dependencies:
       '@gerrit0/mini-shiki': 3.23.0
       lunr: 2.3.9
-      markdown-it: 14.3.2
+      markdown-it: 14.3.3
       minimatch: 10.2.6
       typescript: '@typescript/typescript6@6.0.2'
       yaml: 2.9.1
