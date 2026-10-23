@@ -158,6 +158,12 @@ docker compose --env-file .env \
   -f docker/compose.yml -f docker/compose.prod.yml -f docker/compose.malware-scan.yml up -d
 ```
 
+The overlay also stacks on `compose.lite.yml` (the worker scans straight from the local volume),
+but budget for it: the scanner alone measured 977 MiB idle, so lite plus scanning needs roughly
+1.6 GiB before any upload traffic. On a 1 GiB host, either add memory or run clamd on another
+machine instead of adding the overlay: set `MALWARE_SCANNER_ENABLED=true` in `.env.api` and
+`.env.worker`, and `MALWARE_SCANNER_HOST`/`MALWARE_SCANNER_PORT` in `.env.worker`.
+
 With scanning off, `POST /upload/confirm` and `POST /upload` validate magic bytes inline and
 return `READY` with a download URL in the same response, so clients need no status polling. For
 Swarm, attach `malware-scanner` to `app-net` when adding the overlay.
