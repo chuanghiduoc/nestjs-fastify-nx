@@ -86,7 +86,7 @@
     "class-transformer": "^0.5.1",
     "class-validator": "^0.15.1",
     "eventemitter2": "^6.4.9",
-    "fastify": "^5.12.5",
+    "fastify": "^5.12.6",
     "graphql": "^16.14.2",
     "ioredis": "^6.0.0",
     "mercurius": "^16.11.0",
@@ -134,7 +134,7 @@
     "@types/proxy-addr": "^2.0.3",
     "@types/supertest": "^7.2.1",
     "@typescript/native": "npm:typescript@^7.0.2",
-    "@vitest/coverage-v8": "~5.0.0",
+    "@vitest/coverage-v8": "~5.0.3",
     "eslint": "^10.12.0",
     "lefthook": "^2.2.1",
     "lint-staged": "^17.6.0",
@@ -148,7 +148,7 @@
     "typescript": "npm:@typescript/typescript6@^6.0.2",
     "typescript-eslint": "^8.71.1",
     "vite": "^8.3.4",
-    "vitest": "~5.0.0",
+    "vitest": "~5.0.3",
     "webpack-cli": "^7.2.3"
   },
   "engines": {
