@@ -1,6 +1,16 @@
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { createReadStream, createWriteStream, type ReadStream } from 'node:fs';
-import { mkdir, open, readdir, readFile, rename, stat, unlink, writeFile } from 'node:fs/promises';
+import {
+  link,
+  mkdir,
+  open,
+  readdir,
+  readFile,
+  rename,
+  stat,
+  unlink,
+  writeFile,
+} from 'node:fs/promises';
 import { dirname, join, resolve, sep } from 'node:path';
 import { Transform, type Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
@@ -263,15 +273,35 @@ export class LocalStorageAdapter implements StoragePort {
           throw new Error('Source object changed before it could be finalized');
         }
         await this.commit(claimed, target, meta);
-        await unlink(source.metaPath).catch((err: unknown) => {
-          if (!isMissing(err)) throw err;
-        });
-      } finally {
-        await this.discard(claimed);
+      } catch (err) {
+        await this.restoreClaimed(claimed, source.objectPath);
+        throw err;
       }
+      await unlink(source.metaPath).catch((err: unknown) => {
+        if (isMissing(err)) return;
+        this.logger.warn(
+          { err, sourceKey, finalKey },
+          'finalized upload but kept staging metadata',
+        );
+      });
     } catch (err) {
       throw this.failure(STORAGE_FAILURES.finalize, { sourceKey, finalKey }, err);
     }
+  }
+
+  private async restoreClaimed(claimed: string, objectPath: string): Promise<void> {
+    try {
+      await link(claimed, objectPath);
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== 'EEXIST') {
+        this.logger.error(
+          { err, claimed, objectPath },
+          'could not restore a staged object after a failed finalize; it is kept in tmp until expiry',
+        );
+        return;
+      }
+    }
+    await this.discard(claimed);
   }
 
   async readRange(key: string, byteCount: number, bucket?: string): Promise<Buffer> {

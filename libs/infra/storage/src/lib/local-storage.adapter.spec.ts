@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { mkdtemp, readdir, rm, utimes } from 'node:fs/promises';
+import { mkdtemp, readdir, rm, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Readable } from 'node:stream';
@@ -192,6 +192,26 @@ describe('LocalStorageAdapter', () => {
     });
     expect(await adapter.head('uploads/u1/a.png')).not.toBeNull();
     expect(await adapter.head('files/u1/final.png')).toBeNull();
+  });
+
+  it('keeps the staged object when publishing it fails, so confirmation can be retried', async () => {
+    await presignAndUpload('uploads/u1/a.png', PNG);
+    const staged = await adapter.head('uploads/u1/a.png');
+    const blocker = join(root, 'objects', 'uploads', 'files');
+    await writeFile(blocker, 'not a directory');
+
+    await expectDomainError(
+      adapter.finalize('uploads/u1/a.png', 'files/u1/final.png', staged?.etag ?? ''),
+      { kind: 'unavailable', code: ERROR_CODES.STORAGE_FINALIZE_FAILED },
+    );
+    expect(await adapter.head('uploads/u1/a.png')).toMatchObject({ etag: staged?.etag });
+    expect(await readdir(join(root, 'tmp'))).toEqual([]);
+
+    await rm(blocker);
+    await adapter.finalize('uploads/u1/a.png', 'files/u1/final.png', staged?.etag ?? '');
+    const stream = await adapter.readStream('files/u1/final.png');
+    expect(await collect(stream)).toEqual(PNG);
+    stream.close();
   });
 
   it('serves a signed download and refuses a forged one', async () => {
