@@ -6,6 +6,7 @@ import type { SchedulerLeaderService } from '../leadership/scheduler-leader.serv
 import type { SchedulerEnvConfig } from '../../config/env.validation';
 
 const EXPIRY_DAYS = 2;
+const NOW = new Date('2026-10-23T12:00:00.000Z');
 
 function buildTask(opts: { storage: StoragePort; leader?: boolean }) {
   const config = {
@@ -26,13 +27,18 @@ function localStorage(deleteObjectsOlderThan: ReturnType<typeof vi.fn>): LocalSt
 describe('LocalStagingExpiryTask', () => {
   it('expires staging objects older than the configured window on the leader', async () => {
     const sweep = vi.fn().mockResolvedValue(3);
-    const before = Date.now();
+    vi.useFakeTimers({ toFake: ['Date'], now: NOW });
 
-    await buildTask({ storage: localStorage(sweep) }).expire();
+    try {
+      await buildTask({ storage: localStorage(sweep) }).expire();
+    } finally {
+      vi.useRealTimers();
+    }
 
-    expect(sweep).toHaveBeenCalledWith('uploads', expect.any(Date));
-    const cutoff = (sweep.mock.calls[0][1] as Date).getTime();
-    expect(before - cutoff).toBeGreaterThanOrEqual(EXPIRY_DAYS * 86_400_000);
+    expect(sweep).toHaveBeenCalledWith(
+      'uploads',
+      new Date(NOW.getTime() - EXPIRY_DAYS * 86_400_000),
+    );
   });
 
   it('does nothing on a follower', async () => {
