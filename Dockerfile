@@ -28,7 +28,8 @@ RUN apk add --no-cache tini tzdata gcompat \
               /usr/local/bin/corepack /usr/local/bin/yarn /usr/local/bin/yarnpkg \
               /opt/yarn-* \
     && addgroup --system --gid 1001 appgroup \
-    && adduser --system --uid 1001 --ingroup appgroup appuser
+    && adduser --system --uid 1001 --ingroup appgroup appuser \
+    && install -d -o appuser -g appgroup -m 0750 /var/lib/app/storage
 WORKDIR /app
 USER appuser
 STOPSIGNAL SIGTERM

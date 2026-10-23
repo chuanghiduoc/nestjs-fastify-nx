@@ -15,6 +15,7 @@ import {
   refineOutboxRetryBounds,
   refineRedisQueuePasswordProd,
   refineStorageProd,
+  refineLocalStorageSigningProd,
   sentryEnvShape,
   storageEnvShape,
 } from '@nestjs-fastify-nx/shared';
@@ -214,6 +215,7 @@ const envSchema = z
     if (data.NODE_ENV !== 'production') return;
 
     refineStorageProd(data, ctx);
+    refineLocalStorageSigningProd(data, ctx);
     refineRedisQueuePasswordProd(data, ctx);
     refineDatabaseUrlProd(data, ctx);
     refineMailProd(data, ctx);

@@ -55,6 +55,8 @@ const schedulerEnvSchema = z
     SESSION_PURGE_BATCH_SIZE: z.coerce.number().int().min(100).max(10_000).default(1_000),
     SESSION_PURGE_MAX_BATCHES: z.coerce.number().int().min(1).max(10_000).default(200),
 
+    STORAGE_ORPHAN_EXPIRY_DAYS: z.coerce.number().int().min(1).max(365).default(1),
+
     EVENT_PUBLISHER_DRIVER: z.enum(['inprocess', 'outbox']).default('inprocess'),
 
     ...sentryEnvShape(0.01),

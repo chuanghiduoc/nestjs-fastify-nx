@@ -25,6 +25,7 @@ import { LoggingModule } from '../common/logging/logging.module';
 import { HealthModule } from '../common/health/health.module';
 import { ErrorDocsModule } from '../common/errors/error-docs.module';
 import { MetricsModule } from '../common/metrics/metrics.module';
+import { LocalStorageModule } from '../common/local-storage/local-storage.module';
 import { ThrottlerModule } from '../common/throttler/throttler.module';
 import { UploadModule } from '@nestjs-fastify-nx/modules-upload';
 import { GraphqlModule } from '../graphql/graphql.module';
@@ -74,6 +75,7 @@ import { AppController } from './app.controller';
     // elements evaluate in order, and forRoot() is what parses .env into process.env. Hoisting this
     // read above it made `ENABLE_METRICS=true` in a .env file silently drop the whole module.
     ...(process.env['ENABLE_METRICS'] === 'true' ? [MetricsModule] : []),
+    ...(process.env['STORAGE_DRIVER'] === 'local' ? [LocalStorageModule] : []),
   ],
   controllers: [AppController],
   providers: [

@@ -1,0 +1,120 @@
+x-local-storage-env: &local-storage-env
+  STORAGE_DRIVER: local
+  STORAGE_LOCAL_ROOT: /var/lib/app/storage
+
+x-local-storage-volume: &local-storage-volume
+  volumes:
+    - local_storage:/var/lib/app/storage
+
+services:
+  garage:
+    profiles: [s3]
+
+  garage-init:
+    profiles: [s3]
+
+  postgres:
+    command:
+      [
+        'postgres',
+        '-c',
+        'timezone=UTC',
+        '-c',
+        'shared_buffers=128MB',
+        '-c',
+        'effective_cache_size=256MB',
+        '-c',
+        'work_mem=4MB',
+        '-c',
+        'maintenance_work_mem=32MB',
+        '-c',
+        'max_connections=40',
+      ]
+    mem_limit: 512m
+    cpus: 1.0
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '1.0'
+        reservations:
+          memory: 128M
+          cpus: '0.25'
+
+  redis-cache:
+    mem_limit: 64m
+    cpus: 0.25
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+          cpus: '0.25'
+
+  redis-queue:
+    mem_limit: 128m
+    cpus: 0.25
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: '0.25'
+
+  api:
+    <<: *local-storage-volume
+    environment:
+      <<: *local-storage-env
+      STORAGE_PUBLIC_ENDPOINT: ${STORAGE_PUBLIC_ENDPOINT:?Set STORAGE_PUBLIC_ENDPOINT to the public API origin}
+      DATABASE_POOL_MAX: '10'
+      NODE_OPTIONS: --max-old-space-size=320
+    mem_limit: 448m
+    cpus: 1.0
+    deploy:
+      replicas: 1
+      resources:
+        limits:
+          memory: 448M
+          cpus: '1.0'
+        reservations:
+          memory: 128M
+          cpus: '0.25'
+
+  worker:
+    <<: *local-storage-volume
+    environment:
+      <<: *local-storage-env
+      DATABASE_POOL_MAX: '4'
+      WORKER_EMAIL_CONCURRENCY: '2'
+      WORKER_UPLOAD_CONCURRENCY: '2'
+      NODE_OPTIONS: --max-old-space-size=192
+    mem_limit: 288m
+    cpus: 0.5
+    deploy:
+      replicas: 1
+      resources:
+        limits:
+          memory: 288M
+          cpus: '0.5'
+        reservations:
+          memory: 96M
+          cpus: '0.1'
+
+  scheduler:
+    <<: *local-storage-volume
+    environment:
+      <<: *local-storage-env
+      DATABASE_POOL_MAX: '4'
+      NODE_OPTIONS: --max-old-space-size=192
+    mem_limit: 288m
+    cpus: 0.5
+    deploy:
+      replicas: 1
+      resources:
+        limits:
+          memory: 288M
+          cpus: '0.5'
+        reservations:
+          memory: 96M
+          cpus: '0.1'
+
+volumes:
+  local_storage:
