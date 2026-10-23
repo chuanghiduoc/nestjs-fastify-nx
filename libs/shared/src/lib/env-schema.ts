@@ -40,6 +40,9 @@ export function redisQueueEnvShape() {
 
 export function storageEnvShape() {
   return {
+    STORAGE_DRIVER: z.enum(['s3', 'local']).default('s3'),
+    STORAGE_LOCAL_ROOT: z.string().default('storage'),
+    STORAGE_LOCAL_SIGNING_SECRET: z.string().min(32).optional(),
     STORAGE_ENDPOINT: z.string().default('http://localhost:9000'),
     // Browser-facing endpoint for presigned URLs; overrides STORAGE_ENDPOINT for
     // signing when the app reaches storage at an internal hostname (containers).
@@ -176,11 +179,41 @@ export function refineDatabaseUrlProd(data: DatabaseUrlEnv, ctx: z.RefinementCtx
 }
 
 interface StorageCredentialsEnv {
+  STORAGE_DRIVER?: 's3' | 'local';
   STORAGE_ACCESS_KEY: string;
   STORAGE_SECRET_KEY: string;
 }
 
+interface LocalStorageSigningEnv {
+  STORAGE_DRIVER?: 's3' | 'local';
+  STORAGE_LOCAL_SIGNING_SECRET?: string | undefined;
+  STORAGE_PUBLIC_ENDPOINT?: string | undefined;
+}
+
+export function refineLocalStorageSigningProd(
+  data: LocalStorageSigningEnv,
+  ctx: z.RefinementCtx,
+): void {
+  if (data.STORAGE_DRIVER !== 'local') return;
+  if (!data.STORAGE_LOCAL_SIGNING_SECRET) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['STORAGE_LOCAL_SIGNING_SECRET'],
+      message: 'STORAGE_LOCAL_SIGNING_SECRET must be set in production when STORAGE_DRIVER=local',
+    });
+  }
+  if (!data.STORAGE_PUBLIC_ENDPOINT) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['STORAGE_PUBLIC_ENDPOINT'],
+      message:
+        'STORAGE_PUBLIC_ENDPOINT must be set in production to the public API origin when STORAGE_DRIVER=local',
+    });
+  }
+}
+
 export function refineStorageProd(data: StorageCredentialsEnv, ctx: z.RefinementCtx): void {
+  if (data.STORAGE_DRIVER === 'local') return;
   if (data.STORAGE_ACCESS_KEY === 'minioadmin') {
     ctx.addIssue({
       code: 'custom',

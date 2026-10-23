@@ -4,6 +4,7 @@
 # Compiled output
 /dist
 /tmp
+/storage
 out-tsc
 /bazel-out
 

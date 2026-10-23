@@ -54,6 +54,7 @@ export {
   refineOutboxRetryBounds,
   refineDatabaseUrlProd,
   refineStorageProd,
+  refineLocalStorageSigningProd,
   refineRedisQueuePasswordProd,
   refineMailProd,
   parseEnvOrThrow,

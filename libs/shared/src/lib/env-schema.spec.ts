@@ -14,6 +14,7 @@ import {
   refineOutboxRetryBounds,
   refineRedisQueuePasswordProd,
   refineStorageProd,
+  refineLocalStorageSigningProd,
   sentryEnvShape,
 } from './env-schema';
 
@@ -141,6 +142,50 @@ describe('refineStorageProd', () => {
     expect(() =>
       schema.parse({ STORAGE_ACCESS_KEY: 'minioadmin', STORAGE_SECRET_KEY: 'real' }),
     ).toThrow(/STORAGE_ACCESS_KEY/);
+  });
+
+  it('skips S3 credential checks for the local driver', () => {
+    const schema = z
+      .object({
+        STORAGE_DRIVER: z.enum(['s3', 'local']),
+        STORAGE_ACCESS_KEY: z.string(),
+        STORAGE_SECRET_KEY: z.string(),
+      })
+      .superRefine(refineStorageProd);
+    expect(() =>
+      schema.parse({
+        STORAGE_DRIVER: 'local',
+        STORAGE_ACCESS_KEY: 'minioadmin',
+        STORAGE_SECRET_KEY: 'minioadmin',
+      }),
+    ).not.toThrow();
+  });
+});
+
+describe('refineLocalStorageSigningProd', () => {
+  const schema = z
+    .object({
+      STORAGE_DRIVER: z.enum(['s3', 'local']),
+      STORAGE_LOCAL_SIGNING_SECRET: z.string().optional(),
+      STORAGE_PUBLIC_ENDPOINT: z.string().optional(),
+    })
+    .superRefine(refineLocalStorageSigningProd);
+
+  it('requires a signing secret and public endpoint for the local driver', () => {
+    expect(() => schema.parse({ STORAGE_DRIVER: 'local' })).toThrow(
+      /STORAGE_LOCAL_SIGNING_SECRET[\s\S]*STORAGE_PUBLIC_ENDPOINT/,
+    );
+    expect(() =>
+      schema.parse({
+        STORAGE_DRIVER: 'local',
+        STORAGE_LOCAL_SIGNING_SECRET: 's'.repeat(32),
+        STORAGE_PUBLIC_ENDPOINT: 'https://api.example.com',
+      }),
+    ).not.toThrow();
+  });
+
+  it('ignores the s3 driver', () => {
+    expect(() => schema.parse({ STORAGE_DRIVER: 's3' })).not.toThrow();
   });
 });
 

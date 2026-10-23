@@ -104,6 +104,64 @@ Garage) and healthcheck specs for worker/scheduler. The
 after migrations and gives each process its own env file, preventing the API,
 worker, scheduler, and migration containers from inheriting one shared secret set.
 
+### Small VPS: the lite profile
+
+`migration`, `db-grants` and `garage-init` are one-shot containers that exit after boot, and the
+observability stack is a separate opt-in overlay, so the steady-state footprint is the three Node
+processes plus the data tier. Measured idle with `docker stats` on the production images
+(2026-10-23, Docker 29, no traffic):
+
+| Stack                                 | api     | worker  | scheduler | postgres | redis ×2 | garage | ClamAV  | Total       |
+| ------------------------------------- | ------- | ------- | --------- | -------- | -------- | ------ | ------- | ----------- |
+| `compose.prod.yml`                    | 203 MiB | 189 MiB | 151 MiB   | 47 MiB   | 16 MiB   | 3 MiB  | —       | **609 MiB** |
+| `+ compose.malware-scan.yml`          | 247 MiB | 197 MiB | 153 MiB   | 29 MiB   | 16 MiB   | 4 MiB  | 977 MiB | **1.6 GiB** |
+| `compose.prod.yml + compose.lite.yml` | 195 MiB | 155 MiB | 156 MiB   | 47 MiB   | 15 MiB   | —      | —       | **568 MiB** |
+
+The scanner is the single largest consumer, which is why it is no longer part of the default stack.
+Merging api, worker and scheduler into one process would save roughly one Node baseline
+(~150 MiB) but would put the RLS-bypassing worker/scheduler database roles inside the request
+path — see `docs/agent-gotchas.md` on per-process credentials — so the processes stay separate.
+
+`compose.lite.yml` is for a single host with 1–2 GiB of RAM:
+
+- **No Garage.** `STORAGE_DRIVER=local` stores objects on the `local_storage` volume, mounted at
+  `/var/lib/app/storage` in api, worker and scheduler. Presigned uploads and download URLs are
+  served by the api itself (`/api/v1/storage/local/*`, HMAC-signed, expiring), so clients use the
+  same `presign → upload → confirm` calls as with S3. Garage and `garage-init` move to the `s3`
+  profile and do not start.
+- **Tighter limits.** Postgres runs with `shared_buffers=128MB` and `max_connections=40`; each app
+  gets a smaller connection pool, lower worker concurrency, a memory cap and a matching
+  `--max-old-space-size` so V8 collects garbage before the kernel OOM-kills the container.
+- **Single host only.** A local volume cannot be shared across nodes — stay on `s3` for Swarm or
+  more than one api replica.
+
+```bash
+./scripts/gen-env.sh --prod   # also writes STORAGE_LOCAL_SIGNING_SECRET into .env.api only
+export STORAGE_PUBLIC_ENDPOINT=https://api.example.com   # public api origin the browser reaches
+
+docker compose --env-file .env \
+  -f docker/compose.yml -f docker/compose.prod.yml -f docker/compose.lite.yml up -d
+```
+
+Compose still interpolates the Garage service definitions, so keep the `GARAGE_*` values that
+`gen-env.sh` generates even though the containers never start. Back up the `local_storage` volume
+together with Postgres — `stored_files` rows point at its contents.
+
+### Malware scanning (opt-in)
+
+ClamAV is not started by default. To scan every upload before it becomes downloadable, add the
+overlay; it starts `malware-scanner` and sets `MALWARE_SCANNER_ENABLED=true` on **both** api and
+worker (the api decides whether a confirmed upload waits in `VERIFYING`, the worker runs the scan):
+
+```bash
+docker compose --env-file .env \
+  -f docker/compose.yml -f docker/compose.prod.yml -f docker/compose.malware-scan.yml up -d
+```
+
+With scanning off, `POST /upload/confirm` and `POST /upload` validate magic bytes inline and
+return `READY` with a download URL in the same response, so clients need no status polling. For
+Swarm, attach `malware-scanner` to `app-net` when adding the overlay.
+
 ## Network Exposure & Port Binding
 
 The base `compose.yml` publishes host ports for Postgres, Redis, and Garage as a
@@ -136,8 +194,8 @@ the box. This image is deploy-agnostic — pick whichever fits, nothing else cha
 > (`ports: !override` with `mode: ingress`) and strips the data-tier ports the
 > same way, so the swarm path is unaffected by `API_BIND_HOST`.
 >
-> The Swarm overlay also places `db-grants` and `malware-scanner` on the
-> encrypted application network. `db-grants` retries because Swarm ignores
+> The Swarm overlay also places `db-grants` on the encrypted application
+> network. `db-grants` retries because Swarm ignores
 > `depends_on` conditions; do not remove that one-shot service or start workers
 > before it has completed successfully.
 

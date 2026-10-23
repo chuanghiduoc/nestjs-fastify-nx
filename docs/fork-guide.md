@@ -8,12 +8,12 @@ understand the deployable services, API surfaces, and code ownership.
 Local development only needs one shared `.env`. Production separates runtime
 configuration into:
 
-| File             | Process             | Main credential scope                          |
-| ---------------- | ------------------- | ---------------------------------------------- |
-| `.env.api`       | Fastify API         | session/auth, S3, CORS, API database role      |
-| `.env.worker`    | BullMQ worker       | queues, mail, S3, ClamAV, worker database role |
-| `.env.scheduler` | cron + outbox relay | queue/cache, scheduler database role           |
-| `.env.migration` | Prisma migration    | migration/admin database role                  |
+| File             | Process             | Main credential scope                       |
+| ---------------- | ------------------- | ------------------------------------------- |
+| `.env.api`       | Fastify API         | session/auth, S3, CORS, API database role   |
+| `.env.worker`    | BullMQ worker       | queues, mail, storage, worker database role |
+| `.env.scheduler` | cron + outbox relay | queue/cache, scheduler database role        |
+| `.env.migration` | Prisma migration    | migration/admin database role               |
 
 This reduces the blast radius: the API does not automatically receive SMTP
 credentials, the worker cannot migrate or alter the schema, the scheduler does
@@ -86,16 +86,23 @@ Two endpoints also accept an API key (`Authorization: Bearer sk_…` or `X-Api-K
 `GET /api/v1/feature-flags` and `GET /api/v1/feature-flags/evaluate`. A route accepts a key only
 when it carries `@AllowApiKey()` — see [ADR-0007](adr/0007-api-key-authentication.md).
 
-Upload flow:
+Upload flows — pick one per use case:
 
 ```text
+Direct (large files; bytes never pass through the api's request path on s3):
 POST /api/v1/upload/presign { "contentType": "image/png" }
-  -> browser POSTs multipart data directly to S3/Garage
+  -> browser POSTs multipart data to the returned url (S3/Garage, or the api with STORAGE_DRIVER=local)
   -> POST /api/v1/upload/confirm { "key": "uploads/<user>/<file>.png" }
-  -> VERIFYING -> worker checks magic bytes + ClamAV -> READY
+  -> READY + url in the same response
+
+Through the api (small files; one request):
+POST /api/v1/upload            multipart, field "file"   -> READY + url
+POST /api/v1/upload/batch      multipart, fields "file"  -> list of READY files
 ```
 
-A download URL is returned only after the file reaches `READY`.
+With the opt-in malware scanner (`docker/compose.malware-scan.yml`) both flows return `VERIFYING`
+instead; the worker checks magic bytes + ClamAV and the client polls `GET /api/v1/upload/:id` until
+`READY`. A download URL is returned only after the file reaches `READY`.
 
 ### Authentication
 

@@ -1,8 +1,6 @@
 import type { Readable } from 'node:stream';
 import { Injectable, Logger, type OnModuleDestroy, type OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { DomainException } from '@nestjs-fastify-nx/core';
-import { ERROR_CODES, I18N_KEYS } from '@nestjs-fastify-nx/contracts';
 import {
   S3Client,
   PutObjectCommand,
@@ -24,6 +22,11 @@ import type {
   StreamUploadOptions,
   StoredFile,
 } from './storage.port';
+import {
+  STORAGE_FAILURES as FAILURES,
+  storageFailure,
+  type StorageFailureContract,
+} from './storage-failure';
 
 type ChecksumMode = 'WHEN_SUPPORTED' | 'WHEN_REQUIRED';
 
@@ -33,64 +36,6 @@ const DEFAULT_PRESIGN_EXPIRY_SECONDS = 300;
 const SDK_MAX_ATTEMPTS = 3;
 const ABSENT_BUCKET_CODES = ['NotFound', 'NoSuchBucket'] as const;
 const ABSENT_OBJECT_CODES = ['NotFound', 'NoSuchKey'] as const;
-
-const FAILURES = {
-  upload: {
-    code: ERROR_CODES.STORAGE_UPLOAD_FAILED,
-    messageKey: I18N_KEYS.errors.storage.upload_failed,
-    message: 'Storage upload failed',
-    log: 'S3 upload failed',
-  },
-  presign: {
-    code: ERROR_CODES.STORAGE_PRESIGN_FAILED,
-    messageKey: I18N_KEYS.errors.storage.presign_failed,
-    message: 'Storage presign failed',
-    log: 'S3 presign upload failed',
-  },
-  head: {
-    code: ERROR_CODES.STORAGE_HEAD_FAILED,
-    messageKey: I18N_KEYS.errors.storage.head_failed,
-    message: 'Storage head failed',
-    log: 'S3 head failed',
-  },
-  signedUrl: {
-    code: ERROR_CODES.STORAGE_SIGNED_URL_FAILED,
-    messageKey: I18N_KEYS.errors.storage.signed_url_failed,
-    message: 'Storage signed URL generation failed',
-    log: 'S3 getSignedUrl failed',
-  },
-  delete: {
-    code: ERROR_CODES.STORAGE_DELETE_FAILED,
-    messageKey: I18N_KEYS.errors.storage.delete_failed,
-    message: 'Storage delete failed',
-    log: 'S3 delete failed',
-  },
-  finalize: {
-    code: ERROR_CODES.STORAGE_FINALIZE_FAILED,
-    messageKey: I18N_KEYS.errors.storage.commit_failed,
-    message: 'Storage finalize failed; retry confirmation',
-    log: 'S3 finalize copy failed',
-  },
-  readRange: {
-    code: ERROR_CODES.STORAGE_READ_FAILED,
-    messageKey: I18N_KEYS.errors.storage.read_range_failed,
-    message: 'Storage readRange failed',
-    log: 'S3 readRange failed',
-  },
-  readStream: {
-    code: ERROR_CODES.STORAGE_READ_FAILED,
-    messageKey: I18N_KEYS.errors.storage.read_range_failed,
-    message: 'Storage readStream failed',
-    log: 'S3 readStream failed',
-  },
-} as const satisfies Record<string, FailureContract>;
-
-interface FailureContract {
-  readonly code: string;
-  readonly messageKey: string;
-  readonly message: string;
-  readonly log: string;
-}
 
 function assertByteArray(body: unknown): { transformToByteArray: () => Promise<Uint8Array> } {
   const candidate = body as { transformToByteArray?: () => Promise<Uint8Array> } | undefined;
@@ -259,24 +204,11 @@ export class S3StorageAdapter implements StoragePort, OnModuleInit, OnModuleDest
   }
 
   private failure(
-    failure: FailureContract,
+    failure: StorageFailureContract,
     ctx: Record<string, unknown>,
     err: unknown,
-  ): DomainException {
-    this.logger.error({ err, ...ctx }, failure.log);
-    return new DomainException({
-      kind: 'unavailable',
-      code: failure.code,
-      messageKey: failure.messageKey,
-      violations: [
-        {
-          path: 'storage',
-          code: failure.code,
-          message: failure.message,
-          messageKey: failure.messageKey,
-        },
-      ],
-    });
+  ): Error {
+    return storageFailure(this.logger, failure, ctx, err);
   }
 
   async uploadStream(
