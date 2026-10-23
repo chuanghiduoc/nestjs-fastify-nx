@@ -15,6 +15,8 @@ import { LocalStorageModule } from './local-storage.module';
 
 const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 9, 9, 9, 9]);
 const BOUNDARY = 'local-storage-boundary';
+const UPLOAD_CAP_BYTES = 1024;
+const OVERSIZED_BYTES = 4 * 1024 * 1024;
 const KIND_STATUS: Record<string, number> = {
   malformed: 400,
   validation: 422,
@@ -72,6 +74,7 @@ describe('LocalStorageController', () => {
               STORAGE_LOCAL_ROOT: root,
               STORAGE_PUBLIC_ENDPOINT: 'http://localhost',
               STORAGE_LOCAL_SIGNING_SECRET: 'k'.repeat(40),
+              UPLOAD_MAX_FILE_BYTES: UPLOAD_CAP_BYTES,
             }),
           ],
         }),
@@ -79,13 +82,12 @@ describe('LocalStorageController', () => {
       ],
     }).compile();
     app = moduleRef.createNestApplication<NestFastifyApplication>(new FastifyAdapter());
-    await app.register(fastifyMultipart, { limits: { fileSize: 1024 * 1024 } });
+    await app.register(fastifyMultipart, { limits: { fileSize: UPLOAD_CAP_BYTES } });
     app.setGlobalPrefix('api');
     app.enableVersioning({ type: VersioningType.URI, defaultVersion: '1' });
     app.useGlobalPipes(new ProblemDetailsValidationPipe());
     app.useGlobalFilters(new DomainStatusFilter());
-    await app.init();
-    await app.getHttpAdapter().getInstance().ready();
+    await app.listen(0, '127.0.0.1');
     storage = app.get(STORAGE_PORT);
   });
 
@@ -119,6 +121,32 @@ describe('LocalStorageController', () => {
     expect(download.headers['content-disposition']).toBe('attachment');
     expect(download.headers['x-content-type-options']).toBe('nosniff');
     expect(download.rawPayload).toEqual(PNG);
+  });
+
+  it('rejects an oversized upload without breaking the keep-alive connection', async () => {
+    const presigned = await storage.presignUpload('uploads/u1/big.png', {
+      contentType: 'image/png',
+      maxBytes: UPLOAD_CAP_BYTES,
+    });
+    const oversized = Buffer.alloc(OVERSIZED_BYTES, 0x41);
+    PNG.copy(oversized, 0);
+    const base = await app.getUrl();
+
+    const rejected = await fetch(`${base}/api/v1/storage/local/uploads`, {
+      method: 'POST',
+      headers: { 'content-type': `multipart/form-data; boundary=${BOUNDARY}` },
+      body: multipartBody(presigned.fields, oversized),
+    });
+    await rejected.arrayBuffer();
+    const followUps = [];
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const url = new URL(await storage.getSignedUrl('uploads/u1/missing.png', 60));
+      followUps.push((await fetch(`${base}${url.pathname}${url.search}`)).status);
+    }
+
+    expect(rejected.status).toBe(422);
+    expect(followUps).toEqual([404, 404, 404]);
+    expect(await storage.head('uploads/u1/big.png')).toBeNull();
   });
 
   it('rejects a forged upload policy with 403', async () => {

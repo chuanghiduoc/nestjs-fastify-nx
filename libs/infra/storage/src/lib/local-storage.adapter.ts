@@ -400,11 +400,13 @@ export class LocalStorageAdapter implements StoragePort {
     try {
       const hash = createHash('sha256');
       let size = 0;
+      let overflowed = false;
       const meter = new Transform({
         transform(chunk: Buffer, _encoding, callback) {
           size += chunk.length;
           if (size > limits.maxBytes) {
-            callback(new ObjectSizeOutOfRange());
+            overflowed = true;
+            callback();
             return;
           }
           hash.update(chunk);
@@ -414,7 +416,7 @@ export class LocalStorageAdapter implements StoragePort {
       await pipeline(body, meter, createWriteStream(temp, { flags: 'wx', mode: 0o600 }), {
         signal: limits.signal,
       });
-      if (size < limits.minBytes) throw new ObjectSizeOutOfRange();
+      if (overflowed || size < limits.minBytes) throw new ObjectSizeOutOfRange();
       await this.commit(temp, location, {
         contentType: contentType ?? 'application/octet-stream',
         size,
