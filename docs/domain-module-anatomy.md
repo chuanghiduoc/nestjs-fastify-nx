@@ -609,8 +609,9 @@ through `scope:composition` or a domain event.
 
 ### `index.ts` — the public barrel
 
-The only file other libs may import from — the Nx path alias
-(`@nestjs-fastify-nx/modules-users`) resolves here.
+The only file other libs may import from — the workspace package import
+(`@nestjs-fastify-nx/modules-users`) resolves here through the lib's
+`package.json` `exports`.
 
 ```typescript
 export { UsersModule } from './users.module';

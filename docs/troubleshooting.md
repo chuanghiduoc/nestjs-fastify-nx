@@ -20,19 +20,24 @@ means a project file moved or a new dependency was added. Run
 
 ### Vitest cannot find tests in `libs/modules/*`
 
-If you've recently bumped `@nx/vite`, the workspace globs in
-`vitest.workspace.ts` may be out of date. Confirm the file lists
-`libs/modules/*/vitest.config.{m,c,}{j,t}s` — that pattern was added in P1.8
-and matches every module library.
+There is no `vitest.workspace.ts`. Each project owns a `vitest.config.mts`
+built with `defineVitestConfig` from the workspace-root `vitest.shared.ts`, and
+the `@nx/vitest` plugin infers the project's `test` target from it. If a newly
+generated lib has no `test` target, confirm `vitest.config.mts` exists, then run
+`pnpm nx reset` so the daemon re-reads the project graph. The include/exclude
+globals live in `vitest.shared.ts`, not in the per-project file.
 
 ### `cannot find module '@nestjs-fastify-nx/...'` after a fresh checkout
 
-Run `pnpm prisma generate && pnpm nx sync`. The Prisma 7 `prisma-client`
-generator emits the client into `libs/infra/database/src/generated/prisma`
-(gitignored — regenerated on `postinstall`), and Nx path mappings flow through
-`tsconfig` references that `nx sync` regenerates from `project.json`. Consumers
-import Prisma types from the `@nestjs-fastify-nx/infra-database` barrel, not from
-`@prisma/client` directly.
+Run `pnpm install && pnpm prisma generate && pnpm nx sync`. Workspace imports
+resolve through pnpm workspace links, not through `tsconfig` paths: every lib
+ships a `package.json` with its `name`/`exports` and declares its siblings as
+`workspace:*`. A new lib therefore needs `pnpm install` before it resolves.
+`nx sync` only maintains TypeScript project references. The Prisma 7
+`prisma-client` generator emits the client into
+`libs/infra/database/src/generated/prisma` (gitignored — regenerated on
+`postinstall`); consumers import Prisma types from the
+`@nestjs-fastify-nx/infra-database` barrel, not from `@prisma/client` directly.
 
 ### Import `@nestjs-fastify-nx/admin` not found (moved library)
 
@@ -41,7 +46,9 @@ Symptom: `Cannot find module '@nestjs-fastify-nx/admin'`.
 Cause: admin module was moved from `libs/modules/admin` to `libs/composition/admin`.
 
 Resolution: update your import from `@nestjs-fastify-nx/admin` to
-`@nestjs-fastify-nx/composition-admin` (verify the mapping in `tsconfig.base.json`).
+`@nestjs-fastify-nx/composition-admin`. The import resolves through the package
+`name` in `libs/composition/admin/package.json`; run `pnpm install` after the
+move so pnpm recreates the workspace link.
 
 ### Import `@nestjs-fastify-nx/upload` pointing to old path
 
