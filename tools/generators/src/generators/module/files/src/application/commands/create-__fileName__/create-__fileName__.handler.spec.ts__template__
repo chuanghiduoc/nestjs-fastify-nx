@@ -1,0 +1,32 @@
+import { beforeEach, describe, expect, it } from 'vitest';
+import { generateId } from '@nestjs-fastify-nx/shared';
+import { <%= className %> } from '../../../domain';
+import { Mock<%= className %>Repository } from '../../../testing/mock-<%= fileName %>-repository';
+import { Create<%= className %>Command } from './create-<%= fileName %>.command';
+import { Create<%= className %>Handler } from './create-<%= fileName %>.handler';
+
+describe('Create<%= className %>Handler', () => {
+  let repository: Mock<%= className %>Repository;
+  let handler: Create<%= className %>Handler;
+
+  beforeEach(() => {
+    repository = new Mock<%= className %>Repository();
+    handler = new Create<%= className %>Handler(repository);
+  });
+
+  it('creates and persists a new aggregate', async () => {
+    const created = await handler.execute(new Create<%= className %>Command(generateId()));
+
+    expect(created).toBeInstanceOf(<%= className %>);
+    expect(await repository.findById(created.id)).toBe(created);
+  });
+
+  it('creates a distinct aggregate on every call', async () => {
+    const requestedBy = generateId();
+
+    const first = await handler.execute(new Create<%= className %>Command(requestedBy));
+    const second = await handler.execute(new Create<%= className %>Command(requestedBy));
+
+    expect(first.id).not.toBe(second.id);
+  });
+});

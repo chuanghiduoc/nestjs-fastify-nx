@@ -1,0 +1,42 @@
+import { beforeEach, describe, expect, it } from 'vitest';
+import { generateId } from '@nestjs-fastify-nx/shared';
+import { Mock<%= className %>Repository } from './mock-<%= fileName %>-repository';
+import { <%= className %>Factory } from './<%= fileName %>.factory';
+
+describe('Mock<%= className %>Repository', () => {
+  let repository: Mock<%= className %>Repository;
+
+  beforeEach(() => {
+    repository = new Mock<%= className %>Repository();
+  });
+
+  it('returns a saved aggregate by id', async () => {
+    const entity = <%= className %>Factory.create();
+
+    await repository.save(entity);
+
+    expect(await repository.findById(entity.id)).toBe(entity);
+  });
+
+  it('returns null for an unknown id', async () => {
+    expect(await repository.findById(generateId())).toBeNull();
+  });
+
+  it('forgets a deleted aggregate', async () => {
+    const entity = <%= className %>Factory.create();
+    await repository.save(entity);
+
+    await repository.delete(entity.id);
+
+    expect(await repository.findById(entity.id)).toBeNull();
+  });
+
+  it('empties the store on clear', async () => {
+    const entity = <%= className %>Factory.create();
+    await repository.save(entity);
+
+    repository.clear();
+
+    expect(await repository.findById(entity.id)).toBeNull();
+  });
+});

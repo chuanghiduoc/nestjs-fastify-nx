@@ -1,0 +1,24 @@
+import { describe, expect, it } from 'vitest';
+import { NotImplementedException } from '@nestjs/common';
+import type { PrismaService } from '@nestjs-fastify-nx/infra-database';
+import { generateId } from '@nestjs-fastify-nx/shared';
+import { <%= className %>Factory } from '../../testing/<%= fileName %>.factory';
+import { Prisma<%= className %>Repository } from './prisma-<%= fileName %>.repository';
+
+describe('Prisma<%= className %>Repository skeleton', () => {
+  const repository = new Prisma<%= className %>Repository({} as unknown as PrismaService);
+
+  it('fails loudly until findById is implemented', () => {
+    expect(() => repository.findById(generateId())).toThrow(NotImplementedException);
+  });
+
+  it('fails loudly until save is implemented', () => {
+    expect(() => repository.save(<%= className %>Factory.create())).toThrow(
+      NotImplementedException,
+    );
+  });
+
+  it('fails loudly until delete is implemented', () => {
+    expect(() => repository.delete(generateId())).toThrow(NotImplementedException);
+  });
+});

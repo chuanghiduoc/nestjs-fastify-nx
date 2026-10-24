@@ -124,6 +124,25 @@ describe('module generator', () => {
     expect(tree.exists('libs/modules/products/src/testing/mock-products-repository.ts')).toBe(true);
   });
 
+  it('pairs every scaffolded source file that carries logic with a spec', async () => {
+    await moduleGenerator(tree, { name: 'products', directory: 'modules', withCqrs: true });
+    const src = 'libs/modules/products/src';
+
+    for (const spec of [
+      'application/commands/create-products/create-products.handler.spec.ts',
+      'domain/entities/products.entity.spec.ts',
+      'domain/events/products-created.event.spec.ts',
+      'infrastructure/repositories/prisma-products.repository.spec.ts',
+      'presentation/controllers/products.controller.spec.ts',
+      'testing/mock-products-repository.spec.ts',
+    ]) {
+      expect(tree.exists(`${src}/${spec}`), spec).toBe(true);
+    }
+    expect(tree.read(`${src}/domain/events/products-created.event.spec.ts`, 'utf-8')).toContain(
+      "toBe('PRODUCTS_CREATED')",
+    );
+  });
+
   it('emitted files contain zero TODO or FIXME', async () => {
     await moduleGenerator(tree, { name: 'products', directory: 'modules', withCqrs: true });
 
