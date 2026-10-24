@@ -54,6 +54,7 @@ describe('module generator', () => {
     const specConfig = readJson(tree, 'libs/modules/orders/tsconfig.spec.json');
     expect(specConfig.extends).toBe('../../../tsconfig.base.json');
     expect(specConfig.compilerOptions.outDir).toBe('./out-tsc/spec');
+    expect(specConfig.include).not.toContain('vitest.config.mts');
 
     const packageJson = readJson(tree, 'libs/modules/orders/package.json');
     expect(packageJson.name).toBe('@nestjs-fastify-nx/modules-orders');
