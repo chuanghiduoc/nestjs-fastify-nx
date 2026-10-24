@@ -41,7 +41,7 @@ export async function moduleGenerator(tree: Tree, options: ModuleGeneratorSchema
   const scopeTag = `scope:${rawDir}`;
 
   // All targets are inferred from config files by the workspace plugins:
-  // `typecheck` by `@nx/js/typescript` (tsconfig.lib.json), `lint` by
+  // `typecheck` by `@nx/js/typescript` (tsconfig.json), `lint` by
   // `@nx/eslint/plugin`, and `test` by `@nx/vitest` (vitest.config.mts — see the
   // template in files/). No explicit target is declared, so the module needs no
   // hand-maintained `nx.json` include entry.

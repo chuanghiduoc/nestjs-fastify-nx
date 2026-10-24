@@ -64,7 +64,7 @@ libs/modules/products/
 └── vitest.config.mts
 ```
 
-Path alias `@nestjs-fastify-nx/modules-products` is wired into `tsconfig.base.json` automatically.
+The import path `@nestjs-fastify-nx/modules-products` resolves through the pnpm workspace link created by the generated `package.json`. There are no `tsconfig` path aliases; run `pnpm install` (the generator script does it) before the first import resolves.
 
 ## Composition Variant
 
@@ -79,7 +79,7 @@ This produces the same DDD layout under `libs/composition/billing-report/` with 
 
 - Project name: `composition-billing-report` (not `modules-billing-report`)
 - Scope tag: `scope:composition` (not `scope:modules`)
-- Path alias: `@nestjs-fastify-nx/composition-billing-report`
+- Import path: `@nestjs-fastify-nx/composition-billing-report`
 
 **When to use composition vs modules:**
 
@@ -95,9 +95,10 @@ cross-module imports inside a `scope:modules` lib, extract a composition lib ins
 
 ## Targets are inferred — no config to edit
 
-The generator writes **no explicit targets** into `project.json`. `build`/`typecheck` (from
-`tsconfig.lib.json`), `lint` (from the workspace ESLint config), and `test` (from
-`vitest.config.mts`) are all inferred by the workspace Nx plugins. A freshly generated module is
+The generator writes **no explicit targets** into `project.json`. `typecheck` (from
+`tsconfig.json`), `lint` (from the workspace ESLint config), and `test` (from
+`vitest.config.mts`) are all inferred by the workspace Nx plugins. Libraries have no `build`
+target: the four apps bundle library source through webpack. A freshly generated module is
 picked up automatically — you never hand-edit `nx.json` or add a `test` target. Run `nx test <name>`,
 `nx lint <name>`, etc. immediately.
 
@@ -108,13 +109,14 @@ storage…), not DDD bounded contexts, so the DDD module generator doesn't apply
 `--directory=modules|composition`). To add one:
 
 - **Preferred:** copy the closest existing infra lib (e.g. `libs/infra/redis`) and rename — it already
-  matches the workspace conventions (inferred targets, `resolve: { tsconfigPaths: true }` in the
-  vitest config, `scope:infra` tag).
+  matches the workspace conventions (inferred targets, `defineVitestConfig` from `vitest.shared.ts`,
+  `scope:infra` tag).
 - `pnpm gen:lib` / `pnpm gen:app` are raw `@nx/js:library` / `@nx/nest:application` passthroughs.
   Their Nx-default output drifts from this repo (it emits an explicit `build` target and the
   deprecated `nxViteTsPaths`/`nxCopyAssetsPlugin` vite plugins), so align it afterwards: delete the
-  explicit targets and switch the vitest config to `resolve: { tsconfigPaths: true }`. Also add the correct
-  `scope:*` / `type:*` tags so `@nx/enforce-module-boundaries` applies.
+  explicit targets and replace the generated vitest config with `defineVitestConfig` from
+  `vitest.shared.ts`. Also add the correct `scope:*` / `type:*` tags so
+  `@nx/enforce-module-boundaries` applies.
 
 ## After Generating
 
