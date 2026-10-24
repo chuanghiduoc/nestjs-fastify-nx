@@ -639,20 +639,19 @@ importers:
         version: link:../../shared
 
   libs/infra/storage:
-    dependencies:
-      '@nestjs-fastify-nx/core':
-        specifier: workspace:*
-        version: link:../../core
-      '@nestjs-fastify-nx/shared':
-        specifier: workspace:*
-        version: link:../../shared
     devDependencies:
       '@nestjs-fastify-nx/contracts':
         specifier: workspace:*
         version: link:../../contracts
+      '@nestjs-fastify-nx/core':
+        specifier: workspace:*
+        version: link:../../core
       '@nestjs-fastify-nx/infra-i18n':
         specifier: workspace:*
         version: link:../i18n
+      '@nestjs-fastify-nx/shared':
+        specifier: workspace:*
+        version: link:../../shared
 
   libs/modules/api-keys:
     devDependencies:
