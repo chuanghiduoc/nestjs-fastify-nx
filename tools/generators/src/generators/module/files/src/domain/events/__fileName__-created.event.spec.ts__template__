@@ -1,0 +1,25 @@
+import { describe, expect, it } from 'vitest';
+import { generateId } from '@nestjs-fastify-nx/shared';
+import { <%= className %>Created } from './<%= fileName %>-created.event';
+
+describe('<%= className %>Created', () => {
+  it('carries the aggregate id, payload and a typed envelope', () => {
+    const aggregateId = generateId();
+    const payload = { source: 'spec' };
+
+    const event = new <%= className %>Created(aggregateId, payload);
+
+    expect(event.aggregateId).toBe(aggregateId);
+    expect(event.payload).toBe(payload);
+    expect(event.eventType).toBe('<%= constantName %>_CREATED');
+    expect(event.occurredAt).toBeInstanceOf(Date);
+  });
+
+  it('gives every event its own id', () => {
+    const aggregateId = generateId();
+
+    expect(new <%= className %>Created(aggregateId, {}).eventId).not.toBe(
+      new <%= className %>Created(aggregateId, {}).eventId,
+    );
+  });
+});

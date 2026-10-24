@@ -30,7 +30,8 @@ libs/modules/products/
 │   │   │   └── products.entity.spec.ts
 │   │   ├── value-objects/          # add VOs here as needed
 │   │   ├── events/
-│   │   │   └── products-created.event.ts
+│   │   │   ├── products-created.event.ts
+│   │   │   └── products-created.event.spec.ts
 │   │   ├── ports/
 │   │   │   └── products-repository.port.ts
 │   │   └── index.ts
@@ -38,14 +39,16 @@ libs/modules/products/
 │   │   ├── commands/
 │   │   │   └── create-products/    # (withCqrs=true, default)
 │   │   │       ├── create-products.command.ts
-│   │   │       └── create-products.handler.ts
+│   │   │       ├── create-products.handler.ts
+│   │   │       └── create-products.handler.spec.ts
 │   │   ├── queries/                # add query handlers here
 │   │   ├── listeners/              # add domain-event listeners here
 │   │   ├── dto/                    # application-layer DTOs
 │   │   └── index.ts
 │   ├── infrastructure/
 │   │   ├── repositories/
-│   │   │   └── prisma-products.repository.ts
+│   │   │   ├── prisma-products.repository.ts
+│   │   │   └── prisma-products.repository.spec.ts   # skeleton: asserts NotImplemented
 │   │   └── index.ts
 │   ├── presentation/
 │   │   ├── controllers/
@@ -55,7 +58,8 @@ libs/modules/products/
 │   │   └── index.ts
 │   ├── testing/
 │   │   ├── products.factory.ts     # in-memory test data builder
-│   │   └── mock-products-repository.ts
+│   │   ├── mock-products-repository.ts
+│   │   └── mock-products-repository.spec.ts
 │   ├── products.module.ts
 │   └── index.ts                   # public barrel — export only what consumers need
 ├── tsconfig.json
@@ -63,6 +67,11 @@ libs/modules/products/
 ├── tsconfig.spec.json
 └── vitest.config.mts
 ```
+
+Every scaffolded file that carries logic ships with a spec, so a fresh module passes the 60%
+coverage gate in CI before any feature code exists. When you implement
+`prisma-products.repository.ts`, replace its skeleton spec with a Testcontainers
+`*.integration.spec.ts` — database tests never mock Prisma.
 
 The import path `@nestjs-fastify-nx/modules-products` resolves through the pnpm workspace link created by the generated `package.json`. There are no `tsconfig` path aliases; run `pnpm install` (the generator script does it) before the first import resolves.
 
