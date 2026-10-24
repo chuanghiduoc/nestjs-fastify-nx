@@ -9,6 +9,23 @@ describe('module generator', () => {
 
   beforeEach(() => {
     tree = createTreeWithEmptyWorkspace();
+    if (tree.exists('.oxfmtrc.json')) {
+      tree.delete('.oxfmtrc.json');
+    }
+    if (!tree.exists('.prettierrc')) {
+      tree.write(
+        '.prettierrc',
+        JSON.stringify({
+          singleQuote: true,
+          trailingComma: 'all',
+          printWidth: 100,
+          tabWidth: 2,
+          semi: true,
+          arrowParens: 'always',
+          endOfLine: 'lf',
+        }),
+      );
+    }
     if (!tree.exists('tsconfig.base.json')) {
       tree.write('tsconfig.base.json', JSON.stringify({ compilerOptions: { composite: true } }));
     }
@@ -44,10 +61,12 @@ describe('module generator', () => {
     expect(packageJson.devDependencies['@nestjs-fastify-nx/shared']).toBe('workspace:*');
 
     const vitestConfig = tree.read('libs/modules/orders/vitest.config.mts', 'utf-8');
-    expect(vitestConfig).toContain('resolve: { tsconfigPaths: true }');
-    expect(vitestConfig).toContain("const isIntegrationRun = process.argv.includes('integration')");
-    expect(vitestConfig).toContain("exclude: isIntegrationRun ? [] : ['**/*.integration.spec.*']");
-    expect(vitestConfig).not.toContain('vite-tsconfig-paths');
+    expect(vitestConfig).toContain("from '../../../vitest.shared'");
+    expect(vitestConfig).toContain("name: 'modules-orders'");
+    expect(vitestConfig).toContain("rootDir: 'libs/modules/orders'");
+    expect(vitestConfig).toContain('integrationTests: true');
+    expect(vitestConfig).not.toContain('defineConfig');
+    expect(vitestConfig).not.toContain('tsconfigPaths');
   });
 
   it('generates full DDD domain layer', async () => {
