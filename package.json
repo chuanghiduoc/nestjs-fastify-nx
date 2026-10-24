@@ -93,7 +93,7 @@
     "nestjs-cls": "^7.0.1",
     "nestjs-i18n": "^10.8.5",
     "nestjs-pino": "^5.3.1",
-    "nodemailer": "^10.0.14",
+    "nodemailer": "^10.1.4",
     "pg": "^8.23.1",
     "pino": "^10.4.0",
     "pino-http": "^11.0.0",
