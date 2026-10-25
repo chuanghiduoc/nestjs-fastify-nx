@@ -35,7 +35,7 @@ jobs:
       # OSV-Scanner pulls advisories from osv.dev — wider feed than npm audit
       # (covers GitHub Security Advisories, GHSA, language ecosystems, OS pkgs).
       - name: OSV-Scanner
-        uses: google/osv-scanner-action/osv-scanner-action@a345acffa64b0eaede81a3d9aae6141214d9c8fc # v2.6.0
+        uses: google/osv-scanner-action/osv-scanner-action@b1d267aea5211fa648d9d442fa64b90dbdcbdd36 # v2.7.0
         with:
           scan-args: |-
             --recursive
@@ -82,7 +82,7 @@ jobs:
       # are populated. Without this, nx falls back to `defaultBase: "main"`
       # which doesn't exist as a local ref in PR checkouts.
       - name: Set NX base and head
-        uses: nrwl/nx-set-shas@afb73a62d26e41464e9254689e1fd6122ee683c1 # v5
+        uses: nrwl/nx-set-shas@e602fada7ad5987b0f7b1905e7a99ea1c661514c # v5
 
       # Fail early before spending time on lint, typecheck, tests, and builds.
       # The generated client is committed so a stale OpenAPI surface is a source
