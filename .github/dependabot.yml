@@ -22,6 +22,12 @@ updates:
       prefix-development: chore(deps-dev)
       include: scope
     ignore:
+      # @opentelemetry/core 3.0 only pairs with the experimental 0.300.x line, where
+      # sdk-trace-base is gone (replaced by sdk-trace). This repo still imports
+      # sdk-trace-base, so the whole OpenTelemetry set has to move in one change.
+      # pnpm-workspace.yaml caps core below 3 for the same reason.
+      - dependency-name: '@opentelemetry/core'
+        update-types: [version-update:semver-major]
       # graphql 17 breaks the mercurius stack — mercurius@16 peers `graphql ^16`
       # and @nestjs/graphql peers `graphql ^16.11`. Hold at 16.x until the
       # Mercurius/@nestjs GraphQL packages ship graphql 17 support.
