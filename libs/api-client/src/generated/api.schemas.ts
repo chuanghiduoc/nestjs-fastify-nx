@@ -1039,17 +1039,11 @@ export interface Invitation {
 }
 
 export type TeamsListParams = {
-  /**
-   * Items per page (1–100).
-   */
+  /** Items per page (1–100). */
   limit?: number;
-  /**
-   * Opaque cursor for the next page — pass the previous response's `lastCursor` value verbatim. The encoded format is `base64url(sortField.toISOString():id)` and clients MUST NOT construct it manually.
-   */
+  /** Opaque cursor for the next page — pass the previous response's `lastCursor` value verbatim. The encoded format is `base64url(sortField.toISOString():id)` and clients MUST NOT construct it manually. */
   startingAfter?: string;
-  /**
-   * Case-insensitive substring match on the team name.
-   */
+  /** Case-insensitive substring match on the team name. */
   search?: string;
 };
 
@@ -1058,21 +1052,13 @@ export type TeamsList200 = ListResponseDto & {
 };
 
 export type InvitationsListParams = {
-  /**
-   * Items per page (1–100).
-   */
+  /** Items per page (1–100). */
   limit?: number;
-  /**
-   * Opaque cursor for the next page — pass the previous response's `lastCursor` value verbatim. The encoded format is `base64url(sortField.toISOString():id)` and clients MUST NOT construct it manually.
-   */
+  /** Opaque cursor for the next page — pass the previous response's `lastCursor` value verbatim. The encoded format is `base64url(sortField.toISOString():id)` and clients MUST NOT construct it manually. */
   startingAfter?: string;
-  /**
-   * Filter by invitation status.
-   */
+  /** Filter by invitation status. */
   status?: InvitationsListStatus;
-  /**
-   * Filter by the invited email address.
-   */
+  /** Filter by the invited email address. */
   email?: string;
 };
 
@@ -1091,25 +1077,15 @@ export type InvitationsList200 = ListResponseDto & {
 };
 
 export type AdminUsersListParams = {
-  /**
-   * Items per page (1–100).
-   */
+  /** Items per page (1–100). */
   limit?: number;
-  /**
-   * Opaque cursor for the next page — pass the previous response's `lastCursor` value verbatim. The encoded format is `base64url(sortField.toISOString():id)` and clients MUST NOT construct it manually.
-   */
+  /** Opaque cursor for the next page — pass the previous response's `lastCursor` value verbatim. The encoded format is `base64url(sortField.toISOString():id)` and clients MUST NOT construct it manually. */
   startingAfter?: string;
-  /**
-   * Filter by organization membership role.
-   */
+  /** Filter by organization membership role. */
   role?: string;
-  /**
-   * Filter by account status
-   */
+  /** Filter by account status */
   status?: AdminUsersListStatus;
-  /**
-   * Search by name or email (case-insensitive)
-   */
+  /** Search by name or email (case-insensitive) */
   search?: string;
 };
 
@@ -1126,33 +1102,19 @@ export type AdminUsersList200 = ListResponseDto & {
 };
 
 export type AuditLogsListParams = {
-  /**
-   * Items per page (1–100).
-   */
+  /** Items per page (1–100). */
   limit?: number;
-  /**
-   * Opaque cursor for the next page — pass the previous response's `lastCursor` value verbatim. The encoded format is `base64url(sortField.toISOString():id)` and clients MUST NOT construct it manually.
-   */
+  /** Opaque cursor for the next page — pass the previous response's `lastCursor` value verbatim. The encoded format is `base64url(sortField.toISOString():id)` and clients MUST NOT construct it manually. */
   startingAfter?: string;
-  /**
-   * Exact domain event name to filter by, e.g. `users.registered`.
-   */
+  /** Exact domain event name to filter by, e.g. `users.registered`. */
   action?: string;
-  /**
-   * Exact resource label to filter by, e.g. `user` or `organization`.
-   */
+  /** Exact resource label to filter by, e.g. `user` or `organization`. */
   resource?: string;
-  /**
-   * Restrict to entries recorded for a single acting user (UUID v7).
-   */
+  /** Restrict to entries recorded for a single acting user (UUID v7). */
   userId?: string;
-  /**
-   * Inclusive lower bound on when the entry was recorded (ISO 8601).
-   */
+  /** Inclusive lower bound on when the entry was recorded (ISO 8601). */
   occurredFrom?: string;
-  /**
-   * Inclusive upper bound on when the entry was recorded (ISO 8601).
-   */
+  /** Inclusive upper bound on when the entry was recorded (ISO 8601). */
   occurredUntil?: string;
 };
 
@@ -1161,17 +1123,11 @@ export type AuditLogsList200 = ListResponseDto & {
 };
 
 export type ApiKeysListParams = {
-  /**
-   * Items per page (1–100).
-   */
+  /** Items per page (1–100). */
   limit?: number;
-  /**
-   * Opaque cursor for the next page — pass the previous response's `lastCursor` value verbatim. The encoded format is `base64url(sortField.toISOString():id)` and clients MUST NOT construct it manually.
-   */
+  /** Opaque cursor for the next page — pass the previous response's `lastCursor` value verbatim. The encoded format is `base64url(sortField.toISOString():id)` and clients MUST NOT construct it manually. */
   startingAfter?: string;
-  /**
-   * Include revoked keys in the listing. Defaults to false.
-   */
+  /** Include revoked keys in the listing. Defaults to false. */
   includeRevoked?: boolean;
 };
 
@@ -1180,17 +1136,11 @@ export type ApiKeysList200 = ListResponseDto & {
 };
 
 export type NotificationsListParams = {
-  /**
-   * Items per page (1–100).
-   */
+  /** Items per page (1–100). */
   limit?: number;
-  /**
-   * Opaque cursor for the next page — pass the previous response's `lastCursor` value verbatim. The encoded format is `base64url(sortField.toISOString():id)` and clients MUST NOT construct it manually.
-   */
+  /** Opaque cursor for the next page — pass the previous response's `lastCursor` value verbatim. The encoded format is `base64url(sortField.toISOString():id)` and clients MUST NOT construct it manually. */
   startingAfter?: string;
-  /**
-   * Return only notifications that have not been read yet.
-   */
+  /** Return only notifications that have not been read yet. */
   unreadOnly?: boolean;
 };
 
@@ -1199,13 +1149,9 @@ export type NotificationsList200 = ListResponseDto & {
 };
 
 export type FeatureFlagsListParams = {
-  /**
-   * Items per page (1–100).
-   */
+  /** Items per page (1–100). */
   limit?: number;
-  /**
-   * Opaque cursor for the next page — pass the previous response's `lastCursor` value verbatim. The encoded format is `base64url(sortField.toISOString():id)` and clients MUST NOT construct it manually.
-   */
+  /** Opaque cursor for the next page — pass the previous response's `lastCursor` value verbatim. The encoded format is `base64url(sortField.toISOString():id)` and clients MUST NOT construct it manually. */
   startingAfter?: string;
 };
 
@@ -1222,17 +1168,11 @@ export type TermsAcceptances200 = ListResponseDto & {
 };
 
 export type SessionsListParams = {
-  /**
-   * Items per page (1–100).
-   */
+  /** Items per page (1–100). */
   limit?: number;
-  /**
-   * Opaque cursor for the next page — pass the previous response's `lastCursor` value verbatim. The encoded format is `base64url(sortField.toISOString():id)` and clients MUST NOT construct it manually.
-   */
+  /** Opaque cursor for the next page — pass the previous response's `lastCursor` value verbatim. The encoded format is `base64url(sortField.toISOString():id)` and clients MUST NOT construct it manually. */
   startingAfter?: string;
-  /**
-   * Hide sessions that have already expired. Defaults to true.
-   */
+  /** Hide sessions that have already expired. Defaults to true. */
   activeOnly?: boolean;
 };
 
@@ -1652,13 +1592,9 @@ export type VerifyPassword404 = {
 };
 
 export type VerifyEmailParams = {
-  /**
-   * The token to verify the email
-   */
+  /** The token to verify the email */
   token: string;
-  /**
-   * The URL to redirect to after email verification
-   */
+  /** The URL to redirect to after email verification */
   callbackURL?: string;
 };
 
@@ -1939,9 +1875,7 @@ export type RequestPasswordReset404 = {
 };
 
 export type ResetPasswordCallbackParams = {
-  /**
-   * The URL to redirect the user to reset their password
-   */
+  /** The URL to redirect the user to reset their password */
   callbackURL: string;
 };
 
@@ -2174,13 +2108,9 @@ export type ListUserAccounts404 = {
 };
 
 export type DeleteUserCallbackParams = {
-  /**
-   * The token to verify the deletion request
-   */
+  /** The token to verify the deletion request */
   token?: string;
-  /**
-   * The URL to redirect to after deletion
-   */
+  /** The URL to redirect to after deletion */
   callbackURL?: string;
 };
 
@@ -2663,9 +2593,7 @@ export type OrganizationAcceptInvitation404 = {
 };
 
 export type OrganizationGetInvitationParams = {
-  /**
-   * The ID of the invitation to get
-   */
+  /** The ID of the invitation to get */
   id?: string;
 };
 
