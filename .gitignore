@@ -58,6 +58,7 @@ Thumbs.db
 
 vitest.config.*.timestamp*
 .nx/polygraph
+.nx/migrate-runs
 .claude/worktrees
 .claude/agent-memory/
 .claude/settings.local.json
@@ -70,3 +71,4 @@ plans/
 
 # Local MCP server config — machine-specific (hardcoded cwd), not shared.
 .mcp.json
+.vitest

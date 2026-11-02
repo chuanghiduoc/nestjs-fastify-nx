@@ -156,5 +156,6 @@
     { "plugin": "@nx/vitest", "options": { "testTargetName": "test" } }
   ],
   "analytics": true,
-  "nxCloudId": "6aaa1610e479c96322018991"
+  "nxCloudId": "6aaa1610e479c96322018991",
+  "affected": { "legacy": true }
 }
