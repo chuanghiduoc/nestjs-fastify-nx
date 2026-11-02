@@ -1,4 +1,14 @@
 [[IgnoredVulns]]
-id = "GHSA-vfj7-8cjw-p6xm"
+id = "GHSA-g3hv-75wg-m249"
 ignoreUntil = 2026-12-01
-reason = "braces 3.0.3 reaches the tree only through chokidar 3 via nestjs-i18n. Input is file paths from the i18n directory, not user input. No patched release exists. Review when braces publishes a fix."
+reason = "minimatch denial of service via globparts amplification. The 3.1.5, 5.1.9 and 9.0.9 copies are build-time only (fork-ts-checker-webpack-plugin, readdir-glob, and glob through archiver/test-exclude). The 10.2.5 and 10.2.6 copies reach runtime through glob 13 in @fastify/static 10, which Bull Board mounts when BULL_BOARD_ENABLED is true; both call sites glob a fixed public root configured at boot, and the application code does not pass a caller-supplied pattern into them. The first patched release is 11.0.1, a major the consumers' ranges do not accept, so resolving it means overriding three other majors at once. Revisit when the parents move off minimatch 10."
+
+[[IgnoredVulns]]
+id = "GHSA-3g3m-2fjr-6pw4"
+ignoreUntil = 2026-12-01
+reason = "glob AbortSignal cancellation bypass (post-timeout filesystem traversal). The 10.5.0 copies come from archiver, rimraf/opentelemetry and test-exclude at build/test time. The 13.0.6 copy reaches runtime through @fastify/static 10, which Bull Board mounts when BULL_BOARD_ENABLED is true; it globs a fixed public root configured at boot, and no call site passes an untrusted pattern or relies on an abort timeout for containment. The fix lands in 14.0.2, a major none of the parents accept; revisit when they do."
+
+[[IgnoredVulns]]
+id = "GHSA-gcqx-w48m-w2h4"
+ignoreUntil = 2026-12-01
+reason = "deepmerge prototype poisoning through mergeObject(). Reached only through fork-ts-checker-webpack-plugin and jest-config at build/test time, both merging repository-owned configuration. The advisory lists 4.3.1 as last affected with no patched release, so there is no version to move to; review when deepmerge publishes one."
