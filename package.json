@@ -128,14 +128,14 @@
     "@swc/helpers": "~0.5.23",
     "@testcontainers/postgresql": "^12.2.1",
     "@testcontainers/redis": "^12.2.1",
-    "@types/node": "^26.6.5",
+    "@types/node": "^26.6.6",
     "@types/nodemailer": "^8.0.2",
     "@types/pg": "^8.23.1",
     "@types/proxy-addr": "^2.0.3",
     "@types/supertest": "^7.2.1",
     "@typescript/native": "npm:typescript@^7.0.2",
     "@vitest/coverage-v8": "~5.0.3",
-    "eslint": "^10.13.0",
+    "eslint": "^10.14.0",
     "lefthook": "^2.2.2",
     "lint-staged": "^17.6.0",
     "nx": "24.0.3",
@@ -149,7 +149,7 @@
     "typescript-eslint": "^8.72.0",
     "vite": "^8.3.5",
     "vitest": "~5.0.3",
-    "webpack-cli": "^7.2.3"
+    "webpack-cli": "^7.3.1"
   },
   "engines": {
     "node": ">=24.0.0",
