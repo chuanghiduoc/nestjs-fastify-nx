@@ -43,6 +43,26 @@ describe('RedisLeaderLease', () => {
     expect(lease.isLeader()).toBe(false);
   });
 
+  it('does not stack a new tick while the previous one is still in flight', async () => {
+    const redis = redisMock();
+    let release: (value: unknown) => void = () => undefined;
+    vi.mocked(redis.set).mockReturnValueOnce(
+      new Promise((resolve) => {
+        release = resolve;
+      }) as never,
+    );
+    const lease = new RedisLeaderLease({ redis, key: 'k' });
+
+    const first = lease.tick();
+    const second = lease.tick();
+    await Promise.resolve();
+
+    expect(redis.set).toHaveBeenCalledTimes(1);
+
+    release(null);
+    await Promise.all([first, second]);
+  });
+
   it('renews via compare-and-extend while leader, without re-acquiring', async () => {
     const redis = redisMock();
     vi.mocked(redis.set).mockResolvedValueOnce('OK');

@@ -34,7 +34,7 @@ describe('PrismaUserRepository (integration)', () => {
   }, 90_000);
 
   afterAll(async () => {
-    await prismaService?.onModuleDestroy();
+    await prismaService?.onApplicationShutdown();
     await containers?.teardown();
   });
 

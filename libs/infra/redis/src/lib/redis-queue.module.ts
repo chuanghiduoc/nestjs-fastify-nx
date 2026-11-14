@@ -1,4 +1,4 @@
-import { Injectable, Module, OnModuleDestroy } from '@nestjs/common';
+import { Injectable, Module, OnApplicationShutdown } from '@nestjs/common';
 import { BullModule } from '@nestjs/bullmq';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { redisReconnectStrategy } from '@nestjs-fastify-nx/shared';
@@ -29,7 +29,7 @@ interface RedisQueueEnv {
  * deploys where the raw-factory pattern has no shutdown path.
  */
 @Injectable()
-export class RedisQueueClientProvider implements OnModuleDestroy {
+export class RedisQueueClientProvider implements OnApplicationShutdown {
   readonly client: Redis;
 
   constructor(config: ConfigService<RedisQueueEnv, true>) {
@@ -45,7 +45,7 @@ export class RedisQueueClientProvider implements OnModuleDestroy {
     });
   }
 
-  async onModuleDestroy(): Promise<void> {
+  async onApplicationShutdown(): Promise<void> {
     await this.client.quit().catch(() => this.client.disconnect());
   }
 }

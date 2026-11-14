@@ -179,7 +179,7 @@ describe('stored_files tenant isolation (integration)', () => {
     }, 60_000);
 
     afterAll(async () => {
-      await prisma?.onModuleDestroy();
+      await prisma?.onApplicationShutdown();
       if (previousDatabaseUrl === undefined) delete process.env['DATABASE_URL'];
       else process.env['DATABASE_URL'] = previousDatabaseUrl;
     });

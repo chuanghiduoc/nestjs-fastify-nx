@@ -37,8 +37,8 @@ describe('RedisQueueClientProvider', () => {
     expect(provider.client).toBeDefined();
   });
 
-  it('calls quit() exactly once on onModuleDestroy', async () => {
-    await provider.onModuleDestroy();
+  it('calls quit() exactly once on onApplicationShutdown', async () => {
+    await provider.onApplicationShutdown();
 
     // Cast through unknown: the real Redis type and the mock type do not
     // overlap structurally, so a direct cast would be a TS error.
@@ -51,9 +51,14 @@ describe('RedisQueueClientProvider', () => {
     const quitMock = (provider.client as unknown as { quit: ReturnType<typeof vi.fn> }).quit;
     quitMock.mockRejectedValueOnce(new Error('Connection is already closed'));
 
-    await expect(provider.onModuleDestroy()).resolves.toBeUndefined();
+    await expect(provider.onApplicationShutdown()).resolves.toBeUndefined();
     const disconnectMock = (provider.client as unknown as { disconnect: ReturnType<typeof vi.fn> })
       .disconnect;
     expect(disconnectMock).toHaveBeenCalledOnce();
+  });
+
+  it('closes only after the HTTP listener stops, not on module destroy', () => {
+    expect(typeof provider.onApplicationShutdown).toBe('function');
+    expect((provider as unknown as { onModuleDestroy?: unknown }).onModuleDestroy).toBeUndefined();
   });
 });

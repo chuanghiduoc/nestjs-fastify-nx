@@ -50,7 +50,7 @@ import { PrismaService } from '@nestjs-fastify-nx/infra-database';
 
 const noConnect = (): Promise<void> => Promise.resolve();
 PrismaService.prototype.onModuleInit = noConnect;
-PrismaService.prototype.onModuleDestroy = noConnect;
+PrismaService.prototype.onApplicationShutdown = noConnect;
 
 import { CodegenAppModule } from './codegen-app.module';
 import { buildSwaggerDocument } from './swagger.config';

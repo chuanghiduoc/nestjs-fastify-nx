@@ -40,7 +40,7 @@ describe('organization repositories (integration)', () => {
   }, 90_000);
 
   afterAll(async () => {
-    await prisma?.onModuleDestroy();
+    await prisma?.onApplicationShutdown();
     await containers?.teardown();
   });
 

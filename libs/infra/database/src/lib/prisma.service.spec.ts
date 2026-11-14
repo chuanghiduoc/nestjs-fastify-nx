@@ -107,8 +107,15 @@ describe('PrismaService lifecycle cleanup', () => {
     vi.spyOn(svc.db, '$disconnect').mockRejectedValue(new Error('primary close failed'));
     const disconnectRead = vi.spyOn(svc.dbRead, '$disconnect').mockResolvedValue();
 
-    await expect(svc.onModuleDestroy()).resolves.toBeUndefined();
+    await expect(svc.onApplicationShutdown()).resolves.toBeUndefined();
     expect(disconnectRead).toHaveBeenCalledOnce();
+  });
+
+  it('closes after the HTTP and WS servers are stopped, not on module destroy', () => {
+    const svc = new PrismaService();
+
+    expect(typeof svc.onApplicationShutdown).toBe('function');
+    expect((svc as unknown as { onModuleDestroy?: unknown }).onModuleDestroy).toBeUndefined();
   });
 });
 
