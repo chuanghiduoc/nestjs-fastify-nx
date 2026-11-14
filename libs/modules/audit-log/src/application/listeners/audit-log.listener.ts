@@ -1,8 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { CommandBus } from '@nestjs/cqrs';
 import { OnEvent } from '@nestjs/event-emitter';
+import { DomainException } from '@nestjs-fastify-nx/core';
 import type { DomainEvent } from '@nestjs-fastify-nx/core';
-import { DOMAIN_EVENT_STREAMS } from '@nestjs-fastify-nx/shared';
+import { ERROR_CODES } from '@nestjs-fastify-nx/contracts';
+import { DOMAIN_EVENT_STREAMS, configurationEventPayloadSchema } from '@nestjs-fastify-nx/shared';
 import { RecordAuditLogCommand } from '../commands/record-audit-log/record-audit-log.command';
 
 @Injectable()
@@ -55,6 +57,59 @@ export class AuditLogListener {
           eventId: event.eventId,
           organizationId: event.aggregateId,
         },
+        ipAddress: null,
+        userAgent: null,
+        occurredAt: event.occurredAt,
+      }),
+    );
+  }
+
+  @OnEvent(DOMAIN_EVENT_STREAMS.FEATURE_FLAGS, {
+    async: true,
+    promisify: true,
+    suppressErrors: false,
+  })
+  async handleFeatureFlagEvent(event: DomainEvent): Promise<void> {
+    await this.recordConfigurationEvent(event, 'feature_flag');
+  }
+
+  @OnEvent(DOMAIN_EVENT_STREAMS.API_KEYS, {
+    async: true,
+    promisify: true,
+    suppressErrors: false,
+  })
+  async handleApiKeyEvent(event: DomainEvent): Promise<void> {
+    await this.recordConfigurationEvent(event, 'api_key');
+  }
+
+  private async recordConfigurationEvent(event: DomainEvent, resource: string): Promise<void> {
+    const parsed = configurationEventPayloadSchema.safeParse(event.payload);
+    if (!parsed.success) {
+      throw new DomainException({
+        kind: 'malformed',
+        code: ERROR_CODES.BUSINESS_RULE_VIOLATION,
+        title: 'Invalid domain event',
+        permanent: true,
+        violations: [
+          {
+            path: 'payload',
+            code: ERROR_CODES.BUSINESS_RULE_VIOLATION,
+            message: 'Configuration event payload is not deliverable',
+          },
+        ],
+      });
+    }
+
+    const { userId: actorUserId, ...metadata } = parsed.data;
+
+    await this.commandBus.execute(
+      new RecordAuditLogCommand({
+        eventId: event.eventId,
+        organizationId: event.organizationId ?? null,
+        userId: actorUserId ?? null,
+        action: event.eventType,
+        resource,
+        metadata: { ...metadata, eventId: event.eventId, resourceId: event.aggregateId },
         ipAddress: null,
         userAgent: null,
         occurredAt: event.occurredAt,

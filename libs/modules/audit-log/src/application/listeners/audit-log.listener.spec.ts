@@ -170,4 +170,69 @@ describe('AuditLogListener', () => {
       expect(command.metadata).not.toHaveProperty('memberUserId');
     });
   });
+
+  describe('configuration streams', () => {
+    const ORG_ID = '00000000-0000-4000-8000-0000000000b1';
+    const ACTOR_ID = '00000000-0000-4000-8000-0000000000b2';
+    const RESOURCE_ID = '00000000-0000-4000-8000-0000000000b3';
+
+    it('records a feature flag change against the actor and the flag id', async () => {
+      const { listener, commandBus } = buildListener();
+      const event: DomainEvent = {
+        eventId: generateId(),
+        eventType: 'feature_flags.updated',
+        occurredAt: new Date('2026-08-20T13:00:00.000Z'),
+        aggregateId: RESOURCE_ID,
+        organizationId: ORG_ID,
+        payload: { userId: ACTOR_ID, key: 'checkout.new-flow', enabled: true },
+      };
+
+      await listener.handleFeatureFlagEvent(event);
+
+      const command = dispatchedCommand(commandBus);
+      expect(command.userId).toBe(ACTOR_ID);
+      expect(command.resource).toBe('feature_flag');
+      expect(command.metadata).toEqual({
+        key: 'checkout.new-flow',
+        enabled: true,
+        eventId: event.eventId,
+        resourceId: RESOURCE_ID,
+      });
+    });
+
+    it('records an api key revocation without any secret material', async () => {
+      const { listener, commandBus } = buildListener();
+      const event: DomainEvent = {
+        eventId: generateId(),
+        eventType: 'api_keys.revoked',
+        occurredAt: new Date('2026-08-20T14:00:00.000Z'),
+        aggregateId: RESOURCE_ID,
+        organizationId: ORG_ID,
+        payload: { userId: ACTOR_ID },
+      };
+
+      await listener.handleApiKeyEvent(event);
+
+      const command = dispatchedCommand(commandBus);
+      expect(command.userId).toBe(ACTOR_ID);
+      expect(command.resource).toBe('api_key');
+      expect(JSON.stringify(command.metadata)).not.toMatch(/sk_/);
+    });
+
+    it('throws a permanent failure for an unparseable configuration payload', async () => {
+      const { listener } = buildListener();
+      const event: DomainEvent = {
+        eventId: generateId(),
+        eventType: 'feature_flags.created',
+        occurredAt: new Date(),
+        aggregateId: RESOURCE_ID,
+        organizationId: ORG_ID,
+        payload: { userId: 'not-a-uuid' },
+      };
+
+      await expect(listener.handleFeatureFlagEvent(event)).rejects.toMatchObject({
+        permanent: true,
+      });
+    });
+  });
 });

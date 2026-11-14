@@ -1,7 +1,12 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, it, expect } from 'vitest';
-import { DOMAIN_EVENTS, DOMAIN_EVENT_STREAMS, userEventPayloadSchema } from './domain-events';
+import {
+  DOMAIN_EVENTS,
+  DOMAIN_EVENT_STREAMS,
+  PUBLISHER_DOMAIN_EVENTS,
+  userEventPayloadSchema,
+} from './domain-events';
 
 // The producers for these events are Postgres triggers, so TypeScript cannot see the contract at
 // all: renaming a constant here compiles and passes every other test while the relay keeps
@@ -17,12 +22,19 @@ function migrationSql(): string {
 describe('DOMAIN_EVENTS', () => {
   const sql = migrationSql();
 
-  it.each(Object.entries(DOMAIN_EVENTS))(
+  it.each(Object.entries(DOMAIN_EVENTS).filter(([, name]) => !PUBLISHER_DOMAIN_EVENTS.has(name)))(
     '%s is the name emitted by the trigger SQL',
     (_key, name) => {
       expect(sql).toContain(`'${name}'`);
     },
   );
+
+  it('exempts every publisher-only event from the trigger contract', () => {
+    expect(PUBLISHER_DOMAIN_EVENTS.size).toBeGreaterThan(0);
+    for (const name of PUBLISHER_DOMAIN_EVENTS) {
+      expect(Object.values(DOMAIN_EVENTS)).toContain(name);
+    }
+  });
 
   // An event whose name matches no stream is never delivered: listeners subscribe to the wildcard,
   // not to individual names, so a typo'd prefix silently drops the event instead of failing.

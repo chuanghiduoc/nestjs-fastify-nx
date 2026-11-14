@@ -133,6 +133,7 @@ export class FeatureFlagsController {
     return this.commandBus.execute(
       new CreateFeatureFlagCommand({
         organizationId: requireOrganizationId(user),
+        userId: user.userId,
         key: dto.key,
         description: dto.description,
         enabled: dto.enabled,
@@ -159,6 +160,7 @@ export class FeatureFlagsController {
     return this.commandBus.execute(
       new UpdateFeatureFlagCommand({
         organizationId: requireOrganizationId(user),
+        userId: user.userId,
         id,
         description: dto.description,
         enabled: dto.enabled,
@@ -181,6 +183,8 @@ export class FeatureFlagsController {
     @CurrentUser() user: AuthenticatedSession,
     @Param('id', new ParseUUIDPipe({ version: '7' })) id: string,
   ): Promise<void> {
-    return this.commandBus.execute(new DeleteFeatureFlagCommand(requireOrganizationId(user), id));
+    return this.commandBus.execute(
+      new DeleteFeatureFlagCommand(requireOrganizationId(user), user.userId, id),
+    );
   }
 }

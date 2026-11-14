@@ -674,6 +674,9 @@ importers:
       '@nestjs-fastify-nx/infra-database':
         specifier: workspace:*
         version: link:../../infra/database
+      '@nestjs-fastify-nx/infra-messaging':
+        specifier: workspace:*
+        version: link:../../infra/messaging
       '@nestjs-fastify-nx/shared':
         specifier: workspace:*
         version: link:../../shared

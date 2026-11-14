@@ -127,6 +127,8 @@ export class ApiKeysController {
     @CurrentUser() user: AuthenticatedSession,
     @Param('id', new ParseUUIDPipe({ version: '7' })) id: string,
   ): Promise<void> {
-    return this.commandBus.execute(new RevokeApiKeyCommand(requireOrganizationId(user), id));
+    return this.commandBus.execute(
+      new RevokeApiKeyCommand(requireOrganizationId(user), user.userId, id),
+    );
   }
 }

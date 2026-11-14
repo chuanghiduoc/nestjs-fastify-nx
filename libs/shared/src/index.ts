@@ -17,11 +17,14 @@ export {
 export {
   DOMAIN_EVENTS,
   DOMAIN_EVENT_STREAMS,
+  PUBLISHER_DOMAIN_EVENTS,
   userEventPayloadSchema,
   organizationEventPayloadSchema,
+  configurationEventPayloadSchema,
   type DomainEventType,
   type OrganizationEventPayload,
   type UserEventPayload,
+  type ConfigurationEventPayload,
 } from './lib/domain-events';
 export {
   SENSITIVE_REDACT_PATHS,

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { AuthorizationPort } from '@nestjs-fastify-nx/core';
-import { PERMISSIONS, generateId, type Permission } from '@nestjs-fastify-nx/shared';
+import type { AuthorizationPort, EventPublisherPort } from '@nestjs-fastify-nx/core';
+import type { PrismaService } from '@nestjs-fastify-nx/infra-database';
+import { DOMAIN_EVENTS, PERMISSIONS, generateId, type Permission } from '@nestjs-fastify-nx/shared';
 import { ApiKey } from '../domain/entities/api-key.entity';
 import { InMemoryApiKeyRepository } from '../testing/in-memory-api-key-repository';
 import { CreateApiKeyHandler } from './commands/create-api-key/create-api-key.handler';
@@ -13,6 +14,17 @@ import { ListApiKeysQuery } from './queries/list-api-keys/list-api-keys.query';
 const ORG_ID = '019dd1a5-9235-70db-8d57-54ef90900001';
 const OTHER_ORG_ID = '019dd1a5-9235-70db-8d57-54ef90900002';
 const USER_ID = '019dd1a5-9235-70db-8d57-54ef90900003';
+
+const prismaDouble = {
+  transaction: (fn: () => Promise<unknown>) => fn(),
+} as unknown as PrismaService;
+
+function eventsDouble(): EventPublisherPort & { publish: ReturnType<typeof vi.fn> } {
+  return {
+    publish: vi.fn(),
+    publishAll: vi.fn(),
+  } as unknown as EventPublisherPort & { publish: ReturnType<typeof vi.fn> };
+}
 
 function authorizationHolding(permissions: readonly Permission[]): AuthorizationPort {
   return {
@@ -43,6 +55,8 @@ describe('CreateApiKeyHandler', () => {
     const handler = new CreateApiKeyHandler(
       repository,
       authorizationHolding([PERMISSIONS.FILE_READ]),
+      prismaDouble,
+      eventsDouble(),
     );
 
     const issued = await handler.execute(
@@ -64,10 +78,39 @@ describe('CreateApiKeyHandler', () => {
     expect(JSON.stringify(issued)).not.toContain(listed.items[0].keyHash);
   });
 
+  it('records an api_keys.issued audit event with the actor', async () => {
+    const events = eventsDouble();
+    const handler = new CreateApiKeyHandler(
+      repository,
+      authorizationHolding([PERMISSIONS.FILE_READ]),
+      prismaDouble,
+      events,
+    );
+
+    await handler.execute(
+      new CreateApiKeyCommand({
+        organizationId: ORG_ID,
+        userId: USER_ID,
+        name: 'CI bot',
+        scopes: [PERMISSIONS.FILE_READ],
+      }),
+    );
+
+    expect(events.publish).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventType: DOMAIN_EVENTS.API_KEYS_ISSUED,
+        organizationId: ORG_ID,
+        payload: expect.objectContaining({ userId: USER_ID, name: 'CI bot' }),
+      }),
+    );
+  });
+
   it('refuses a scope the caller does not hold', async () => {
     const handler = new CreateApiKeyHandler(
       repository,
       authorizationHolding([PERMISSIONS.FILE_READ]),
+      prismaDouble,
+      eventsDouble(),
     );
 
     const execute = handler.execute(
@@ -84,7 +127,12 @@ describe('CreateApiKeyHandler', () => {
 
   it('resolves the issuer permissions for the caller in their own organization', async () => {
     const authorization = authorizationHolding([PERMISSIONS.FILE_READ]);
-    const handler = new CreateApiKeyHandler(repository, authorization);
+    const handler = new CreateApiKeyHandler(
+      repository,
+      authorization,
+      prismaDouble,
+      eventsDouble(),
+    );
 
     await handler.execute(
       new CreateApiKeyCommand({
@@ -113,32 +161,54 @@ describe('RevokeApiKeyHandler', () => {
   it('revokes a live key', async () => {
     const key = seedKey(repository);
 
-    await new RevokeApiKeyHandler(repository).execute(new RevokeApiKeyCommand(ORG_ID, key.id));
+    await new RevokeApiKeyHandler(repository, prismaDouble, eventsDouble()).execute(
+      new RevokeApiKeyCommand(ORG_ID, USER_ID, key.id),
+    );
 
     expect(repository.isRevoked(key.id)).toBe(true);
   });
 
+  it('records an api_keys.revoked audit event with the actor', async () => {
+    const key = seedKey(repository);
+    const events = eventsDouble();
+
+    await new RevokeApiKeyHandler(repository, prismaDouble, events).execute(
+      new RevokeApiKeyCommand(ORG_ID, USER_ID, key.id),
+    );
+
+    expect(events.publish).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventType: DOMAIN_EVENTS.API_KEYS_REVOKED,
+        organizationId: ORG_ID,
+        aggregateId: key.id,
+        payload: expect.objectContaining({ userId: USER_ID }),
+      }),
+    );
+  });
+
   it('is a no-op when the key is already revoked', async () => {
     const key = seedKey(repository);
-    const handler = new RevokeApiKeyHandler(repository);
-    await handler.execute(new RevokeApiKeyCommand(ORG_ID, key.id));
+    const handler = new RevokeApiKeyHandler(repository, prismaDouble, eventsDouble());
+    await handler.execute(new RevokeApiKeyCommand(ORG_ID, USER_ID, key.id));
 
-    await expect(handler.execute(new RevokeApiKeyCommand(ORG_ID, key.id))).resolves.toBeUndefined();
+    await expect(
+      handler.execute(new RevokeApiKeyCommand(ORG_ID, USER_ID, key.id)),
+    ).resolves.toBeUndefined();
   });
 
   it('answers not_found for a key of another organization', async () => {
     const key = seedKey(repository, OTHER_ORG_ID);
 
-    const execute = new RevokeApiKeyHandler(repository).execute(
-      new RevokeApiKeyCommand(ORG_ID, key.id),
+    const execute = new RevokeApiKeyHandler(repository, prismaDouble, eventsDouble()).execute(
+      new RevokeApiKeyCommand(ORG_ID, USER_ID, key.id),
     );
 
     await expect(execute).rejects.toMatchObject({ kind: 'not_found' });
   });
 
   it('answers not_found for an unknown key', async () => {
-    const execute = new RevokeApiKeyHandler(repository).execute(
-      new RevokeApiKeyCommand(ORG_ID, generateId()),
+    const execute = new RevokeApiKeyHandler(repository, prismaDouble, eventsDouble()).execute(
+      new RevokeApiKeyCommand(ORG_ID, USER_ID, generateId()),
     );
 
     await expect(execute).rejects.toMatchObject({ kind: 'not_found' });
