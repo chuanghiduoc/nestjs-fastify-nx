@@ -12,6 +12,7 @@ export { RETRIED_JOB_OPTIONS } from './lib/job-options';
 export {
   EMAIL_TEMPLATES,
   GENERIC_EMAIL_TEMPLATE,
+  emailNotificationPayloadSchema,
   type EmailNotificationPayload,
   type EmailTemplate,
 } from './lib/email-contract';

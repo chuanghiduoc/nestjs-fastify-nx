@@ -24,6 +24,7 @@ function requestContextMixin(): Record<string, string> {
   if (store.requestId) fields['requestId'] = store.requestId;
   if (store.correlationId) fields['correlationId'] = store.correlationId;
   if (store.userId) fields['userId'] = store.userId;
+  if (store.organizationId) fields['organizationId'] = store.organizationId;
   return fields;
 }
 

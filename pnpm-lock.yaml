@@ -501,6 +501,9 @@ importers:
 
   apps/worker:
     devDependencies:
+      '@nestjs-fastify-nx/core':
+        specifier: workspace:*
+        version: link:../../libs/core
       '@nestjs-fastify-nx/infra-database':
         specifier: workspace:*
         version: link:../../libs/infra/database

@@ -78,7 +78,7 @@ export function createProblemDetailsErrorHandler(): (error: unknown) => {
       // The root onSend normalizer passes a well-formed Problem Details body straight through, so
       // without this the 5xx would leave no trace in logs or Sentry.
       logger.error({ err: error, status }, 'Bull Board request failed');
-      Sentry.captureException(error);
+      Sentry.captureException(error, { tags: { service: 'bull-board' } });
     }
 
     return {

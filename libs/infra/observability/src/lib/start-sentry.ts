@@ -9,6 +9,7 @@ import {
 export interface StartSentryOptions {
   readonly serviceName: string;
   readonly profiling?: boolean;
+  readonly tracesSampleRateDefault?: number;
 }
 
 // Defense-in-depth key-name redaction on every Sentry event (dataCollection already
@@ -45,16 +46,24 @@ export function startSentry(options: StartSentryOptions): boolean {
 
   const isProduction = process.env['NODE_ENV'] === 'production';
   const cap = isProduction ? PRODUCTION_SAMPLE_RATE_CAP : DEV_SAMPLE_RATE_CAP;
-  const parsed = Number(process.env['SENTRY_TRACES_SAMPLE_RATE'] ?? DEFAULT_TRACES_SAMPLE_RATE);
+  const fallbackRate = options.tracesSampleRateDefault ?? DEFAULT_TRACES_SAMPLE_RATE;
+  const parsed = Number(process.env['SENTRY_TRACES_SAMPLE_RATE'] ?? fallbackRate);
   const tracesSampleRate = Math.max(
     0,
-    Math.min(Number.isFinite(parsed) ? parsed : DEFAULT_TRACES_SAMPLE_RATE, cap),
+    Math.min(Number.isFinite(parsed) ? parsed : fallbackRate, cap),
   );
+
+  if (process.env['OTEL_ENABLED'] === 'true' && tracesSampleRate > 0) {
+    process.stderr.write(
+      '[sentry] OTEL_ENABLED=true with Sentry performance tracing enabled — two independent ' +
+        'tracing pipelines will run. Set SENTRY_TRACES_SAMPLE_RATE=0 to keep errors only.\n',
+    );
+  }
 
   Sentry.init({
     dsn,
     environment: process.env['SENTRY_ENVIRONMENT'] ?? process.env['NODE_ENV'] ?? 'development',
-    release: process.env['OTEL_SERVICE_VERSION'],
+    release: process.env['SENTRY_RELEASE'] ?? process.env['OTEL_SERVICE_VERSION'],
     initialScope: { tags: { service: options.serviceName } },
     tracesSampleRate,
     profileSessionSampleRate: options.profiling ? Math.min(PRODUCTION_SAMPLE_RATE_CAP, cap) : 0,

@@ -150,5 +150,12 @@ describe('EmailNotificationProcessor', () => {
       await expect(processor.process(job)).resolves.toBeUndefined();
       expect(mail.send).toHaveBeenCalledOnce();
     });
+
+    it('rejects a payload that does not match the wire contract without retrying', async () => {
+      const job = makeJob({ to: 'not-an-email', subject: 'Hi', body: 'Body' });
+
+      await expect(processor.process(job)).rejects.toThrow(/wire contract/);
+      expect(mail.send).not.toHaveBeenCalled();
+    });
   });
 });

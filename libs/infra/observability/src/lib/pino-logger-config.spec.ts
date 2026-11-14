@@ -111,13 +111,19 @@ describe('buildPinoLoggerConfig — request context mixin', () => {
     expect(mixin()).toEqual({});
   });
 
-  it('includes requestId/correlationId/userId once seeded on the CLS store', () => {
+  it('includes requestId/correlationId/userId/organizationId once seeded on the CLS store', () => {
     cls.run(() => {
       cls.set('requestId', 'req-1');
       cls.set('correlationId', 'corr-1');
       cls.set('userId', 'user-1');
+      cls.set('organizationId', 'org-1');
 
-      expect(mixin()).toEqual({ requestId: 'req-1', correlationId: 'corr-1', userId: 'user-1' });
+      expect(mixin()).toEqual({
+        requestId: 'req-1',
+        correlationId: 'corr-1',
+        userId: 'user-1',
+        organizationId: 'org-1',
+      });
     });
   });
 

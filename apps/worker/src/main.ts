@@ -4,7 +4,7 @@ import { Logger } from 'nestjs-pino';
 import { reportFatalError, startSentry } from '@nestjs-fastify-nx/infra-observability';
 import { AppModule } from './app/app.module';
 
-startSentry({ serviceName: 'nestjs-fastify-worker' });
+startSentry({ serviceName: 'nestjs-fastify-worker', tracesSampleRateDefault: 0.1 });
 
 async function bootstrap() {
   const app = await NestFactory.createApplicationContext(AppModule, {

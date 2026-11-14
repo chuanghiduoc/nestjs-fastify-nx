@@ -1,3 +1,5 @@
+import { z } from 'zod';
+
 export const EMAIL_TEMPLATES = {
   WELCOME: 'welcome',
   EMAIL_VERIFICATION: 'email-verification',
@@ -19,3 +21,12 @@ export interface EmailNotificationPayload {
   variables?: Record<string, string>;
   correlationId?: string;
 }
+
+export const emailNotificationPayloadSchema = z.object({
+  to: z.email(),
+  subject: z.string().min(1),
+  body: z.string(),
+  templateId: z.string().optional(),
+  variables: z.record(z.string(), z.string()).optional(),
+  correlationId: z.string().optional(),
+});
