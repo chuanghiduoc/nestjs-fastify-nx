@@ -47,6 +47,7 @@ import { ValidationPipe, VersioningType } from '@nestjs/common';
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { FastifyAdapter } from '@nestjs/platform-fastify';
 import { PrismaService } from '@nestjs-fastify-nx/infra-database';
+import { GLOBAL_PREFIX, GLOBAL_PREFIX_EXCLUDES } from '../http/global-prefix';
 
 const noConnect = (): Promise<void> => Promise.resolve();
 PrismaService.prototype.onModuleInit = noConnect;
@@ -63,7 +64,7 @@ async function exportSpec(): Promise<void> {
     new FastifyAdapter(),
     { logger: false, abortOnError: false },
   );
-  app.setGlobalPrefix('api');
+  app.setGlobalPrefix(GLOBAL_PREFIX, { exclude: [...GLOBAL_PREFIX_EXCLUDES] });
   app.enableVersioning({ type: VersioningType.URI, defaultVersion: '1' });
   app.useGlobalPipes(
     new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),

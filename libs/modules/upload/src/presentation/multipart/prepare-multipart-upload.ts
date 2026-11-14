@@ -76,8 +76,10 @@ export async function prepareMultipartUpload(
 
 function acquireRequest(request: FastifyRequest, reply: FastifyReply): AbortSignal {
   const maximum = positiveIntEnv('UPLOAD_MAX_CONCURRENT_REQUESTS', 4);
-  if (activeRequests >= maximum)
+  if (activeRequests >= maximum) {
+    void reply.header('retry-after', '1');
     throw new HttpException('Upload capacity reached. Retry shortly.', 429);
+  }
   activeRequests += 1;
   const controller = new AbortController();
   const abort = (): void => controller.abort();

@@ -21,6 +21,7 @@ import {
 } from '@nestjs/swagger';
 import {
   ApiCommonErrors,
+  ApiUnpaginatedListResponse,
   ListResponseDto,
   toUnpaginatedListResponse,
 } from '@nestjs-fastify-nx/contracts';
@@ -59,7 +60,9 @@ export class OrganizationRolesController {
     description:
       'Returns the built-in system roles followed by the roles this organization defined itself. System roles carry `system: true`, a null `id`, and cannot be updated or deleted. The list is small and bounded by the permission catalog, so it is not paginated.',
   })
-  @ApiOkResponse({ type: ListResponseDto, description: 'System roles plus tenant-defined roles.' })
+  @ApiUnpaginatedListResponse(OrganizationRoleResponseDto, {
+    description: 'System roles plus tenant-defined roles. Not paginated.',
+  })
   @ApiCommonErrors()
   async list(
     @CurrentUser() user: AuthenticatedSession,

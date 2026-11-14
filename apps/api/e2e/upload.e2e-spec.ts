@@ -370,5 +370,21 @@ describe('Upload E2E', () => {
       expect(res.body.key).toMatch(/^files\/[0-9a-f-]{36}\/[0-9a-f-]{36}\.png$/i);
       expect(res.body.status).toBe('READY');
     });
+
+    it('accepts a batch and returns 200 with an unpaginated list envelope', async () => {
+      const res = await request(ctx.app.getHttpServer())
+        .post('/api/v1/upload/batch')
+        .set('Cookie', cookie)
+        .attach('file', PNG_HEADER, { filename: 'one.png', contentType: 'image/png' })
+        .attach('file', PNG_HEADER, { filename: 'two.png', contentType: 'image/png' })
+        .expect(200);
+
+      expect(res.body.object).toBe('list');
+      expect(res.body.data).toHaveLength(2);
+      expect(res.body.hasMore).toBe(false);
+      expect(res.body).not.toHaveProperty('page');
+      expect(res.body).not.toHaveProperty('pageSize');
+      expect(res.body).not.toHaveProperty('totalCount');
+    });
   });
 });

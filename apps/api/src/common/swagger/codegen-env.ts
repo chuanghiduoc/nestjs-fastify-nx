@@ -13,9 +13,9 @@ function setIfMissing(key: string, value: string): void {
 setIfMissing('NODE_ENV', 'development');
 setIfMissing('DATABASE_URL', 'postgresql://codegen:codegen@localhost:5432/codegen');
 setIfMissing('BETTER_AUTH_SECRET', 'codegen-placeholder-secret-min-32-characters-ok');
-// Better Auth logs a warning at module init if BETTER_AUTH_URL is unset, even
-// though the spec exporter never serves a real request. Sentinel keeps it quiet.
-setIfMissing('BETTER_AUTH_URL', 'http://codegen.invalid');
+// Use the public HTTPS origin so the exported scheme names the `__Secure-` cookie production
+// actually issues. A http:// placeholder would publish the dev cookie name instead.
+setIfMissing('BETTER_AUTH_URL', 'https://codegen.invalid');
 setIfMissing('CORS_ORIGINS', 'http://localhost:3000');
 setIfMissing('STORAGE_ACCESS_KEY', 'codegen');
 setIfMissing('STORAGE_SECRET_KEY', 'codegen');

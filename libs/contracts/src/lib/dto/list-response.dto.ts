@@ -130,5 +130,9 @@ export function toCursorListResponse<T>(args: {
 }
 
 export function toUnpaginatedListResponse<T>(url: string, items: readonly T[]): ListResponseDto<T> {
-  return toListResponse({ url, items, page: 1, pageSize: items.length, total: items.length });
+  const response = new ListResponseDto<T>();
+  response.url = url;
+  response.data = [...items];
+  response.hasMore = false;
+  return response;
 }

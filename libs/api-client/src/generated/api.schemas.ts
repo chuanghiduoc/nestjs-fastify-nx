@@ -247,51 +247,6 @@ export interface ListResponseDto {
   pageSize?: number;
 }
 
-export type CreateOrganizationRoleDtoPermissionsItem =
-  (typeof CreateOrganizationRoleDtoPermissionsItem)[keyof typeof CreateOrganizationRoleDtoPermissionsItem];
-
-export const CreateOrganizationRoleDtoPermissionsItem = {
-  'organization:read': 'organization:read',
-  'organization:update': 'organization:update',
-  'organization:delete': 'organization:delete',
-  'member:read': 'member:read',
-  'member:invite': 'member:invite',
-  'member:update': 'member:update',
-  'member:remove': 'member:remove',
-  'team:read': 'team:read',
-  'team:create': 'team:create',
-  'team:update': 'team:update',
-  'team:delete': 'team:delete',
-  'invitation:read': 'invitation:read',
-  'invitation:cancel': 'invitation:cancel',
-  'role:read': 'role:read',
-  'role:create': 'role:create',
-  'role:update': 'role:update',
-  'role:delete': 'role:delete',
-  'file:read': 'file:read',
-  'file:create': 'file:create',
-  'file:delete': 'file:delete',
-  'audit_log:read': 'audit_log:read',
-  'api_key:read': 'api_key:read',
-  'api_key:create': 'api_key:create',
-  'api_key:revoke': 'api_key:revoke',
-  'feature_flag:read': 'feature_flag:read',
-  'feature_flag:manage': 'feature_flag:manage',
-  'notification:read': 'notification:read',
-  'notification:update': 'notification:update',
-  'session:read': 'session:read',
-  'session:revoke': 'session:revoke',
-  'term:read': 'term:read',
-  'term:accept': 'term:accept',
-} as const;
-
-export interface CreateOrganizationRoleDto {
-  /** Role name, unique within the organization. Cannot shadow a system role. */
-  role: string;
-  /** Permissions the role grants. Every value must exist in the permission catalog. */
-  permissions: CreateOrganizationRoleDtoPermissionsItem[];
-}
-
 export type OrganizationRoleResponseDtoPermissionsItem =
   (typeof OrganizationRoleResponseDtoPermissionsItem)[keyof typeof OrganizationRoleResponseDtoPermissionsItem];
 
@@ -346,6 +301,51 @@ export interface OrganizationRoleResponseDto {
   createdAt: string | null;
   /** @nullable */
   updatedAt: string | null;
+}
+
+export type CreateOrganizationRoleDtoPermissionsItem =
+  (typeof CreateOrganizationRoleDtoPermissionsItem)[keyof typeof CreateOrganizationRoleDtoPermissionsItem];
+
+export const CreateOrganizationRoleDtoPermissionsItem = {
+  'organization:read': 'organization:read',
+  'organization:update': 'organization:update',
+  'organization:delete': 'organization:delete',
+  'member:read': 'member:read',
+  'member:invite': 'member:invite',
+  'member:update': 'member:update',
+  'member:remove': 'member:remove',
+  'team:read': 'team:read',
+  'team:create': 'team:create',
+  'team:update': 'team:update',
+  'team:delete': 'team:delete',
+  'invitation:read': 'invitation:read',
+  'invitation:cancel': 'invitation:cancel',
+  'role:read': 'role:read',
+  'role:create': 'role:create',
+  'role:update': 'role:update',
+  'role:delete': 'role:delete',
+  'file:read': 'file:read',
+  'file:create': 'file:create',
+  'file:delete': 'file:delete',
+  'audit_log:read': 'audit_log:read',
+  'api_key:read': 'api_key:read',
+  'api_key:create': 'api_key:create',
+  'api_key:revoke': 'api_key:revoke',
+  'feature_flag:read': 'feature_flag:read',
+  'feature_flag:manage': 'feature_flag:manage',
+  'notification:read': 'notification:read',
+  'notification:update': 'notification:update',
+  'session:read': 'session:read',
+  'session:revoke': 'session:revoke',
+  'term:read': 'term:read',
+  'term:accept': 'term:accept',
+} as const;
+
+export interface CreateOrganizationRoleDto {
+  /** Role name, unique within the organization. Cannot shadow a system role. */
+  role: string;
+  /** Permissions the role grants. Every value must exist in the permission catalog. */
+  permissions: CreateOrganizationRoleDtoPermissionsItem[];
 }
 
 export type UpdateOrganizationRoleDtoPermissionsItem =
@@ -1038,6 +1038,11 @@ export interface Invitation {
   inviterId: string;
 }
 
+export type OrganizationRolesList200 = ListResponseDto & {
+  data?: OrganizationRoleResponseDto[];
+  hasMore?: false;
+};
+
 export type TeamsListParams = {
   /** Items per page (1–100). */
   limit?: number;
@@ -1161,10 +1166,12 @@ export type FeatureFlagsList200 = ListResponseDto & {
 
 export type TermsList200 = ListResponseDto & {
   data?: TermResponseDto[];
+  hasMore?: false;
 };
 
 export type TermsAcceptances200 = ListResponseDto & {
   data?: TermAcceptanceResponseDto[];
+  hasMore?: false;
 };
 
 export type SessionsListParams = {
@@ -1190,6 +1197,7 @@ export type UploadUploadBatchBody = {
 
 export type UploadUploadBatch200 = ListResponseDto & {
   data?: StoredFileDto[];
+  hasMore?: false;
 };
 
 export type SocialSignInBodyIdTokenUserName = {

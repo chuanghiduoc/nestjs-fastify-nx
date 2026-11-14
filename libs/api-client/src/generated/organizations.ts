@@ -23,9 +23,9 @@ import type {
   CreateTeamDto,
   InvitationsList200,
   InvitationsListParams,
-  ListResponseDto,
   OrganizationResponseDto,
   OrganizationRoleResponseDto,
+  OrganizationRolesList200,
   TeamResponseDto,
   TeamsList200,
   TeamsListParams,
@@ -51,7 +51,7 @@ export const getOrganizations = () => {
    * @summary List roles available in the active organization
    */
   const organizationRolesList = () => {
-    return customAxiosInstance<ListResponseDto>({
+    return customAxiosInstance<OrganizationRolesList200>({
       url: `/api/v1/organizations/current/roles`,
       method: 'GET',
     });

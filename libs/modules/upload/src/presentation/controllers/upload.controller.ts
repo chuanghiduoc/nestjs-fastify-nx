@@ -29,8 +29,9 @@ import { ClsService } from 'nestjs-cls';
 import { REQUEST_CONTEXT_KEYS, type RequestContextStore } from '@nestjs-fastify-nx/core';
 import {
   ApiCommonErrors,
-  ApiPaginatedResponse,
+  ApiUnpaginatedListResponse,
   ListResponseDto,
+  toUnpaginatedListResponse,
 } from '@nestjs-fastify-nx/contracts';
 import { PERMISSIONS } from '@nestjs-fastify-nx/shared';
 import { RequirePermission } from '@nestjs-fastify-nx/infra-authorization';
@@ -94,7 +95,7 @@ export class UploadController {
     },
   })
   @ApiCreatedResponse({ type: StoredFileDto })
-  @ApiCommonErrors()
+  @ApiCommonErrors({ payloadTooLarge: true })
   @ApiOperation({ summary: 'Upload one file through the backend.' })
   async upload(
     @CurrentUser() user: AuthenticatedSession,
@@ -109,6 +110,7 @@ export class UploadController {
   @Post('batch')
   @RequirePermission(PERMISSIONS.FILE_CREATE)
   @Throttle(PRESIGN_LIMIT)
+  @HttpCode(HttpStatus.OK)
   @ApiConsumes('multipart/form-data')
   @ApiBody({
     schema: {
@@ -117,8 +119,10 @@ export class UploadController {
       properties: { file: { type: 'array', items: { type: 'string', format: 'binary' } } },
     },
   })
-  @ApiPaginatedResponse(StoredFileDto)
-  @ApiCommonErrors()
+  @ApiUnpaginatedListResponse(StoredFileDto, {
+    description: 'Batch result. Not paginated.',
+  })
+  @ApiCommonErrors({ payloadTooLarge: true })
   @ApiOperation({ summary: 'Upload multiple files through the backend as one batch.' })
   async uploadBatch(
     @CurrentUser() user: AuthenticatedSession,
@@ -127,7 +131,7 @@ export class UploadController {
   ): Promise<ListResponseDto<StoredFile>> {
     const files = await prepareMultipartUploads(request, reply);
     const data = await this.commandBus.execute(this.buildUploadFilesCommand(user, files));
-    return { object: 'list', url: '/api/v1/upload/batch', data, hasMore: false };
+    return toUnpaginatedListResponse('/api/v1/upload/batch', data);
   }
 
   @Get(':id')
