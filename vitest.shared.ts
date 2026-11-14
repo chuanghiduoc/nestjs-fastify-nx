@@ -62,6 +62,9 @@ export function createVitestConfig(options: VitestProjectOptions) {
       // only the latter would run Testcontainers suites in the plain `test` target.
       exclude: isIntegrationRun ? [] : ['**/*.integration.*'],
       reporters: ['default'],
+      // Integration suites share one reused Testcontainers database when TESTCONTAINERS_REUSE=true;
+      // parallel files would truncate each other's fixtures mid-test.
+      ...(integrationTests ? { fileParallelism: false } : {}),
       setupFiles: [`${relativePath}vitest.setup.ts`],
       passWithNoTests: true,
       ...(testTimeout && { testTimeout }),

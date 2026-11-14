@@ -2,7 +2,11 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { Client } from 'pg';
 import { ClsService } from 'nestjs-cls';
-import { createTestContainers, deployTestMigrations } from '@nestjs-fastify-nx/testing';
+import {
+  createTestContainers,
+  deployTestMigrations,
+  provisionRlsRole,
+} from '@nestjs-fastify-nx/testing';
 import type { TestContainers } from '@nestjs-fastify-nx/testing';
 import { PrismaService } from '@nestjs-fastify-nx/infra-database';
 import { REQUEST_CONTEXT_KEYS, type RequestContextStore } from '@nestjs-fastify-nx/core';
@@ -12,9 +16,6 @@ const ORG_A = '01900000-0000-7000-8000-00000000a001';
 const ORG_B = '01900000-0000-7000-8000-00000000b001';
 const USER_A = '01900000-0000-7000-8000-00000000a002';
 const USER_B = '01900000-0000-7000-8000-00000000b002';
-
-const RLS_ROLE = 'app_request_probe';
-const RLS_PASSWORD = 'probe-password';
 
 async function seedTenants(admin: Client): Promise<void> {
   await admin.query(
@@ -48,19 +49,8 @@ describe('stored_files tenant isolation (integration)', () => {
     admin = new Client({ connectionString: dbUrl });
     await admin.connect();
 
-    await admin.query(`DROP ROLE IF EXISTS ${RLS_ROLE}`);
-    await admin.query(
-      `CREATE ROLE ${RLS_ROLE} LOGIN NOSUPERUSER NOBYPASSRLS PASSWORD '${RLS_PASSWORD}'`,
-    );
-    await admin.query(`GRANT USAGE ON SCHEMA public TO ${RLS_ROLE}`);
-    await admin.query(
-      `GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO ${RLS_ROLE}`,
-    );
-
-    const url = new URL(dbUrl);
-    url.username = RLS_ROLE;
-    url.password = RLS_PASSWORD;
-    tenant = new Client({ connectionString: url.toString() });
+    const url = await provisionRlsRole(dbUrl);
+    tenant = new Client({ connectionString: url });
     await tenant.connect();
   }, 120_000);
 
@@ -165,12 +155,8 @@ describe('stored_files tenant isolation (integration)', () => {
     let previousDatabaseUrl: string | undefined;
 
     beforeAll(async () => {
-      const url = new URL(containers.postgres.getConnectionUri());
-      url.username = RLS_ROLE;
-      url.password = RLS_PASSWORD;
-
       previousDatabaseUrl = process.env['DATABASE_URL'];
-      process.env['DATABASE_URL'] = url.toString();
+      process.env['DATABASE_URL'] = await provisionRlsRole(containers.postgres.getConnectionUri());
 
       cls = new ClsService<RequestContextStore>(new AsyncLocalStorage());
       prisma = new PrismaService(cls);

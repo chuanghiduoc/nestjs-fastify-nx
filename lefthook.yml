@@ -21,7 +21,7 @@ pre-commit:
     # process — enough to exhaust the default heap. The content was already linted on its own commit.
     lint-staged:
       priority: 1
-      run: pnpm lint-staged
+      run: pnpm lint-staged --relative
       skip:
         - merge
         - rebase

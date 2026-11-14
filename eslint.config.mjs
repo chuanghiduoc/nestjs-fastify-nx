@@ -286,4 +286,17 @@ export default defineConfig(
       ],
     },
   },
+
+  // Root tooling configs sit outside every Nx project. lint-staged passes absolute paths, which the
+  // project service cannot map to `allowDefaultProject`, so these files lint untyped.
+  {
+    files: ['vitest.shared.ts', 'vitest.setup.ts', 'prisma.config.ts', 'orval.config.ts'],
+    ...tseslint.configs.disableTypeChecked,
+    languageOptions: {
+      parserOptions: {
+        projectService: false,
+        project: false,
+      },
+    },
+  },
 );

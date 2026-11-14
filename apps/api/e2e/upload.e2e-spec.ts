@@ -299,4 +299,76 @@ describe('Upload E2E', () => {
         .expect(201);
     });
   });
+
+  describe('GET /api/v1/upload/:id', () => {
+    it('returns the stored file for its owner after confirm', async () => {
+      const presign = await request(ctx.app.getHttpServer())
+        .post('/api/v1/upload/presign')
+        .set('Cookie', cookie)
+        .send({ contentType: 'image/png' })
+        .expect(201);
+      seedE2eStorageObject(presign.body.key, PNG_HEADER, 'image/png');
+      const confirmed = await request(ctx.app.getHttpServer())
+        .post('/api/v1/upload/confirm')
+        .set('Cookie', cookie)
+        .send({ key: presign.body.key })
+        .expect(200);
+
+      const res = await request(ctx.app.getHttpServer())
+        .get(`/api/v1/upload/${confirmed.body.id}`)
+        .set('Cookie', cookie)
+        .expect(200);
+
+      expect(res.body.id).toBe(confirmed.body.id);
+      expect(res.body.key).toBe(confirmed.body.key);
+      expect(res.body.status).toBe('READY');
+    });
+
+    it('answers 404 for an unknown id', async () => {
+      const res = await request(ctx.app.getHttpServer())
+        .get('/api/v1/upload/019dd1a5-9235-70db-8d57-54ef901d8185')
+        .set('Cookie', cookie)
+        .expect(404);
+
+      expect(res.headers['content-type']).toMatch(/application\/problem\+json/);
+    });
+
+    it('answers 404 for another user file', async () => {
+      const presign = await request(ctx.app.getHttpServer())
+        .post('/api/v1/upload/presign')
+        .set('Cookie', cookie)
+        .send({ contentType: 'image/png' })
+        .expect(201);
+      seedE2eStorageObject(presign.body.key, PNG_HEADER, 'image/png');
+      const confirmed = await request(ctx.app.getHttpServer())
+        .post('/api/v1/upload/confirm')
+        .set('Cookie', cookie)
+        .send({ key: presign.body.key })
+        .expect(200);
+
+      const otherEmail = `other-get-${Date.now()}@example.com`;
+      const otherSignUp = await request(ctx.app.getHttpServer())
+        .post('/api/auth/sign-up/email')
+        .send({ email: otherEmail, password: 'password1234', name: 'Other' });
+      const otherCookie = cookieHeaderFromSetCookies(otherSignUp.headers['set-cookie']);
+
+      await request(ctx.app.getHttpServer())
+        .get(`/api/v1/upload/${confirmed.body.id}`)
+        .set('Cookie', otherCookie)
+        .expect(404);
+    });
+  });
+
+  describe('POST /api/v1/upload (multipart)', () => {
+    it('accepts a single multipart file and stores the verified object', async () => {
+      const res = await request(ctx.app.getHttpServer())
+        .post('/api/v1/upload')
+        .set('Cookie', cookie)
+        .attach('file', PNG_HEADER, { filename: 'avatar.png', contentType: 'image/png' })
+        .expect(201);
+
+      expect(res.body.key).toMatch(/^files\/[0-9a-f-]{36}\/[0-9a-f-]{36}\.png$/i);
+      expect(res.body.status).toBe('READY');
+    });
+  });
 });

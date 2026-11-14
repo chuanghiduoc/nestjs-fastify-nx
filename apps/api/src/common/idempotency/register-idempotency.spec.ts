@@ -361,12 +361,17 @@ describe('registerIdempotency', () => {
   it('returns 409 while an identical request is still in flight', async () => {
     const errors: string[] = [];
     let release!: () => void;
+    let markStarted!: () => void;
     const gate = new Promise<void>((resolve) => {
       release = resolve;
+    });
+    const started = new Promise<void>((resolve) => {
+      markStarted = resolve;
     });
     const app = Fastify();
     await app.register(fastifyCookie);
     app.post('/api/v1/slow', async () => {
+      markStarted();
       await gate;
       return { ok: true };
     });
@@ -387,8 +392,9 @@ describe('registerIdempotency', () => {
       headers: KEY_HEADER,
       payload: {},
     });
-    // Let the first request's preHandler acquire the lock before the second arrives.
-    await new Promise((resolve) => setTimeout(resolve, 25));
+    // The handler only starts after the preHandler acquired the lock, so this is the
+    // deterministic signal that the second request will observe an in-flight lock.
+    await started;
 
     const conflict = await app.inject({
       method: 'POST',
