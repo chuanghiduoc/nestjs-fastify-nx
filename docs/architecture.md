@@ -260,7 +260,7 @@ GET /api/v1/feature-flags (Authorization: Bearer sk_…) → FeatureFlagsControl
 
 ### Guard chain
 
-Four `APP_GUARD` providers run in this order (`apps/api/src/app/app.module.ts`), and the order is
+Five `APP_GUARD` providers run in this order (`apps/api/src/app/app.module.ts`), and the order is
 load-bearing:
 
 | #   | Guard               | Answers                                                                      |
@@ -465,17 +465,18 @@ List endpoints wrap items in `ListResponseDto<T>` (Stripe / Linear-style envelop
 `@nestjs-fastify-nx/contracts`:
 
 ```json
-GET /api/v1/admin/users?page=1&pageSize=20  → 200
+GET /api/v1/admin/users?limit=20&startingAfter=MjAyNi0wNS0xOVQwMzowNTowMC4wMDBaOjAxOTczMmRi  → 200
 {
   "object": "list",
   "url": "/api/v1/admin/users",
   "data": [ … ],
   "hasMore": true,
-  "totalCount": 1284,
-  "page": 1,
-  "pageSize": 20
+  "lastCursor": "MjAyNi0wNS0xOVQwMzowNTowMC4wMDBaOjAxOTczMmRi"
 }
 ```
+
+This endpoint is cursor-only; `page`/`pageSize`/`totalCount` are omitted. Offset pagination is
+reserved for true jump-to-page UX and documented on the controller that uses it.
 
 Pagination conventions:
 
@@ -552,7 +553,7 @@ Event flow is **transactional**:
 4. **Listeners** run synchronously; durable side-effects (email, audit) dispatch **BullMQ jobs** which survive process crashes
 5. **Worker process** consumes BullMQ jobs and executes side-effects (send email, write audit log)
 
-The outbox pattern guarantees atomicity: either both the domain row and the event row commit together, or both roll back. Listeners run in-process for development simplicity; production deployments can switch to `EVENT_PUBLISHER_DRIVER=outbox` to defer event publishing until the scheduler's `OutboxRelayService` polls and publishes them durably.
+The outbox pattern guarantees atomicity: either both the domain row and the event row commit together, or both roll back. `EVENT_PUBLISHER_DRIVER=outbox` is mandatory in production for the api and scheduler (env validation refuses to boot otherwise); the in-process driver exists only for local development and tests.
 
 Listeners are NestJS event subscribers; durable side-effects (email, audit)
 always go through BullMQ so retries and dead-letter routing are uniform.

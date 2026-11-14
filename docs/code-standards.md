@@ -24,18 +24,19 @@ Pino logs are structured JSON, correlated with `X-Request-Id`, and automatically
 The status is part of the API contract — clients branch on it. Pick by what the caller can _do_
 about the answer, not by what is nearest to hand. `400` and `500` are not defaults.
 
-| Situation                                                                                           | Status | How                                                            |
-| --------------------------------------------------------------------------------------------------- | ------ | -------------------------------------------------------------- |
-| Request is malformed — bad JSON, an opaque cursor/token that will not decode, an unparseable header | `400`  | `DomainException({ kind: 'malformed' })`                       |
-| Body or query failed `class-validator`                                                              | `422`  | Nothing — `ProblemDetailsValidationPipe` owns it               |
-| Request understood, but a domain rule says no, or the state it references violates policy           | `422`  | `DomainException({ kind: 'validation' })` (its default)        |
-| No session, or the session expired — re-authenticating would fix it                                 | `401`  | `UnauthorizedException`                                        |
-| Session is valid, but this principal may not do this — wrong role, deactivated/banned account       | `403`  | `ForbiddenException`                                           |
-| Resource does not exist — or exists, but the caller must not learn that it does                     | `404`  | `DomainException({ kind: 'not_found' })` / `NotFoundException` |
-| State conflict a retry could resolve — duplicate key, concurrent update, work still in flight       | `409`  | `DomainException({ kind: 'conflict', permanent: false })`      |
-| The **request body itself** is over the size limit                                                  | `413`  | Fastify body limit — never hand-rolled                         |
-| Rate limit hit                                                                                      | `429`  | `@fastify/rate-limit` / `ThrottlerGuard`                       |
-| The server broke — DB down, S3 unreachable, a bug                                                   | `500`  | `InternalServerErrorException`, with no specific `code`        |
+| Situation                                                                                           | Status | How                                                                                          |
+| --------------------------------------------------------------------------------------------------- | ------ | -------------------------------------------------------------------------------------------- |
+| Request is malformed — bad JSON, an opaque cursor/token that will not decode, an unparseable header | `400`  | `DomainException({ kind: 'malformed' })`                                                     |
+| Body or query failed `class-validator`                                                              | `422`  | Nothing — `ProblemDetailsValidationPipe` owns it                                             |
+| Request understood, but a domain rule says no, or the state it references violates policy           | `422`  | `DomainException({ kind: 'validation' })` (its default)                                      |
+| No session, or the session expired — re-authenticating would fix it                                 | `401`  | `UnauthorizedException`                                                                      |
+| Session is valid, but this principal may not do this — wrong role, deactivated/banned account       | `403`  | `ForbiddenException`                                                                         |
+| Resource does not exist — or exists, but the caller must not learn that it does                     | `404`  | `DomainException({ kind: 'not_found' })` / `NotFoundException`                               |
+| State conflict a retry could resolve — duplicate key, concurrent update, work still in flight       | `409`  | `DomainException({ kind: 'conflict' })` (use `permanent: false` only when a retry could win) |
+| The **request body itself** is over the size limit                                                  | `413`  | Fastify body limit — never hand-rolled                                                       |
+| Rate limit hit                                                                                      | `429`  | `@fastify/rate-limit` / `ThrottlerGuard`                                                     |
+| A downstream dependency is unreachable or unhealthy (DB, S3, authorization engine)                  | `503`  | `DomainException({ kind: 'unavailable' })` — retryable                                       |
+| The server broke for an unknown reason                                                              | `500`  | `InternalServerErrorException`, with no specific `code`                                      |
 
 The three distinctions that actually get chosen wrong:
 
@@ -263,24 +264,7 @@ describe('CreateUserHandler', () => {
 
 ## Comments
 
-**Only WHY comments.** Remove WHAT narration — code reads for itself.
-
-```typescript
-// DO: Why
-// Retry only transient errors; permanent constraint violations must fail immediately
-if (error.code === 'P2002') {
-  // Unique constraint
-  throw error;
-}
-
-// DON'T: What
-// Check if error code is P2002
-if (error.code === 'P2002') {
-  throw error;
-}
-```
-
-Never reference task IDs, callers, or "added for X" — those belong in PR descriptions.
+**Zero comments in new code.** Not "few" — zero, including JSDoc and `TODO`. Meaning is carried by naming, small functions, explicit types, and tests. A decision that cannot be expressed that way belongs in `docs/adr/`. Pre-existing comments stay; never run a comment-stripping sweep as a side effect.
 
 ## Email Job Idempotency
 
@@ -331,23 +315,23 @@ bypass the Nest pipeline and are unaffected.
 
 ## Read Replica Routing
 
-`PrismaService` exposes two clients: `db` (primary write) and `dbRead` (replica
-or alias to `db` when `DATABASE_REPLICA_URL` is unset).
+Repositories resolve their client through the transaction-aware accessors on
+`PrismaService`: `writeTarget()` (primary, or the ambient transaction when one is
+open) and `readTarget()` (replica when configured, otherwise the primary). Never
+call `prisma.db` / `prisma.dbRead` directly from a repository — a direct client
+bypasses the AsyncLocalStorage transaction and silently loses outbox atomicity.
 
 **Rules:**
 
-- `findMany` / `count` / `aggregate` for list endpoints **MUST** use
-  `prisma.dbRead`. These reads tolerate the typical 10–50 ms replication lag.
-- Single-row PK/UK lookups (`findUnique`/`findFirst` by id or natural key)
-  **MUST** use `prisma.db`. A request that writes then reads the same row on
-  the same handler (post-signup → `/users/me`) is the rule, not the exception
-  — replica lag would surface as 404. Point-lookup cost on primary is
-  negligible.
-- `exists`-style pre-checks before a write may use `prisma.dbRead`: a
+- List/aggregate reads **SHOULD** use `readTarget()`; they tolerate the typical
+  10–50 ms replication lag.
+- Single-row PK/UK lookups that a request may read immediately after its own
+  write **MUST** use `writeTarget()` — replica lag would surface as 404.
+- `exists`-style pre-checks before a write may use `readTarget()`: a
   false-negative on lag is safe because the unique constraint enforces
   correctness at write time.
-- Better Auth, outbox relay, and interactive transactions are permanently
-  bound to `prisma.db` — do not change these call sites.
+- Better Auth, the outbox relay, and interactive transactions are permanently
+  bound to the primary.
 
 ## Production Quality
 

@@ -198,3 +198,8 @@ unbounded accumulation.
   queueing work it can't serve.
 - **Compression** — `@fastify/compress` gzips JSON/GraphQL responses over 1 KB.
 - **Rate limiting** — two-tier `@fastify/rate-limit` on `/api/auth/*` (see `docs/security.md`).
+
+## Sentry and OpenTelemetry
+
+When both OTEL_ENABLED=true and Sentry tracing are enabled, two independent tracing pipelines run and produce unrelated trace ids. The supported posture is errors-only Sentry alongside OTel: set SENTRY_TRACES_SAMPLE_RATE=0 in that deployment. A boot warning is printed when the conflicting configuration is detected. Sentry errors still correlate through the \
+equestId\ tag every capture site adds.

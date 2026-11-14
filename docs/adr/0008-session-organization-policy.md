@@ -1,6 +1,6 @@
 # ADR-0008: Session organization provisioning belongs to Organizations
 
-- **Status**: Proposed
+- **Status**: Accepted
 - **Date**: 2026-09-19
 
 ## Context

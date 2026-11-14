@@ -109,13 +109,13 @@ SyntaxError: The requested module 'js-yaml' does not provide an export named 'de
 
 Cause: orval's ESM config bundle does `import yaml from "js-yaml"` (a default import).
 `js-yaml@5` is pure ESM and dropped the default export, so the import fails. The `js-yaml`
-version is controlled by the `pnpm.overrides` entry in `package.json`. When that override was
-`">=4.2.0"` it floated up to `js-yaml@5` on any lockfile regeneration (e.g. a Dependabot bump),
-silently breaking codegen — the orval version was a red herring, every orval release broke
-once js-yaml floated to v5.
+version is controlled by the `overrides` entry in `pnpm-workspace.yaml` (not `package.json`).
+When that override was `">=4.2.0"` it floated up to `js-yaml@5` on any lockfile regeneration
+(e.g. a Dependabot bump), silently breaking codegen — the orval version was a red herring,
+every orval release broke once js-yaml floated to v5.
 
-Resolution: keep the override capped at v4 — `"js-yaml": "^4.2.0"`. It stays there until orval
-switches to a named `js-yaml` import; there is no reason to relax it.
+Resolution: keep the override capped at v4 — `"js-yaml": ">=4.3.2 <5"` in `pnpm-workspace.yaml`.
+It stays there until orval switches to a named `js-yaml` import; there is no reason to relax it.
 
 ### Dependabot proposes `typescript` 7.x (major) — why it is ignored
 

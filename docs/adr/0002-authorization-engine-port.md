@@ -44,7 +44,7 @@ adapter is PBAC on Postgres. The port is shaped so a ReBAC adapter is a drop-in.
 ### 1. A neutral permission catalog
 
 Permissions are `${ResourceType}:${Action}` constants declared in
-`libs/contracts` — a published contract, like `DOMAIN_EVENTS` and `ERROR_CODES`.
+`libs/shared` and re-exported through `libs/contracts` — a published contract, like `DOMAIN_EVENTS` and `ERROR_CODES`.
 Never an ad-hoc string: the value is persisted in role definitions that outlive
 any deploy, and each adapter maps the catalog to its own vocabulary (PBAC → a
 permission row; ReBAC → a relation on an object type).
@@ -119,10 +119,13 @@ whether `ResourceRef.parent` is understood natively.
 
 ### 3. `AccessFilter` is applied by one shared helper
 
-`applyAccessFilter(baseWhere, filter)` lives in `libs/infra/database` and handles
+`applyAccessFilter(baseWhere, filter)` lives in `libs/core` and handles
 all four branches. Repositories call it; they never branch on `kind` themselves.
 This is what makes the swap mechanical: on the day `filter()` starts returning
 `ids`, exactly one function changes behaviour and every list endpoint follows.
+Today the helper is wired only in the conformance suite; list handlers scope by
+the session-derived organization id directly. Wiring the remaining handlers
+through the helper is the implementation follow-up this ADR still owes.
 
 `truncated: true` means the engine hit `maxEnumeratedObjects` and the answer is
 incomplete. It MUST surface as a `DomainException` (kind `conflict`), never as a

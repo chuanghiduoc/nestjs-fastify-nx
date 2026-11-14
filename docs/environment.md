@@ -75,7 +75,7 @@ Copy `.env.example` to `.env` and fill in the values.
 short-lived (5 min) S3 presigned-POST policy, upload the bytes browser→S3
 directly, then call `POST /api/v1/upload/confirm` so the server HEADs the
 object and verifies size + MIME via magic-byte detection
-(`libs/modules/upload/src/presentation/controllers/file-signature.ts`). The
+(`libs/shared/src/lib/file-signature.ts`). The
 allow-list is hard-coded to `image/jpeg`, `image/png`, `image/gif`,
 `image/webp`, `application/pdf`. Both the multipart parser and the presign
 policy honour `UPLOAD_MAX_FILE_BYTES` so the two layers reject at the same
@@ -178,7 +178,7 @@ Optional. Each provider activates only when **both** its `*_CLIENT_ID` and `*_CL
 ## Rate Limiting & Request Body Limits
 
 Two-tier auth rate limit (Auth0/Cognito pattern). STRICT bucket guards
-credential endpoints (`sign-in`, `sign-up`, `forget-password`, `reset-password`)
+credential endpoints (`sign-in/email`, `sign-up/email`, `request-password-reset`, `reset-password`)
 keyed by IP + email; LOOSE bucket guards session ops (`sign-out`, `get-session`,
 `list-sessions`, …) keyed by IP only. Both are enforced by `@fastify/rate-limit`
 because `reply.hijack()` bypasses the NestJS ThrottlerGuard.
@@ -309,7 +309,7 @@ few seconds. If that Redis is unreachable the surface fails closed with `503`.
 | `SWARM_STACK_NAME`               | `app`                                    | No       | Stack namespace used by `scripts/swarm-local-test.sh`; independent from the Compose project name                                                                                 |
 | `PROD_STARTUP_TIMEOUT_SECONDS`   | `120`                                    | No       | Maximum time `build-prod.sh` waits for the production stack to become healthy                                                                                                    |
 | `ENABLE_METRICS`                 | `false`                                  | No       | Expose `/metrics` for Prometheus (excluded from `api/v1` prefix)                                                                                                                 |
-| `METRICS_ALLOW_CIDRS`            | —                                        | No       | Comma-separated CIDR ranges allowed to hit `/metrics` (empty=closed)                                                                                                             |
+| `METRICS_ALLOW_CIDRS`            | —                                        | No       | Comma-separated CIDR ranges allowed to hit `/metrics` (empty = loopback only)                                                                                                    |
 | `OTEL_ENABLED`                   | `false`                                  | No       | Bootstrap the OpenTelemetry SDK                                                                                                                                                  |
 | `OTEL_SERVICE_NAME`              | `nestjs-fastify-api`                     | No       | Reported service name                                                                                                                                                            |
 | `OTEL_SERVICE_NAMESPACE`         | `app`                                    | No       | Reported service namespace                                                                                                                                                       |

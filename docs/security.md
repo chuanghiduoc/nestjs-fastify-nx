@@ -276,3 +276,11 @@ Per-service Dockerfile properties relied on by the scanners above:
   removing one binary and its CVE surface.
 - OCI labels (`org.opencontainers.image.*`) populated for registry, scanner,
   and policy-engine consumption.
+
+## Session revocation windows
+
+- Password reset revokes every session (
+  evokeSessionsOnPasswordReset: true); password change forces
+  evokeOtherSessions server-side, so the SPA cannot forget it.
+- The signed session cookie cache is 60 seconds. /api/v1/* and WebSocket revalidation always read the session row, so revocation there is immediate; /api/auth/organization/* may honour a cached cookie for up to 60 seconds.
+- There is no server-side concurrent-session cap. Users can list and revoke their own devices via /api/v1/sessions; a cap is a product decision, not a security invariant.

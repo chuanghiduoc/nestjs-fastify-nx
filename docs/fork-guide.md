@@ -137,7 +137,7 @@ query {
 }
 ```
 
-The `users(...)` query requires the `ADMIN` role. Introspection is disabled in
+The `users(...)` query requires the `member:read` organization permission. Introspection is disabled in
 production.
 
 ### WebSocket

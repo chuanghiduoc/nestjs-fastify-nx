@@ -12,39 +12,46 @@ backend modules and generated clients.
 import {
   ListResponseDto,
   CursorPaginationDto,
+  PaginationDto,
   toListResponse,
   toCursorListResponse,
-  PaginationDto,
-  PageMetaDto,
-  PageDto,
+  toUnpaginatedListResponse,
+  invalidCursorProblem,
+  fieldProblem,
   ProblemDetailsDto,
   ValidationProblemDetailsDto,
   ValidationErrorItemDto,
   ERROR_CODES,
+  ERROR_CATALOG_ENTRIES,
   errorTypeUrl,
   type ErrorCode,
+  I18N_KEYS,
+  VALIDATOR_CODES,
   ApiCommonErrors,
   type CommonErrorsOptions,
   ApiPaginatedResponse,
+  ApiUnpaginatedListResponse,
 } from '@nestjs-fastify-nx/contracts';
 ```
 
 Cursor pagination is the default for resource lists; the offset DTOs exist for the rare screen that
 genuinely needs jump-to-page.
 
-| Export                                              | Purpose                                                                                   |
-| --------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| `CursorPaginationDto`                               | Cursor request DTO (`limit`, `startingAfter`) — the default for lists                     |
-| `ListResponseDto<T>`                                | Stripe-style flat envelope (`object: 'list'`, `url`, `data`, `hasMore`, `lastCursor?`, …) |
-| `toCursorListResponse` / `toListResponse`           | Build that envelope from a cursor page / an offset page                                   |
-| `PaginationDto`                                     | Offset request DTO (`page`, `pageSize`, capped at 100)                                    |
-| `PageMetaDto` / `PageDto<T>`                        | Offset metadata + envelope (`items`, `meta`)                                              |
-| `ProblemDetailsDto` / `ValidationProblemDetailsDto` | RFC 9457 error bodies — the shape the global filter emits                                 |
-| `ValidationErrorItemDto`                            | One entry of the flat `errors[]` array                                                    |
-| `ERROR_CODES` / `ErrorCode`                         | Stable snake_case `code` values clients branch on                                         |
-| `errorTypeUrl(code)`                                | RFC 9457 `type` URI for a code (`/errors/<kebab-code>`)                                   |
-| `ApiCommonErrors` / `CommonErrorsOptions`           | Documents the error responses a route can emit                                            |
-| `ApiPaginatedResponse`                              | Documents a `ListResponseDto<T>` 200                                                      |
+| Export                                                | Purpose                                                                                   |
+| ----------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `CursorPaginationDto`                                 | Cursor request DTO (`limit`, `startingAfter`) — the default for lists                     |
+| `ListResponseDto<T>`                                  | Stripe-style flat envelope (`object: 'list'`, `url`, `data`, `hasMore`, `lastCursor?`, …) |
+| `toCursorListResponse` / `toListResponse`             | Build that envelope from a cursor page / an offset page                                   |
+| `toUnpaginatedListResponse`                           | Flat envelope for bounded, non-paginated lists (`hasMore: false`, no offset members)      |
+| `PaginationDto`                                       | Offset request DTO (`page`, `pageSize`, capped at 100)                                    |
+| `ProblemDetailsDto` / `ValidationProblemDetailsDto`   | RFC 9457 error bodies — the shape the global filter emits                                 |
+| `ValidationErrorItemDto`                              | One entry of the flat `errors[]` array                                                    |
+| `invalidCursorProblem` / `fieldProblem`               | Builders for `malformed` cursors and field-level domain violations                        |
+| `ERROR_CODES` / `ErrorCode` / `ERROR_CATALOG_ENTRIES` | Stable snake_case `code` values + the served documentation catalog                        |
+| `errorTypeUrl(code)`                                  | RFC 9457 `type` URI for a code (`/errors/<kebab-code>`)                                   |
+| `I18N_KEYS` / `VALIDATOR_CODES`                       | Translation keys and class-validator code mapping                                         |
+| `ApiCommonErrors` / `CommonErrorsOptions`             | Documents the error responses a route can emit                                            |
+| `ApiPaginatedResponse` / `ApiUnpaginatedListResponse` | Documents a typed 200 for cursor or bounded lists                                         |
 
 The runtime helpers (`buildPageMeta`, `paginationSkip`, type aliases) live in
 [`@nestjs-fastify-nx/shared`](../shared/README.md). Use this lib when you need

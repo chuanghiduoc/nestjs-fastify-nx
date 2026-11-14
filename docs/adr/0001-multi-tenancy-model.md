@@ -61,6 +61,28 @@ enabled, an absent policy is a denial.
 that creates it.** Partial coverage is a sequencing decision, not a standing
 exemption.
 
+### Documented exemptions
+
+Three tenant-owned tables deliberately do not carry RLS, each for a reason RLS
+would break rather than protect:
+
+- `api_keys` — machine authentication resolves `keyHash` before any organization
+  context exists. The request that presents a key has no session tenant to bind,
+  so an RLS policy would make every machine request return zero rows. Isolation
+  rests on the `keyHash` unique lookup plus the guard's scope ceiling (ADR-0007).
+- `notifications` — the outbox relay writes notification rows from the scheduler,
+  which runs `BYPASSRLS` and has no request tenant; the API reads are scoped by
+  `(organizationId, userId)` in every query. Application-level scoping is the
+  enforced invariant and is covered by integration tests.
+- `feature_flags` — evaluated on the API request path where tenant context exists,
+  but also by machine API keys and future in-process consumers. The repository
+  scopes every method by `organizationId`; enabling RLS would require binding the
+  tenant on every evaluation path, including machine callers whose organization is
+  resolved from the key rather than CLS.
+
+Any new tenant-owned table is still expected to enable RLS unless it joins this
+list with an argued reason in a follow-up ADR.
+
 ### Postgres roles, because RLS must not break system work
 
 The split is per runtime rather than the two abstract roles this ADR originally

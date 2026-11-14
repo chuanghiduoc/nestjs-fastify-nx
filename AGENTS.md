@@ -129,9 +129,9 @@ pnpm gen:module <name> | gen:composition | gen:lib | gen:app | rm:project
 2. **Zero comments in new code.** Not "few" — zero, including JSDoc and TODO. Meaning is carried by naming, small functions, explicit types and tests. Anything that cannot be is a _decision_ and belongs in `docs/adr/`. Pre-existing comments stay; never run a comment-stripping sweep as a side effect.
 3. **No mocks for DB tests** — integration tests hit real Postgres via Testcontainers (`libs/testing`).
 4. **e2e lives at `apps/api/e2e/`**, never `apps/api/test/`. Use `createTestApp()`.
-5. **Conventional Commits** (lefthook + commitlint): `feat|fix|chore|test|docs|refactor|ci|perf|build|revert`, subject lowercase, ≤100 chars.
+5. **Conventional Commits** (lefthook + commitlint): `feat|fix|chore|test|docs|refactor|ci|perf|build|revert|style`, subject lowercase, ≤100 chars.
 6. **Validation is declarative.** Pipes and decorators, not hand-rolled `if`/regex. Id path params MUST be `@Param('id', new ParseUUIDPipe({ version: '7' }))` — a bare `ParseUUIDPipe` accepts any version. Read the caller via `@CurrentUser() user: AuthenticatedSession` from `@nestjs-fastify-nx/infra-auth` — never `@Req() req: FastifyRequest & { user }`, and never a per-module copy of that decorator. Reserve `if`/`else` for authorization logic no decorator can express.
-7. **Pre-commit gate (mandatory)**: `pnpm nx affected -t lint test build typecheck --base=origin/main` — `origin/main`, not `main`, or `affected` silently returns nothing. Changes under `apps/api/` also need `pnpm nx run api:e2e`. Coverage thresholds are 60% for every project via `vitest.shared.ts`.
+7. **Pre-commit gate (mandatory)**: `pnpm nx affected -t lint test build typecheck --base=origin/main` — `origin/main`, not `main`, or `affected` silently returns nothing. Changes under `apps/api/` also need `pnpm nx run api:e2e`. Locally, lefthook runs lint+typecheck on staged files and the same origin/main-scoped lint+typecheck on pre-push; the full gate (test/build/e2e) runs in CI. Coverage thresholds are 60% for every project via `vitest.shared.ts`; the only carve-out is `libs/testing`, whose Testcontainers harness cannot be unit-tested (its helpers and `DatabaseCleaner` are covered).
 8. **Authorization has two axes that must not be mixed.** `User.role` (`ADMIN`/`USER`) + `@Roles()` is the _provider's own staff_, for back-office surfaces only. Every tenant-facing endpoint uses `@RequirePermission()` + `PermissionGuard` instead. Putting `@Roles('ADMIN')` on a tenant endpoint locks out the org owner **and** exposes other tenants. Two engines (Better Auth's plugin for `/api/auth/organization/*`, `PostgresPbacAdapter` for `/api/v1/*`) must stay in step — details in `docs/agent-gotchas.md`.
 
 ### API contract (fixed)
@@ -140,15 +140,16 @@ Successful 2xx returns the resource **directly** — no `{ data, meta }` envelop
 
 **Throw `DomainException` and pick a `kind`, never a status** — the same handlers run under REST, GraphQL and the scheduler, so only the transport assigns one. Never `extends HttpException` in `libs/core`, a domain entity, or an application handler.
 
-| `kind`       | Status | Throw when                                                                  |
-| ------------ | ------ | --------------------------------------------------------------------------- |
-| `malformed`  | 400    | Input could not be parsed at all                                            |
-| `validation` | 422    | Parsed but broke a fixable rule — the default                               |
-| `not_found`  | 404    | Absent, or the caller must not learn it exists                              |
-| `conflict`   | 409    | Duplicate key, stale version, work in flight — pair with `permanent: false` |
-| `forbidden`  | 403    | Authenticated but not permitted                                             |
+| `kind`        | Status | Throw when                                                        |
+| ------------- | ------ | ----------------------------------------------------------------- |
+| `malformed`   | 400    | Input could not be parsed at all                                  |
+| `validation`  | 422    | Parsed but broke a fixable rule — the default                     |
+| `not_found`   | 404    | Absent, or the caller must not learn it exists                    |
+| `conflict`    | 409    | Duplicate key, stale version, work in flight                      |
+| `forbidden`   | 403    | Authenticated but not permitted                                   |
+| `unavailable` | 503    | A downstream dependency is unreachable; always `permanent: false` |
 
-`permanent` defaults to **true**: a rejected rule never becomes valid by waiting, so the outbox parks the row instead of burning retries.
+`permanent` defaults to **true**: a rejected rule never becomes valid by waiting, so the outbox parks the row instead of burning retries. Set it to `false` only for a conflict a later attempt could genuinely win.
 
 - **Pagination**: cursor is the default (`?limit=&startingAfter=`). Offset is allowed only for true jump-to-page UX — document why on the controller. Cursor MUST be `base64url(${sortField.toISOString()}:${id})`, never the bare id, or rows with equal timestamps duplicate across pages.
 - **`totalCount`**: omit it when `COUNT(*)` would be a hot path. `undefined` _is_ the "unknown" signal — never `-1`.
@@ -161,7 +162,7 @@ Full guides: `docs/error-handling.md`, `docs/code-standards.md`.
 
 ## Documentation map
 
-`docs/agent-gotchas.md` (read first) · `architecture.md` · `getting-started.md` · `creating-a-module.md` · `domain-module-anatomy.md` · `environment.md` · `deployment.md` · `security.md` · `observability.md` + `observability-guide.md` · `troubleshooting.md` · `runbook.md` · `code-standards.md` · `error-handling.md` · `scaling-to-services.md` · `adr/` · `CONTRIBUTING.md`
+`docs/agent-gotchas.md` (read first) · `architecture.md` · `getting-started.md` · `creating-a-module.md` · `domain-module-anatomy.md` · `environment.md` · `deployment.md` · `security.md` · `authentication-flow.md` · `fork-guide.md` · `observability.md` + `observability-guide.md` · `troubleshooting.md` · `runbook.md` · `code-standards.md` · `error-handling.md` · `scaling-to-services.md` · `adr/` · `CONTRIBUTING.md` (repo root)
 
 ## Knowledge graph (code-review-graph MCP)
 
