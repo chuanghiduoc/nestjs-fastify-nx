@@ -36,6 +36,8 @@ export interface IdempotencyContext {
   // `contentType` preserves replay fidelity for non-JSON responses (@Header('Content-Type', ...));
   // omit it to default to application/json. Best-effort: no-ops if the pending lock already expired.
   completeLate(status: number, value: unknown, contentType?: string): Promise<void>;
+  // A response that must never enter the replay cache (it carries a credential shown exactly once).
+  secretBearing: boolean;
 }
 
 interface RequestWithIdempotency extends FastifyRequest {
@@ -44,6 +46,12 @@ interface RequestWithIdempotency extends FastifyRequest {
 
 function sha256(input: string): string {
   return createHash('sha256').update(input).digest('hex');
+}
+
+const SECRET_BEARING_REQUESTS = new Set(['POST /api/v1/api-keys']);
+
+function isSecretBearing(req: FastifyRequest): boolean {
+  return SECRET_BEARING_REQUESTS.has(`${req.method} ${req.url.split('?')[0]}`);
 }
 
 function canonicalize(value: unknown): unknown {
@@ -155,8 +163,10 @@ export function registerIdempotency(
         storeKey,
         fingerprint,
         ownerToken,
+        secretBearing: isSecretBearing(req),
         completeLate: async (status, value, contentType) => {
           if (status < 200 || status >= 300) return;
+          if (isSecretBearing(req)) return;
           // Same capture contract as the onSend hook (replayableBody): undefined => non-capturable
           // (Buffer/stream) — leave the record pending until TTL rather than store a wrong body.
           const body = serializeReplayBody(value);
@@ -273,6 +283,12 @@ async function completeSuccessRecord(
     // the record pending so a duplicate gets 409 rather than re-executing the mutation.
     reportError(
       `idempotency cannot replay a non-text ${status} body; leaving key pending until TTL`,
+    );
+    return;
+  }
+  if (ctx.secretBearing) {
+    reportError(
+      'idempotency response carries a one-shot credential; leaving key pending until TTL',
     );
     return;
   }

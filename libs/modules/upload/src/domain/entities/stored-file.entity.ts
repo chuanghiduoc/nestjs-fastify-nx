@@ -114,7 +114,7 @@ export function assertSizeWithinLimit(size: number, maxBytes: number): void {
 export function assertMagicBytesMatch(
   head: Buffer,
   declaredContentType: string,
-  key: string,
+  _key: string,
 ): void {
   const detected = detectFileType(head);
 
@@ -126,8 +126,7 @@ export function assertMagicBytesMatch(
         violationCode: 'magic_bytes_unknown',
         messageKey: I18N_KEYS.errors.upload.magic_bytes_unknown,
         path: 'key',
-        message: `Object at "${key}" has no recognized binary signature`,
-        args: { key },
+        message: 'Object has no recognized binary signature',
       }),
     );
   }
@@ -140,8 +139,7 @@ export function assertMagicBytesMatch(
         violationCode: 'magic_bytes_mismatch',
         messageKey: I18N_KEYS.errors.upload.magic_bytes_mismatch,
         path: 'key',
-        message: `Magic bytes indicate "${detected.mimeType}" but Content-Type is "${declaredContentType}"`,
-        args: { detected: detected.mimeType, declared: declaredContentType },
+        message: 'Magic bytes do not match the declared Content-Type',
       }),
     );
   }
@@ -153,7 +151,7 @@ export function assertOwnsSourceKey(sourceKey: string, userId: string): void {
   throw objectNotFound(sourceKey);
 }
 
-export function objectNotFound(key: string): DomainException {
+export function objectNotFound(_key: string): DomainException {
   return new DomainException(
     fieldProblem({
       kind: 'not_found',
@@ -162,8 +160,7 @@ export function objectNotFound(key: string): DomainException {
       violationCode: 'object_not_found',
       messageKey: I18N_KEYS.errors.upload.object_not_found,
       path: 'key',
-      message: `No object stored at "${key}"`,
-      args: { key },
+      message: 'No object stored at that key',
     }),
   );
 }

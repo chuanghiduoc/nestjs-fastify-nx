@@ -1,4 +1,5 @@
 export { generateId, generateCorrelationId } from './lib/id';
+export { ACCESS_FILTER_TRUNCATED_CODE } from './lib/access-filter-code';
 export {
   buildPageMeta,
   paginationSkip,

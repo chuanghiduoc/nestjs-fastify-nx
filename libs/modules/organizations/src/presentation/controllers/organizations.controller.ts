@@ -10,7 +10,6 @@ import {
 import { RequirePermission } from '@nestjs-fastify-nx/infra-authorization';
 import { PERMISSIONS } from '@nestjs-fastify-nx/shared';
 import { GetCurrentOrganizationQuery } from '../../application/queries/get-current-organization/get-current-organization.query';
-import type { OrganizationDto } from '../../application/dto/organization-role.dto';
 import { OrganizationResponseDto } from '../dto/organization-role.dto';
 
 @ApiTags('organizations')
@@ -28,7 +27,7 @@ export class OrganizationsController {
   })
   @ApiOkResponse({ type: OrganizationResponseDto, description: 'Active organization.' })
   @ApiCommonErrors({ notFound: true })
-  current(@CurrentUser() user: AuthenticatedSession): Promise<OrganizationDto> {
+  current(@CurrentUser() user: AuthenticatedSession): Promise<OrganizationResponseDto> {
     return this.queryBus.execute(new GetCurrentOrganizationQuery(requireOrganizationId(user)));
   }
 }

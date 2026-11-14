@@ -1,11 +1,12 @@
+import { ACCESS_FILTER_TRUNCATED_CODE } from '@nestjs-fastify-nx/shared';
 import { DomainException } from '../errors/domain.exception';
 import type { AccessFilter } from './authorization.port';
 
-export const ACCESS_FILTER_TRUNCATED_CODE = 'authorization_result_truncated';
+export { ACCESS_FILTER_TRUNCATED_CODE };
 
 export function accessFilterTruncated(): DomainException {
   return new DomainException({
-    kind: 'conflict',
+    kind: 'unavailable',
     code: ACCESS_FILTER_TRUNCATED_CODE,
     title: 'Authorization result truncated',
     permanent: false,

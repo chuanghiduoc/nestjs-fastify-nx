@@ -35,7 +35,6 @@ import { ListOrganizationRolesQuery } from '../../application/queries/list-organ
 import { CreateOrganizationRoleCommand } from '../../application/commands/create-organization-role/create-organization-role.command';
 import { UpdateOrganizationRoleCommand } from '../../application/commands/update-organization-role/update-organization-role.command';
 import { DeleteOrganizationRoleCommand } from '../../application/commands/delete-organization-role/delete-organization-role.command';
-import type { OrganizationRoleDto } from '../../application/dto/organization-role.dto';
 import {
   CreateOrganizationRoleDto,
   OrganizationRoleResponseDto,
@@ -64,7 +63,7 @@ export class OrganizationRolesController {
   @ApiCommonErrors()
   async list(
     @CurrentUser() user: AuthenticatedSession,
-  ): Promise<ListResponseDto<OrganizationRoleDto>> {
+  ): Promise<ListResponseDto<OrganizationRoleResponseDto>> {
     const result = await this.queryBus.execute(
       new ListOrganizationRolesQuery(requireOrganizationId(user)),
     );
@@ -84,7 +83,7 @@ export class OrganizationRolesController {
   create(
     @CurrentUser() user: AuthenticatedSession,
     @Body() dto: CreateOrganizationRoleDto,
-  ): Promise<OrganizationRoleDto> {
+  ): Promise<OrganizationRoleResponseDto> {
     return this.commandBus.execute(
       new CreateOrganizationRoleCommand({
         organizationId: requireOrganizationId(user),
@@ -110,7 +109,7 @@ export class OrganizationRolesController {
     @CurrentUser() user: AuthenticatedSession,
     @Param('role') role: string,
     @Body() dto: UpdateOrganizationRoleDto,
-  ): Promise<OrganizationRoleDto> {
+  ): Promise<OrganizationRoleResponseDto> {
     return this.commandBus.execute(
       new UpdateOrganizationRoleCommand({
         organizationId: requireOrganizationId(user),

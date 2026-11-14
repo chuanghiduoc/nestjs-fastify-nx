@@ -146,4 +146,10 @@ describe('decideWithoutOrganization', () => {
       { allowed: false, reason: DENIAL_REASONS.permissionNotGranted },
     ]);
   });
+
+  it('keeps MEMBERSHIP_INDEPENDENT_PERMISSIONS in step with the scope taxonomy', () => {
+    const derived = ALL_PERMISSIONS.filter((permission) => !requiresMembership(permission));
+
+    expect(new Set(MEMBERSHIP_INDEPENDENT_PERMISSIONS)).toEqual(new Set(derived));
+  });
 });

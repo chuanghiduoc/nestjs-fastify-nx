@@ -11,7 +11,7 @@ export class PrismaOrganizationRepository implements OrganizationRepositoryPort 
   constructor(private readonly prisma: PrismaService) {}
 
   async findSummary(organizationId: string): Promise<OrganizationSummary | null> {
-    const row = await this.prisma.readTarget().organization.findUnique({
+    const row = await this.prisma.writeTarget().organization.findUnique({
       where: { id: organizationId },
       include: {
         _count: {

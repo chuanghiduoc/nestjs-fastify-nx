@@ -1,4 +1,5 @@
-export { AuditLogModule, AuditLogListenersModule } from './audit-log.module';
+export { AuditLogModule } from './audit-log.module';
+export { AuditLogListenersModule } from './audit-log-listeners.module';
 
 export {
   ListAuditLogsCursorQuery,

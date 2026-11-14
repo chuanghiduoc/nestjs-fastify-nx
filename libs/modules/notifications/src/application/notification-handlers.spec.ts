@@ -217,20 +217,24 @@ describe('MembershipNotificationListener', () => {
     );
   });
 
-  it('ignores an event whose payload carries no member', async () => {
+  it('rejects an event whose payload carries no member instead of dropping it silently', async () => {
     const commandBus = { execute: vi.fn() } as unknown as CommandBus;
 
-    await new MembershipNotificationListener(commandBus).handleMemberAdded(event({ payload: {} }));
+    await expect(
+      new MembershipNotificationListener(commandBus).handleMemberAdded(event({ payload: {} })),
+    ).rejects.toMatchObject({ permanent: true });
 
     expect(commandBus.execute).not.toHaveBeenCalled();
   });
 
-  it('ignores an event with no organization context', async () => {
+  it('rejects an event with no organization context instead of dropping it silently', async () => {
     const commandBus = { execute: vi.fn() } as unknown as CommandBus;
 
-    await new MembershipNotificationListener(commandBus).handleMemberAdded(
-      event({ organizationId: undefined }),
-    );
+    await expect(
+      new MembershipNotificationListener(commandBus).handleMemberAdded(
+        event({ organizationId: undefined }),
+      ),
+    ).rejects.toMatchObject({ permanent: true });
 
     expect(commandBus.execute).not.toHaveBeenCalled();
   });

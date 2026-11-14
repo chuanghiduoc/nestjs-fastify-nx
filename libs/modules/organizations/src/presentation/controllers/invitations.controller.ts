@@ -31,7 +31,6 @@ import { RequirePermission } from '@nestjs-fastify-nx/infra-authorization';
 import { PERMISSIONS } from '@nestjs-fastify-nx/shared';
 import { ListInvitationsQuery } from '../../application/queries/list-invitations/list-invitations.query';
 import { CancelInvitationCommand } from '../../application/commands/cancel-invitation/cancel-invitation.command';
-import type { InvitationDto } from '../../application/dto/organization-role.dto';
 import { InvitationResponseDto, ListInvitationsFilterDto } from '../dto/organization-role.dto';
 
 const INVITATIONS_PATH = '/api/v1/organizations/current/invitations';
@@ -59,7 +58,7 @@ export class InvitationsController {
   async list(
     @CurrentUser() user: AuthenticatedSession,
     @Query() filter: ListInvitationsFilterDto,
-  ): Promise<ListResponseDto<InvitationDto>> {
+  ): Promise<ListResponseDto<InvitationResponseDto>> {
     const result = await this.queryBus.execute(
       new ListInvitationsQuery(requireOrganizationId(user), filter.limit, {
         startingAfter: filter.startingAfter,

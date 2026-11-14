@@ -10,7 +10,12 @@ export class ListSessionsFilterDto extends CursorPaginationDto {
     default: true,
   })
   @IsOptional()
-  @Transform(({ value }) => value !== false && value !== 'false')
+  @Transform(({ value }): unknown => {
+    if (value === undefined) return undefined;
+    if (value === true || value === 'true') return true;
+    if (value === false || value === 'false') return false;
+    return value as unknown;
+  })
   @IsBoolean()
   activeOnly?: boolean;
 }

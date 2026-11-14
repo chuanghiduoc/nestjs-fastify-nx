@@ -18,16 +18,5 @@ const providers = [
   imports: [DatabaseModule, MessagingModule],
   controllers: [AuditLogsController],
   providers: [...providers, ListAuditLogsCursorHandler],
-  exports: [AUDIT_LOG_REPOSITORY_PORT],
 })
 export class AuditLogModule {}
-
-// Listener-only slice for hosts that must not load the HTTP surface (worker, scheduler): the
-// outbox relay republishes domain events in those processes, and the subscriber has to exist there
-// for the audit entry to be recorded at all.
-@Module({
-  imports: [DatabaseModule, MessagingModule],
-  providers,
-  exports: [AUDIT_LOG_REPOSITORY_PORT],
-})
-export class AuditLogListenersModule {}

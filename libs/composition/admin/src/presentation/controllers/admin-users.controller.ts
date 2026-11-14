@@ -18,7 +18,6 @@ import {
   ListUsersCursorFilterDto,
   ListUsersCursorQuery,
   UserListItemResponseDto,
-  type UserListItemDto,
 } from '@nestjs-fastify-nx/modules-users';
 
 const ADMIN_USERS_PATH = '/api/v1/admin/users';
@@ -47,7 +46,7 @@ export class AdminUsersController {
   async list(
     @CurrentUser() user: AuthenticatedSession,
     @Query() filter: ListUsersCursorFilterDto,
-  ): Promise<ListResponseDto<UserListItemDto>> {
+  ): Promise<ListResponseDto<UserListItemResponseDto>> {
     const result = await this.queryBus.execute(
       new ListUsersCursorQuery(requireOrganizationId(user), filter.limit, {
         startingAfter: filter.startingAfter,

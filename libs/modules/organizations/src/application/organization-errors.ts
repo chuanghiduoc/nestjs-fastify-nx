@@ -6,9 +6,7 @@ function notFound(path: string, code: string, message: string, messageKey: strin
 }
 
 function conflict(path: string, code: string, message: string, messageKey: string) {
-  return new DomainException(
-    fieldProblem({ kind: 'conflict', code, path, message, messageKey, permanent: false }),
-  );
+  return new DomainException(fieldProblem({ kind: 'conflict', code, path, message, messageKey }));
 }
 
 export const organizationNotFound = () =>

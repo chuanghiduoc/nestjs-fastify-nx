@@ -1,7 +1,11 @@
-import { Resolver, Query, Context, Args } from '@nestjs/graphql';
+import { Resolver, Query, Args } from '@nestjs/graphql';
 import { QueryBus } from '@nestjs/cqrs';
 import { isDomainException } from '@nestjs-fastify-nx/core';
-import { requireOrganizationId, type AuthenticatedSession } from '@nestjs-fastify-nx/infra-auth';
+import {
+  CurrentUser,
+  requireOrganizationId,
+  type AuthenticatedSession,
+} from '@nestjs-fastify-nx/infra-auth';
 import { RequirePermission } from '@nestjs-fastify-nx/infra-authorization';
 import { PERMISSIONS } from '@nestjs-fastify-nx/shared';
 import { ListUsersCursorQuery, GetUserProfileQuery } from '@nestjs-fastify-nx/modules-users';
@@ -19,9 +23,8 @@ export class UserResolver {
   // return null even for signed-in users). `nullable` exists ONLY for the deleted-account race handled
   // in the catch below; the `!userId` guard is defensive against the optional context type.
   @Query(() => UserType, { name: 'me', nullable: true })
-  async me(@Context() context: { req: { user?: AuthenticatedSession } }): Promise<UserType | null> {
-    const userId = context.req.user?.userId;
-    if (!userId) return null;
+  async me(@CurrentUser() user: AuthenticatedSession): Promise<UserType | null> {
+    const userId = user.userId;
 
     try {
       return await this.queryBus.execute(new GetUserProfileQuery(userId));
@@ -38,12 +41,9 @@ export class UserResolver {
   @Query(() => UserCursorPageType, { name: 'users' })
   @RequirePermission(PERMISSIONS.MEMBER_READ)
   async users(
-    @Context() context: { req: { user?: AuthenticatedSession } },
+    @CurrentUser() user: AuthenticatedSession,
     @Args() args: ListUsersCursorArgs,
   ): Promise<UserCursorPageType> {
-    const user = context.req.user;
-    if (!user) throw new Error('users query reached the resolver without a session');
-
     const result = await this.queryBus.execute(
       new ListUsersCursorQuery(requireOrganizationId(user), args.limit, {
         startingAfter: args.startingAfter,

@@ -58,8 +58,7 @@ describe('UserResolver', () => {
 
   describe('me', () => {
     it('returns user profile for authenticated request', async () => {
-      const ctx: { req: { user: AuthenticatedSession } } = { req: { user: mockSession } };
-      const result = await resolver.me(ctx);
+      const result = await resolver.me(mockSession);
       expect(result?.id).toBe('u1');
       expect(result?.email).toBe('test@example.com');
       expect(result?.name).toBe('Test User');
@@ -74,32 +73,22 @@ describe('UserResolver', () => {
           violations: [],
         }),
       );
-      const ctx: { req: { user: AuthenticatedSession } } = { req: { user: mockSession } };
-      const result = await resolver.me(ctx);
+      const result = await resolver.me(mockSession);
       expect(result).toBeNull();
     });
 
     it('rethrows non-404 errors from the query bus', async () => {
       execute.mockRejectedValueOnce(new Error('db down'));
-      const ctx: { req: { user: AuthenticatedSession } } = { req: { user: mockSession } };
-      await expect(resolver.me(ctx)).rejects.toThrow('db down');
-    });
-
-    it('returns null when no session userId', async () => {
-      const ctx = { req: { user: undefined } };
-      const result = await resolver.me(ctx as unknown as { req: { user?: AuthenticatedSession } });
-      expect(result).toBeNull();
+      await expect(resolver.me(mockSession)).rejects.toThrow('db down');
     });
   });
 
   describe('users', () => {
     const ORG_ID = '019dd1a5-9235-70db-8d57-54ef90300001';
-    const orgContext = {
-      req: { user: { userId: 'u1', organizationId: ORG_ID } },
-    } as unknown as { req: { user?: AuthenticatedSession } };
+    const orgSession: AuthenticatedSession = { ...mockSession, organizationId: ORG_ID };
 
     it('returns cursor-paginated users from the query bus', async () => {
-      const result = await resolver.users(orgContext, { limit: 20 });
+      const result = await resolver.users(orgSession, { limit: 20 });
       expect(result.data).toHaveLength(1);
       expect(result.data[0].id).toBe('u1');
       expect(result.hasMore).toBe(false);
@@ -109,7 +98,7 @@ describe('UserResolver', () => {
 
     it('passes startingAfter to the query', async () => {
       const cursor = 'some-cursor';
-      await resolver.users(orgContext, { limit: 10, startingAfter: cursor });
+      await resolver.users(orgSession, { limit: 10, startingAfter: cursor });
       expect(execute).toHaveBeenCalledWith(
         expect.objectContaining({ startingAfter: cursor, limit: 10 }),
       );
@@ -117,7 +106,7 @@ describe('UserResolver', () => {
 
     it('returns null lastCursor when result has no items', async () => {
       execute.mockResolvedValueOnce({ data: [], hasMore: false, lastCursor: null });
-      const result = await resolver.users(orgContext, { limit: 20 });
+      const result = await resolver.users(orgSession, { limit: 20 });
       expect(result.lastCursor).toBeNull();
       expect(result.data).toHaveLength(0);
     });
