@@ -71,6 +71,26 @@ updates:
         dependency-type: development
         update-types: [major]
 
+  - package-ecosystem: docker-compose
+    # Compose-pinned infrastructure images (postgres, redis, garage, mailpit, curl) are updated here;
+    # the `docker` ecosystem above only tracks the root Dockerfile.
+    directory: /docker
+    schedule:
+      interval: weekly
+      day: monday
+      time: '06:00'
+      timezone: Asia/Ho_Chi_Minh
+    open-pull-requests-limit: 2
+    cooldown:
+      default-days: 7
+    labels: [dependencies, docker]
+    commit-message:
+      prefix: chore(docker)
+      include: scope
+    groups:
+      compose-images:
+        patterns: ['*']
+
   - package-ecosystem: docker
     # Single multi-stage Dockerfile at the repo root builds all four app images.
     directory: /

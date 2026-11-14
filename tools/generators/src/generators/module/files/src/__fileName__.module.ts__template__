@@ -1,15 +1,14 @@
 import { Module } from '@nestjs/common';
+<% if (!isComposition) { %>import { Prisma<%= className %>Repository } from './infrastructure/repositories/prisma-<%= fileName %>.repository';
+import { <%= constantName %>_REPOSITORY } from './domain';<% } %>
 import { <%= className %>Controller } from './presentation/controllers/<%= fileName %>.controller';
-import { Prisma<%= className %>Repository } from './infrastructure/repositories/prisma-<%= fileName %>.repository';
-import { <%= constantName %>_REPOSITORY } from './domain';
 <% if (withCqrs) { %>import { Create<%= className %>Handler } from './application/commands/create-<%= fileName %>/create-<%= fileName %>.handler';
 <% } %>
 @Module({
   controllers: [<%= className %>Controller],
-  providers: [
-    { provide: <%= constantName %>_REPOSITORY, useClass: Prisma<%= className %>Repository },<% if (withCqrs) { %>
+  providers: [<% if (!isComposition) { %>
+    { provide: <%= constantName %>_REPOSITORY, useClass: Prisma<%= className %>Repository },<% } %><% if (withCqrs) { %>
     Create<%= className %>Handler,<% } %>
   ],
-  exports: [],
 })
 export class <%= className %>Module {}

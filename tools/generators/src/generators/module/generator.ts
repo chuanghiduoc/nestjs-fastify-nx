@@ -58,15 +58,26 @@ export async function moduleGenerator(tree: Tree, options: ModuleGeneratorSchema
   // bounded-context module, `@nestjs-fastify-nx/composition-admin` is a
   // cross-cutting aggregate. Keep name and path in lockstep.
   const importPath = `@nestjs-fastify-nx/${projectName}`;
+  const isComposition = rawDir === 'composition';
   generateFiles(tree, path.join(import.meta.dirname, 'files'), projectRoot, {
     ...moduleNames,
-    withCqrs,
+    withCqrs: withCqrs && !isComposition,
+    isComposition,
     projectName,
     importPath,
     projectRoot,
     offsetFromRoot: offset,
     template: '',
   });
+
+  if (isComposition) {
+    for (const layer of ['domain', 'application', 'infrastructure', 'testing']) {
+      tree.delete(path.join(projectRoot, 'src', layer));
+    }
+    tree.delete(path.join(projectRoot, 'src', `${moduleNames.fileName}-listeners.module.ts`));
+  } else if (!withCqrs) {
+    tree.delete(path.join(projectRoot, 'src', 'application', 'commands'));
+  }
 
   await formatFiles(tree);
 }

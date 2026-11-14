@@ -114,6 +114,30 @@ jobs:
   # builds the real multi-stage images and boots the full dev stack so those fail
   # here on the PR instead of at `release.yml` tag time. Supply-chain scanning
   # (Trivy/SBOM/Cosign) stays in release.yml — this gate is correctness only.
+  compose-config:
+    needs: main
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      # Compose-parse the production overlay (which docker-smoke never boots). Catches syntax,
+      # `!override` compatibility and env-file wiring before a real deployment does.
+      - name: Validate production compose overlay
+        env:
+          API_IMAGE: example.invalid/api:ci
+          WORKER_IMAGE: example.invalid/worker:ci
+          SCHEDULER_IMAGE: example.invalid/scheduler:ci
+          MIGRATION_IMAGE: example.invalid/migration:ci
+          POSTGRES_ADMIN_USER: postgres
+          POSTGRES_ADMIN_PASSWORD: ${{ github.run_id }}
+          GARAGE_ADMIN_TOKEN: ${{ github.run_id }}
+          GARAGE_RPC_SECRET: ${{ github.run_id }}
+        run: |
+          cp .env.example .env
+          touch .env.api .env.worker .env.scheduler .env.migration
+          docker compose -f docker/compose.yml -f docker/compose.prod.yml config -q
+
   docker-smoke:
     needs: main
     runs-on: ubuntu-latest
