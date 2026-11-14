@@ -18,6 +18,7 @@
  * defaults to a database-generated UUIDv7, so nothing here needs the ORM.
  */
 
+import { readFileSync } from 'node:fs';
 import { Client } from 'pg';
 import { hashPassword } from 'better-auth/crypto';
 
@@ -30,8 +31,11 @@ if (!url) {
 const client = new Client({ connectionString: url });
 
 async function main() {
-  const email = process.env['SEED_ADMIN_EMAIL'];
-  const password = process.env['SEED_ADMIN_PASSWORD'];
+  const email = process.env['SEED_ADMIN_EMAIL']?.trim().toLowerCase();
+  const passwordFile = process.env['SEED_ADMIN_PASSWORD_FILE'];
+  const password =
+    (passwordFile ? readFileSync(passwordFile, 'utf8').trim() : undefined) ??
+    process.env['SEED_ADMIN_PASSWORD'];
 
   if (!email || !password) {
     console.log('[seed] SEED_ADMIN_EMAIL / SEED_ADMIN_PASSWORD not set — skipping.');
