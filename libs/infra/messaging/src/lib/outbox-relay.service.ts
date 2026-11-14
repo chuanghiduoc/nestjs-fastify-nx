@@ -8,7 +8,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '@nestjs-fastify-nx/infra-database';
 import { isDomainException, type DomainEvent } from '@nestjs-fastify-nx/core';
-import { positiveIntEnv, safeErrorSummary } from '@nestjs-fastify-nx/shared';
+import { positiveIntEnv, safeErrorSummary, withTimeout } from '@nestjs-fastify-nx/shared';
 import { EventBusService } from './event-bus.service';
 import { OUTBOX_SCHEMA_VERSION } from './outbox-schema-version';
 import { formatEnvelopeIssues, outboxEnvelopeSchema } from './outbox-envelope';
@@ -36,6 +36,7 @@ export class OutboxRelayService implements OnApplicationBootstrap, OnModuleDestr
   private readonly dispatchConcurrency = positiveIntEnv('OUTBOX_DISPATCH_CONCURRENCY', 8);
   private readonly maxAttempts = positiveIntEnv('OUTBOX_MAX_ATTEMPTS', 10);
   private readonly txTimeoutMs = positiveIntEnv('OUTBOX_TX_TIMEOUT_MS', 30_000);
+  private readonly dispatchTimeoutMs = positiveIntEnv('OUTBOX_DISPATCH_TIMEOUT_MS', 30_000);
   // Exponential backoff between delivery attempts. Without it the relay re-claims a failing row on
   // every poll tick, so a downstream outage lasting only maxAttempts × pollInterval (10s at the
   // defaults) exhausts the whole retry budget of every pending event and parks them as permanently
@@ -62,6 +63,7 @@ export class OutboxRelayService implements OnApplicationBootstrap, OnModuleDestr
   ) {}
 
   onApplicationBootstrap(): void {
+    void this.redriveVersionSkewRows();
     this.timer = setInterval(() => {
       if (this.inFlight) return;
       this.inFlight = this.tick()
@@ -110,8 +112,9 @@ export class OutboxRelayService implements OnApplicationBootstrap, OnModuleDestr
   }
 
   /**
-   * Different aggregates may publish concurrently, while events for one aggregate retain claim
-   * order. This removes batch-size × broker-latency polling stalls without reordering a stream.
+   * Different aggregates may publish concurrently. Events for one aggregate keep claim order within
+   * a single batch; a failed row backs off and can be overtaken by later events for the same
+   * aggregate, so consumers must tolerate per-aggregate reordering under failure.
    */
   private async dispatchClaimed(rows: OutboxRow[]): Promise<number> {
     const byAggregate = new Map<string, OutboxRow[]>();
@@ -167,6 +170,24 @@ export class OutboxRelayService implements OnApplicationBootstrap, OnModuleDestr
   // The claim itself stamps the next visible time, so the backoff survives a relay that dies
   // mid-dispatch (an error-handler-only stamp would leave such a row claimable on the next tick).
   // `attempts` is the pre-increment value inside the UPDATE, so the first retry waits retryBaseMs.
+  private async redriveVersionSkewRows(): Promise<void> {
+    try {
+      const result = await this.prisma.db.outboxEvent.updateMany({
+        where: {
+          processedAt: null,
+          attempts: { gte: this.maxAttempts },
+          lastError: { startsWith: 'Unsupported outbox schemaVersion' },
+        },
+        data: { attempts: 0, lastError: null, nextAttemptAt: null },
+      });
+      if (result.count > 0) {
+        this.logger.warn(`Re-driving ${result.count} outbox row(s) parked by schema-version skew`);
+      }
+    } catch (err) {
+      this.logger.error({ err }, 'Outbox schema-version re-drive failed');
+    }
+  }
+
   private async claimBatch(): Promise<OutboxRow[]> {
     return this.prisma.transaction(
       async (tx) => {
@@ -234,9 +255,9 @@ export class OutboxRelayService implements OnApplicationBootstrap, OnModuleDestr
     };
 
     try {
-      await this.bus.publish(event);
+      await withTimeout(this.bus.publish(event), this.dispatchTimeoutMs, 'Outbox dispatch');
     } catch (err) {
-      const message = safeErrorSummary(err);
+      const message = isDomainException(err) ? `${err.code}: ${err.title}` : safeErrorSummary(err);
       this.logger.error(
         { err, eventType: row.eventType, outboxId: row.id, attempt: row.attempts },
         'Outbox dispatch failed',

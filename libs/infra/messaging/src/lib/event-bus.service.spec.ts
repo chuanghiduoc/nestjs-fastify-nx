@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { EventEmitter2 } from '@nestjs/event-emitter';
+import { DomainException } from '@nestjs-fastify-nx/core';
 import type { DomainEvent } from '@nestjs-fastify-nx/core';
 import { EventBusService } from './event-bus.service';
 
@@ -20,13 +21,15 @@ describe('EventBusService', () => {
     expect(emitter.emitAsync).toHaveBeenCalledWith(event.eventType, event);
   });
 
-  it('rejects an event that has no registered listener', async () => {
+  it('rejects an event that has no registered listener as a permanent failure', async () => {
     const emitter = { emitAsync: vi.fn().mockResolvedValue([]) };
     const bus = new EventBusService(emitter as unknown as EventEmitter2);
 
-    await expect(bus.publish(event)).rejects.toThrow(
-      'No listener registered for domain event "users.registered"',
-    );
+    const error = await bus.publish(event).catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(DomainException);
+    expect((error as DomainException).permanent).toBe(true);
+    expect((error as DomainException).message).toContain('No listener registered');
   });
 
   it('propagates listener failures', async () => {

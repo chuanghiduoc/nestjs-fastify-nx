@@ -16,22 +16,26 @@ interface OutboxPayload extends Prisma.InputJsonObject {
 // PrismaService propagates its interactive transaction through AsyncLocalStorage, so calls made
 // inside prisma.transaction(...) use that transaction client. Outside one, this is an event-only
 // durable write; producers changing aggregate state must use a trigger or PrismaService.transaction.
+export interface OutboxPublishOptions {
+  readonly eventOnly?: boolean;
+}
+
 @Injectable()
 export class OutboxPublisher implements EventPublisherPort {
   private readonly logger = new Logger(OutboxPublisher.name);
 
   constructor(private readonly prisma: PrismaService) {}
 
-  async publish(event: DomainEvent): Promise<void> {
-    await this.persist([event]);
+  async publish(event: DomainEvent, options?: OutboxPublishOptions): Promise<void> {
+    await this.persist([event], options);
   }
 
-  async publishAll(events: DomainEvent[]): Promise<void> {
+  async publishAll(events: DomainEvent[], options?: OutboxPublishOptions): Promise<void> {
     if (events.length === 0) return;
-    await this.persist(events);
+    await this.persist(events, options);
   }
 
-  private async persist(events: DomainEvent[]): Promise<void> {
+  private async persist(events: DomainEvent[], options?: OutboxPublishOptions): Promise<void> {
     // The tenant is taken from the event, not from the ambient request context: a handler may
     // legitimately publish for an organization other than the caller's active one, and reading CLS
     // here would silently overwrite that with the wrong tenant.
@@ -44,13 +48,10 @@ export class OutboxPublisher implements EventPublisherPort {
     }));
 
     const transaction = this.prisma.currentTransaction;
-    if (!transaction) {
-      // An event-only write is legitimate here; a producer that also mutated state has lost
-      // atomicity. Indistinguishable from in here, so warn instead of failing a valid caller.
-      this.logger.warn(
-        `Outbox write outside a transaction (${events.map((e) => e.eventType).join(', ')}) — ` +
-          'not atomic with aggregate state. Wrap it in prisma.transaction() if this producer ' +
-          'also changed state.',
+    if (!transaction && options?.eventOnly !== true) {
+      throw new Error(
+        'Outbox writes must join the caller transaction; wrap this producer in prisma.transaction() ' +
+          'or pass { eventOnly: true } when the write is intentionally event-only',
       );
     }
 
