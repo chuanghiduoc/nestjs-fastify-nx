@@ -99,7 +99,6 @@ export class BetterAuthGuard implements CanActivate {
       role: user.role,
       status: user.status,
       sessionId: session.session.id,
-      sessionToken: session.session.token,
       ...(organizationId ? { organizationId } : {}),
       ...(teamId ? { teamId } : {}),
     };

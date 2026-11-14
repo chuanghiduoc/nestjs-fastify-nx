@@ -13,7 +13,7 @@ describe('Audit security regressions', () => {
   let cookie: string;
   let userId: string;
   let email: string;
-  const password = 'password123';
+  const password = 'password1234';
 
   beforeAll(async () => {
     ctx = await createTestApp();

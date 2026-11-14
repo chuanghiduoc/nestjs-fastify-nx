@@ -16,7 +16,6 @@ const SESSION = {
   role: 'USER',
   status: 'ACTIVE',
   sessionId: 's-1',
-  sessionToken: 't-1',
   organizationId: '019dd1a5-9235-70db-8d57-54ef90300001',
 } as const;
 

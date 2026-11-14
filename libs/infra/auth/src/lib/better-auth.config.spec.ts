@@ -1,5 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { assertHttpLink, buildSocialProviders, resolveFrontendBase } from './better-auth.config';
+import {
+  assertHttpLink,
+  buildSocialProviders,
+  enforcePasswordChangeRevocation,
+  resolveFrontendBase,
+} from './better-auth.config';
 
 const OAUTH_KEYS = [
   'GOOGLE_CLIENT_ID',
@@ -66,6 +71,24 @@ describe('buildSocialProviders', () => {
       github: { clientId: 'ghid', clientSecret: 'ghsecret' },
       facebook: { clientId: 'fbid', clientSecret: 'fbsecret' },
     });
+  });
+});
+
+describe('enforcePasswordChangeRevocation', () => {
+  it('forces revokeOtherSessions for the change-password path', () => {
+    const body: Record<string, unknown> = { currentPassword: 'old', newPassword: 'new' };
+
+    enforcePasswordChangeRevocation('/change-password', body);
+
+    expect(body['revokeOtherSessions']).toBe(true);
+  });
+
+  it('does not touch unrelated paths', () => {
+    const body: Record<string, unknown> = { email: 'user@example.com' };
+
+    enforcePasswordChangeRevocation('/sign-in/email', body);
+
+    expect(body).not.toHaveProperty('revokeOtherSessions');
   });
 });
 

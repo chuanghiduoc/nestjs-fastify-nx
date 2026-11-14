@@ -49,7 +49,7 @@ describe('Organizations E2E', () => {
     email = `org-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
     const signUp = await request(ctx.app.getHttpServer())
       .post('/api/auth/sign-up/email')
-      .send({ email, password: 'password123', name: 'Org Owner' });
+      .send({ email, password: 'password1234', name: 'Org Owner' });
     cookie = cookieHeaderFromSetCookies(signUp.headers['set-cookie']);
   });
 
@@ -72,7 +72,7 @@ describe('Organizations E2E', () => {
     it('does not create a second organization when the same user signs in again', async () => {
       await request(ctx.app.getHttpServer())
         .post('/api/auth/sign-in/email')
-        .send({ email, password: 'password123' })
+        .send({ email, password: 'password1234' })
         .expect(200);
 
       await withAdmin(async (admin) => {
@@ -165,7 +165,7 @@ describe('Organizations E2E', () => {
 
       await request(ctx.app.getHttpServer())
         .post('/api/auth/sign-up/email')
-        .send({ email: inviteeEmail, password: 'password123', name: 'Invitee' })
+        .send({ email: inviteeEmail, password: 'password1234', name: 'Invitee' })
         .expect(200);
 
       // Better Auth refuses to accept an invitation from an unverified mailbox whenever the
@@ -178,7 +178,7 @@ describe('Organizations E2E', () => {
 
       const inviteeSignIn = await request(ctx.app.getHttpServer())
         .post('/api/auth/sign-in/email')
-        .send({ email: inviteeEmail, password: 'password123' })
+        .send({ email: inviteeEmail, password: 'password1234' })
         .expect(200);
       const inviteeCookie = cookieHeaderFromSetCookies(inviteeSignIn.headers['set-cookie']);
 

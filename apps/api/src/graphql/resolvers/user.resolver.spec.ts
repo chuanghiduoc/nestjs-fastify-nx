@@ -38,7 +38,6 @@ const mockSession: AuthenticatedSession = {
   role: 'USER',
   status: 'ACTIVE',
   sessionId: 's1',
-  sessionToken: 'tok',
 };
 
 describe('UserResolver', () => {

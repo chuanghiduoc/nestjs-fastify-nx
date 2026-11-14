@@ -24,7 +24,7 @@ describe('api-client contract — UserProfileResponseDto', () => {
     email = `contract-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
     const signUp = await request(ctx.app.getHttpServer())
       .post('/api/auth/sign-up/email')
-      .send({ email, password: 'password123', name: 'Contract Test' });
+      .send({ email, password: 'password1234', name: 'Contract Test' });
     cookie = cookieHeaderFromSetCookies(signUp.headers['set-cookie']);
   });
 

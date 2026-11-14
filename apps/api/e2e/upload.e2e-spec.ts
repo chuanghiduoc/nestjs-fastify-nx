@@ -25,7 +25,7 @@ describe('Upload E2E', () => {
     const email = `up-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
     const signUp = await request(ctx.app.getHttpServer())
       .post('/api/auth/sign-up/email')
-      .send({ email, password: 'password123', name: 'Up' });
+      .send({ email, password: 'password1234', name: 'Up' });
     cookie = cookieHeaderFromSetCookies(signUp.headers['set-cookie']);
   });
 
@@ -229,7 +229,7 @@ describe('Upload E2E', () => {
       const otherEmail = `up-other-${Date.now()}@example.com`;
       const otherSignUp = await request(ctx.app.getHttpServer())
         .post('/api/auth/sign-up/email')
-        .send({ email: otherEmail, password: 'password123', name: 'Other' });
+        .send({ email: otherEmail, password: 'password1234', name: 'Other' });
       const otherCookie = cookieHeaderFromSetCookies(otherSignUp.headers['set-cookie']);
 
       const res = await request(ctx.app.getHttpServer())

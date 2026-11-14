@@ -17,7 +17,7 @@ describe('API keys E2E', () => {
     const email = `apikey-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
     const signUp = await request(ctx.app.getHttpServer())
       .post('/api/auth/sign-up/email')
-      .send({ email, password: 'password123', name: 'Key Owner' });
+      .send({ email, password: 'password1234', name: 'Key Owner' });
     cookie = cookieHeaderFromSetCookies(signUp.headers['set-cookie']);
   });
 
