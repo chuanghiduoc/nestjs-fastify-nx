@@ -37,7 +37,7 @@ export class PrismaTermRepository implements TermRepositoryPort {
   async findLatestPublished(type: TermType): Promise<Term | null> {
     const row = await this.prisma.readTarget().term.findFirst({
       where: { type, publishedAt: { not: null } },
-      orderBy: { publishedAt: 'desc' },
+      orderBy: [{ publishedAt: 'desc' }, { id: 'desc' }],
     });
     return row ? toEntity(row) : null;
   }

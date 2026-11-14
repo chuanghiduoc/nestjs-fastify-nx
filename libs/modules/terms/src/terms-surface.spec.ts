@@ -10,6 +10,7 @@ import { REQUIRED_PERMISSIONS_KEY } from '@nestjs-fastify-nx/infra-authorization
 import { generateId } from '@nestjs-fastify-nx/shared';
 import { Term, TERM_TYPE } from './domain/entities/term.entity';
 import { PrismaTermRepository } from './infrastructure/repositories/prisma-term.repository';
+import { InMemoryTermRepository } from './testing/in-memory-term-repository';
 import { TermsController } from './presentation/controllers/terms.controller';
 import { CreateTermDto } from './presentation/dto/term.dto';
 
@@ -63,7 +64,34 @@ describe('PrismaTermRepository', () => {
     const term = await repository.findLatestPublished(TERM_TYPE.TERMS_OF_SERVICE);
 
     expect(term?.version).toBe('newest');
-    expect(findFirst.mock.calls[0][0].orderBy).toEqual({ publishedAt: 'desc' });
+    expect(findFirst.mock.calls[0][0].orderBy).toEqual([{ publishedAt: 'desc' }, { id: 'desc' }]);
+  });
+
+  it('breaks a same-instant publish tie by id descending in the in-memory double', async () => {
+    const repository = new InMemoryTermRepository();
+    const publishedAt = new Date('2026-08-01T00:00:00.000Z');
+    repository.seed(
+      Term.create({
+        id: '0190f5b0-0000-7000-8000-000000000001',
+        type: TERM_TYPE.TERMS_OF_SERVICE,
+        version: 'v1',
+        content: 'first',
+        publishedAt,
+      }),
+    );
+    repository.seed(
+      Term.create({
+        id: '0190f5b0-0000-7000-8000-000000000002',
+        type: TERM_TYPE.TERMS_OF_SERVICE,
+        version: 'v2',
+        content: 'second',
+        publishedAt,
+      }),
+    );
+
+    const term = await repository.findLatestPublished(TERM_TYPE.TERMS_OF_SERVICE);
+
+    expect(term?.version).toBe('v2');
   });
 
   it('returns null when nothing of that type is published', async () => {
