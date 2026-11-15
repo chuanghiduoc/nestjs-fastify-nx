@@ -27,7 +27,7 @@ import { ErrorDocsModule } from '../common/errors/error-docs.module';
 import { MetricsModule } from '../common/metrics/metrics.module';
 import { LocalStorageModule } from '../common/local-storage/local-storage.module';
 import { ThrottlerModule } from '../common/throttler/throttler.module';
-import { UploadModule } from '@nestjs-fastify-nx/modules-upload';
+import { UploadModule } from '@nestjs-fastify-nx/modules/upload';
 import { GraphqlModule } from '../graphql/graphql.module';
 import { WebsocketModule } from '../websocket/websocket.module';
 import { GlobalExceptionFilter } from '../common/filters/global-exception.filter';

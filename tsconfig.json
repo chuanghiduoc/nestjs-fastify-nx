@@ -15,9 +15,6 @@
       "path": "./libs/infra/database"
     },
     {
-      "path": "./libs/modules/upload"
-    },
-    {
       "path": "./libs/infra/storage"
     },
     {

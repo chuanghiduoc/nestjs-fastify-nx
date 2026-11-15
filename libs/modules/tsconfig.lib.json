@@ -22,6 +22,9 @@
   ],
   "references": [
     {
+      "path": "../infra/storage/tsconfig.lib.json"
+    },
+    {
       "path": "../infra/redis/tsconfig.lib.json"
     },
     {

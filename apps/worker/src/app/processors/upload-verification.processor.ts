@@ -7,7 +7,7 @@ import { QUEUE_NAMES, positiveIntEnv } from '@nestjs-fastify-nx/shared';
 import {
   VerifyUploadCommand,
   type UploadVerificationRequest,
-} from '@nestjs-fastify-nx/modules-upload';
+} from '@nestjs-fastify-nx/modules/upload';
 import type { WorkerEnvConfig } from '../../config/env.validation';
 import { applyWorkerConcurrency } from './apply-worker-concurrency';
 

@@ -22,7 +22,7 @@ import { SessionsModule } from '@nestjs-fastify-nx/modules/sessions';
 import { LoggingModule } from '../logging/logging.module';
 import { HealthModule } from '../health/health.module';
 import { ThrottlerModule } from '../throttler/throttler.module';
-import { UploadModule } from '@nestjs-fastify-nx/modules-upload';
+import { UploadModule } from '@nestjs-fastify-nx/modules/upload';
 import { GlobalExceptionFilter } from '../filters/global-exception.filter';
 import { validateConfig } from '../../config/env.validation';
 import { AuthenticationModule } from '../auth/authentication.module';
