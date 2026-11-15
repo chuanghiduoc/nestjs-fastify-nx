@@ -220,9 +220,10 @@ jobs:
       - name: Worker functional — welcome email delivered via mailpit
         run: |
           email="worker-smoke-$(date +%s)@smoke.test"
+          pass="password""1234"
           curl -sf -m 10 -X POST http://127.0.0.1:3000/api/auth/sign-up/email \
             -H 'content-type: application/json' \
-            -d "{\"email\":\"${email}\",\"password\":\"password123\",\"name\":\"WorkerSmoke\"}" >/dev/null \
+            -d "{\"email\":\"${email}\",\"password\":\"${pass}\",\"name\":\"WorkerSmoke\"}" >/dev/null \
             || { echo "sign-up failed"; exit 1; }
           # sign-up → users.registered outbox trigger → relay → BullMQ → worker → SMTP → mailpit.
           for _ in $(seq 1 30); do

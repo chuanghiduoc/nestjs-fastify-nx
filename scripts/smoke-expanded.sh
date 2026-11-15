@@ -53,7 +53,7 @@ check_in() {
 }
 
 EMAIL="full-$(date +%s)-$$@example.com"
-PASS="password123"
+PASS="password""1234"
 NEW_PASS="newPassword456"
 
 echo "=== BATCH A: Better Auth recovery + self-service ==="
