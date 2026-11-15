@@ -15,7 +15,7 @@ import { I18nInfraModule } from '@nestjs-fastify-nx/infra-i18n';
 import { UsersModule } from '@nestjs-fastify-nx/modules/users';
 import { AdminModule } from '@nestjs-fastify-nx/composition-admin';
 import { AuditLogModule } from '@nestjs-fastify-nx/modules/audit-log';
-import { OrganizationsModule } from '@nestjs-fastify-nx/modules-organizations';
+import { OrganizationsModule } from '@nestjs-fastify-nx/modules/organizations';
 import { ApiKeysModule } from '@nestjs-fastify-nx/modules/api-keys';
 import { NotificationsModule } from '@nestjs-fastify-nx/modules/notifications';
 import { FeatureFlagsModule } from '@nestjs-fastify-nx/modules/feature-flags';

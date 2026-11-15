@@ -4,7 +4,7 @@ import { BetterAuthModule, type AuthSessionPolicy } from '@nestjs-fastify-nx/inf
 import {
   EnsurePersonalOrganizationCommand,
   OrganizationsModule,
-} from '@nestjs-fastify-nx/modules-organizations';
+} from '@nestjs-fastify-nx/modules/organizations';
 
 @Module({
   imports: [

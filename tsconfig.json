@@ -63,9 +63,6 @@
       "path": "./libs/infra/authorization"
     },
     {
-      "path": "./libs/modules/organizations"
-    },
-    {
       "path": "./libs/modules"
     }
   ]
