@@ -1,1 +1,0 @@
-export { Prisma<%= className %>Repository } from './repositories/prisma-<%= fileName %>.repository';

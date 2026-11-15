@@ -1,0 +1,66 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+<% if (withCqrs) { %>import type { CommandBus, QueryBus } from '@nestjs/cqrs';
+import type { AuthenticatedSession } from '@nestjs-fastify-nx/infra-auth';
+import { <%= className %>Controller } from './<%= fileName %>.controller';
+import { Create<%= className %>Command } from './create-<%= fileName %>';
+
+const ORG_ID = '019dd1a5-9235-70db-8d57-54ef91500001';
+
+const SESSION: AuthenticatedSession = {
+  userId: '019dd1a5-9235-70db-8d57-54ef91500002',
+  email: 'owner@example.com',
+  name: 'Owner',
+  role: 'USER',
+  status: 'ACTIVE',
+  sessionId: 's-1',
+  organizationId: ORG_ID,
+};
+
+describe('<%= className %>Controller', () => {
+  let queryBus: { execute: ReturnType<typeof vi.fn> };
+  let commandBus: { execute: ReturnType<typeof vi.fn> };
+  let controller: <%= className %>Controller;
+
+  beforeEach(() => {
+    queryBus = { execute: vi.fn() };
+    commandBus = { execute: vi.fn() };
+    controller = new <%= className %>Controller(
+      queryBus as unknown as QueryBus,
+      commandBus as unknown as CommandBus,
+    );
+  });
+
+  it('creates through the command bus carrying the caller identity', async () => {
+    await controller.create(SESSION, { name: 'first' });
+
+    expect(commandBus.execute).toHaveBeenCalledTimes(1);
+    const [command] = commandBus.execute.mock.calls[0] as [Create<%= className %>Command];
+    expect(command).toBeInstanceOf(Create<%= className %>Command);
+    expect(command.organizationId).toBe(ORG_ID);
+    expect(command.userId).toBe(SESSION.userId);
+    expect(command.name).toBe('first');
+  });
+
+  it('lists through the query bus and maps to a cursor list response', async () => {
+    queryBus.execute.mockResolvedValue({ data: [], hasMore: false, lastCursor: null });
+
+    const result = await controller.list(SESSION, { limit: 10 });
+
+    expect(queryBus.execute).toHaveBeenCalledTimes(1);
+    expect(result.data).toEqual([]);
+    expect(result.hasMore).toBe(false);
+  });
+});
+<% } else { %>import { Test } from '@nestjs/testing';
+import { <%= className %>Controller } from './<%= fileName %>.controller';
+
+describe('<%= className %>Controller', () => {
+  it('is defined', async () => {
+    const module = await Test.createTestingModule({
+      controllers: [<%= className %>Controller],
+    }).compile();
+
+    expect(module.get(<%= className %>Controller)).toBeDefined();
+  });
+});
+<% } %>

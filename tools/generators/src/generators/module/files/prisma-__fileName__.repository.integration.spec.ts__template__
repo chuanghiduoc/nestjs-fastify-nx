@@ -1,0 +1,85 @@
+import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
+import {
+  createTestContainers,
+  DatabaseCleaner,
+  deployTestMigrations,
+} from '@nestjs-fastify-nx/testing';
+import type { TestContainers } from '@nestjs-fastify-nx/testing';
+import { PrismaService } from '@nestjs-fastify-nx/infra-database';
+import { generateId } from '@nestjs-fastify-nx/shared';
+import { Prisma<%= className %>Repository } from './prisma-<%= fileName %>.repository';
+
+const ORG_ID = '019dd1a5-9235-70db-8d57-540100000001';
+const OTHER_ORG_ID = '019dd1a5-9235-70db-8d57-540100000002';
+const USER_ID = '019dd1a5-9235-70db-8d57-540100000003';
+
+describe('Prisma<%= className %>Repository (integration)', () => {
+  let containers: TestContainers;
+  let prisma: PrismaService;
+  let repository: Prisma<%= className %>Repository;
+  let cleaner: DatabaseCleaner;
+
+  beforeAll(async () => {
+    containers = await createTestContainers();
+    const dbUrl = containers.postgres.getConnectionUri();
+    process.env['DATABASE_URL'] = dbUrl;
+    deployTestMigrations(dbUrl);
+
+    prisma = new PrismaService();
+    await prisma.onModuleInit();
+    repository = new Prisma<%= className %>Repository(prisma);
+    cleaner = new DatabaseCleaner(prisma.db);
+  }, 90_000);
+
+  afterAll(async () => {
+    await prisma?.onApplicationShutdown();
+    await containers?.teardown();
+  });
+
+  beforeEach(async () => {
+    await cleaner.truncateAll();
+    await prisma.db.user.create({
+      data: {
+        id: USER_ID,
+        email: '<%= fileName %>@test.com',
+        name: '<%= className %>',
+        updatedAt: new Date(),
+      },
+    });
+  });
+
+  async function seedRecord(id: string, organizationId: string, name: string): Promise<void> {
+    await repository.create({
+      id,
+      organizationId,
+      userId: USER_ID,
+      name,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+  }
+
+  it('creates and finds a record scoped to its organization', async () => {
+    const id = generateId();
+    await seedRecord(id, ORG_ID, 'first');
+
+    const found = await repository.findById(ORG_ID, id);
+    expect(found?.name).toBe('first');
+    expect(await repository.findById(OTHER_ORG_ID, id)).toBeNull();
+  });
+
+  it('lists with keyset pagination and never crosses the organization boundary', async () => {
+    const first = generateId();
+    const second = generateId();
+    await seedRecord(first, ORG_ID, 'first');
+    await seedRecord(second, ORG_ID, 'second');
+    await seedRecord(generateId(), OTHER_ORG_ID, 'other-org');
+
+    const page = await repository.findAllCursor({ organizationId: ORG_ID, limit: 2 });
+    expect(page.items.map((record) => record.id)).toEqual([second, first]);
+    expect(page.hasMore).toBe(false);
+
+    const scoped = await repository.findAllCursor({ organizationId: OTHER_ORG_ID, limit: 2 });
+    expect(scoped.items).toHaveLength(1);
+  });
+});

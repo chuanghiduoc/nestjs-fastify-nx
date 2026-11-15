@@ -1,0 +1,33 @@
+import { ApiProperty } from '@nestjs/swagger';
+import { IsNotEmpty, IsString, MaxLength } from 'class-validator';
+import { CursorPaginationDto } from '@nestjs-fastify-nx/contracts';
+
+export class List<%= className %>FilterDto extends CursorPaginationDto {}
+
+export class Create<%= className %>Dto {
+  @ApiProperty({ description: 'Human-readable name.', example: 'My <%= className %>' })
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(200)
+  name!: string;
+}
+
+export class <%= className %>ResponseDto {
+  @ApiProperty({ format: 'uuid' })
+  id!: string;
+
+  @ApiProperty({ format: 'uuid' })
+  organizationId!: string;
+
+  @ApiProperty({ format: 'uuid' })
+  userId!: string;
+
+  @ApiProperty({ example: 'My <%= className %>' })
+  name!: string;
+
+  @ApiProperty({ type: String, format: 'date-time' })
+  createdAt!: Date;
+
+  @ApiProperty({ type: String, format: 'date-time' })
+  updatedAt!: Date;
+}

@@ -1,15 +1,20 @@
 import {
+  addProjectConfiguration,
   formatFiles,
   generateFiles,
   names,
   offsetFromRoot,
-  addProjectConfiguration,
+  updateJson,
 } from '@nx/devkit';
 import type { Tree } from '@nx/devkit';
 import * as path from 'path';
 import type { ModuleGeneratorSchema } from './schema';
 
 type DirectoryEnum = 'modules' | 'composition';
+
+type ModuleNames = ReturnType<typeof names>;
+
+const GROUP_PACKAGE = 'libs/modules/package.json';
 
 // Normalizes the raw --directory option to the canonical enum value.
 // Accepts full paths (libs/modules, libs/composition) for backward compat
@@ -29,57 +34,74 @@ function normalizeDirectory(raw: string): DirectoryEnum {
 export async function moduleGenerator(tree: Tree, options: ModuleGeneratorSchema): Promise<void> {
   const { name, withCqrs = true } = options;
   const rawDir = normalizeDirectory(options.directory ?? 'modules');
-  const directory = `libs/${rawDir}`;
   const moduleNames = names(name);
-  const projectRoot = `${directory}/${moduleNames.fileName}`;
+
+  if (rawDir === 'modules') {
+    generateFolderModule(tree, moduleNames, withCqrs);
+  } else {
+    generateCompositionModule(tree, moduleNames);
+  }
+
+  await formatFiles(tree);
+}
+
+// A bounded context is a folder inside the modules group: no project, no package,
+// no tsconfig — the group carries all of those, and the exports map is the only
+// wiring the context needs.
+function generateFolderModule(tree: Tree, moduleNames: ModuleNames, withCqrs: boolean): void {
+  const folderRoot = `libs/modules/src/${moduleNames.fileName}`;
+  if (tree.exists(folderRoot) || tree.exists(`${folderRoot}/index.ts`)) {
+    throw new Error(`Folder "${folderRoot}" already exists.`);
+  }
+
+  generateFiles(tree, path.join(import.meta.dirname, 'files'), folderRoot, {
+    ...moduleNames,
+    withCqrs,
+    template: '',
+  });
+
+  if (!withCqrs) {
+    tree.delete(`${folderRoot}/create-${moduleNames.fileName}.ts`);
+    tree.delete(`${folderRoot}/list-${moduleNames.fileName}.ts`);
+  }
+
+  updateJson(tree, GROUP_PACKAGE, (json: Record<string, unknown>) => {
+    const exports = (json['exports'] ?? {}) as Record<string, unknown>;
+    exports[`./${moduleNames.fileName}`] = {
+      types: `./src/${moduleNames.fileName}/index.ts`,
+      default: `./src/${moduleNames.fileName}/index.ts`,
+    };
+    json['exports'] = Object.fromEntries(
+      Object.entries(exports).sort(([a], [b]) => a.localeCompare(b)),
+    );
+    return json;
+  });
+}
+
+// Composition stays a real Nx project: it owns an HTTP surface that orchestrates
+// several contexts, so it keeps its own package, tsconfig and vitest project.
+function generateCompositionModule(tree: Tree, moduleNames: ModuleNames): void {
+  const projectRoot = `libs/composition/${moduleNames.fileName}`;
+  const projectName = `composition-${moduleNames.fileName}`;
   const offset = offsetFromRoot(projectRoot);
+  const importPath = `@nestjs-fastify-nx/${projectName}`;
 
-  // Project name and scope tag are derived from the target directory so that
-  // composition modules get `composition-foo` / `scope:composition` rather than
-  // the modules variants — matching the convention in libs/composition/admin.
-  const projectName = `${rawDir}-${moduleNames.fileName}`;
-  const scopeTag = `scope:${rawDir}`;
-
-  // All targets are inferred from config files by the workspace plugins:
-  // `typecheck` by `@nx/js/typescript` (tsconfig.json), `lint` by
-  // `@nx/eslint/plugin`, and `test` by `@nx/vitest` (vitest.config.mts — see the
-  // template in files/). No explicit target is declared, so the module needs no
-  // hand-maintained `nx.json` include entry.
   addProjectConfiguration(tree, projectName, {
     root: projectRoot,
     projectType: 'library',
     sourceRoot: `${projectRoot}/src`,
-    tags: [scopeTag],
+    tags: ['scope:composition'],
     targets: {},
   });
 
-  // Import path mirrors the project name so consumers can tell at a glance
-  // which scope a barrel belongs to — `@nestjs-fastify-nx/modules/users` is a
-  // bounded-context module, `@nestjs-fastify-nx/composition-admin` is a
-  // cross-cutting aggregate. Keep name and path in lockstep.
-  const importPath = `@nestjs-fastify-nx/${projectName}`;
-  const isComposition = rawDir === 'composition';
-  generateFiles(tree, path.join(import.meta.dirname, 'files'), projectRoot, {
+  generateFiles(tree, path.join(import.meta.dirname, 'files-composition'), projectRoot, {
     ...moduleNames,
-    withCqrs: withCqrs && !isComposition,
-    isComposition,
     projectName,
     importPath,
     projectRoot,
     offsetFromRoot: offset,
     template: '',
   });
-
-  if (isComposition) {
-    for (const layer of ['domain', 'application', 'infrastructure', 'testing']) {
-      tree.delete(path.join(projectRoot, 'src', layer));
-    }
-    tree.delete(path.join(projectRoot, 'src', `${moduleNames.fileName}-listeners.module.ts`));
-  } else if (!withCqrs) {
-    tree.delete(path.join(projectRoot, 'src', 'application', 'commands'));
-  }
-
-  await formatFiles(tree);
 }
 
 export default moduleGenerator;

@@ -1,0 +1,18 @@
+import { Module } from '@nestjs/common';
+import { DatabaseModule } from '@nestjs-fastify-nx/infra-database';
+import { <%= constantName %>_REPOSITORY } from './<%= fileName %>-repository.port';
+import { Prisma<%= className %>Repository } from './prisma-<%= fileName %>.repository';<% if (withCqrs) { %>
+import { Create<%= className %>Handler } from './create-<%= fileName %>';
+import { List<%= className %>Handler } from './list-<%= fileName %>';<% } %>
+import { <%= className %>Controller } from './<%= fileName %>.controller';
+
+@Module({
+  imports: [DatabaseModule],
+  controllers: [<%= className %>Controller],
+  providers: [
+    { provide: <%= constantName %>_REPOSITORY, useClass: Prisma<%= className %>Repository },<% if (withCqrs) { %>
+    Create<%= className %>Handler,
+    List<%= className %>Handler,<% } %>
+  ],
+})
+export class <%= className %>Module {}
