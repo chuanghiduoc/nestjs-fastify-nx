@@ -2,6 +2,7 @@
 import nxPlugin from '@nx/eslint-plugin';
 import tseslint from 'typescript-eslint';
 import { defineConfig } from 'eslint/config';
+import noCrossContextImports from './tools/generators/src/eslint-rules/no-cross-context-imports.mjs';
 
 // @nx/eslint-plugin ships tseslint-flavoured flat configs; defineConfig's stricter
 // ConfigWithExtends doesn't accept them nominally, so widen once at the boundary.
@@ -297,6 +298,20 @@ export default defineConfig(
         projectService: false,
         project: false,
       },
+    },
+  },
+
+  // Context boundaries inside the libs/modules group: no cross-context imports, no deep imports
+  // past a context barrel, and the group root stays group-internal. Nx tags no longer see
+  // contexts once they are folders, so this rule owns that edge.
+  {
+    files: ['**/*.ts'],
+    ignores: ['**/*.spec.ts', '**/*.test.ts', '**/*.integration.ts', '**/e2e/**'],
+    plugins: {
+      'modules-scale': { rules: { 'no-cross-context-imports': noCrossContextImports } },
+    },
+    rules: {
+      'modules-scale/no-cross-context-imports': 'error',
     },
   },
 );

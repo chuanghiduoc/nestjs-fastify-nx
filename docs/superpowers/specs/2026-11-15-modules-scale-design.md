@@ -102,6 +102,13 @@ The rule has a unit spec (it is new behavior) exercised with a fixture set.
 - `docs/architecture.md`: dependency diagram updated.
 - READMEs: `libs/modules/README.md` new; per-context READMEs move with their folders.
 
+## Builder-check rulings (settled 2026-11-15, recorded here as design)
+
+1. **Coverage after mock-spec deletion.** The group's `vitest.config.mts` excludes adapter files (`src/**/prisma-*.repository.ts`) from the unit-lane coverage denominator — adapters are gated by the integration lane (real Postgres, CI runs it on every PR), which is strictly stronger than mock coverage. Every migration task carries a coverage checkpoint (`pnpm nx test modules -- --coverage`), so a red gate surfaces at context 1, not context 9.
+2. **Leaf keeps the two-DTO-kind invariant by naming.** `<ctx>.dto.ts` in a leaf is the presentation DTO — the only file in a leaf that may import `@nestjs/swagger`/`class-validator`; application result types live in the operation files (pure TS). The eslint rule is re-keyed for the group: those imports are allowed only in `**/presentation/**`, `**/*.dto.ts`, `**/*.controller.ts`, scoped to `libs/modules/src/**` — covering both tiers.
+3. **Rule + spec location.** `tools/generators/src/eslint-rules/` (inside the `tools-generators` project) so `nx affected` runs the spec in CI.
+4. **Removal flow.** The generator scope adds `pnpm rm:module <name>` (delete the folder, drop the exports-map entry, print reference-cleanup steps). The docs sweep is grep-driven, not limited to the files listed above (covers the `pnpm install` note in agent-gotchas and the `modules-upload` import example in troubleshooting).
+
 ## What is left to the builder
 
 - Exact per-file placement inside a tier (the ladder above is the contract, not a file manifest).
