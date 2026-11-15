@@ -20,7 +20,6 @@ const SESSION: AuthenticatedSession = {
   role: 'USER',
   status: 'ACTIVE',
   sessionId: 's-1',
-  sessionToken: 't-1',
   organizationId: ORG_ID,
 };
 

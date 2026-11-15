@@ -28,7 +28,7 @@ describe('Auth E2E (Better Auth)', () => {
     it('creates a user and returns a session cookie', async () => {
       const res = await request(ctx.app.getHttpServer())
         .post('/api/auth/sign-up/email')
-        .send({ email: 'new@example.com', password: 'password123', name: 'New User' })
+        .send({ email: 'new@example.com', password: 'password1234', name: 'New User' })
         .expect(200);
 
       expect(res.body.user).toBeDefined();
@@ -44,7 +44,7 @@ describe('Auth E2E (Better Auth)', () => {
     it('atomically writes a users.registered outbox row via the DB trigger', async () => {
       const signup = await request(ctx.app.getHttpServer())
         .post('/api/auth/sign-up/email')
-        .send({ email: 'outbox@example.com', password: 'password123', name: 'Outbox' })
+        .send({ email: 'outbox@example.com', password: 'password1234', name: 'Outbox' })
         .expect(200);
 
       const userId = signup.body.user.id as string;
@@ -69,12 +69,12 @@ describe('Auth E2E (Better Auth)', () => {
     it('rejects duplicate email with 4xx', async () => {
       await request(ctx.app.getHttpServer())
         .post('/api/auth/sign-up/email')
-        .send({ email: 'dup@example.com', password: 'password123', name: 'Dup' })
+        .send({ email: 'dup@example.com', password: 'password1234', name: 'Dup' })
         .expect(200);
 
       const res = await request(ctx.app.getHttpServer())
         .post('/api/auth/sign-up/email')
-        .send({ email: 'dup@example.com', password: 'password123', name: 'Dup' });
+        .send({ email: 'dup@example.com', password: 'password1234', name: 'Dup' });
 
       expect(res.status).toBeGreaterThanOrEqual(400);
       expect(res.status).toBeLessThan(500);
@@ -92,7 +92,7 @@ describe('Auth E2E (Better Auth)', () => {
     it('emits a users.logged_in outbox row from the sessions trigger on signup', async () => {
       const signup = await request(ctx.app.getHttpServer())
         .post('/api/auth/sign-up/email')
-        .send({ email: 'login-trigger@example.com', password: 'password123', name: 'Login' })
+        .send({ email: 'login-trigger@example.com', password: 'password1234', name: 'Login' })
         .expect(200);
 
       const userId = signup.body.user.id as string;
@@ -118,13 +118,13 @@ describe('Auth E2E (Better Auth)', () => {
     beforeEach(async () => {
       await request(ctx.app.getHttpServer())
         .post('/api/auth/sign-up/email')
-        .send({ email: 'user@example.com', password: 'password123', name: 'User' });
+        .send({ email: 'user@example.com', password: 'password1234', name: 'User' });
     });
 
     it('returns a session cookie for valid credentials', async () => {
       const res = await request(ctx.app.getHttpServer())
         .post('/api/auth/sign-in/email')
-        .send({ email: 'user@example.com', password: 'password123' })
+        .send({ email: 'user@example.com', password: 'password1234' })
         .expect(200);
 
       expect(res.body.user.email).toBe('user@example.com');
@@ -141,7 +141,7 @@ describe('Auth E2E (Better Auth)', () => {
     it('rejects unknown email with 401', async () => {
       await request(ctx.app.getHttpServer())
         .post('/api/auth/sign-in/email')
-        .send({ email: 'unknown@example.com', password: 'password123' })
+        .send({ email: 'unknown@example.com', password: 'password1234' })
         .expect(401);
     });
 
@@ -204,7 +204,7 @@ describe('Auth E2E (Better Auth)', () => {
     it('returns the active session when cookie is forwarded', async () => {
       const signUp = await request(ctx.app.getHttpServer())
         .post('/api/auth/sign-up/email')
-        .send({ email: 'session@example.com', password: 'password123', name: 'Session' })
+        .send({ email: 'session@example.com', password: 'password1234', name: 'Session' })
         .expect(200);
 
       const cookie = cookieHeaderFromSetCookies(signUp.headers['set-cookie']);
@@ -218,11 +218,77 @@ describe('Auth E2E (Better Auth)', () => {
     });
   });
 
+  describe('Password recovery and change', () => {
+    async function signUpWithSecondSession(email: string) {
+      const signUp = await request(ctx.app.getHttpServer())
+        .post('/api/auth/sign-up/email')
+        .send({ email, password: 'password1234', name: 'Recovery' })
+        .expect(200);
+      const firstCookie = cookieHeaderFromSetCookies(signUp.headers['set-cookie']);
+
+      const secondSignIn = await request(ctx.app.getHttpServer())
+        .post('/api/auth/sign-in/email')
+        .send({ email, password: 'password1234' })
+        .expect(200);
+      const secondCookie = cookieHeaderFromSetCookies(secondSignIn.headers['set-cookie']);
+
+      return { firstCookie, secondCookie };
+    }
+
+    it('revokes every existing session when the password is reset', async () => {
+      const email = 'reset-revokes@example.com';
+      const { firstCookie, secondCookie } = await signUpWithSecondSession(email);
+
+      await request(ctx.app.getHttpServer())
+        .post('/api/auth/request-password-reset')
+        .send({ email })
+        .expect(200);
+
+      const verification = await ctx.prisma.db.verification.findFirst({
+        where: { identifier: { startsWith: 'reset-password:' } },
+        orderBy: { createdAt: 'desc' },
+      });
+      expect(verification).not.toBeNull();
+      if (!verification) throw new Error('expected a reset verification row');
+      const token = verification.identifier.slice('reset-password:'.length);
+
+      await request(ctx.app.getHttpServer())
+        .post('/api/auth/reset-password')
+        .send({ token, newPassword: 'newpassword1234' })
+        .expect(200);
+
+      await request(ctx.app.getHttpServer())
+        .get('/api/v1/users/me')
+        .set('Cookie', firstCookie)
+        .expect(401);
+      await request(ctx.app.getHttpServer())
+        .get('/api/v1/users/me')
+        .set('Cookie', secondCookie)
+        .expect(401);
+    });
+
+    it('revokes the other sessions on password change without a client flag', async () => {
+      const email = 'change-revokes@example.com';
+      const { firstCookie, secondCookie } = await signUpWithSecondSession(email);
+
+      await request(ctx.app.getHttpServer())
+        .post('/api/auth/change-password')
+        .set('Cookie', firstCookie)
+        .send({ currentPassword: 'password1234', newPassword: 'newpassword1234' })
+        .expect(200);
+
+      await request(ctx.app.getHttpServer())
+        .get('/api/v1/users/me')
+        .set('Cookie', secondCookie)
+        .expect(401);
+    });
+  });
+
   describe('Sign-out flow', () => {
     it('clears session cookies — requests with the cleared cookies return 401', async () => {
       const signUp = await request(ctx.app.getHttpServer())
         .post('/api/auth/sign-up/email')
-        .send({ email: 'signout@example.com', password: 'password123', name: 'Sign Out' })
+        .send({ email: 'signout@example.com', password: 'password1234', name: 'Sign Out' })
         .expect(200);
 
       const cookie = cookieHeaderFromSetCookies(signUp.headers['set-cookie']);
@@ -241,7 +307,7 @@ describe('Auth E2E (Better Auth)', () => {
       // Sign-out responds with Set-Cookie headers that expire session_token and
       // session_data (Max-Age=0). A real browser replaces its stored cookies
       // with these cleared ones, so subsequent requests carry no valid session.
-      // Note: cookieCache is enabled (5min in better-auth.config.ts) — the
+      // Note: cookieCache is enabled (60s in better-auth.config.ts) — the
       // original sign-up cookie keeps verifying for the cache window because
       // session_data is self-contained and signed; the realistic post-signout
       // state is the cleared cookies the server just sent back.
@@ -257,7 +323,7 @@ describe('Auth E2E (Better Auth)', () => {
     it('emits a users.logged_out outbox row from the sessions trigger on sign-out', async () => {
       const signUp = await request(ctx.app.getHttpServer())
         .post('/api/auth/sign-up/email')
-        .send({ email: 'logout-trigger@example.com', password: 'password123', name: 'Logout' })
+        .send({ email: 'logout-trigger@example.com', password: 'password1234', name: 'Logout' })
         .expect(200);
 
       const userId = signUp.body.user.id as string;

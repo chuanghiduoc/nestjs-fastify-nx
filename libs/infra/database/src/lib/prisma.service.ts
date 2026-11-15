@@ -3,8 +3,8 @@ import {
   Injectable,
   Logger,
   Optional,
+  OnApplicationShutdown,
   OnModuleInit,
-  OnModuleDestroy,
 } from '@nestjs/common';
 import { PrismaClient } from '../generated/prisma/client';
 import type { Prisma } from '../generated/prisma/client';
@@ -80,7 +80,7 @@ function buildPgAdapter(
 
 // Better Auth and outbox relay must use `db` (primary) — replica lag surfaces as 401 immediately after sign-in.
 @Injectable()
-export class PrismaService implements OnModuleInit, OnModuleDestroy {
+export class PrismaService implements OnModuleInit, OnApplicationShutdown {
   private readonly logger = new Logger(PrismaService.name);
   private readonly _writeClient: PrismaClient;
   private readonly _readClient: PrismaClient;
@@ -108,6 +108,10 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
         applicationName: `${appName}-write`,
       }),
       log: [{ emit: 'event', level: 'query' }],
+      transactionOptions: {
+        maxWait: intEnv('DATABASE_TX_MAX_WAIT_MS', 10_000),
+        timeout: intEnv('DATABASE_TX_TIMEOUT_MS', 30_000),
+      },
     });
     this.registerQueryLogger(this._writeClient, slowQueryThresholdMs, logAllQueries);
 
@@ -125,6 +129,10 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
           applicationName: `${appName}-read`,
         }),
         log: [{ emit: 'event', level: 'query' }],
+        transactionOptions: {
+          maxWait: intEnv('DATABASE_TX_MAX_WAIT_MS', 10_000),
+          timeout: intEnv('DATABASE_TX_TIMEOUT_MS', 30_000),
+        },
       });
       this.registerQueryLogger(this._readClient, slowQueryThresholdMs, logAllQueries);
       this.logger.log('Read replica enabled via DATABASE_REPLICA_URL');
@@ -280,7 +288,7 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  async onModuleDestroy(): Promise<void> {
+  async onApplicationShutdown(): Promise<void> {
     const clients = this._hasReplica ? [this._writeClient, this._readClient] : [this._writeClient];
     const results = await Promise.allSettled(clients.map((client) => client.$disconnect()));
     const failures = results.filter((result) => result.status === 'rejected');

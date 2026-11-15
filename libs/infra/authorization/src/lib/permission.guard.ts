@@ -51,9 +51,16 @@ export class PermissionGuard implements CanActivate {
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    // WebSocket frames are authorized at the socket.io layer; running here would read the socket
-    // as an HTTP request (see the global-enhancer rule in CLAUDE.md).
-    if (context.getType() === 'ws') return true;
+    if (context.getType() === 'ws') {
+      const requiredOnSocket = this.reflector.getAllAndOverride<Permission[]>(
+        REQUIRED_PERMISSIONS_KEY,
+        [context.getHandler(), context.getClass()],
+      );
+      if (requiredOnSocket && requiredOnSocket.length > 0) {
+        throw forbidden(requiredOnSocket[0]);
+      }
+      return true;
+    }
 
     if (isPublic(this.reflector, context)) return true;
 

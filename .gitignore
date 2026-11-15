@@ -72,3 +72,5 @@ plans/
 # Local MCP server config — machine-specific (hardcoded cwd), not shared.
 .mcp.json
 .vitest
+
+.workbuddy-ai/

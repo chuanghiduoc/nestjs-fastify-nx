@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { DatabaseModule } from '@nestjs-fastify-nx/infra-database';
+import { MessagingModule } from '@nestjs-fastify-nx/infra-messaging';
 import { FEATURE_FLAG_REPOSITORY } from './domain/ports/feature-flag-repository.port';
 import { PrismaFeatureFlagRepository } from './infrastructure/repositories/prisma-feature-flag.repository';
 import { ListFeatureFlagsHandler } from './application/queries/list-feature-flags/list-feature-flags.handler';
@@ -10,7 +11,7 @@ import { DeleteFeatureFlagHandler } from './application/commands/delete-feature-
 import { FeatureFlagsController } from './presentation/controllers/feature-flags.controller';
 
 @Module({
-  imports: [DatabaseModule],
+  imports: [DatabaseModule, MessagingModule],
   controllers: [FeatureFlagsController],
   providers: [
     { provide: FEATURE_FLAG_REPOSITORY, useClass: PrismaFeatureFlagRepository },

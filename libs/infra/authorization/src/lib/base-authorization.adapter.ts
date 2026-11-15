@@ -1,4 +1,5 @@
 import {
+  ALL_PERMISSIONS,
   SYSTEM_ROLE_PERMISSIONS,
   type Permission,
   type ResourceType,
@@ -18,7 +19,8 @@ import { decideAccess, decideFilter, type PolicyContext } from './access-policy'
 export function permissionsForNonUserPrincipal(principal: Principal): readonly Permission[] | null {
   if (principal.type === 'system') return SYSTEM_ROLE_PERMISSIONS.owner;
   if (principal.type === 'api_key') {
-    return principal.scopes.filter((scope): scope is Permission => scope.includes(':'));
+    const catalog = new Set<string>(ALL_PERMISSIONS);
+    return principal.scopes.filter((scope): scope is Permission => catalog.has(scope));
   }
   return null;
 }

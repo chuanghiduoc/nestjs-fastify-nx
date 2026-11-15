@@ -16,7 +16,6 @@ export const featureFlagKeyTaken = () =>
   new DomainException(
     fieldProblem({
       kind: 'conflict',
-      permanent: false,
       code: ERROR_CODES.FEATURE_FLAG_KEY_TAKEN,
       messageKey: I18N_KEYS.errors.feature_flags.key_taken,
       path: 'key',

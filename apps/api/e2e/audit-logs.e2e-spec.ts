@@ -21,7 +21,7 @@ describe('Audit logs E2E', () => {
     const email = `audit-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
     const signUp = await request(ctx.app.getHttpServer())
       .post('/api/auth/sign-up/email')
-      .send({ email, password: 'password123', name: 'Auditor' });
+      .send({ email, password: 'password1234', name: 'Auditor' });
     cookie = cookieHeaderFromSetCookies(signUp.headers['set-cookie']);
 
     const prisma = ctx.app.get(PrismaService).db;

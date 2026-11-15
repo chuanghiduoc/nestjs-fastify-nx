@@ -21,6 +21,7 @@ import {
 } from '@nestjs/swagger';
 import {
   ApiCommonErrors,
+  ApiUnpaginatedListResponse,
   ListResponseDto,
   toUnpaginatedListResponse,
 } from '@nestjs-fastify-nx/contracts';
@@ -35,7 +36,6 @@ import { ListOrganizationRolesQuery } from '../../application/queries/list-organ
 import { CreateOrganizationRoleCommand } from '../../application/commands/create-organization-role/create-organization-role.command';
 import { UpdateOrganizationRoleCommand } from '../../application/commands/update-organization-role/update-organization-role.command';
 import { DeleteOrganizationRoleCommand } from '../../application/commands/delete-organization-role/delete-organization-role.command';
-import type { OrganizationRoleDto } from '../../application/dto/organization-role.dto';
 import {
   CreateOrganizationRoleDto,
   OrganizationRoleResponseDto,
@@ -60,11 +60,13 @@ export class OrganizationRolesController {
     description:
       'Returns the built-in system roles followed by the roles this organization defined itself. System roles carry `system: true`, a null `id`, and cannot be updated or deleted. The list is small and bounded by the permission catalog, so it is not paginated.',
   })
-  @ApiOkResponse({ type: ListResponseDto, description: 'System roles plus tenant-defined roles.' })
+  @ApiUnpaginatedListResponse(OrganizationRoleResponseDto, {
+    description: 'System roles plus tenant-defined roles. Not paginated.',
+  })
   @ApiCommonErrors()
   async list(
     @CurrentUser() user: AuthenticatedSession,
-  ): Promise<ListResponseDto<OrganizationRoleDto>> {
+  ): Promise<ListResponseDto<OrganizationRoleResponseDto>> {
     const result = await this.queryBus.execute(
       new ListOrganizationRolesQuery(requireOrganizationId(user)),
     );
@@ -84,7 +86,7 @@ export class OrganizationRolesController {
   create(
     @CurrentUser() user: AuthenticatedSession,
     @Body() dto: CreateOrganizationRoleDto,
-  ): Promise<OrganizationRoleDto> {
+  ): Promise<OrganizationRoleResponseDto> {
     return this.commandBus.execute(
       new CreateOrganizationRoleCommand({
         organizationId: requireOrganizationId(user),
@@ -110,7 +112,7 @@ export class OrganizationRolesController {
     @CurrentUser() user: AuthenticatedSession,
     @Param('role') role: string,
     @Body() dto: UpdateOrganizationRoleDto,
-  ): Promise<OrganizationRoleDto> {
+  ): Promise<OrganizationRoleResponseDto> {
     return this.commandBus.execute(
       new UpdateOrganizationRoleCommand({
         organizationId: requireOrganizationId(user),

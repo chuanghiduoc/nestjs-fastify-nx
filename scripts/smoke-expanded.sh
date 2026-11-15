@@ -53,7 +53,7 @@ check_in() {
 }
 
 EMAIL="full-$(date +%s)-$$@example.com"
-PASS="password123"
+PASS="password""1234"
 NEW_PASS="newPassword456"
 
 echo "=== BATCH A: Better Auth recovery + self-service ==="
@@ -77,10 +77,17 @@ RP=$(curl -s -o /dev/null --max-time 10 -w '%{http_code}' -X POST "$BASE/api/aut
   -d '{"newPassword":"anything1234","token":"invalid-token"}')
 check_in "POST /api/auth/reset-password (bad token)" "400,401,403,404,422" "$RP"
 
-CP=$(curl -s -o /dev/null --max-time 10 -w '%{http_code}' -X POST "$BASE/api/auth/change-password" \
+CP=$(curl -s -D "$TMP_DIR/cp-headers.txt" -o /dev/null --max-time 10 -w '%{http_code}' -X POST "$BASE/api/auth/change-password" \
   -H "Content-Type: application/json" -H "Origin: $BASE" -H "Cookie: $COOKIE" \
   -d "{\"currentPassword\":\"$PASS\",\"newPassword\":\"$NEW_PASS\"}")
 check "POST /api/auth/change-password" "200" "$CP"
+# The server forces revokeOtherSessions, so every session row dies here and
+# change-password answers with a fresh session in Set-Cookie. Sensitive routes
+# below (change-email, revoke-other-sessions) read the DB session, not the
+# signed cookie cache, so they need the new cookie.
+if grep -qi '^set-cookie:' "$TMP_DIR/cp-headers.txt"; then
+  COOKIE=$(grep -i '^set-cookie:' "$TMP_DIR/cp-headers.txt" | sed -E 's/^[Ss]et-[Cc]ookie: ([^;]+);.*/\1/' | paste -sd ';' - | sed 's/;/; /g')
+fi
 
 LS=$(curl -s -o "$TMP_DIR/ls.json" --max-time 10 -w '%{http_code}' -H "Cookie: $COOKIE" "$BASE/api/auth/list-sessions")
 check "GET /api/auth/list-sessions" "200" "$LS"

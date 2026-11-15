@@ -104,7 +104,7 @@ redis-cli -h $REDIS_QUEUE_HOST -p $REDIS_QUEUE_PORT
 5. Purge genuinely unrecoverable jobs (data from a bad deploy) after confirming replay is safe:
    Bull Board → "Clean" → select "failed" state → confirm.
 
-**Escalation:** If the queue fills faster than the worker can drain (sustained spike), scale the worker replicas via your orchestrator or increase `BULLMQ_CONCURRENCY`. Alert the team if a runaway job producer is suspected.
+**Escalation:** If the queue fills faster than the worker can drain (sustained spike), scale the worker replicas via your orchestrator or raise the per-queue concurrency: `WORKER_EMAIL_CONCURRENCY` for the email queue, `WORKER_UPLOAD_CONCURRENCY` for upload verification. There is no `BULLMQ_CONCURRENCY` variable. Alert the team if a runaway job producer is suspected.
 
 ---
 
@@ -370,32 +370,21 @@ curl -v http://<api-host>:3000/metrics 2>&1 | grep "< HTTP"
 
 **Escalation:** If metrics are confirmed reachable from the public internet, treat as a security incident — Prometheus metrics expose internal labels, queue depths, and memory usage that aid attackers in profiling the system. Rotate any secrets that may appear in metric labels, restrict access immediately, and review ingress firewall rules.
 
-### 6a. BullMQ counters inflated by replica count
+### 6a. BullMQ counters and the leader-elected collector
 
-**Symptom:** `rate(bullmq_jobs_total{status="failed"}[5m])` jumps to N× the rate observed in the worker logs, where N matches `API_REPLICAS`. SLO alerts on the counter fire even though the actual worker error rate is fine.
-
-**Root cause:** Every API replica subscribes to the same BullMQ `QueueEvents` Redis stream, so each terminal event (completed/failed/stalled/delayed) increments `bullmq_jobs_total` once per replica. The fan-out is intentional (it keeps the duration histogram observable per-replica) but the counter sample is multiplied by the replica count.
-
-**Recipe for dashboards / alerts:** divide by the live API instance count instead of hard-coding the replica number.
+`bullmq_jobs_total` and `bullmq_queue_depth` are written by a leader-elected collector: only the
+process holding the `bull:*:leader` Redis lease updates them, and it resets its gauges when
+leadership is lost. A scrape of one instance therefore reports the true cluster value — **sum the
+series, never divide by the replica count.** Dividing under-counts real failures by N and SLO
+alerts silently under-fire.
 
 ```promql
-# Replica-corrected failure rate
+# Correct: one writer per cluster
 sum(rate(bullmq_jobs_total{status="failed"}[5m]))
-  /
-sum(up{job="api"})
 ```
 
-Or, equivalently, average across instances:
-
-```promql
-avg by (queue, status) (rate(bullmq_jobs_total[5m]))
-```
-
-The `bullmq_job_duration_seconds` histogram is NOT inflated — each replica observes its own per-job samples — so quantile alerts on it work unmodified.
-
-**Action:** update dashboards / recording rules to apply the division pattern. If you later move metric collection onto a leader-elected collector (see comment in `bullmq-metrics.listener.ts`), drop the divisor.
-
-**Prevention:** when introducing a new BullMQ-derived counter, document its replica behaviour next to the metric definition in `metrics.service.ts` so dashboard authors are warned at definition time.
+The `bullmq_job_duration_seconds` histogram records per-instance observations and is not
+leader-gated; quantile queries across replicas are fine.
 
 ---
 
@@ -405,7 +394,7 @@ The `bullmq_job_duration_seconds` histogram is NOT inflated — each replica obs
 
 **Root cause:** The upload flow is presign -> browser POST -> confirm. A client can abandon staging, or the API can crash between S3 finalization and its HTTP response. Final objects can also outlive a user unless ownership is tracked durably.
 
-**Mitigation in code:** presign writes staging under `uploads/` tagged `committed=false`. Confirm creates a `stored_files` row before copying the exact ETag-checked version to a fresh `files/` key, advances it to `VERIFYING`, then durably enqueues verification. Retrying after a lost response recovers the same database record and final object. `StoredFileCleanupTask` claims stale/rejected rows with optimistic concurrency before deleting S3 data, and removes committed files whose user no longer exists. Abandoned staging remains bounded by the lifecycle rule below.
+**Mitigation in code:** presign writes staging under `uploads/`. Confirm creates a `stored_files` row before copying the exact ETag-checked version to a fresh `files/` key; with `MALWARE_SCANNER_ENABLED=true` the row advances to `VERIFYING` and a verification job is durably enqueued, while the default `false` verifies magic bytes inline and returns `READY`. Retrying after a lost response recovers the same database record and final object. `StoredFileCleanupTask` claims stale/rejected rows with optimistic concurrency before deleting S3 data, and removes committed files whose user no longer exists. Abandoned staging remains bounded by the lifecycle rule below.
 
 **Required bucket lifecycle rule (apply at infra time, NOT in code):**
 
@@ -415,25 +404,22 @@ The `bullmq_job_duration_seconds` histogram is NOT inflated — each replica obs
     {
       "ID": "expire-uncommitted-uploads",
       "Status": "Enabled",
-      "Filter": {
-        "And": {
-          "Prefix": "uploads/",
-          "Tags": [{ "Key": "committed", "Value": "false" }]
-        }
-      },
+      "Filter": { "Prefix": "uploads/" },
       "Expiration": { "Days": 1 }
     }
   ]
 }
 ```
 
-Because presign tags objects `committed=false` upfront, the single tag-filtered rule above matches every orphan — no separate untagged sweep is needed (apply via `aws s3api put-bucket-lifecycle-configuration --bucket <name> --lifecycle-configuration file://lifecycle.json`).
+No code path tags objects; the rule is prefix-filtered only. Presign never sets a `tagging` field,
+and there is no `committed=false` tag to filter on — a tag-filtered rule matches zero objects and
+abandoned staging grows forever (apply via `aws s3api put-bucket-lifecycle-configuration --bucket <name> --lifecycle-configuration file://lifecycle.json`).
 
-**Bundled Garage:** `garage-init` applies a prefix-filtered expiry rule on every boot (`docker/garage/provision.sh`). Garage has no tag filters, so it expires everything under `uploads/` after `STORAGE_ORPHAN_EXPIRY_DAYS`.
+**Bundled Garage:** `garage-init` applies the same prefix-filtered expiry rule on every boot (`docker/garage/provision.sh`).
 
-**Action when bucket already bloated:** list orphan objects via `aws s3api list-objects-v2` + filter by the `committed=false` tag, then bulk delete. Cost-wise the lifecycle rule is the right long-term fix; manual cleanup is one-time.
+**Action when bucket already bloated:** list objects under `uploads/` older than the retention window via `aws s3api list-objects-v2 --prefix uploads/`, then bulk delete. Cost-wise the lifecycle rule is the right long-term fix; manual cleanup is one-time.
 
-**Escalation:** If orphan rate is high (>10% of total uploads), investigate whether legitimate clients are failing to call `/confirm` (network errors, FE bug, mobile background suspend). Add a Prometheus alert on `s3_bucket_object_count` divergence from a confirmed-upload counter.
+**Escalation:** If orphan rate is high (>10% of total uploads), investigate whether legitimate clients are failing to call `/confirm` (network errors, FE bug, mobile background suspend). There is no `s3_bucket_object_count` metric; compare the bucket's object count from the provider console with the confirmed-upload counter.
 
 ---
 
@@ -528,12 +514,17 @@ Set `OUTBOX_PURGE_MAX_BATCHES` to at least that value and redeploy.
 
 **Symptom:** Worker log entry like `verify-magic-bytes: MIME mismatch — deleting tampered upload`. The object disappears without a `/confirm` follow-through visible to the client.
 
-**Cause:** Async magic-byte verification (`UploadVerificationProcessor` in the worker) reads the first 16 bytes of every confirmed object via S3 `GetObject Range`, runs `detectFileType()` from `libs/shared/src/lib/file-signature.ts`, and deletes the object if the binary signature contradicts the MIME declared at presign time. This catches `.exe` renamed to `.png` and similar evasion attempts.
+**Cause:** Magic-byte verification runs in one of two places depending on `MALWARE_SCANNER_ENABLED`:
+
+- **`false` (default):** `confirm` reads the first 16 bytes inline in the API, runs `detectFileType()` from `libs/shared/src/lib/file-signature.ts`, and returns `READY` (or deletes the object and rejects the confirm) in the same request. There is no worker job and no `VERIFYING` state.
+- **`true`:** `confirm` advances the row to `VERIFYING`, enqueues an `UploadVerificationProcessor` job in the worker, and the worker reads the object via S3 `GetObject Range` and deletes it if the signature contradicts the MIME declared at presign time.
+
+Both paths catch `.exe` renamed to `.png`. Check `MALWARE_SCANNER_ENABLED` first: with the default you will find the deletion in the **API** logs, not the worker.
 
 **Diagnostic:**
 
-- Bull Board UI: `http://localhost:3000/api/admin/queues` → `upload-verification` queue → inspect failed/completed jobs.
-- Worker logs for the specific key: `docker compose logs worker | grep "<key>"`.
+- `false`: API logs around the confirm request (`docker compose logs api | grep "<key>"`).
+- `true`: Bull Board `http://localhost:3000/api/admin/queues` → `upload-verification` queue; worker logs for the key.
 
 **Action:**
 

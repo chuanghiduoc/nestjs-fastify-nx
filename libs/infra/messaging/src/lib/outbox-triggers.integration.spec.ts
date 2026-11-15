@@ -35,7 +35,7 @@ describe('outbox triggers (integration)', () => {
   }, 180_000);
 
   afterAll(async () => {
-    await prisma?.onModuleDestroy();
+    await prisma?.onApplicationShutdown();
     await containers?.teardown();
   }, 60_000);
 

@@ -32,7 +32,7 @@ const INVITATION_EXPIRES_IN_SECONDS = 60 * 60 * 48;
 
 const SESSION_EXPIRES_IN_SECONDS = 7 * 24 * 60 * 60;
 const SESSION_UPDATE_AGE_SECONDS = 24 * 60 * 60;
-const SESSION_COOKIE_CACHE_MAX_AGE_SECONDS = 5 * 60;
+const SESSION_COOKIE_CACHE_MAX_AGE_SECONDS = 60;
 
 type OAuthCredentials = { clientId: string; clientSecret: string };
 
@@ -104,7 +104,7 @@ export function createBetterAuth(
   return betterAuth({
     hooks: {
       before: createAuthMiddleware(async (ctx) => {
-        // Disabled accounts must still be able to clear their session.
+        enforcePasswordChangeRevocation(ctx.path, ctx.body as Record<string, unknown> | undefined);
         if (ctx.path === '/sign-out') return;
         // Server-side guards need the session status to render their own transport-specific
         // denial. HTTP get-session still enforces status here, including cached cookies.
@@ -119,7 +119,8 @@ export function createBetterAuth(
     ...(enabledProviders.length > 0 ? { socialProviders } : {}),
     emailAndPassword: {
       enabled: true,
-      minPasswordLength: 8,
+      minPasswordLength: 12,
+      revokeSessionsOnPasswordReset: true,
       sendResetPassword: async ({ user, token }, request) => {
         const lang = resolveRequestLocale(request);
         const link = `${frontendBase}/reset?token=${encodeURIComponent(token)}`;
@@ -427,10 +428,14 @@ async function sendAuthEmail(params: SendAuthEmailParams): Promise<void> {
 
 const EMAIL_LINK_PROTOCOLS = new Set(['http:', 'https:']);
 
-// escapeHtml guards the href's quoting, NOT its scheme: `javascript:...` contains none of the five
-// escaped characters and would survive intact. FRONTEND_BASE_URL is operator-controlled, so the
-// scheme is the one part of an email link that no escaping downstream can make safe — reject it
-// here instead. The link carries a single-use token, so it must never reach the message.
+export function enforcePasswordChangeRevocation(
+  path: string,
+  body: Record<string, unknown> | undefined,
+): void {
+  if (path !== '/change-password' || !body) return;
+  body['revokeOtherSessions'] = true;
+}
+
 export function assertHttpLink(link: string): string {
   let protocol: string;
   try {

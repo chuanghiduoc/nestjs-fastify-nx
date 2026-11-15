@@ -1,4 +1,5 @@
 export { generateId, generateCorrelationId } from './lib/id';
+export { ACCESS_FILTER_TRUNCATED_CODE } from './lib/access-filter-code';
 export {
   buildPageMeta,
   paginationSkip,
@@ -11,17 +12,21 @@ export { RETRIED_JOB_OPTIONS } from './lib/job-options';
 export {
   EMAIL_TEMPLATES,
   GENERIC_EMAIL_TEMPLATE,
+  emailNotificationPayloadSchema,
   type EmailNotificationPayload,
   type EmailTemplate,
 } from './lib/email-contract';
 export {
   DOMAIN_EVENTS,
   DOMAIN_EVENT_STREAMS,
+  PUBLISHER_DOMAIN_EVENTS,
   userEventPayloadSchema,
   organizationEventPayloadSchema,
+  configurationEventPayloadSchema,
   type DomainEventType,
   type OrganizationEventPayload,
   type UserEventPayload,
+  type ConfigurationEventPayload,
 } from './lib/domain-events';
 export {
   SENSITIVE_REDACT_PATHS,

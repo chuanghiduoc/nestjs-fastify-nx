@@ -50,7 +50,7 @@ Prisma transaction / database trigger
 
 OutboxRelayService (in scheduler app)
   ├── poll outbox_events WHERE processedAt IS NULL
-  ├── dispatch payload to BullMQ (or HTTP integration target)
+  ├── dispatch to @OnEvent listeners (which enqueue BullMQ jobs or call the integration target)
   ├── mark processedAt = now()
   └── on failure: increment attempts, retry up to OUTBOX_MAX_ATTEMPTS, then park
 ```

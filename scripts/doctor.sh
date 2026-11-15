@@ -5,7 +5,7 @@
 #   - Docker daemon running
 #   - Docker Compose v2 available
 #   - Node.js >= 24
-#   - pnpm >= 10
+#   - pnpm >= 11
 #   - .env file exists
 #   - .env drift against .env.example
 #   - Ports free: 3000, 5432, 6379, 6380, 9000, 1025, 8025
@@ -27,7 +27,7 @@ if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
   echo ""
   echo "Verifies all prerequisites for running the dev stack:"
   echo "  - Docker daemon and Compose v2"
-  echo "  - Node.js >= 24, pnpm >= 10"
+  echo "  - Node.js >= 24, pnpm >= 11"
   echo "  - .env file present with required keys"
   echo "  - Host ports free: 3000 5432 6379 6380 9000 1025 8025"
   echo ""

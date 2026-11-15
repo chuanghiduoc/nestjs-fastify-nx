@@ -13,7 +13,7 @@ describe('worker AppModule', () => {
   beforeAll(async () => {
     // Only the process-external connections are stubbed; the module graph itself stays real.
     vi.spyOn(PrismaService.prototype, 'onModuleInit').mockResolvedValue(undefined);
-    vi.spyOn(PrismaService.prototype, 'onModuleDestroy').mockResolvedValue(undefined);
+    vi.spyOn(PrismaService.prototype, 'onApplicationShutdown').mockResolvedValue(undefined);
 
     compiled = await Test.createTestingModule({ imports: [AppModule] }).compile();
   }, 60_000);

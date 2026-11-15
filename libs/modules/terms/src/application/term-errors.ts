@@ -28,7 +28,6 @@ export const termVersionTaken = () =>
   new DomainException(
     fieldProblem({
       kind: 'conflict',
-      permanent: false,
       code: ERROR_CODES.TERM_VERSION_TAKEN,
       messageKey: I18N_KEYS.errors.terms.version_taken,
       path: 'version',

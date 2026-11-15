@@ -1,5 +1,7 @@
-import { beforeEach, describe, expect, it } from 'vitest';
-import { generateId } from '@nestjs-fastify-nx/shared';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { EventPublisherPort } from '@nestjs-fastify-nx/core';
+import type { PrismaService } from '@nestjs-fastify-nx/infra-database';
+import { DOMAIN_EVENTS, generateId } from '@nestjs-fastify-nx/shared';
 import { FeatureFlag } from '../domain/entities/feature-flag.entity';
 import type { FeatureFlagRepositoryPort } from '../domain/ports/feature-flag-repository.port';
 import { InMemoryFeatureFlagRepository } from '../testing/in-memory-feature-flag-repository';
@@ -17,21 +19,57 @@ import { DeleteFeatureFlagCommand } from './commands/delete-feature-flag/delete-
 const ORG_ID = '019dd1a5-9235-70db-8d57-54ef91200001';
 const OTHER_ORG_ID = '019dd1a5-9235-70db-8d57-54ef91200002';
 const SUBJECT_ID = '019dd1a5-9235-70db-8d57-54ef91200003';
+const ACTOR_ID = '019dd1a5-9235-70db-8d57-54ef91200004';
+
+const prismaDouble = {
+  transaction: (fn: () => Promise<unknown>) => fn(),
+} as unknown as PrismaService;
+
+function eventsDouble(): EventPublisherPort & { publish: ReturnType<typeof vi.fn> } {
+  return {
+    publish: vi.fn(),
+    publishAll: vi.fn(),
+  } as unknown as EventPublisherPort & { publish: ReturnType<typeof vi.fn> };
+}
 
 describe('feature flag handlers', () => {
   let repository: InMemoryFeatureFlagRepository;
+  let events: ReturnType<typeof eventsDouble>;
 
   beforeEach(() => {
     repository = new InMemoryFeatureFlagRepository();
+    events = eventsDouble();
   });
 
   it('creates a flag', async () => {
-    const created = await new CreateFeatureFlagHandler(repository).execute(
-      new CreateFeatureFlagCommand({ organizationId: ORG_ID, key: 'checkout.new-flow' }),
+    const created = await new CreateFeatureFlagHandler(repository, prismaDouble, events).execute(
+      new CreateFeatureFlagCommand({
+        organizationId: ORG_ID,
+        userId: ACTOR_ID,
+        key: 'checkout.new-flow',
+      }),
     );
 
     expect(created.key).toBe('checkout.new-flow');
     expect(await repository.findById(ORG_ID, created.id)).not.toBeNull();
+  });
+
+  it('records an audit event atomically with the flag write', async () => {
+    await new CreateFeatureFlagHandler(repository, prismaDouble, events).execute(
+      new CreateFeatureFlagCommand({
+        organizationId: ORG_ID,
+        userId: ACTOR_ID,
+        key: 'audited.flag',
+      }),
+    );
+
+    expect(events.publish).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventType: DOMAIN_EVENTS.FEATURE_FLAGS_CREATED,
+        organizationId: ORG_ID,
+        payload: expect.objectContaining({ userId: ACTOR_ID, key: 'audited.flag' }),
+      }),
+    );
   });
 
   it('lists flags scoped to the organization', async () => {
@@ -78,8 +116,13 @@ describe('feature flag handlers', () => {
     });
     repository.seed(flag);
 
-    const updated = await new UpdateFeatureFlagHandler(repository).execute(
-      new UpdateFeatureFlagCommand({ organizationId: ORG_ID, id: flag.id, enabled: true }),
+    const updated = await new UpdateFeatureFlagHandler(repository, prismaDouble, events).execute(
+      new UpdateFeatureFlagCommand({
+        organizationId: ORG_ID,
+        userId: ACTOR_ID,
+        id: flag.id,
+        enabled: true,
+      }),
     );
 
     expect(updated.enabled).toBe(true);
@@ -91,8 +134,13 @@ describe('feature flag handlers', () => {
     const flag = FeatureFlag.create({ organizationId: OTHER_ORG_ID, key: 'theirs.flag' });
     repository.seed(flag);
 
-    const execute = new UpdateFeatureFlagHandler(repository).execute(
-      new UpdateFeatureFlagCommand({ organizationId: ORG_ID, id: flag.id, enabled: true }),
+    const execute = new UpdateFeatureFlagHandler(repository, prismaDouble, events).execute(
+      new UpdateFeatureFlagCommand({
+        organizationId: ORG_ID,
+        userId: ACTOR_ID,
+        id: flag.id,
+        enabled: true,
+      }),
     );
 
     await expect(execute).rejects.toMatchObject({ kind: 'not_found' });
@@ -112,8 +160,13 @@ describe('feature flag handlers', () => {
       delete: (organizationId, id) => repository.delete(organizationId, id),
     };
 
-    const execute = new UpdateFeatureFlagHandler(staleRead).execute(
-      new UpdateFeatureFlagCommand({ organizationId: ORG_ID, id: flag.id, enabled: true }),
+    const execute = new UpdateFeatureFlagHandler(staleRead, prismaDouble, events).execute(
+      new UpdateFeatureFlagCommand({
+        organizationId: ORG_ID,
+        userId: ACTOR_ID,
+        id: flag.id,
+        enabled: true,
+      }),
     );
 
     await expect(execute).rejects.toMatchObject({ kind: 'not_found' });
@@ -122,18 +175,18 @@ describe('feature flag handlers', () => {
   it('deletes a flag and reports not_found on the second call', async () => {
     const flag = FeatureFlag.create({ organizationId: ORG_ID, key: 'checkout.new-flow' });
     repository.seed(flag);
-    const handler = new DeleteFeatureFlagHandler(repository);
+    const handler = new DeleteFeatureFlagHandler(repository, prismaDouble, events);
 
-    await handler.execute(new DeleteFeatureFlagCommand(ORG_ID, flag.id));
+    await handler.execute(new DeleteFeatureFlagCommand(ORG_ID, ACTOR_ID, flag.id));
 
     await expect(
-      handler.execute(new DeleteFeatureFlagCommand(ORG_ID, flag.id)),
+      handler.execute(new DeleteFeatureFlagCommand(ORG_ID, ACTOR_ID, flag.id)),
     ).rejects.toMatchObject({ kind: 'not_found' });
   });
 
   it('answers not_found when deleting an unknown flag', async () => {
-    const execute = new DeleteFeatureFlagHandler(repository).execute(
-      new DeleteFeatureFlagCommand(ORG_ID, generateId()),
+    const execute = new DeleteFeatureFlagHandler(repository, prismaDouble, events).execute(
+      new DeleteFeatureFlagCommand(ORG_ID, ACTOR_ID, generateId()),
     );
 
     await expect(execute).rejects.toMatchObject({ kind: 'not_found' });

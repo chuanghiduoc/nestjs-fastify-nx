@@ -21,7 +21,9 @@ import { BatchedPurgeRunner } from './tasks/batched-purge.runner';
 import { CleanupTask } from './tasks/cleanup.task';
 import { DlqMonitorTask } from './tasks/dlq-monitor.task';
 import { HeartbeatTask } from './tasks/heartbeat.task';
+import { InvitationCleanupTask } from './tasks/invitation-cleanup.task';
 import { LocalStagingExpiryTask } from './tasks/local-staging-expiry.task';
+import { NotificationCleanupTask } from './tasks/notification-cleanup.task';
 import { OutboxCleanupTask } from './tasks/outbox-cleanup.task';
 import { SchedulerLeadershipModule } from './leadership/scheduler-leadership.module';
 import { SessionCleanupTask } from './tasks/session-cleanup.task';
@@ -57,6 +59,8 @@ import { UploadVerificationRecoveryTask } from './tasks/upload-verification-reco
     DlqMonitorTask,
     HeartbeatTask,
     LocalStagingExpiryTask,
+    NotificationCleanupTask,
+    InvitationCleanupTask,
     OutboxCleanupTask,
     {
       provide: LivenessProbeService,

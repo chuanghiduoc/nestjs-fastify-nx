@@ -22,12 +22,14 @@ export interface I18nInfraModuleOptions {
 //   - vitest / e2e / source-only:           apps/api/src/assets/i18n
 //   - Generic deploy:                       assets/i18n              (cwd = app root)
 function resolveDefaultTranslationsPath(): string {
-  const candidates = [
-    path.join(process.cwd(), 'dist/apps/api/assets/i18n'),
-    path.join(process.cwd(), 'dist/assets/i18n'),
-    path.join(process.cwd(), 'apps/api/src/assets/i18n'),
-    path.join(process.cwd(), 'assets/i18n'),
-  ];
+  const source = path.join(process.cwd(), 'apps/api/src/assets/i18n');
+  const dist = path.join(process.cwd(), 'dist/apps/api/assets/i18n');
+  const dockerDist = path.join(process.cwd(), 'dist/assets/i18n');
+  const generic = path.join(process.cwd(), 'assets/i18n');
+  const candidates =
+    process.env['NODE_ENV'] === 'test'
+      ? [source, dist, dockerDist, generic]
+      : [dist, dockerDist, source, generic];
   for (const candidate of candidates) {
     if (fs.existsSync(candidate)) return candidate;
   }

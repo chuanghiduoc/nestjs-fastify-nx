@@ -37,7 +37,7 @@ export class CreateOrganizationRoleDto {
   @ArrayMinSize(1)
   @ArrayMaxSize(MAX_PERMISSIONS_PER_ROLE)
   @IsString({ each: true })
-  permissions!: string[];
+  permissions!: readonly string[];
 }
 
 export class UpdateOrganizationRoleDto {
@@ -51,7 +51,7 @@ export class UpdateOrganizationRoleDto {
   @ArrayMinSize(1)
   @ArrayMaxSize(MAX_PERMISSIONS_PER_ROLE)
   @IsString({ each: true })
-  permissions!: string[];
+  permissions!: readonly string[];
 }
 
 export class OrganizationRoleResponseDto {
@@ -70,7 +70,7 @@ export class OrganizationRoleResponseDto {
   system!: boolean;
 
   @ApiProperty({ isArray: true, enum: ALL_PERMISSIONS, description: 'Permissions granted.' })
-  permissions!: string[];
+  permissions!: readonly string[];
 
   @ApiProperty({ type: String, format: 'date-time', nullable: true })
   createdAt!: Date | null;

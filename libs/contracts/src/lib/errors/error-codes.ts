@@ -1,3 +1,5 @@
+import { ACCESS_FILTER_TRUNCATED_CODE } from '@nestjs-fastify-nx/shared';
+
 // DO NOT rename — frontend uses these as stable i18n keys.
 export const ERROR_CODES = {
   BAD_REQUEST: 'bad_request',
@@ -34,6 +36,8 @@ export const ERROR_CODES = {
   UPLOAD_MAGIC_BYTES_UNKNOWN: 'upload_magic_bytes_unknown',
   UPLOAD_MAGIC_BYTES_MISMATCH: 'upload_magic_bytes_mismatch',
   UPLOAD_IN_PROGRESS: 'upload_in_progress',
+
+  AUTHORIZATION_RESULT_TRUNCATED: ACCESS_FILTER_TRUNCATED_CODE,
 
   ORGANIZATION_NOT_FOUND: 'organization_not_found',
   ORGANIZATION_ROLE_NOT_FOUND: 'organization_role_not_found',

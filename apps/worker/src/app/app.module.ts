@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { CqrsModule } from '@nestjs/cqrs';
 import { LoggerModule } from 'nestjs-pino';
+import { CqrsInstrumentationInitializer } from '@nestjs-fastify-nx/core';
 import { DeadLetterModule, RedisQueueModule } from '@nestjs-fastify-nx/infra-redis';
 import { StorageModule } from '@nestjs-fastify-nx/infra-storage';
 import { DatabaseModule } from '@nestjs-fastify-nx/infra-database';
@@ -36,6 +37,7 @@ import { MalwareScannerModule } from './security/malware-scanner.module';
     MailModule,
   ],
   providers: [
+    CqrsInstrumentationInitializer,
     EmailNotificationProcessor,
     UploadVerificationProcessor,
     {

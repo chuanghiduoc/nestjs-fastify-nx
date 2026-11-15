@@ -28,9 +28,6 @@
       "path": "../../shared/tsconfig.lib.json"
     },
     {
-      "path": "../../infra/messaging/tsconfig.lib.json"
-    },
-    {
       "path": "../../infra/database/tsconfig.lib.json"
     },
     {

@@ -1,10 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import { DomainException } from '@nestjs-fastify-nx/core';
 import type { DomainEvent, EventPublisherPort } from '@nestjs-fastify-nx/core';
+import { ERROR_CODES } from '@nestjs-fastify-nx/contracts';
 
-// In-process adapter backed by EventEmitter2.emitAsync — listener errors propagate to the caller.
-// For durable at-least-once cross-process delivery, swap this behind EVENT_PUBLISHER_PORT with
-// OutboxPublisher. Consumers must remain idempotent because a publish/mark crash causes redelivery.
 @Injectable()
 export class EventBusService implements EventPublisherPort {
   constructor(private readonly emitter: EventEmitter2) {}
@@ -12,7 +11,19 @@ export class EventBusService implements EventPublisherPort {
   async publish(event: DomainEvent): Promise<void> {
     const results = await this.emitter.emitAsync(event.eventType, event);
     if (results.length === 0) {
-      throw new Error(`No listener registered for domain event "${event.eventType}"`);
+      throw new DomainException({
+        kind: 'malformed',
+        code: ERROR_CODES.BUSINESS_RULE_VIOLATION,
+        title: `No listener registered for domain event "${event.eventType}"`,
+        permanent: true,
+        violations: [
+          {
+            path: 'eventType',
+            code: ERROR_CODES.BUSINESS_RULE_VIOLATION,
+            message: `No listener registered for domain event "${event.eventType}"`,
+          },
+        ],
+      });
     }
   }
 

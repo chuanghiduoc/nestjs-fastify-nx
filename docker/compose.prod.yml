@@ -239,22 +239,8 @@ services:
       redis-queue:
         condition: service_healthy
     restart: unless-stopped
-    # Liveness probe — process is alive. Use /api/v1/health/ready for K8s readiness;
-    # /api/v1/health (full) for ops dashboards. Docker should only kill on liveness fail.
-    healthcheck:
-      test:
-        [
-          'CMD',
-          'wget',
-          '--quiet',
-          '--spider',
-          '--tries=1',
-          'http://127.0.0.1:${PORT:-3000}/api/v1/health/live',
-        ]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 20s
+    # Liveness is the image's own node-based HEALTHCHECK (Dockerfile) — it does not depend on
+    # busybox wget flags, which Alpine silently ignores.
     stop_grace_period: 30s
     deploy:
       replicas: ${API_REPLICAS:-1}
@@ -298,10 +284,19 @@ services:
       redis-queue:
         condition: service_healthy
     restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          'test $(( $(date +%s) - $(stat -c %Y /tmp/worker-alive 2>/dev/null || echo 0) )) -lt 90',
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
     # stop_grace_period must exceed worst-case BullMQ job timeout + lock duration
-    # so in-flight jobs complete before SIGKILL. Email + S3 HEAD jobs are
-    # sub-second; 45s gives a comfortable buffer. Bump if longer-running handlers
-    # are introduced.
+    # so in-flight jobs complete before SIGKILL. A clamd stream over a ~2 GiB upload or a
+    # slow SMTP socket can outlast 45s; raise this when adding longer-running handlers.
     stop_grace_period: 45s
     deploy:
       replicas: ${WORKER_REPLICAS:-1}
@@ -340,6 +335,16 @@ services:
     # Multiple replicas provide failover; only the elected instance executes.
     # 30s grace period: VACUUM and partition DDL jobs can run up to ~20s;
     # the Docker default of 10s would SIGKILL them mid-operation.
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          'test $(( $(date +%s) - $(stat -c %Y /tmp/scheduler-alive 2>/dev/null || echo 0) )) -lt 90',
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
     stop_grace_period: 30s
     deploy:
       replicas: ${SCHEDULER_REPLICAS:-1}

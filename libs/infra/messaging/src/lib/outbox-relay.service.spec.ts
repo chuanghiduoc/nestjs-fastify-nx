@@ -31,6 +31,7 @@ function buildPrisma(opts: { claim: (limit: number) => OutboxRow[] }): {
   prisma: PrismaService;
   updateCalls: UpdateCall[];
   countMock: ReturnType<typeof vi.fn>;
+  updateManyMock: ReturnType<typeof vi.fn>;
 } {
   const updateCalls: UpdateCall[] = [];
 
@@ -47,11 +48,13 @@ function buildPrisma(opts: { claim: (limit: number) => OutboxRow[] }): {
     updateCalls.push(call);
     return {};
   });
+  const updateManyMock = vi.fn(async () => ({ count: 0 }));
 
   const db = {
     outboxEvent: {
       count: countMock,
       update: updateMock,
+      updateMany: updateManyMock,
     },
   };
 
@@ -59,6 +62,7 @@ function buildPrisma(opts: { claim: (limit: number) => OutboxRow[] }): {
     prisma: { transaction, db } as unknown as PrismaService,
     updateCalls,
     countMock,
+    updateManyMock,
   };
 }
 
@@ -94,6 +98,7 @@ describe('OutboxRelayService', () => {
     delete process.env['OUTBOX_POLL_INTERVAL_MS'];
     delete process.env['OUTBOX_BATCH_SIZE'];
     delete process.env['OUTBOX_MAX_ATTEMPTS'];
+    delete process.env['OUTBOX_DISPATCH_TIMEOUT_MS'];
   });
 
   it('returns 0 when there is nothing to dispatch', async () => {
@@ -152,6 +157,40 @@ describe('OutboxRelayService', () => {
     expect(updateCalls[0].data).not.toHaveProperty('processedAt');
   });
 
+  it('abandons a hung dispatch after the dispatch timeout and records a retryable error', async () => {
+    process.env['OUTBOX_DISPATCH_TIMEOUT_MS'] = '20';
+    const { prisma, updateCalls } = buildPrisma({ claim: () => [buildRow({ attempts: 2 })] });
+    const bus = buildBus();
+    bus.publish.mockReturnValue(new Promise(() => undefined));
+    const relay = new OutboxRelayService(prisma, bus);
+
+    expect(await relay.tick()).toBe(0);
+
+    expect(updateCalls).toHaveLength(1);
+    expect(updateCalls[0].data).toHaveProperty('lastError');
+    expect(updateCalls[0].data).not.toHaveProperty('processedAt');
+    expect(updateCalls[0].data).not.toHaveProperty('attempts');
+  });
+
+  it('re-drives rows parked by a schema-version skew on startup', async () => {
+    const { prisma, updateManyMock } = buildPrisma({ claim: () => [] });
+    const relay = new OutboxRelayService(prisma, buildBus());
+
+    relay.onApplicationBootstrap();
+    await vi.waitFor(() => expect(updateManyMock).toHaveBeenCalled());
+    await relay.onModuleDestroy();
+
+    expect(updateManyMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          processedAt: null,
+          lastError: { startsWith: 'Unsupported outbox schemaVersion' },
+        }),
+        data: expect.objectContaining({ attempts: 0, lastError: null }),
+      }),
+    );
+  });
+
   it('skips a row whose schemaVersion is newer than the relay supports and records the error', async () => {
     const { prisma, updateCalls } = buildPrisma({
       claim: () => [
@@ -169,8 +208,8 @@ describe('OutboxRelayService', () => {
     const relay = new OutboxRelayService(prisma, bus);
 
     expect(await relay.tick()).toBe(0);
-    // Never dispatched, never marked processed — only lastError recorded so the row
-    // exhausts attempts and surfaces via the stuck-row warning.
+    // Never dispatched and never marked processed — parkPermanently sets attempts=maxAttempts
+    // immediately, so the row surfaces via the stuck-row warning instead of burning retries.
     expect(bus.publish).not.toHaveBeenCalled();
     expect(updateCalls).toHaveLength(1);
     expect(updateCalls[0].data['lastError']).toContain('schemaVersion=99');

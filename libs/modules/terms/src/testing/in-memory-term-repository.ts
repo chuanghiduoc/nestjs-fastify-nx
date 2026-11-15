@@ -19,9 +19,11 @@ export class InMemoryTermRepository implements TermRepositoryPort {
   findLatestPublished(type: TermType): Promise<Term | null> {
     const published = [...this.terms.values()]
       .filter((term) => term.type === type && term.publishedAt !== null)
-      .sort(
-        (left, right) => (right.publishedAt?.getTime() ?? 0) - (left.publishedAt?.getTime() ?? 0),
-      );
+      .sort((left, right) => {
+        const byPublishedAt =
+          (right.publishedAt?.getTime() ?? 0) - (left.publishedAt?.getTime() ?? 0);
+        return byPublishedAt !== 0 ? byPublishedAt : right.id.localeCompare(left.id);
+      });
     return Promise.resolve(published[0] ?? null);
   }
 

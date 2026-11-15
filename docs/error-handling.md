@@ -36,13 +36,16 @@ knows what "not found" means on the wire.
 
 `kind` is the only decision a handler makes. The transport derives everything else.
 
-| `kind`       | Status | Use when                                                                                          | Do not use when                                                                         |
-| ------------ | ------ | ------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| `malformed`  | `400`  | The input could not be parsed at all — an opaque cursor that will not decode, an unreadable token | A field parsed fine but is out of range — that is `validation`                          |
-| `validation` | `422`  | Input parsed but broke a rule the client can fix                                                  | The whole payload is unreadable — that is `malformed`                                   |
-| `not_found`  | `404`  | The resource does not exist, or the caller must not learn that it does                            | The caller is simply not allowed — that is `forbidden`, unless hiding existence matters |
-| `conflict`   | `409`  | State conflict: duplicate key, stale version, work already in flight                              | A rule violation with no competing state — that is `validation`                         |
-| `forbidden`  | `403`  | Authenticated but not permitted                                                                   | Not authenticated at all — that is the guard's `401`, not a domain error                |
+| `kind`        | Status | Use when                                                                                          | Do not use when                                                                         |
+| ------------- | ------ | ------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| `malformed`   | `400`  | The input could not be parsed at all — an opaque cursor that will not decode, an unreadable token | A field parsed fine but is out of range — that is `validation`                          |
+| `validation`  | `422`  | Input parsed but broke a rule the client can fix                                                  | The whole payload is unreadable — that is `malformed`                                   |
+| `not_found`   | `404`  | The resource does not exist, or the caller must not learn that it does                            | The caller is simply not allowed — that is `forbidden`, unless hiding existence matters |
+| `conflict`    | `409`  | State conflict: duplicate key, stale version, work already in flight                              | A rule violation with no competing state — that is `validation`                         |
+| `forbidden`   | `403`  | Authenticated but not permitted                                                                   | Not authenticated at all — that is the guard's `401`, not a domain error                |
+| `unavailable` | `503`  | A downstream dependency (DB, storage, authorization engine) is unreachable or unhealthy           | A rule the request itself violates — that is `validation` or `conflict`                 |
+
+`unavailable` always forces `permanent: false`: infrastructure failures are retryable by definition.
 
 `malformed` vs `validation` is the RFC 9110 §15.5 distinction and the reason both exist: 400 means
 "I could not understand the request", 422 means "I understood it and it is wrong".

@@ -86,6 +86,20 @@ describe('startSentry', () => {
     });
   });
 
+  it('uses the per-app default and the SENTRY_RELEASE fallback', () => {
+    process.env['SENTRY_DSN'] = 'https://public@example.invalid/1';
+    process.env['NODE_ENV'] = 'development';
+    process.env['OTEL_SERVICE_VERSION'] = '0.0.0';
+    process.env['SENTRY_RELEASE'] = '2026.11.15';
+    delete process.env['SENTRY_TRACES_SAMPLE_RATE'];
+
+    startSentry({ serviceName: 'worker', tracesSampleRateDefault: 0.1 });
+
+    const options = vi.mocked(Sentry.init).mock.calls[0]?.[0];
+    expect(options?.tracesSampleRate).toBe(0.1);
+    expect(options?.release).toBe('2026.11.15');
+  });
+
   it('reports fatal errors without writing their message or stack to stderr', async () => {
     const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
     const exit = vi.spyOn(process, 'exit').mockImplementation((() => undefined) as never);

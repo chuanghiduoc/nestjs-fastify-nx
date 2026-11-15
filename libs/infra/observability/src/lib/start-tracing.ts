@@ -130,6 +130,7 @@ export function startTracing(options: StartTracingOptions = {}): NodeSDK | null 
     instrumentations: [
       getNodeAutoInstrumentations({
         '@opentelemetry/instrumentation-fs': { enabled: false },
+        '@opentelemetry/instrumentation-nestjs-core': { enabled: false },
         '@opentelemetry/instrumentation-http': {
           requestHook: (span, request) => {
             const rawUrl =

@@ -54,6 +54,5 @@ import { EnsurePersonalOrganizationHandler } from './application/commands/ensure
     DeleteTeamHandler,
     CancelInvitationHandler,
   ],
-  exports: [ORGANIZATION_ROLE_REPOSITORY],
 })
 export class OrganizationsModule {}

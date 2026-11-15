@@ -3,6 +3,7 @@ import type { FeatureFlagDto } from '../../dto/feature-flag.dto';
 
 export interface CreateFeatureFlagInput {
   readonly organizationId: string;
+  readonly userId: string;
   readonly key: string;
   readonly description?: string | null;
   readonly enabled?: boolean;
@@ -11,6 +12,7 @@ export interface CreateFeatureFlagInput {
 
 export class CreateFeatureFlagCommand extends Command<FeatureFlagDto> {
   readonly organizationId: string;
+  readonly userId: string;
   readonly key: string;
   readonly description?: string | null;
   readonly enabled?: boolean;
@@ -19,6 +21,7 @@ export class CreateFeatureFlagCommand extends Command<FeatureFlagDto> {
   constructor(input: CreateFeatureFlagInput) {
     super();
     this.organizationId = input.organizationId;
+    this.userId = input.userId;
     this.key = input.key;
     this.description = input.description;
     this.enabled = input.enabled;

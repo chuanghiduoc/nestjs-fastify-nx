@@ -21,7 +21,7 @@ pre-commit:
     # process — enough to exhaust the default heap. The content was already linted on its own commit.
     lint-staged:
       priority: 1
-      run: pnpm lint-staged
+      run: pnpm lint-staged --relative
       skip:
         - merge
         - rebase
@@ -52,6 +52,10 @@ commit-msg:
 
 pre-push:
   commands:
+    # Fast, origin/main-scoped gate before the remote sees the branch. The full gate (test/build/e2e)
+    # stays in CI because it needs Docker and several minutes.
+    affected-lint-typecheck:
+      run: pnpm nx affected -t lint typecheck --base=origin/main
     # Secret scan the full history before the remote sees it — the one gate that
     # must not reach a public remote. Skips silently without Docker; CI re-checks.
     gitleaks-full:

@@ -408,6 +408,14 @@ const DOCS: readonly ErrorTypeDoc[] = [
     meaning: 'No session with that id belongs to the caller.',
     resolution: 'Refresh the session list; it may already have been revoked or expired.',
   },
+  {
+    code: ERROR_CODES.AUTHORIZATION_RESULT_TRUNCATED,
+    status: 503,
+    title: 'Authorization result truncated',
+    meaning:
+      'The authorization engine could not enumerate every permitted resource for this request.',
+    resolution: 'Retry later. If it persists, narrow the request or contact support.',
+  },
 ];
 
 // A Map, not a plain object: the slug comes straight off the URL, and an object lookup would answer

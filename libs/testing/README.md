@@ -26,7 +26,7 @@ containers plus a `teardown()` hook. It does **not** migrate — call
 query fails with `relation does not exist`. Use it in `beforeAll`; tear down in
 `afterAll`.
 
-The containers start sequentially, and the first is stopped if the second fails
+The containers start concurrently; if one fails the started one is stopped before the error is rethrown
 to start — a `Promise.all` would leave the survivor running with no handle left
 to stop it.
 

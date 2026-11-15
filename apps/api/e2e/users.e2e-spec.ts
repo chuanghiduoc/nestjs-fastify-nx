@@ -19,7 +19,7 @@ describe('Users E2E', () => {
     userEmail = `me-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
     const signUp = await request(ctx.app.getHttpServer())
       .post('/api/auth/sign-up/email')
-      .send({ email: userEmail, password: 'password123', name: 'Me' });
+      .send({ email: userEmail, password: 'password1234', name: 'Me' });
     cookie = cookieHeaderFromSetCookies(signUp.headers['set-cookie']);
   });
 

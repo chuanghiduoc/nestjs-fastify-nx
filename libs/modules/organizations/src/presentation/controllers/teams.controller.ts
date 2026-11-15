@@ -38,7 +38,6 @@ import { ListTeamsQuery } from '../../application/queries/list-teams/list-teams.
 import { CreateTeamCommand } from '../../application/commands/create-team/create-team.command';
 import { UpdateTeamCommand } from '../../application/commands/update-team/update-team.command';
 import { DeleteTeamCommand } from '../../application/commands/delete-team/delete-team.command';
-import type { TeamDto } from '../../application/dto/organization-role.dto';
 import {
   CreateTeamDto,
   ListTeamsFilterDto,
@@ -69,7 +68,7 @@ export class TeamsController {
   async list(
     @CurrentUser() user: AuthenticatedSession,
     @Query() filter: ListTeamsFilterDto,
-  ): Promise<ListResponseDto<TeamDto>> {
+  ): Promise<ListResponseDto<TeamResponseDto>> {
     const result = await this.queryBus.execute(
       new ListTeamsQuery(requireOrganizationId(user), filter.limit, {
         startingAfter: filter.startingAfter,
@@ -90,7 +89,10 @@ export class TeamsController {
   @ApiOperation({ summary: 'Create a team in the active organization' })
   @ApiCreatedResponse({ type: TeamResponseDto, description: 'Team created.' })
   @ApiCommonErrors({ conflict: true })
-  create(@CurrentUser() user: AuthenticatedSession, @Body() dto: CreateTeamDto): Promise<TeamDto> {
+  create(
+    @CurrentUser() user: AuthenticatedSession,
+    @Body() dto: CreateTeamDto,
+  ): Promise<TeamResponseDto> {
     return this.commandBus.execute(new CreateTeamCommand(requireOrganizationId(user), dto.name));
   }
 
@@ -105,7 +107,7 @@ export class TeamsController {
     @CurrentUser() user: AuthenticatedSession,
     @Param('id', new ParseUUIDPipe({ version: '7' })) id: string,
     @Body() dto: UpdateTeamDto,
-  ): Promise<TeamDto> {
+  ): Promise<TeamResponseDto> {
     return this.commandBus.execute(
       new UpdateTeamCommand(requireOrganizationId(user), id, dto.name),
     );

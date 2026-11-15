@@ -18,7 +18,7 @@ describe('Organization roles and teams E2E', () => {
     const email = `roles-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
     const signUp = await request(ctx.app.getHttpServer())
       .post('/api/auth/sign-up/email')
-      .send({ email, password: 'password123', name: 'Owner' });
+      .send({ email, password: 'password1234', name: 'Owner' });
     cookie = cookieHeaderFromSetCookies(signUp.headers['set-cookie']);
 
     const membership = await ctx.app.get(PrismaService).db.member.findFirstOrThrow();

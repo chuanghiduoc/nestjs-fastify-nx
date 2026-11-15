@@ -17,7 +17,6 @@ const SESSION: AuthenticatedSession = {
   role: 'USER',
   status: 'ACTIVE',
   sessionId: SESSION_ID,
-  sessionToken: 't-1',
   organizationId: '019dd1a5-9235-70db-8d57-54ef92100003',
 };
 

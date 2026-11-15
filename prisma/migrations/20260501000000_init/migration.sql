@@ -151,7 +151,8 @@ CREATE TABLE "stored_files" (
 
     CONSTRAINT "stored_files_pkey" PRIMARY KEY ("id"),
     CONSTRAINT "stored_files_size_check" CHECK ("size" > 0),
-    CONSTRAINT "stored_files_status_check" CHECK ("status" IN ('FINALIZING', 'VERIFYING', 'READY', 'REJECTED'))
+    CONSTRAINT "stored_files_status_check" CHECK ("status" IN ('FINALIZING', 'VERIFYING', 'READY', 'REJECTED')),
+    CONSTRAINT "stored_files_scanOutcome_check" CHECK ("scanOutcome" IS NULL OR "scanOutcome" IN ('CLEAN', 'SKIPPED_TOO_LARGE'))
 );
 
 -- `id` is application-stamped UUIDv7 so producers can correlate aggregate
@@ -258,7 +259,7 @@ CREATE TABLE "terms" (
 CREATE TABLE "term_acceptances" (
     "id" UUID NOT NULL DEFAULT uuidv7(),
     "termId" UUID NOT NULL,
-    "userId" UUID NOT NULL,
+    "userId" UUID,
     "acceptedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "ipAddress" TEXT,
 
@@ -283,7 +284,7 @@ CREATE INDEX "users_email_trgm_idx" ON "users" USING gin ("email" gin_trgm_ops);
 CREATE INDEX "users_name_trgm_idx" ON "users" USING gin ("name" gin_trgm_ops);
 
 CREATE UNIQUE INDEX "sessions_token_key" ON "sessions"("token");
-CREATE INDEX "sessions_userId_idx" ON "sessions"("userId");
+CREATE INDEX "sessions_userId_createdAt_id_idx" ON "sessions"("userId", "createdAt" DESC, "id" DESC);
 CREATE INDEX "sessions_activeOrganizationId_idx" ON "sessions"("activeOrganizationId");
 CREATE INDEX "sessions_activeTeamId_idx" ON "sessions"("activeTeamId");
 -- Backs the scheduler's expired-session purge (SessionCleanupTask). Better Auth never deletes a
@@ -308,6 +309,7 @@ CREATE INDEX "members_userId_idx" ON "members"("userId");
 CREATE INDEX "members_org_createdAt_id_desc_idx" ON "members"("organizationId", "createdAt" DESC, "id" DESC);
 
 CREATE INDEX "invitations_organizationId_status_idx" ON "invitations"("organizationId", "status");
+CREATE INDEX "invitations_organizationId_createdAt_id_idx" ON "invitations"("organizationId", "createdAt" DESC, "id" DESC);
 CREATE INDEX "invitations_email_status_idx" ON "invitations"("email", "status");
 CREATE INDEX "invitations_expiresAt_idx" ON "invitations"("expiresAt");
 CREATE INDEX "invitations_inviterId_idx" ON "invitations"("inviterId");
@@ -337,7 +339,7 @@ CREATE INDEX "audit_logs_action_createdAt_idx" ON "audit_logs"("action", "create
 CREATE INDEX "audit_logs_createdAt_idx" ON "audit_logs"("createdAt");
 -- Compliance query path — "every admin action on resource X in window Y".
 CREATE INDEX "audit_logs_resource_createdAt_idx" ON "audit_logs"("resource", "createdAt");
-CREATE INDEX "audit_logs_organizationId_createdAt_idx" ON "audit_logs"("organizationId", "createdAt" DESC);
+CREATE INDEX "audit_logs_organizationId_createdAt_id_idx" ON "audit_logs"("organizationId", "createdAt" DESC, "id" DESC);
 
 CREATE UNIQUE INDEX "stored_files_sourceKey_key" ON "stored_files"("sourceKey");
 CREATE UNIQUE INDEX "stored_files_key_key" ON "stored_files"("key");
@@ -383,7 +385,7 @@ ALTER TABLE "notifications" ADD CONSTRAINT "notifications_organizationId_fkey" F
 ALTER TABLE "notifications" ADD CONSTRAINT "notifications_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 ALTER TABLE "feature_flags" ADD CONSTRAINT "feature_flags_organizationId_fkey" FOREIGN KEY ("organizationId") REFERENCES "organizations"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 ALTER TABLE "term_acceptances" ADD CONSTRAINT "term_acceptances_termId_fkey" FOREIGN KEY ("termId") REFERENCES "terms"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-ALTER TABLE "term_acceptances" ADD CONSTRAINT "term_acceptances_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "term_acceptances" ADD CONSTRAINT "term_acceptances_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 ALTER TABLE "stored_files" ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "stored_files_tenant_isolation" ON "stored_files"

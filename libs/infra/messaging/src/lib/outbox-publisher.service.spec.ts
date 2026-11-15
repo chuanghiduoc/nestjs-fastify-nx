@@ -37,8 +37,14 @@ describe('OutboxPublisher', () => {
     publisher = new OutboxPublisher(buildPrisma(outbox));
   });
 
+  it('refuses to write outside a transaction unless the producer opts into an event-only write', async () => {
+    await expect(publisher.publish(buildEvent())).rejects.toThrow(/event-only/);
+
+    expect(outbox.createMany).not.toHaveBeenCalled();
+  });
+
   it('persists a single event with type, aggregate id and serialized payload', async () => {
-    await publisher.publish(buildEvent());
+    await publisher.publish(buildEvent(), { eventOnly: true });
 
     expect(outbox.createMany).toHaveBeenCalledOnce();
     expect(outbox.created).toHaveLength(1);
@@ -58,15 +64,18 @@ describe('OutboxPublisher', () => {
   });
 
   it('persists multiple events in a single createMany call', async () => {
-    await publisher.publishAll([
-      buildEvent({ eventId: 'evt-1', aggregateId: 'user-1' }),
-      buildEvent({
-        eventId: 'evt-2',
-        eventType: 'users.logged_in',
-        aggregateId: 'user-2',
-        payload: { ip: '1.1.1.1' },
-      }),
-    ]);
+    await publisher.publishAll(
+      [
+        buildEvent({ eventId: 'evt-1', aggregateId: 'user-1' }),
+        buildEvent({
+          eventId: 'evt-2',
+          eventType: 'users.logged_in',
+          aggregateId: 'user-2',
+          payload: { ip: '1.1.1.1' },
+        }),
+      ],
+      { eventOnly: true },
+    );
 
     expect(outbox.createMany).toHaveBeenCalledOnce();
     expect(outbox.created).toHaveLength(2);
@@ -78,13 +87,15 @@ describe('OutboxPublisher', () => {
   });
 
   it('is a no-op when called with an empty event array', async () => {
-    await publisher.publishAll([]);
+    await publisher.publishAll([], { eventOnly: true });
     expect(outbox.createMany).not.toHaveBeenCalled();
   });
 
   it('propagates persistence failures so the surrounding transaction can roll back', async () => {
     outbox.createMany.mockRejectedValueOnce(new Error('unique violation'));
-    await expect(publisher.publish(buildEvent())).rejects.toThrow('unique violation');
+    await expect(publisher.publish(buildEvent(), { eventOnly: true })).rejects.toThrow(
+      'unique violation',
+    );
   });
 
   it('uses the transaction-scoped delegate when PrismaService exposes one', async () => {

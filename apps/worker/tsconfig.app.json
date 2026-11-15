@@ -37,6 +37,9 @@
       "path": "../../libs/infra/observability/tsconfig.lib.json"
     },
     {
+      "path": "../../libs/core/tsconfig.lib.json"
+    },
+    {
       "path": "../../libs/infra/database/tsconfig.lib.json"
     }
   ]

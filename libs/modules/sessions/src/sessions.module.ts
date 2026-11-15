@@ -16,6 +16,5 @@ import { SessionsController } from './presentation/controllers/sessions.controll
     RevokeSessionHandler,
     RevokeOtherSessionsHandler,
   ],
-  exports: [SESSION_REPOSITORY],
 })
 export class SessionsModule {}

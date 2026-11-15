@@ -44,6 +44,7 @@ export interface RedisLeaderLeaseOptions {
 export class RedisLeaderLease {
   private readonly token = randomUUID();
   private readonly inFlightTicks = new Set<Promise<void>>();
+  private tickInFlight = false;
   private timer?: NodeJS.Timeout;
   private leader = false;
   private stopped = false;
@@ -79,13 +80,15 @@ export class RedisLeaderLease {
   }
 
   async tick(): Promise<void> {
-    if (this.stopped) return;
+    if (this.stopped || this.tickInFlight) return;
+    this.tickInFlight = true;
     const run = this.runTick();
     this.inFlightTicks.add(run);
     try {
       await run;
     } finally {
       this.inFlightTicks.delete(run);
+      this.tickInFlight = false;
     }
   }
 

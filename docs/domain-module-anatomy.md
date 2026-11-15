@@ -194,7 +194,6 @@ export interface UserRepositoryPort {
   findByEmail(email: string): Promise<User | null>;
   findAllCursor(options: FindAllCursorOptions): Promise<FindAllCursorResult>;
   save(user: User): Promise<void>;
-  exists(email: string): Promise<boolean>;
 }
 ```
 
@@ -306,11 +305,14 @@ export interface ListUsersCursorResult {
 
 export class ListUsersCursorQuery extends Query<ListUsersCursorResult> {
   constructor(
+    readonly organizationId: string,
     readonly limit: number,
-    readonly startingAfter?: string,
-    readonly role?: UserRole,
-    readonly status?: UserStatus,
-    readonly search?: string,
+    readonly options: {
+      startingAfter?: string;
+      role?: string;
+      status?: string;
+      search?: string;
+    } = {},
   ) {
     super();
   }
@@ -431,8 +433,9 @@ export class PrismaUserRepository implements UserRepositoryPort {
 `exists` — see [`architecture.md`](./architecture.md) for the read-your-writes
 rule.
 
-**Rules**: translate Prisma error codes here (`P2002` → `ConflictException`,
-unknown → `InternalServerErrorException`) so callers never see a raw Prisma
+**Rules**: translate Prisma error codes here (`P2002` → `DomainException` with
+`kind: 'conflict'` and the domain `code`; every other Prisma error is re-thrown
+for the global filter to mask) so callers never see a raw Prisma
 error. This is the only place `User.reconstitute()` runs outside a test
 factory.
 
@@ -456,10 +459,8 @@ export class UsersController {
   @Get('me')
   @ApiOkResponse({ type: UserProfileResponseDto, description: 'The current user profile.' })
   @ApiCommonErrors({ auth: true, validation: false })
-  getProfile(
-    @Req() req: FastifyRequest & { user: AuthenticatedSession },
-  ): Promise<UserProfileResponseDto> {
-    return this.queryBus.execute(new GetUserProfileQuery(req.user.userId));
+  getProfile(@CurrentUser() user: AuthenticatedSession): Promise<UserProfileResponseDto> {
+    return this.queryBus.execute(new GetUserProfileQuery(user.userId));
   }
 }
 ```

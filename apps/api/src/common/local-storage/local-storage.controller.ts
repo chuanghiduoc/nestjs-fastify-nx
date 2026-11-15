@@ -88,6 +88,7 @@ export class LocalStorageController {
   }
 
   @Get(LOCAL_STORAGE_DOWNLOAD_ROUTE)
+  @Throttle(UPLOAD_LIMIT)
   async download(@Query() query: LocalDownloadQueryDto, @Res() reply: FastifyReply): Promise<void> {
     const download = await this.storage.openSignedDownload(query);
     if (!download) throw new NotFoundException();

@@ -30,7 +30,6 @@ import { PERMISSIONS } from '@nestjs-fastify-nx/shared';
 import { ListMySessionsQuery } from '../../application/queries/list-my-sessions/list-my-sessions.query';
 import { RevokeSessionCommand } from '../../application/commands/revoke-session/revoke-session.command';
 import { RevokeOtherSessionsCommand } from '../../application/commands/revoke-other-sessions/revoke-other-sessions.command';
-import type { RevokedSessionsDto, SessionDto } from '../../application/dto/session.dto';
 import {
   ListSessionsFilterDto,
   RevokedSessionsResponseDto,
@@ -60,7 +59,7 @@ export class SessionsController {
   async list(
     @CurrentUser() user: AuthenticatedSession,
     @Query() filter: ListSessionsFilterDto,
-  ): Promise<ListResponseDto<SessionDto>> {
+  ): Promise<ListResponseDto<SessionResponseDto>> {
     const result = await this.queryBus.execute(
       new ListMySessionsQuery(user.userId, user.sessionId, filter.limit, {
         startingAfter: filter.startingAfter,
@@ -104,7 +103,7 @@ export class SessionsController {
   })
   @ApiOkResponse({ type: RevokedSessionsResponseDto, description: 'How many were revoked.' })
   @ApiCommonErrors()
-  revokeOthers(@CurrentUser() user: AuthenticatedSession): Promise<RevokedSessionsDto> {
+  revokeOthers(@CurrentUser() user: AuthenticatedSession): Promise<RevokedSessionsResponseDto> {
     return this.commandBus.execute(new RevokeOtherSessionsCommand(user.userId, user.sessionId));
   }
 }

@@ -60,7 +60,7 @@ model Session {
   activeTeamId         String?       @db.Uuid
   activeTeam           Team?         @relation(fields: [activeTeamId], references: [id], onDelete: SetNull)
 
-  @@index([userId])
+  @@index([userId, createdAt(sort: Desc), id(sort: Desc)])
   @@index([activeOrganizationId])
   @@index([activeTeamId])
   // Backs the scheduler's expired-session purge (SessionCleanupTask). Better Auth never deletes
@@ -160,6 +160,7 @@ model Invitation {
   team         Team?        @relation(fields: [teamId], references: [id], onDelete: SetNull)
 
   @@index([organizationId, status])
+  @@index([organizationId, createdAt(sort: Desc), id(sort: Desc)])
   @@index([email, status])
   @@index([expiresAt])
   @@index([inviterId])
@@ -294,7 +295,7 @@ model AuditLog {
   @@index([userId, createdAt])
   @@index([action, createdAt])
   @@index([createdAt])
-  @@index([organizationId, createdAt(sort: Desc)])
+  @@index([organizationId, createdAt(sort: Desc), id(sort: Desc)])
   // Compliance query path — "every admin action on resource X in window Y".
   // Two-column index with createdAt last so it remains useful for range scans.
   @@index([resource, createdAt])
@@ -386,12 +387,12 @@ model Term {
 model TermAcceptance {
   id         String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
   termId     String   @db.Uuid
-  userId     String   @db.Uuid
+  userId     String?  @db.Uuid
   acceptedAt DateTime @default(now())
   ipAddress  String?
 
   term Term @relation(fields: [termId], references: [id], onDelete: Cascade)
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@unique([termId, userId])
   @@index([userId, acceptedAt(sort: Desc)])

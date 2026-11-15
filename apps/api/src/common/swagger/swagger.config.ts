@@ -81,7 +81,7 @@ export async function buildSwaggerDocument(app: INestApplication): Promise<OpenA
     .addTag('health', 'Liveness, readiness, dependency checks')
     .addTag(AUTH_TAG, 'Sessions, sign-up, sign-in, password reset (Better Auth)')
     .addTag('users', 'Authenticated user profile')
-    .addTag('admin', 'Admin-only operations (requires ADMIN role)')
+    .addTag('admin', 'Organization member administration (requires member:read)')
     .addTag('upload', 'File upload')
     .addCookieAuth(
       sessionCookie,

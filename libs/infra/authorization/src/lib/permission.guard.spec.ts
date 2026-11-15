@@ -18,7 +18,6 @@ function session(overrides: Partial<AuthenticatedSession> = {}): AuthenticatedSe
     role: 'USER',
     status: 'ACTIVE',
     sessionId: 's-1',
-    sessionToken: 't-1',
     organizationId: ORG_ID,
     ...overrides,
   };
@@ -61,6 +60,19 @@ describe('PermissionGuard', () => {
     await expect(guard.canActivate(contextFor(session()))).resolves.toBe(true);
   });
 
+  it('allows ws handlers that declare no permission (socket budget owns them)', async () => {
+    const guard = build({});
+    await expect(guard.canActivate(contextFor(session(), 'ws'))).resolves.toBe(true);
+  });
+
+  it('fails closed on a ws handler that declares a permission', async () => {
+    const guard = build({ permissions: [PERMISSIONS.SESSION_READ] });
+
+    await expect(guard.canActivate(contextFor(session(), 'ws'))).rejects.toMatchObject({
+      kind: 'forbidden',
+    });
+  });
+
   it('allows a public handler without consulting the engine', async () => {
     const spy = vi.spyOn(authorization, 'checkMany');
     const guard = build({ isPublic: true, permissions: [PERMISSIONS.ORGANIZATION_DELETE] });
@@ -71,14 +83,6 @@ describe('PermissionGuard', () => {
 
   // WebSocket frames are authorized at the socket.io layer; running here would read the socket as
   // an HTTP request, which is the failure the global-enhancer rule in CLAUDE.md exists to prevent.
-  it('never runs on the ws context', async () => {
-    const spy = vi.spyOn(authorization, 'checkMany');
-    const guard = build({ permissions: [PERMISSIONS.ORGANIZATION_DELETE] });
-
-    await expect(guard.canActivate(contextFor(undefined, 'ws'))).resolves.toBe(true);
-    expect(spy).not.toHaveBeenCalled();
-  });
-
   it('permits a caller whose role carries the permission', async () => {
     const guard = build({ permissions: [PERMISSIONS.FILE_CREATE] });
     await expect(guard.canActivate(contextFor(session()))).resolves.toBe(true);

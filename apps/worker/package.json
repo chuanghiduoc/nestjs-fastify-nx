@@ -4,6 +4,7 @@
   "private": true,
   "devDependencies": {
     "@nestjs-fastify-nx/infra-database": "workspace:*",
+    "@nestjs-fastify-nx/core": "workspace:*",
     "@nestjs-fastify-nx/infra-observability": "workspace:*",
     "@nestjs-fastify-nx/infra-redis": "workspace:*",
     "@nestjs-fastify-nx/infra-storage": "workspace:*",

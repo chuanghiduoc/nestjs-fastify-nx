@@ -24,7 +24,7 @@ describe('Idempotency E2E', () => {
     const email = `idem-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
     const signUp = await request(ctx.app.getHttpServer())
       .post('/api/auth/sign-up/email')
-      .send({ email, password: 'password123', name: 'Idem' });
+      .send({ email, password: 'password1234', name: 'Idem' });
     cookie = cookieHeaderFromSetCookies(signUp.headers['set-cookie']);
   });
 

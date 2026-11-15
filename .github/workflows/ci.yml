@@ -114,6 +114,30 @@ jobs:
   # builds the real multi-stage images and boots the full dev stack so those fail
   # here on the PR instead of at `release.yml` tag time. Supply-chain scanning
   # (Trivy/SBOM/Cosign) stays in release.yml — this gate is correctness only.
+  compose-config:
+    needs: main
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      # Compose-parse the production overlay (which docker-smoke never boots). Catches syntax,
+      # `!override` compatibility and env-file wiring before a real deployment does.
+      - name: Validate production compose overlay
+        env:
+          API_IMAGE: example.invalid/api:ci
+          WORKER_IMAGE: example.invalid/worker:ci
+          SCHEDULER_IMAGE: example.invalid/scheduler:ci
+          MIGRATION_IMAGE: example.invalid/migration:ci
+          POSTGRES_ADMIN_USER: postgres
+          POSTGRES_ADMIN_PASSWORD: ${{ github.run_id }}
+          GARAGE_ADMIN_TOKEN: ${{ github.run_id }}
+          GARAGE_RPC_SECRET: ${{ github.run_id }}
+        run: |
+          cp .env.example .env
+          touch .env.api .env.worker .env.scheduler .env.migration
+          docker compose --env-file .env -f docker/compose.yml -f docker/compose.prod.yml config -q
+
   docker-smoke:
     needs: main
     runs-on: ubuntu-latest
@@ -196,9 +220,10 @@ jobs:
       - name: Worker functional — welcome email delivered via mailpit
         run: |
           email="worker-smoke-$(date +%s)@smoke.test"
+          pass="password""1234"
           curl -sf -m 10 -X POST http://127.0.0.1:3000/api/auth/sign-up/email \
             -H 'content-type: application/json' \
-            -d "{\"email\":\"${email}\",\"password\":\"password123\",\"name\":\"WorkerSmoke\"}" >/dev/null \
+            -d "{\"email\":\"${email}\",\"password\":\"${pass}\",\"name\":\"WorkerSmoke\"}" >/dev/null \
             || { echo "sign-up failed"; exit 1; }
           # sign-up → users.registered outbox trigger → relay → BullMQ → worker → SMTP → mailpit.
           for _ in $(seq 1 30); do

@@ -40,17 +40,29 @@ export class MailAdapter implements OnModuleInit {
     const email = this.config.get('MAIL_DEFAULT_EMAIL', { infer: true });
     this.from = `"${name}" <${email}>`;
 
-    // Fail fast in production: a broken SMTP config should surface as a startup
-    // error, not as silently-dropped emails. In dev we log and continue so a
-    // mailpit restart doesn't block the worker.
-    try {
-      await this.transport.verify();
-      this.logger.log('Mail transport verified');
-    } catch (err) {
-      if (this.config.get('NODE_ENV', { infer: true }) === 'production') {
-        throw new Error('SMTP transport verification failed', { cause: err });
+    await this.verifyWithRetry();
+  }
+
+  private async verifyWithRetry(): Promise<void> {
+    const attempts = 3;
+    for (let attempt = 1; attempt <= attempts; attempt++) {
+      try {
+        await this.transport.verify();
+        this.logger.log('Mail transport verified');
+        return;
+      } catch (err) {
+        if (attempt === attempts) {
+          this.logger.error(
+            { err },
+            'SMTP transport verification failed; deliveries will retry through the queue and DLQ',
+          );
+          return;
+        }
+        await new Promise((resolve) => {
+          const timer = setTimeout(resolve, 1_000);
+          timer.unref();
+        });
       }
-      this.logger.warn({ err }, 'SMTP transport verification failed');
     }
   }
 

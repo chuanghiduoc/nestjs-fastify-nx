@@ -1,11 +1,12 @@
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Inject, Logger, type OnApplicationBootstrap } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import type { Job } from 'bullmq';
+import { UnrecoverableError, type Job } from 'bullmq';
 import type Redis from 'ioredis';
 import { createHash } from 'node:crypto';
 import {
   QUEUE_NAMES,
+  emailNotificationPayloadSchema,
   positiveIntEnv,
   type EmailNotificationPayload,
 } from '@nestjs-fastify-nx/shared';
@@ -58,10 +59,16 @@ export class EmailNotificationProcessor extends WorkerHost implements OnApplicat
 
   async process(job: Job<EmailNotificationPayload>): Promise<void> {
     if (job.id === undefined) {
-      throw new Error('Email job has no id; deterministic delivery identity cannot be established');
+      throw new UnrecoverableError(
+        'Email job has no id; deterministic delivery identity cannot be established',
+      );
+    }
+    const parsed = emailNotificationPayloadSchema.safeParse(job.data);
+    if (!parsed.success) {
+      throw new UnrecoverableError('Email job payload does not match the wire contract');
     }
     const jobId = String(job.id);
-    const { to, subject, body, correlationId } = job.data;
+    const { to, subject, body, correlationId } = parsed.data;
     const toMasked = redactEmail(to);
     this.logger.log(
       `Processing email job #${job.id} → to="${toMasked}" subject="${subject}" attempt=${job.attemptsMade + 1}`,

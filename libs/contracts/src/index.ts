@@ -31,3 +31,4 @@ export {
   type ProblemExampleInput,
 } from './lib/swagger/api-common-errors.decorator';
 export { ApiPaginatedResponse } from './lib/swagger/api-paginated-response.decorator';
+export { ApiUnpaginatedListResponse } from './lib/swagger/api-unpaginated-list-response.decorator';

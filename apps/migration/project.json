@@ -11,7 +11,7 @@
       "options": {
         "buildTarget": "migration:build",
         "runBuildTargetDependencies": false,
-        "watch": true
+        "watch": false
       },
       "configurations": {
         "development": {

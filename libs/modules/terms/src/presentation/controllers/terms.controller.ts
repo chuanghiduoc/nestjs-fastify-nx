@@ -23,7 +23,7 @@ import {
 } from '@nestjs/swagger';
 import {
   ApiCommonErrors,
-  ApiPaginatedResponse,
+  ApiUnpaginatedListResponse,
   ListResponseDto,
   toUnpaginatedListResponse,
 } from '@nestjs-fastify-nx/contracts';
@@ -59,7 +59,9 @@ export class TermsController {
     description:
       'Returns every published version, newest first per type. Unpublished drafts are never exposed here. The set is small and bounded, so it is not paginated.',
   })
-  @ApiPaginatedResponse(TermResponseDto, { description: 'Published terms.' })
+  @ApiUnpaginatedListResponse(TermResponseDto, {
+    description: 'Published terms. Not paginated.',
+  })
   @ApiCommonErrors()
   async list(): Promise<ListResponseDto<TermDto>> {
     const result = await this.queryBus.execute(new ListPublishedTermsQuery());
@@ -74,7 +76,9 @@ export class TermsController {
     description:
       'Used by a client to decide whether to prompt for re-acceptance after a new version is published.',
   })
-  @ApiPaginatedResponse(TermAcceptanceResponseDto, { description: 'The caller’s acceptances.' })
+  @ApiUnpaginatedListResponse(TermAcceptanceResponseDto, {
+    description: 'The caller’s acceptances. Not paginated.',
+  })
   @ApiCommonErrors()
   async acceptances(
     @CurrentUser() user: AuthenticatedSession,
