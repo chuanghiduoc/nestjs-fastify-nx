@@ -38,7 +38,8 @@ describe('injectDatabasePassword', () => {
   }
 
   it('injects a percent-containing password encoded exactly once', () => {
-    const file = passwordFile(['p', '%40', 'ss'].join(''));
+    const raw = ['p', '%40', 'ss'].join('');
+    const file = passwordFile(raw);
 
     const result = injectDatabasePassword('postgresql://app:@db:5432/app', file);
 
