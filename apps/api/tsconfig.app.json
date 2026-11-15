@@ -22,6 +22,9 @@
   ],
   "references": [
     {
+      "path": "../../libs/modules/tsconfig.lib.json"
+    },
+    {
       "path": "../../libs/modules/users/tsconfig.lib.json"
     },
     {
@@ -29,9 +32,6 @@
     },
     {
       "path": "../../libs/modules/terms/tsconfig.lib.json"
-    },
-    {
-      "path": "../../libs/modules/sessions/tsconfig.lib.json"
     },
     {
       "path": "../../libs/modules/organizations/tsconfig.lib.json"
@@ -47,9 +47,6 @@
     },
     {
       "path": "../../libs/modules/api-keys/tsconfig.lib.json"
-    },
-    {
-      "path": "../../libs/infra/redis/tsconfig.lib.json"
     },
     {
       "path": "../../libs/infra/observability/tsconfig.lib.json"
@@ -74,6 +71,9 @@
     },
     {
       "path": "../../libs/infra/auth/tsconfig.lib.json"
+    },
+    {
+      "path": "../../libs/infra/redis/tsconfig.lib.json"
     },
     {
       "path": "../../libs/testing/tsconfig.lib.json"

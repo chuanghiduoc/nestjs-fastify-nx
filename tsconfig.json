@@ -81,10 +81,10 @@
       "path": "./libs/modules/api-keys"
     },
     {
-      "path": "./libs/modules/sessions"
+      "path": "./libs/modules/terms"
     },
     {
-      "path": "./libs/modules/terms"
+      "path": "./libs/modules"
     }
   ]
 }

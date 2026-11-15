@@ -27,14 +27,14 @@ import {
 import { CurrentUser, type AuthenticatedSession } from '@nestjs-fastify-nx/infra-auth';
 import { RequirePermission } from '@nestjs-fastify-nx/infra-authorization';
 import { PERMISSIONS } from '@nestjs-fastify-nx/shared';
-import { ListMySessionsQuery } from '../../application/queries/list-my-sessions/list-my-sessions.query';
-import { RevokeSessionCommand } from '../../application/commands/revoke-session/revoke-session.command';
-import { RevokeOtherSessionsCommand } from '../../application/commands/revoke-other-sessions/revoke-other-sessions.command';
+import { ListMySessionsQuery } from './list-my-sessions';
+import { RevokeSessionCommand } from './revoke-session';
+import { RevokeOtherSessionsCommand } from './revoke-other-sessions';
 import {
   ListSessionsFilterDto,
   RevokedSessionsResponseDto,
   SessionResponseDto,
-} from '../dto/session.dto';
+} from './sessions.dto';
 
 const SESSIONS_PATH = '/api/v1/sessions';
 

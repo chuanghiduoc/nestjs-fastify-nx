@@ -6,7 +6,7 @@ import type {
   FindSessionsCursorOptions,
   FindSessionsCursorResult,
   SessionRepositoryPort,
-} from '../../domain/ports/session-repository.port';
+} from './session-repository.port';
 
 const SESSION_FIELDS = {
   id: true,

@@ -4,7 +4,7 @@ import type {
   FindSessionsCursorResult,
   SessionRecord,
   SessionRepositoryPort,
-} from '../domain/ports/session-repository.port';
+} from './session-repository.port';
 
 export class InMemorySessionRepository implements SessionRepositoryPort {
   private readonly sessions = new Map<string, SessionRecord>();

@@ -314,4 +314,38 @@ export default defineConfig(
       'modules-scale/no-cross-context-imports': 'error',
     },
   },
+
+  // Leaf contexts are flat folders: the application layer is the operation files themselves, so
+  // the framework-agnostic DTO rule keys on what a file IS (dto/controller/module/presentation)
+  // instead of the folder it sits in. Engine contexts keep their presentation/ folder.
+  {
+    files: ['libs/modules/src/**/*.ts'],
+    ignores: [
+      '**/presentation/**',
+      '**/*.dto.ts',
+      '**/*.controller.ts',
+      '**/*.module.ts',
+      '**/*.spec.ts',
+      '**/*.integration.ts',
+    ],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: '@nestjs/swagger',
+              message:
+                'Swagger decorators belong in <ctx>.dto.ts / presentation only — operation files must stay framework-agnostic.',
+            },
+            {
+              name: 'class-validator',
+              message:
+                'Operation files are pure TS — class-validator decorators belong in <ctx>.dto.ts / presentation only.',
+            },
+          ],
+        },
+      ],
+    },
+  },
 );

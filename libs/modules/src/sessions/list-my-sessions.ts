@@ -1,12 +1,52 @@
 import { Inject } from '@nestjs/common';
-import { QueryHandler, type IQueryHandler } from '@nestjs/cqrs';
+import { Query, QueryHandler, type IQueryHandler } from '@nestjs/cqrs';
 import { DomainException } from '@nestjs-fastify-nx/core';
 import { invalidCursorProblem } from '@nestjs-fastify-nx/contracts';
 import { decodeCursor, lastCursorOf, type DecodedCursor } from '@nestjs-fastify-nx/shared';
-import { SESSION_REPOSITORY } from '../../../domain/ports/session-repository.port';
-import type { SessionRepositoryPort } from '../../../domain/ports/session-repository.port';
-import type { SessionDto } from '../../dto/session.dto';
-import { ListMySessionsQuery, type ListMySessionsResult } from './list-my-sessions.query';
+import { SESSION_REPOSITORY, type SessionRepositoryPort } from './session-repository.port';
+
+export interface SessionDto {
+  id: string;
+  ipAddress: string | null;
+  userAgent: string | null;
+  current: boolean;
+  expiresAt: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface ListMySessionsResult {
+  data: SessionDto[];
+  hasMore: boolean;
+  lastCursor: string | null;
+}
+
+export interface ListMySessionsFilters {
+  readonly startingAfter?: string;
+  readonly activeOnly?: boolean;
+}
+
+export class ListMySessionsQuery extends Query<ListMySessionsResult> {
+  readonly userId: string;
+  readonly currentSessionId: string;
+  readonly limit: number;
+  readonly startingAfter?: string;
+  readonly activeOnly: boolean;
+
+  constructor(
+    userId: string,
+    currentSessionId: string,
+    limit: number,
+    filters: ListMySessionsFilters = {},
+  ) {
+    super();
+    this.userId = userId;
+    this.currentSessionId = currentSessionId;
+    this.limit = limit;
+    this.startingAfter = filters.startingAfter;
+    this.activeOnly = filters.activeOnly ?? true;
+  }
+}
 
 @QueryHandler(ListMySessionsQuery)
 export class ListMySessionsHandler implements IQueryHandler<

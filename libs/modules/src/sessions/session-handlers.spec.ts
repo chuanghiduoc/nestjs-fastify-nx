@@ -1,12 +1,9 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { generateId } from '@nestjs-fastify-nx/shared';
-import { InMemorySessionRepository } from '../testing/in-memory-session-repository';
-import { ListMySessionsHandler } from './queries/list-my-sessions/list-my-sessions.handler';
-import { ListMySessionsQuery } from './queries/list-my-sessions/list-my-sessions.query';
-import { RevokeSessionHandler } from './commands/revoke-session/revoke-session.handler';
-import { RevokeSessionCommand } from './commands/revoke-session/revoke-session.command';
-import { RevokeOtherSessionsHandler } from './commands/revoke-other-sessions/revoke-other-sessions.handler';
-import { RevokeOtherSessionsCommand } from './commands/revoke-other-sessions/revoke-other-sessions.command';
+import { InMemorySessionRepository } from './in-memory-session-repository';
+import { ListMySessionsHandler, ListMySessionsQuery } from './list-my-sessions';
+import { RevokeSessionCommand, RevokeSessionHandler } from './revoke-session';
+import { RevokeOtherSessionsCommand, RevokeOtherSessionsHandler } from './revoke-other-sessions';
 
 const USER_ID = '019dd1a5-9235-70db-8d57-54ef91400001';
 const OTHER_USER_ID = '019dd1a5-9235-70db-8d57-54ef91400002';

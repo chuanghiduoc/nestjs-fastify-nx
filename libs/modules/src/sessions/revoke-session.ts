@@ -1,10 +1,17 @@
 import { Inject } from '@nestjs/common';
-import { CommandHandler, type ICommandHandler } from '@nestjs/cqrs';
+import { Command, CommandHandler, type ICommandHandler } from '@nestjs/cqrs';
 import { DomainException } from '@nestjs-fastify-nx/core';
 import { ERROR_CODES, I18N_KEYS, fieldProblem } from '@nestjs-fastify-nx/contracts';
-import { SESSION_REPOSITORY } from '../../../domain/ports/session-repository.port';
-import type { SessionRepositoryPort } from '../../../domain/ports/session-repository.port';
-import { RevokeSessionCommand } from './revoke-session.command';
+import { SESSION_REPOSITORY, type SessionRepositoryPort } from './session-repository.port';
+
+export class RevokeSessionCommand extends Command<void> {
+  constructor(
+    readonly userId: string,
+    readonly id: string,
+  ) {
+    super();
+  }
+}
 
 @CommandHandler(RevokeSessionCommand)
 export class RevokeSessionHandler implements ICommandHandler<RevokeSessionCommand, void> {
