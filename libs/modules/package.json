@@ -9,6 +9,10 @@
       "types": "./src/index.ts",
       "default": "./src/index.ts"
     },
+    "./api-keys": {
+      "types": "./src/api-keys/index.ts",
+      "default": "./src/api-keys/index.ts"
+    },
     "./audit-log": {
       "types": "./src/audit-log/index.ts",
       "default": "./src/audit-log/index.ts"

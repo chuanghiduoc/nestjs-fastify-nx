@@ -14,7 +14,7 @@ import { UsersModule } from '@nestjs-fastify-nx/modules-users';
 import { AdminModule } from '@nestjs-fastify-nx/composition-admin';
 import { AuditLogModule } from '@nestjs-fastify-nx/modules/audit-log';
 import { OrganizationsModule } from '@nestjs-fastify-nx/modules-organizations';
-import { ApiKeysModule } from '@nestjs-fastify-nx/modules-api-keys';
+import { ApiKeysModule } from '@nestjs-fastify-nx/modules/api-keys';
 import { NotificationsModule } from '@nestjs-fastify-nx/modules/notifications';
 import { FeatureFlagsModule } from '@nestjs-fastify-nx/modules-feature-flags';
 import { TermsModule } from '@nestjs-fastify-nx/modules/terms';

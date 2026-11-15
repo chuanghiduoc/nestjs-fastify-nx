@@ -1,5 +1,5 @@
 import { Inject } from '@nestjs/common';
-import { CommandHandler, type ICommandHandler } from '@nestjs/cqrs';
+import { Command, CommandHandler, type ICommandHandler } from '@nestjs/cqrs';
 import {
   AUTHORIZATION_PORT,
   EVENT_PUBLISHER_PORT,
@@ -8,11 +8,34 @@ import {
 } from '@nestjs-fastify-nx/core';
 import { PrismaService } from '@nestjs-fastify-nx/infra-database';
 import { DOMAIN_EVENTS, generateId } from '@nestjs-fastify-nx/shared';
-import { API_KEY_REPOSITORY } from '../../../domain/ports/api-key-repository.port';
-import type { ApiKeyRepositoryPort } from '../../../domain/ports/api-key-repository.port';
-import { ApiKey } from '../../../domain/entities/api-key.entity';
-import { toApiKeyDto, type IssuedApiKeyDto } from '../../dto/api-key.dto';
-import { CreateApiKeyCommand } from './create-api-key.command';
+import { API_KEY_REPOSITORY, type ApiKeyRepositoryPort } from './api-key-repository.port';
+import { ApiKey } from './api-key.entity';
+import { toApiKeyDto, type IssuedApiKeyDto } from './api-key.dto';
+
+export interface CreateApiKeyInput {
+  readonly organizationId: string;
+  readonly userId: string;
+  readonly name: string;
+  readonly scopes: readonly string[];
+  readonly expiresAt?: Date;
+}
+
+export class CreateApiKeyCommand extends Command<IssuedApiKeyDto> {
+  readonly organizationId: string;
+  readonly userId: string;
+  readonly name: string;
+  readonly scopes: readonly string[];
+  readonly expiresAt?: Date;
+
+  constructor(input: CreateApiKeyInput) {
+    super();
+    this.organizationId = input.organizationId;
+    this.userId = input.userId;
+    this.name = input.name;
+    this.scopes = input.scopes;
+    this.expiresAt = input.expiresAt;
+  }
+}
 
 @CommandHandler(CreateApiKeyCommand)
 export class CreateApiKeyHandler implements ICommandHandler<CreateApiKeyCommand, IssuedApiKeyDto> {

@@ -1,12 +1,36 @@
 import { Inject } from '@nestjs/common';
-import { QueryHandler, type IQueryHandler } from '@nestjs/cqrs';
+import { Query, QueryHandler, type IQueryHandler } from '@nestjs/cqrs';
 import { DomainException } from '@nestjs-fastify-nx/core';
 import { invalidCursorProblem } from '@nestjs-fastify-nx/contracts';
 import { decodeCursor, lastCursorOf, type DecodedCursor } from '@nestjs-fastify-nx/shared';
-import { API_KEY_REPOSITORY } from '../../../domain/ports/api-key-repository.port';
-import type { ApiKeyRepositoryPort } from '../../../domain/ports/api-key-repository.port';
-import { toApiKeyDto, type ApiKeyDto } from '../../dto/api-key.dto';
-import { ListApiKeysQuery, type ListApiKeysResult } from './list-api-keys.query';
+import { API_KEY_REPOSITORY, type ApiKeyRepositoryPort } from './api-key-repository.port';
+import { toApiKeyDto, type ApiKeyDto } from './api-key.dto';
+
+export interface ListApiKeysResult {
+  data: ApiKeyDto[];
+  hasMore: boolean;
+  lastCursor: string | null;
+}
+
+export interface ListApiKeysFilters {
+  readonly startingAfter?: string;
+  readonly includeRevoked?: boolean;
+}
+
+export class ListApiKeysQuery extends Query<ListApiKeysResult> {
+  readonly organizationId: string;
+  readonly limit: number;
+  readonly startingAfter?: string;
+  readonly includeRevoked: boolean;
+
+  constructor(organizationId: string, limit: number, filters: ListApiKeysFilters = {}) {
+    super();
+    this.organizationId = organizationId;
+    this.limit = limit;
+    this.startingAfter = filters.startingAfter;
+    this.includeRevoked = filters.includeRevoked ?? false;
+  }
+}
 
 @QueryHandler(ListApiKeysQuery)
 export class ListApiKeysHandler implements IQueryHandler<ListApiKeysQuery, ListApiKeysResult> {
@@ -21,7 +45,6 @@ export class ListApiKeysHandler implements IQueryHandler<ListApiKeysQuery, ListA
     });
 
     const data: ApiKeyDto[] = items.map(toApiKeyDto);
-
     return { data, hasMore, lastCursor: lastCursorOf(items) };
   }
 

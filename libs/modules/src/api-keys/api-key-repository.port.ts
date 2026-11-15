@@ -1,5 +1,5 @@
 import type { DecodedCursor } from '@nestjs-fastify-nx/shared';
-import type { ApiKey } from '../entities/api-key.entity';
+import type { ApiKey } from './api-key.entity';
 
 export const API_KEY_REPOSITORY = Symbol('API_KEY_REPOSITORY');
 

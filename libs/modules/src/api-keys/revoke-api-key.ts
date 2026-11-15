@@ -1,5 +1,5 @@
 import { Inject } from '@nestjs/common';
-import { CommandHandler, type ICommandHandler } from '@nestjs/cqrs';
+import { Command, CommandHandler, type ICommandHandler } from '@nestjs/cqrs';
 import {
   DomainException,
   EVENT_PUBLISHER_PORT,
@@ -8,9 +8,17 @@ import {
 import { ERROR_CODES, I18N_KEYS, fieldProblem } from '@nestjs-fastify-nx/contracts';
 import { PrismaService } from '@nestjs-fastify-nx/infra-database';
 import { DOMAIN_EVENTS, generateId } from '@nestjs-fastify-nx/shared';
-import { API_KEY_REPOSITORY } from '../../../domain/ports/api-key-repository.port';
-import type { ApiKeyRepositoryPort } from '../../../domain/ports/api-key-repository.port';
-import { RevokeApiKeyCommand } from './revoke-api-key.command';
+import { API_KEY_REPOSITORY, type ApiKeyRepositoryPort } from './api-key-repository.port';
+
+export class RevokeApiKeyCommand extends Command<void> {
+  constructor(
+    readonly organizationId: string,
+    readonly userId: string,
+    readonly id: string,
+  ) {
+    super();
+  }
+}
 
 @CommandHandler(RevokeApiKeyCommand)
 export class RevokeApiKeyHandler implements ICommandHandler<RevokeApiKeyCommand, void> {

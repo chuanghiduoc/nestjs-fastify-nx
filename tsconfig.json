@@ -72,9 +72,6 @@
       "path": "./libs/modules/organizations"
     },
     {
-      "path": "./libs/modules/api-keys"
-    },
-    {
       "path": "./libs/modules"
     }
   ]

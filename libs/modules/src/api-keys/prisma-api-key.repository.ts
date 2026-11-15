@@ -2,12 +2,12 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '@nestjs-fastify-nx/infra-database';
 import { Prisma } from '@nestjs-fastify-nx/infra-database';
 import { keysetAfter, takePage, type Permission } from '@nestjs-fastify-nx/shared';
-import { ApiKey } from '../../domain/entities/api-key.entity';
+import { ApiKey } from './api-key.entity';
 import type {
   ApiKeyRepositoryPort,
   FindApiKeysCursorOptions,
   FindApiKeysCursorResult,
-} from '../../domain/ports/api-key-repository.port';
+} from './api-key-repository.port';
 
 type ApiKeyRow = {
   id: string;
