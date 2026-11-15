@@ -5,7 +5,7 @@
  * Production-ready REST + GraphQL API built on NestJS, Fastify and Nx.
  *
  * ### Authentication
- * Session-based via [Better Auth](https://better-auth.com). Endpoints under `/api/auth/*` (tagged **auth**) cover sign-up, sign-in, sign-out, social providers, password reset and session lookup. Protected resource endpoints require the `better-auth.session_token` cookie — click **Authorize** and paste the value to try them out.
+ * Session-based via [Better Auth](https://better-auth.com). Endpoints under `/api/auth/*` (tagged **auth**) cover sign-up, sign-in, sign-out, social providers, password reset and session lookup. Protected resource endpoints require the `__Secure-better-auth.session_token` cookie — click **Authorize** and paste the value to try them out.
  *
  * ### Response shapes
  *
