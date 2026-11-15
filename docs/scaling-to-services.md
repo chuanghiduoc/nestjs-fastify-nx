@@ -8,7 +8,7 @@ How this codebase gets split into separately deployed services — and why it is
 | --------------------- | ---------------------------------------------------------------------------------------------------------------------- |
 | Deployable units      | 4 (`api`, `worker`, `scheduler`, `migration`), each with its own Docker target and pruned `package.json`               |
 | Bounded contexts      | 9 (`users`, `audit-log`, `upload`, `organizations`, `api-keys`, `notifications`, `feature-flags`, `terms`, `sessions`) |
-| Cross-context imports | Blocked by `@nx/enforce-module-boundaries` — `scope:modules` cannot import another `scope:modules`                     |
+| Cross-context imports | Blocked — `modules-scale/no-cross-context-imports` (contexts are folders in one group project; barrels only)           |
 | Table ownership       | Clean: each context's repository touches only its own tables                                                           |
 | Cross-context FKs     | Only to the Better Auth core (`users`, `organizations`) — never between two feature contexts                           |
 | Cross-process events  | `outbox_events` + `OutboxRelayService`, at-least-once, with backoff                                                    |

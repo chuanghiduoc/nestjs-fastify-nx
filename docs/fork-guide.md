@@ -152,15 +152,15 @@ send the cookie from the same origin; other clients should use `auth.token`.
 | ------------------------------------------- | ------------------------------------ |
 | HTTP bootstrap, CORS, Helmet, rate limiting | `apps/api/src/main.ts`               |
 | Authentication, sessions, and role guards   | `libs/infra/auth`                    |
-| User use cases and repositories             | `libs/modules/users`                 |
-| Upload presign and confirmation             | `libs/modules/upload`                |
-| Roles, teams, invitations                   | `libs/modules/organizations`         |
-| Machine credentials                         | `libs/modules/api-keys`              |
-| In-app notifications                        | `libs/modules/notifications`         |
-| Feature flags                               | `libs/modules/feature-flags`         |
-| Legal terms and acceptance                  | `libs/modules/terms`                 |
-| Session listing and revocation              | `libs/modules/sessions`              |
-| Audit trail                                 | `libs/modules/audit-log`             |
+| User use cases and repositories             | `libs/modules/src/users`             |
+| Upload presign and confirmation             | `libs/modules/src/upload`            |
+| Roles, teams, invitations                   | `libs/modules/src/organizations`     |
+| Machine credentials                         | `libs/modules/src/api-keys`          |
+| In-app notifications                        | `libs/modules/src/notifications`     |
+| Feature flags                               | `libs/modules/src/feature-flags`     |
+| Legal terms and acceptance                  | `libs/modules/src/terms`             |
+| Session listing and revocation              | `libs/modules/src/sessions`          |
+| Audit trail                                 | `libs/modules/src/audit-log`         |
 | Permission catalog and system roles         | `libs/shared/src/lib/permissions.ts` |
 | Prisma schema and migrations                | `prisma/`                            |
 | Queue processing                            | `apps/worker`                        |

@@ -10,16 +10,17 @@ nestjs-fastify-nx/
 │   ├── scheduler/    # Scheduled tasks (@nestjs/schedule)
 │   └── migration/    # One-shot prisma migrate deploy + optional seed
 ├── libs/
-│   ├── modules/      # Bounded contexts (DDD)
-│   │   ├── users/           # scope:modules — user profile, admin listing
-│   │   ├── audit-log/       # scope:modules — event listener writes rows; RLS-bound read API
-│   │   ├── upload/          # scope:modules — multipart handler, file processing
-│   │   ├── organizations/   # scope:modules — custom roles, teams, invitations, current org
-│   │   ├── api-keys/        # scope:modules — machine credentials (ADR-0007)
-│   │   ├── notifications/   # scope:modules — in-app notifications fed by domain events
-│   │   ├── feature-flags/   # scope:modules — per-organization flags, deterministic rollout
-│   │   ├── terms/           # scope:modules — legal documents + per-user acceptance
-│   │   └── sessions/        # scope:modules — the caller's own sessions: list and revoke
+│   ├── modules/      # Bounded contexts (DDD) — ONE group project + workspace package
+│   │   └── src/
+│   │       ├── users/           # user profile, admin listing
+│   │       ├── audit-log/       # event listener writes rows; RLS-bound read API
+│   │       ├── upload/          # multipart handler, file processing
+│   │       ├── organizations/   # custom roles, teams, invitations, current org
+│   │       ├── api-keys/        # machine credentials (ADR-0007)
+│   │       ├── notifications/   # in-app notifications fed by domain events
+│   │       ├── feature-flags/   # per-organization flags, deterministic rollout
+│   │       ├── terms/           # legal documents + per-user acceptance
+│   │       └── sessions/        # the caller's own sessions: list and revoke
 │   ├── composition/   # Cross-cutting aggregators (scope:composition)
 │   │   └── admin/     # admin surface + Bull Board (scope:composition tag; composed into api)
 │   ├── infra/        # Adapters
@@ -59,7 +60,7 @@ flowchart TD
 
     comp["libs/composition/ · scope:composition<br/>(admin · Bull Board)"]
 
-    subgraph modules["libs/modules/ · scope:modules · bounded contexts"]
+    subgraph modules["libs/modules/src/ · one group project · scope:modules"]
         direction LR
         users["users"]
         audit["audit-log"]
@@ -111,33 +112,29 @@ flowchart TD
 
 ## Domain Module Layout (DDD + Hexagonal)
 
-Each `libs/modules/<context>` follows this structure:
+Every bounded context is a **folder** under `libs/modules/src/<context>/` — the
+whole group is one Nx project (`modules`, tag `scope:modules`) and one workspace
+package whose `exports` map resolves `@nestjs-fastify-nx/modules/<ctx>` to the
+folder's `index.ts`. The DDD layers exist as **file roles, not folders**:
 
 ```
-module/src/
-  domain/
-    entities/          # Aggregate roots
-    value-objects/     # Immutable VOs
-    events/            # Domain events (e.g. UserRegistered)
-    ports/             # Interfaces (repository ports, etc.)
-  application/
-    commands/          # CQRS command handlers
-    queries/           # CQRS query handlers
-    listeners/         # Domain-event subscribers
-    dto/               # Application-layer transport types
-  infrastructure/
-    repositories/      # Prisma implementations of domain ports
-  presentation/
-    controllers/       # HTTP handlers
-    dto/               # Request/response DTOs
-    decorators/        # Module-specific param decorators (shared @CurrentUser lives in infra-auth)
-  module.ts
-  index.ts             # Public barrel — re-export only what consumers need
+modules/src/<context>/                     # flat folder — leaf or engine tier
+  <context>.entity.ts                      # aggregate root (only when invariants demand it)
+  <context>-repository.port.ts             # repository port + DI token
+  create-<context>.ts                      # colocated: Command + @CommandHandler
+  list-<context>.ts                        # colocated: Query + @QueryHandler
+  <context>.controller.ts                 # HTTP surface (buses only, never handlers)
+  <context>.dto.ts                         # presentation DTOs — only file importing swagger/class-validator
+  prisma-<context>.repository.ts           # Prisma adapter + colocated .integration.spec.ts
+  <context>.module.ts                     # wiring: port→adapter, handlers, controller
+  <context>-listeners.module.ts            # listeners-only slice (worker/scheduler hosts)
+  index.ts                                 # public barrel — commands/queries + result types, never handlers
 ```
 
 **New to the codebase?** [`domain-module-anatomy.md`](./domain-module-anatomy.md)
 walks through every file above one-by-one — what it is, why it exists, when you
-create one, and how to wire it — using the real `users` module as the example.
+create one, and how to wire it — using the real `users` and `sessions` folders as
+the example.
 
 Authentication is delegated to [Better Auth](https://better-auth.com) (mounted by
 `libs/infra/auth`), so feature modules do not own login/logout flows or token
@@ -145,7 +142,9 @@ adapters — they only consume the resulting session via `BetterAuthGuard`.
 
 ## Module Boundary Rules
 
-Enforced by `@nx/enforce-module-boundaries` (see `eslint.config.mjs`):
+Scope-level edges are enforced by `@nx/enforce-module-boundaries`; the edges
+**between context folders** inside the group are enforced by the custom
+`modules-scale/no-cross-context-imports` rule (see `eslint.config.mjs`):
 
 | Source tag          | Allowed dependencies                                             |
 | ------------------- | ---------------------------------------------------------------- |
@@ -173,7 +172,7 @@ flowchart TD
     scheduler["scope:scheduler"]
     comp["scope:composition"]
 
-    subgraph bc["scope:modules · bounded contexts"]
+    subgraph bc["libs/modules/src/ · one group project · bounded contexts"]
         direction LR
         m1["users"]
         m2["audit-log"]

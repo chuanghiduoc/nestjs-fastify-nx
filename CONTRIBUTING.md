@@ -51,28 +51,28 @@ See [docs/architecture.md](./docs/architecture.md) for the full diagram.
 ### 1. Scaffold via generator
 
 ```bash
-pnpm gen:module payments   # shortcut → libs/modules/payments (+ nx sync)
+pnpm gen:module payments   # → libs/modules/src/payments (folder in the group; no install, no sync)
 # equivalent: pnpm nx g @nestjs-fastify-nx/tools-generators:module --name=payments --directory=modules
 ```
 
 ### 2. Implement domain logic
 
-- Aggregate roots in `domain/entities/`
-- Domain events in `domain/events/`
-- Repository interfaces in `domain/ports/`
+- Aggregate roots in `<context>.entity.ts` (only when invariants demand it)
+- Domain value objects in `*.vo.ts`
+- Repository interfaces in `<context>-repository.port.ts`
 
-### 3. Add CQRS handlers
+### 3. Add CQRS operations
 
-- Commands in `application/commands/`
-- Queries in `application/queries/`
+- Commands colocated with their handler in `<verb>-<context>.ts`
+- Queries colocated with their handler the same way
 
 ### 4. Implement repositories
 
-- Prisma adapters in `infrastructure/repositories/`
+- Prisma adapter in `prisma-<context>.repository.ts` + colocated `.integration.spec.ts`
 
 ### 5. Wire controllers
 
-- REST endpoints in `presentation/controllers/`
+- REST endpoints in `<context>.controller.ts`, presentation DTOs in `<context>.dto.ts`
 
 ### 6. Export public API
 
@@ -81,7 +81,7 @@ pnpm gen:module payments   # shortcut → libs/modules/payments (+ nx sync)
 ### 7. Add to AppModule
 
 ```typescript
-import { PaymentsModule } from '@nestjs-fastify-nx/modules-payments';
+import { PaymentsModule } from '@nestjs-fastify-nx/modules/payments';
 
 @Module({
   imports: [PaymentsModule],
@@ -99,7 +99,7 @@ pnpm prisma migrate dev --name "add payments table"
 ### 9. Write tests
 
 ```bash
-pnpm nx test modules-payments
+pnpm nx test modules
 ```
 
 Integration tests use real Postgres via Testcontainers (no mocks).
@@ -121,8 +121,9 @@ Full walkthrough: [docs/creating-a-module.md](./docs/creating-a-module.md)
 | Watch + rebuild      | `pnpm nx watch -p api -- pnpm nx run api:build`                              |
 | Scaffold module      | `pnpm gen:module <name>`                                                     |
 | Scaffold composition | `pnpm gen:composition <name>`                                                |
+| Remove folder module | `pnpm rm:module <name>`                                                      |
 | Remove a project     | `pnpm rm:project <name>`                                                     |
-| Run tests for module | `pnpm nx test modules-payments`                                              |
+| Run tests for module | `pnpm nx test modules`                                                       |
 | Affected unit tests  | `pnpm nx affected -t test --base=origin/main`                                |
 | All unit tests       | `pnpm nx run-many --target=test --all`                                       |
 | Integration tests    | `pnpm nx run-many --target=test --parallel=2 --skip-nx-cache -- integration` |

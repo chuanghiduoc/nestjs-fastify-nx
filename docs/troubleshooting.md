@@ -56,7 +56,7 @@ Symptom: `Cannot find module from apps/api/src/common/upload`.
 
 Cause: upload module moved from `apps/api/src/common/upload` to `libs/modules/upload`.
 
-Resolution: update your import to `@nestjs-fastify-nx/modules-upload`.
+Resolution: update your import to `@nestjs-fastify-nx/modules/upload`.
 
 ### Nx marks a build/typecheck "flaky", or `tsc` errors with TS6305 / EPERM
 
@@ -501,7 +501,7 @@ and security hardening steps.
 `AuditLog` rows are written by `AuditLogListener`, which subscribes to
 specific events. If an action you expected to be audited is missing, check
 that the producing aggregate publishes an event registered in the listener's
-event map (see `libs/modules/audit-log/src/application/listeners/`).
+event map (see `libs/modules/src/audit-log/audit-log.listener.ts`).
 
 ## Inspecting slow queries
 
