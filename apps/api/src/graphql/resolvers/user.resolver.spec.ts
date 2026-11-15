@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { DomainException } from '@nestjs-fastify-nx/core';
 import type { QueryBus } from '@nestjs/cqrs';
 import { UserResolver } from './user.resolver';
-import { GetUserProfileQuery, ListUsersCursorQuery } from '@nestjs-fastify-nx/modules-users';
+import { GetUserProfileQuery, ListUsersCursorQuery } from '@nestjs-fastify-nx/modules/users';
 import type { AuthenticatedSession } from '@nestjs-fastify-nx/infra-auth';
 
 const mockProfileResult = {

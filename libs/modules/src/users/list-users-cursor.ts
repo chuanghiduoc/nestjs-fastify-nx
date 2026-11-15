@@ -1,12 +1,43 @@
 import { Inject } from '@nestjs/common';
-import { QueryHandler, type IQueryHandler } from '@nestjs/cqrs';
+import { Query, QueryHandler, type IQueryHandler } from '@nestjs/cqrs';
 import { DomainException } from '@nestjs-fastify-nx/core';
 import { invalidCursorProblem } from '@nestjs-fastify-nx/contracts';
 import { decodeCursor, lastCursorOf, type DecodedCursor } from '@nestjs-fastify-nx/shared';
-import { USER_REPOSITORY_PORT } from '../../../domain/ports/user-repository.port';
-import type { UserRepositoryPort } from '../../../domain/ports/user-repository.port';
-import type { UserListItemDto } from '../../dto/user-list-item.dto';
-import { ListUsersCursorQuery, type ListUsersCursorResult } from './list-users-cursor.query';
+import { USER_REPOSITORY_PORT, type UserRepositoryPort } from './user-repository.port';
+import type { UserStatus } from './user.entity';
+import type { UserListItemDto } from './user-list-item.dto';
+
+export interface ListUsersCursorResult {
+  data: UserListItemDto[];
+  hasMore: boolean;
+  lastCursor: string | null;
+}
+
+export interface ListUsersCursorFilters {
+  readonly startingAfter?: string;
+  readonly role?: string;
+  readonly status?: UserStatus;
+  readonly search?: string;
+}
+
+export class ListUsersCursorQuery extends Query<ListUsersCursorResult> {
+  readonly organizationId: string;
+  readonly limit: number;
+  readonly startingAfter?: string;
+  readonly role?: string;
+  readonly status?: UserStatus;
+  readonly search?: string;
+
+  constructor(organizationId: string, limit: number, filters: ListUsersCursorFilters = {}) {
+    super();
+    this.organizationId = organizationId;
+    this.limit = limit;
+    this.startingAfter = filters.startingAfter;
+    this.role = filters.role;
+    this.status = filters.status;
+    this.search = filters.search;
+  }
+}
 
 @QueryHandler(ListUsersCursorQuery)
 export class ListUsersCursorHandler implements IQueryHandler<
@@ -29,7 +60,7 @@ export class ListUsersCursorHandler implements IQueryHandler<
       id: user.id,
       email: user.email.toString(),
       name: user.name,
-      role: user.organizationRole ?? '',
+      role: user.organizationRole ?? user.role,
       status: user.status,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
@@ -38,15 +69,10 @@ export class ListUsersCursorHandler implements IQueryHandler<
     return { data, hasMore, lastCursor: lastCursorOf(items) };
   }
 
-  // Decoding here — rather than in the repository — keeps the cursor string at the boundary that
-  // owns input validation, so every UserRepositoryPort implementation receives a cursor that
-  // cannot be malformed.
   private decodeStartingAfter(raw?: string): DecodedCursor | undefined {
     if (!raw) return undefined;
-
     const decoded = decodeCursor(raw);
     if (!decoded) throw new DomainException(invalidCursorProblem());
-
     return decoded;
   }
 }

@@ -21,9 +21,6 @@
       "path": "./libs/infra/storage"
     },
     {
-      "path": "./libs/modules/users"
-    },
-    {
       "path": "./libs/infra/redis"
     },
     {

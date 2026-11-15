@@ -3,8 +3,8 @@ import { QueryBus } from '@nestjs/cqrs';
 import { ApiTags, ApiOperation, ApiOkResponse, ApiCookieAuth } from '@nestjs/swagger';
 import { ApiCommonErrors } from '@nestjs-fastify-nx/contracts';
 import { CurrentUser, type AuthenticatedSession } from '@nestjs-fastify-nx/infra-auth';
-import { UserProfileResponseDto } from '../dto/auth-response.dto';
-import { GetUserProfileQuery } from '../../application/queries/get-user-profile/get-user-profile.query';
+import { UserProfileResponseDto } from './auth-response.dto';
+import { GetUserProfileQuery } from './get-user-profile';
 
 @ApiTags('users')
 @Controller('users')

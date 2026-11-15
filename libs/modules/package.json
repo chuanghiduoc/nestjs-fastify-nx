@@ -32,6 +32,10 @@
     "./terms": {
       "types": "./src/terms/index.ts",
       "default": "./src/terms/index.ts"
+    },
+    "./users": {
+      "types": "./src/users/index.ts",
+      "default": "./src/users/index.ts"
     }
   },
   "devDependencies": {
@@ -42,6 +46,7 @@
     "@nestjs-fastify-nx/infra-database": "workspace:*",
     "@nestjs-fastify-nx/shared": "workspace:*",
     "@nestjs-fastify-nx/testing": "workspace:*",
-    "@nestjs-fastify-nx/infra-messaging": "workspace:*"
+    "@nestjs-fastify-nx/infra-messaging": "workspace:*",
+    "@nestjs-fastify-nx/infra-redis": "workspace:*"
   }
 }

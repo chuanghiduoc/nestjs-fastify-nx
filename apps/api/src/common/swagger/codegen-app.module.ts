@@ -10,7 +10,7 @@ import { StorageModule } from '@nestjs-fastify-nx/infra-storage';
 import { BetterAuthGuard, RolesGuard } from '@nestjs-fastify-nx/infra-auth';
 import { AuthorizationModule, PermissionGuard } from '@nestjs-fastify-nx/infra-authorization';
 import { I18nInfraModule } from '@nestjs-fastify-nx/infra-i18n';
-import { UsersModule } from '@nestjs-fastify-nx/modules-users';
+import { UsersModule } from '@nestjs-fastify-nx/modules/users';
 import { AdminModule } from '@nestjs-fastify-nx/composition-admin';
 import { AuditLogModule } from '@nestjs-fastify-nx/modules/audit-log';
 import { OrganizationsModule } from '@nestjs-fastify-nx/modules-organizations';

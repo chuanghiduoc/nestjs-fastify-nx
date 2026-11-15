@@ -1,10 +1,10 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { decodeCursor } from '@nestjs-fastify-nx/shared';
-import { MockUserRepository } from '../../../testing/mock-user-repository';
-import { UserFactory } from '../../../testing/user.factory';
-import { ListUsersCursorHandler } from './list-users-cursor.handler';
-import { ListUsersCursorQuery } from './list-users-cursor.query';
-import type { User } from '../../../domain/entities/user.entity';
+import { MockUserRepository } from './mock-user-repository';
+import { UserFactory } from './user.factory';
+import { ListUsersCursorHandler } from './list-users-cursor';
+import { ListUsersCursorQuery } from './list-users-cursor';
+import type { User } from './user.entity';
 
 const ORG_ID = '019dd1a5-9235-70db-8d57-54ef90300001';
 const OTHER_ORG_ID = '019dd1a5-9235-70db-8d57-54ef90300002';

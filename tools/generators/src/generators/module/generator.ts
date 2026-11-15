@@ -54,7 +54,7 @@ export async function moduleGenerator(tree: Tree, options: ModuleGeneratorSchema
   });
 
   // Import path mirrors the project name so consumers can tell at a glance
-  // which scope a barrel belongs to — `@nestjs-fastify-nx/modules-users` is a
+  // which scope a barrel belongs to — `@nestjs-fastify-nx/modules/users` is a
   // bounded-context module, `@nestjs-fastify-nx/composition-admin` is a
   // cross-cutting aggregate. Keep name and path in lockstep.
   const importPath = `@nestjs-fastify-nx/${projectName}`;

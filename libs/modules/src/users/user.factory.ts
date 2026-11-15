@@ -1,4 +1,4 @@
-import { User, UserRole, UserStatus } from '../domain/entities/user.entity';
+import { User, UserRole, UserStatus } from './user.entity';
 import { generateId } from '@nestjs-fastify-nx/shared';
 
 let counter = 0;

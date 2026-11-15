@@ -1,7 +1,7 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsEnum, IsOptional, IsString, MaxLength } from 'class-validator';
 import { CursorPaginationDto } from '@nestjs-fastify-nx/contracts';
-import { UserStatus } from '../../domain/entities/user.entity';
+import { UserStatus } from './user.entity';
 
 export class ListUsersCursorFilterDto extends CursorPaginationDto {
   @ApiPropertyOptional({ description: 'Filter by organization membership role.' })

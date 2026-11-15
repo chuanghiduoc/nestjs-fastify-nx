@@ -1,10 +1,26 @@
 import { Inject } from '@nestjs/common';
-import { QueryHandler, type IQueryHandler } from '@nestjs/cqrs';
+import { Query, QueryHandler, type IQueryHandler } from '@nestjs/cqrs';
 import { DomainException } from '@nestjs-fastify-nx/core';
 import { I18N_KEYS, ERROR_CODES } from '@nestjs-fastify-nx/contracts';
-import { GetUserProfileQuery, type UserProfileResult } from './get-user-profile.query';
-import { USER_REPOSITORY_PORT } from '../../../domain/ports/user-repository.port';
-import type { UserRepositoryPort } from '../../../domain/ports/user-repository.port';
+import { USER_REPOSITORY_PORT, type UserRepositoryPort } from './user-repository.port';
+import type { UserRole, UserStatus } from './user.entity';
+
+export interface UserProfileResult {
+  id: string;
+  email: string;
+  name: string;
+  role: UserRole;
+  status: UserStatus;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// Query<TResult> carries the result type so QueryBus.execute() infers it end-to-end.
+export class GetUserProfileQuery extends Query<UserProfileResult> {
+  constructor(readonly userId: string) {
+    super();
+  }
+}
 
 @QueryHandler(GetUserProfileQuery)
 export class GetUserProfileHandler implements IQueryHandler<

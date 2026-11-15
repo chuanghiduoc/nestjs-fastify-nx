@@ -13,7 +13,7 @@ import {
   buildPinoLoggerConfig,
   LivenessProbeService,
 } from '@nestjs-fastify-nx/infra-observability';
-import { UsersListenersModule } from '@nestjs-fastify-nx/modules-users';
+import { UsersListenersModule } from '@nestjs-fastify-nx/modules/users';
 import { AuditLogListenersModule } from '@nestjs-fastify-nx/modules/audit-log';
 import { NotificationsListenersModule } from '@nestjs-fastify-nx/modules/notifications';
 import { validateSchedulerConfig } from '../config/env.validation';

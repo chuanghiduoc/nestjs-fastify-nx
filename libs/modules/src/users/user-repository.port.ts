@@ -1,5 +1,5 @@
 import type { DecodedCursor } from '@nestjs-fastify-nx/shared';
-import type { User, UserStatus } from '../entities/user.entity';
+import type { User, UserStatus } from './user.entity';
 
 export const USER_REPOSITORY_PORT = Symbol('USER_REPOSITORY_PORT');
 

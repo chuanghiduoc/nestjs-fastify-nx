@@ -1,5 +1,5 @@
 import type { PlatformRole, UserStatusValue } from '@nestjs-fastify-nx/shared';
-import { Email } from '../value-objects/email.vo';
+import { Email } from './email.vo';
 
 export enum UserRole {
   ADMIN = 'ADMIN',
