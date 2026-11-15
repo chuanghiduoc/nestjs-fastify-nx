@@ -33,7 +33,23 @@ const fail = (msg: string, err: unknown): never => {
 
 function run(command: string, label: string): void {
   log(`▶ ${label}`);
-  execSync(command, { stdio: 'inherit' });
+  try {
+    const stdout = execSync(command, { stdio: ['inherit', 'pipe', 'pipe'] });
+    if (stdout.length > 0) process.stdout.write(stdout);
+  } catch (err) {
+    const stderr = (err as { stderr?: unknown }).stderr;
+    const text =
+      stderr instanceof Buffer && stderr.length > 0
+        ? stderr.toString('utf8')
+        : typeof stderr === 'string'
+          ? stderr
+          : undefined;
+    if (text) {
+      process.stderr.write(text);
+      throw new Error(`${(err as Error).message}\n${text}`, { cause: err });
+    }
+    throw err;
+  }
 }
 
 async function bootstrap(): Promise<void> {

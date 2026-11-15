@@ -23,8 +23,6 @@ export const DOMAIN_EVENTS = {
 
 export type DomainEventType = (typeof DOMAIN_EVENTS)[keyof typeof DOMAIN_EVENTS];
 
-// Produced by OutboxPublisher inside the handler transaction, not by DB triggers: the acting user
-// is only known to the application. The trigger-parity spec therefore exempts these names.
 export const PUBLISHER_DOMAIN_EVENTS: ReadonlySet<string> = new Set([
   DOMAIN_EVENTS.FEATURE_FLAGS_CREATED,
   DOMAIN_EVENTS.FEATURE_FLAGS_UPDATED,
@@ -64,8 +62,6 @@ export const organizationEventPayloadSchema = z.object({
 
 export type OrganizationEventPayload = z.infer<typeof organizationEventPayloadSchema>;
 
-// Written by the outbox publisher from feature-flag and api-key command handlers. `userId` is the
-// acting member; secret material (the raw API key) must never appear here.
 export const configurationEventPayloadSchema = z.object({
   userId: z.uuid().optional(),
   key: z.string().optional(),

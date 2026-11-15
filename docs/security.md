@@ -230,7 +230,10 @@ Machine-to-machine callers authenticate with a key rather than a session cookie.
 that matter, all enforced in code and pinned by tests:
 
 - **Only a SHA-256 digest is stored.** The raw key is returned once, by `POST /api/v1/api-keys`,
-  and is unrecoverable afterwards. A database leak yields digests, not credentials.
+  and is unrecoverable afterwards. A database leak yields digests, not credentials. The response
+  is also never captured by the idempotency replay cache: a request to that route carrying an
+  `Idempotency-Key` completes normally but the record stays pending, so a retry gets `409`
+  instead of a replayed body that would contain the credential a second time.
 - **A key can never exceed its issuer.** Requested scopes are checked against the permissions the
   calling member actually holds; anything beyond them is refused with
   `api_key_scope_exceeds_grant`. Without this, `api_key:create` is a grant of the whole catalog.

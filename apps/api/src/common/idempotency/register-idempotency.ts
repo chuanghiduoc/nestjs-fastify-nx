@@ -36,7 +36,6 @@ export interface IdempotencyContext {
   // `contentType` preserves replay fidelity for non-JSON responses (@Header('Content-Type', ...));
   // omit it to default to application/json. Best-effort: no-ops if the pending lock already expired.
   completeLate(status: number, value: unknown, contentType?: string): Promise<void>;
-  // A response that must never enter the replay cache (it carries a credential shown exactly once).
   secretBearing: boolean;
 }
 

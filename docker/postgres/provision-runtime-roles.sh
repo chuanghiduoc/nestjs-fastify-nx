@@ -62,7 +62,9 @@ GRANT SELECT, DELETE ON TABLE "users", "sessions", "verifications" TO :"schedule
 GRANT SELECT, UPDATE, DELETE ON TABLE "stored_files" TO :"scheduler_user";
 GRANT SELECT ON TABLE "organizations" TO :"scheduler_user";
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE "outbox_events" TO :"scheduler_user";
-GRANT SELECT, INSERT ON TABLE "audit_logs", "notifications" TO :"scheduler_user";
+GRANT SELECT, INSERT ON TABLE "audit_logs" TO :"scheduler_user";
+GRANT SELECT, INSERT, DELETE ON TABLE "notifications" TO :"scheduler_user";
+GRANT SELECT, DELETE ON TABLE "invitations" TO :"scheduler_user";
 -- No CREATE on the schema: partition DDL runs through the two SECURITY DEFINER functions below,
 -- which execute as their migration-role owner. Granting CREATE would hand a compromised scheduler
 -- the ability to create arbitrary objects in public — the capability those functions exist to avoid.
