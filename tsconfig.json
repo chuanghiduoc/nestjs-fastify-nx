@@ -78,9 +78,6 @@
       "path": "./libs/modules/api-keys"
     },
     {
-      "path": "./libs/modules/terms"
-    },
-    {
       "path": "./libs/modules"
     }
   ]

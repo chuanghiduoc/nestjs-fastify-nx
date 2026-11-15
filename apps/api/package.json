@@ -19,7 +19,6 @@
     "@nestjs-fastify-nx/modules-audit-log": "workspace:*",
     "@nestjs-fastify-nx/modules-feature-flags": "workspace:*",
     "@nestjs-fastify-nx/modules-organizations": "workspace:*",
-    "@nestjs-fastify-nx/modules-terms": "workspace:*",
     "@nestjs-fastify-nx/modules-upload": "workspace:*",
     "@nestjs-fastify-nx/modules-users": "workspace:*",
     "@nestjs-fastify-nx/shared": "workspace:*",

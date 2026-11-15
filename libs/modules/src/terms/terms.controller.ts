@@ -30,15 +30,15 @@ import {
 import { CurrentUser, Roles, type AuthenticatedSession } from '@nestjs-fastify-nx/infra-auth';
 import { RequirePermission } from '@nestjs-fastify-nx/infra-authorization';
 import { PERMISSIONS, PLATFORM_ROLES } from '@nestjs-fastify-nx/shared';
-import { ListPublishedTermsQuery } from '../../application/queries/list-published-terms/list-published-terms.query';
-import { GetLatestTermQuery } from '../../application/queries/get-latest-term/get-latest-term.query';
-import { ListMyTermAcceptancesQuery } from '../../application/queries/list-my-term-acceptances/list-my-term-acceptances.query';
-import { CreateTermCommand } from '../../application/commands/create-term/create-term.command';
-import { PublishTermCommand } from '../../application/commands/publish-term/publish-term.command';
-import { AcceptTermCommand } from '../../application/commands/accept-term/accept-term.command';
-import type { TermAcceptanceDto, TermDto } from '../../application/dto/term.dto';
-import { TERM_TYPE, TERM_TYPES, type TermType } from '../../domain/entities/term.entity';
-import { CreateTermDto, TermAcceptanceResponseDto, TermResponseDto } from '../dto/term.dto';
+import { ListPublishedTermsQuery } from './list-published-terms';
+import { GetLatestTermQuery } from './get-latest-term';
+import { ListMyTermAcceptancesQuery } from './list-my-term-acceptances';
+import { CreateTermCommand } from './create-term';
+import { PublishTermCommand } from './publish-term';
+import { AcceptTermCommand } from './accept-term';
+import type { TermAcceptanceDto, TermDto } from './term.dto';
+import { TERM_TYPE, TERM_TYPES, type TermType } from './term.entity';
+import { CreateTermDto, TermAcceptanceResponseDto, TermResponseDto } from './terms.dto';
 
 const TERMS_PATH = '/api/v1/terms';
 const ACCEPTANCES_PATH = '/api/v1/terms/acceptances';

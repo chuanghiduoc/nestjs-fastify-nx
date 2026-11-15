@@ -1,9 +1,17 @@
 import { Inject } from '@nestjs/common';
-import { CommandHandler, type ICommandHandler } from '@nestjs/cqrs';
-import { TERM_REPOSITORY } from '../../../domain/ports/term-repository.port';
-import type { TermRepositoryPort } from '../../../domain/ports/term-repository.port';
-import { termNotFound, termNotPublished } from '../../term-errors';
-import { AcceptTermCommand } from './accept-term.command';
+import { Command, CommandHandler, type ICommandHandler } from '@nestjs/cqrs';
+import { TERM_REPOSITORY, type TermRepositoryPort } from './term-repository.port';
+import { termNotFound, termNotPublished } from './term-errors';
+
+export class AcceptTermCommand extends Command<void> {
+  constructor(
+    readonly userId: string,
+    readonly termId: string,
+    readonly ipAddress: string | null,
+  ) {
+    super();
+  }
+}
 
 @CommandHandler(AcceptTermCommand)
 export class AcceptTermHandler implements ICommandHandler<AcceptTermCommand, void> {

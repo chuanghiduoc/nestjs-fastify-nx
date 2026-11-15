@@ -1,20 +1,20 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { DomainException } from '@nestjs-fastify-nx/core';
 import { generateId } from '@nestjs-fastify-nx/shared';
-import { Term, TERM_TYPE } from '../domain/entities/term.entity';
-import type { TermRepositoryPort } from '../domain/ports/term-repository.port';
-import { InMemoryTermRepository } from '../testing/in-memory-term-repository';
-import { ListPublishedTermsHandler } from './queries/list-published-terms/list-published-terms.handler';
-import { GetLatestTermHandler } from './queries/get-latest-term/get-latest-term.handler';
-import { GetLatestTermQuery } from './queries/get-latest-term/get-latest-term.query';
-import { ListMyTermAcceptancesHandler } from './queries/list-my-term-acceptances/list-my-term-acceptances.handler';
-import { ListMyTermAcceptancesQuery } from './queries/list-my-term-acceptances/list-my-term-acceptances.query';
-import { CreateTermHandler } from './commands/create-term/create-term.handler';
-import { CreateTermCommand } from './commands/create-term/create-term.command';
-import { PublishTermHandler } from './commands/publish-term/publish-term.handler';
-import { PublishTermCommand } from './commands/publish-term/publish-term.command';
-import { AcceptTermHandler } from './commands/accept-term/accept-term.handler';
-import { AcceptTermCommand } from './commands/accept-term/accept-term.command';
+import { Term, TERM_TYPE } from './term.entity';
+import type { TermRepositoryPort } from './term-repository.port';
+import { InMemoryTermRepository } from './in-memory-term-repository';
+import { ListPublishedTermsHandler } from './list-published-terms';
+import { GetLatestTermHandler } from './get-latest-term';
+import { GetLatestTermQuery } from './get-latest-term';
+import { ListMyTermAcceptancesHandler } from './list-my-term-acceptances';
+import { ListMyTermAcceptancesQuery } from './list-my-term-acceptances';
+import { CreateTermHandler } from './create-term';
+import { CreateTermCommand } from './create-term';
+import { PublishTermHandler } from './publish-term';
+import { PublishTermCommand } from './publish-term';
+import { AcceptTermHandler } from './accept-term';
+import { AcceptTermCommand } from './accept-term';
 
 const USER_ID = '019dd1a5-9235-70db-8d57-54ef91300001';
 

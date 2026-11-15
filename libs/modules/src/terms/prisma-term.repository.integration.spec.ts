@@ -6,7 +6,7 @@ import {
 } from '@nestjs-fastify-nx/testing';
 import type { TestContainers } from '@nestjs-fastify-nx/testing';
 import { PrismaService } from '@nestjs-fastify-nx/infra-database';
-import { Term, TERM_TYPE } from '../../domain/entities/term.entity';
+import { Term, TERM_TYPE } from './term.entity';
 import { PrismaTermRepository } from './prisma-term.repository';
 
 const USER_ID = '019dd1a5-9235-70db-8d57-540300000001';

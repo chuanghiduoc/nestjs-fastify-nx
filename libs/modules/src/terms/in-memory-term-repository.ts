@@ -1,8 +1,5 @@
-import { Term, type TermType } from '../domain/entities/term.entity';
-import type {
-  TermAcceptanceRecord,
-  TermRepositoryPort,
-} from '../domain/ports/term-repository.port';
+import { Term, type TermType } from './term.entity';
+import type { TermAcceptanceRecord, TermRepositoryPort } from './term-repository.port';
 
 export class InMemoryTermRepository implements TermRepositoryPort {
   private readonly terms = new Map<string, Term>();

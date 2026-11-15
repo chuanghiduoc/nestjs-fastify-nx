@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsBoolean, IsIn, IsOptional, IsString, Matches, MaxLength } from 'class-validator';
-import { TERM_TYPES, VERSION_PATTERN } from '../../domain/entities/term.entity';
+import { TERM_TYPES, VERSION_PATTERN } from './term.entity';
 
 export class CreateTermDto {
   @ApiProperty({ enum: TERM_TYPES, description: 'Which legal document this is.' })

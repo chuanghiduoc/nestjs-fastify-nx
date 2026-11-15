@@ -1,11 +1,15 @@
 import { Inject } from '@nestjs/common';
-import { CommandHandler, type ICommandHandler } from '@nestjs/cqrs';
-import { TERM_REPOSITORY } from '../../../domain/ports/term-repository.port';
-import type { TermRepositoryPort } from '../../../domain/ports/term-repository.port';
-import type { Term } from '../../../domain/entities/term.entity';
-import { toTermDto, type TermDto } from '../../dto/term.dto';
-import { termNotFound } from '../../term-errors';
-import { PublishTermCommand } from './publish-term.command';
+import { Command, CommandHandler, type ICommandHandler } from '@nestjs/cqrs';
+import { TERM_REPOSITORY, type TermRepositoryPort } from './term-repository.port';
+import type { Term } from './term.entity';
+import { toTermDto, type TermDto } from './term.dto';
+import { termNotFound } from './term-errors';
+
+export class PublishTermCommand extends Command<TermDto> {
+  constructor(readonly id: string) {
+    super();
+  }
+}
 
 @CommandHandler(PublishTermCommand)
 export class PublishTermHandler implements ICommandHandler<PublishTermCommand, TermDto> {

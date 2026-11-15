@@ -28,9 +28,6 @@
       "path": "../../libs/modules/upload/tsconfig.lib.json"
     },
     {
-      "path": "../../libs/modules/terms/tsconfig.lib.json"
-    },
-    {
       "path": "../../libs/modules/organizations/tsconfig.lib.json"
     },
     {

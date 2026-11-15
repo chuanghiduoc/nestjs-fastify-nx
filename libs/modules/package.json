@@ -16,6 +16,10 @@
     "./sessions": {
       "types": "./src/sessions/index.ts",
       "default": "./src/sessions/index.ts"
+    },
+    "./terms": {
+      "types": "./src/terms/index.ts",
+      "default": "./src/terms/index.ts"
     }
   },
   "devDependencies": {

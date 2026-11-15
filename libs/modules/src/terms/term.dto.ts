@@ -1,4 +1,4 @@
-import type { Term, TermType } from '../../domain/entities/term.entity';
+import type { Term, TermType } from './term.entity';
 
 export interface TermDto {
   id: string;

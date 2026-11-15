@@ -1,4 +1,4 @@
-import type { Term, TermType } from '../entities/term.entity';
+import type { Term, TermType } from './term.entity';
 
 export const TERM_REPOSITORY = Symbol('TERM_REPOSITORY');
 

@@ -1,12 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '@nestjs-fastify-nx/infra-database';
 import { Prisma } from '@nestjs-fastify-nx/infra-database';
-import { Term, type TermType } from '../../domain/entities/term.entity';
-import type {
-  TermAcceptanceRecord,
-  TermRepositoryPort,
-} from '../../domain/ports/term-repository.port';
-import { termVersionTaken } from '../../application/term-errors';
+import { Term, type TermType } from './term.entity';
+import type { TermAcceptanceRecord, TermRepositoryPort } from './term-repository.port';
+import { termVersionTaken } from './term-errors';
 
 type TermRow = {
   id: string;

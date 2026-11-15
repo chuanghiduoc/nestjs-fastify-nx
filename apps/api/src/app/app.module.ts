@@ -19,7 +19,7 @@ import { OrganizationsModule } from '@nestjs-fastify-nx/modules-organizations';
 import { ApiKeysModule } from '@nestjs-fastify-nx/modules-api-keys';
 import { NotificationsModule } from '@nestjs-fastify-nx/modules/notifications';
 import { FeatureFlagsModule } from '@nestjs-fastify-nx/modules-feature-flags';
-import { TermsModule } from '@nestjs-fastify-nx/modules-terms';
+import { TermsModule } from '@nestjs-fastify-nx/modules/terms';
 import { SessionsModule } from '@nestjs-fastify-nx/modules/sessions';
 import { LoggingModule } from '../common/logging/logging.module';
 import { HealthModule } from '../common/health/health.module';
