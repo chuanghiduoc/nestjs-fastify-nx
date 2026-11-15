@@ -2,7 +2,9 @@ const PACKAGE = '@nestjs-fastify-nx/modules';
 const GROUP_SOURCE_ROOT = 'libs/modules/src';
 
 function splitPath(filename) {
-  return String(filename ?? '').replace(/\\/g, '/').split('/');
+  return String(filename ?? '')
+    .replace(/\\/g, '/')
+    .split('/');
 }
 
 function importerContextOf(filename) {
@@ -37,7 +39,9 @@ export default {
     },
   },
   create(context) {
-    const { insideGroup, context: importerContext } = importerContextOf(context.filename ?? context.physicalFilename);
+    const { insideGroup, context: importerContext } = importerContextOf(
+      context.filename ?? context.physicalFilename,
+    );
 
     function checkSource(sourceNode) {
       const facts = importFacts(sourceNode?.value);
