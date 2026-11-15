@@ -1,4 +1,10 @@
-import { Command } from '@nestjs/cqrs';
+import { Inject } from '@nestjs/common';
+import { Command, CommandHandler, type ICommandHandler } from '@nestjs/cqrs';
+import {
+  AUDIT_LOG_REPOSITORY_PORT,
+  type AuditLogRepositoryPort,
+} from './audit-log-repository.port';
+import { AuditLog } from './audit-log.entity';
 
 export interface RecordAuditLogInput {
   readonly eventId: string;
@@ -34,5 +40,19 @@ export class RecordAuditLogCommand extends Command<void> {
     this.ipAddress = input.ipAddress;
     this.userAgent = input.userAgent;
     this.occurredAt = input.occurredAt;
+  }
+}
+
+@CommandHandler(RecordAuditLogCommand)
+export class RecordAuditLogHandler implements ICommandHandler<RecordAuditLogCommand, void> {
+  constructor(
+    @Inject(AUDIT_LOG_REPOSITORY_PORT) private readonly repository: AuditLogRepositoryPort,
+  ) {}
+
+  async execute(command: RecordAuditLogCommand): Promise<void> {
+    // id derived from eventId so outbox redelivery reproduces the same PK; repo treats P2002 as no-op.
+    const entry = AuditLog.create({ id: command.eventId, ...command });
+
+    await this.repository.append(entry);
   }
 }

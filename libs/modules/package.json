@@ -9,6 +9,10 @@
       "types": "./src/index.ts",
       "default": "./src/index.ts"
     },
+    "./audit-log": {
+      "types": "./src/audit-log/index.ts",
+      "default": "./src/audit-log/index.ts"
+    },
     "./notifications": {
       "types": "./src/notifications/index.ts",
       "default": "./src/notifications/index.ts"

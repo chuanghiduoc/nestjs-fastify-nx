@@ -9,9 +9,6 @@
       "path": "./libs/composition/admin"
     },
     {
-      "path": "./libs/modules/audit-log"
-    },
-    {
       "path": "./libs/infra/messaging"
     },
     {

@@ -6,8 +6,8 @@ import type {
   AuditLogRepositoryPort,
   FindAuditLogsCursorOptions,
   FindAuditLogsCursorResult,
-} from '../../domain/ports/audit-log-repository.port';
-import { AuditLog } from '../../domain/entities/audit-log.entity';
+} from './audit-log-repository.port';
+import { AuditLog } from './audit-log.entity';
 
 @Injectable()
 export class PrismaAuditLogRepository implements AuditLogRepositoryPort {

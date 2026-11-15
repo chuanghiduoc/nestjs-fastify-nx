@@ -3,7 +3,7 @@ import type { CommandBus } from '@nestjs/cqrs';
 import type { DomainEvent } from '@nestjs-fastify-nx/core';
 import { generateId } from '@nestjs-fastify-nx/shared';
 import { AuditLogListener } from './audit-log.listener';
-import { RecordAuditLogCommand } from '../commands/record-audit-log/record-audit-log.command';
+import { RecordAuditLogCommand } from './record-audit-log';
 
 // Outbox eventIds are UUIDs in production (see prisma trigger / OutboxPublisher);
 // fixed test UUIDs keep idempotency assertions deterministic without leaking

@@ -11,7 +11,7 @@ import {
 import type { TestContainers } from '@nestjs-fastify-nx/testing';
 import { PrismaService } from '@nestjs-fastify-nx/infra-database';
 import { PrismaAuditLogRepository } from './prisma-audit-log.repository';
-import { AuditLog } from '../../domain/entities/audit-log.entity';
+import { AuditLog } from './audit-log.entity';
 
 describe('PrismaAuditLogRepository (integration)', () => {
   let containers: TestContainers;

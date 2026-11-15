@@ -31,9 +31,6 @@
       "path": "../../libs/modules/upload/tsconfig.lib.json"
     },
     {
-      "path": "../../libs/modules/audit-log/tsconfig.lib.json"
-    },
-    {
       "path": "../../libs/modules/tsconfig.lib.json"
     },
     {

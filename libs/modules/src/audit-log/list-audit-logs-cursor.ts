@@ -1,15 +1,62 @@
 import { Inject } from '@nestjs/common';
-import { QueryHandler, type IQueryHandler } from '@nestjs/cqrs';
+import { Query, QueryHandler, type IQueryHandler } from '@nestjs/cqrs';
 import { DomainException } from '@nestjs-fastify-nx/core';
 import { ERROR_CODES, I18N_KEYS, invalidCursorProblem } from '@nestjs-fastify-nx/contracts';
 import { decodeCursor, lastCursorOf, type DecodedCursor } from '@nestjs-fastify-nx/shared';
-import { AUDIT_LOG_REPOSITORY_PORT } from '../../../domain/ports/audit-log-repository.port';
-import type { AuditLogRepositoryPort } from '../../../domain/ports/audit-log-repository.port';
-import type { AuditLogListItemDto } from '../../dto/audit-log-list-item.dto';
 import {
-  ListAuditLogsCursorQuery,
-  type ListAuditLogsCursorResult,
-} from './list-audit-logs-cursor.query';
+  AUDIT_LOG_REPOSITORY_PORT,
+  type AuditLogRepositoryPort,
+} from './audit-log-repository.port';
+
+export interface AuditLogListItemDto {
+  readonly id: string;
+  readonly organizationId: string | null;
+  readonly userId: string | null;
+  readonly action: string;
+  readonly resource: string | null;
+  readonly metadata: Record<string, unknown>;
+  readonly ipAddress: string | null;
+  readonly userAgent: string | null;
+  readonly createdAt: Date;
+}
+
+export interface ListAuditLogsCursorResult {
+  data: AuditLogListItemDto[];
+  hasMore: boolean;
+  lastCursor: string | null;
+}
+
+export interface ListAuditLogsCursorFilters {
+  readonly startingAfter?: string;
+  readonly action?: string;
+  readonly resource?: string;
+  readonly userId?: string;
+  readonly occurredFrom?: Date;
+  readonly occurredUntil?: Date;
+}
+
+export class ListAuditLogsCursorQuery extends Query<ListAuditLogsCursorResult> {
+  readonly organizationId: string;
+  readonly limit: number;
+  readonly startingAfter?: string;
+  readonly action?: string;
+  readonly resource?: string;
+  readonly userId?: string;
+  readonly occurredFrom?: Date;
+  readonly occurredUntil?: Date;
+
+  constructor(organizationId: string, limit: number, filters: ListAuditLogsCursorFilters = {}) {
+    super();
+    this.organizationId = organizationId;
+    this.limit = limit;
+    this.startingAfter = filters.startingAfter;
+    this.action = filters.action;
+    this.resource = filters.resource;
+    this.userId = filters.userId;
+    this.occurredFrom = filters.occurredFrom;
+    this.occurredUntil = filters.occurredUntil;
+  }
+}
 
 @QueryHandler(ListAuditLogsCursorQuery)
 export class ListAuditLogsCursorHandler implements IQueryHandler<

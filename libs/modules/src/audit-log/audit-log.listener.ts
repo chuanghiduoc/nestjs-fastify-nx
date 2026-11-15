@@ -5,7 +5,7 @@ import { DomainException } from '@nestjs-fastify-nx/core';
 import type { DomainEvent } from '@nestjs-fastify-nx/core';
 import { ERROR_CODES } from '@nestjs-fastify-nx/contracts';
 import { DOMAIN_EVENT_STREAMS, configurationEventPayloadSchema } from '@nestjs-fastify-nx/shared';
-import { RecordAuditLogCommand } from '../commands/record-audit-log/record-audit-log.command';
+import { RecordAuditLogCommand } from './record-audit-log';
 
 @Injectable()
 export class AuditLogListener {

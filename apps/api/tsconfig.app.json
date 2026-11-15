@@ -34,9 +34,6 @@
       "path": "../../libs/modules/feature-flags/tsconfig.lib.json"
     },
     {
-      "path": "../../libs/modules/audit-log/tsconfig.lib.json"
-    },
-    {
       "path": "../../libs/modules/api-keys/tsconfig.lib.json"
     },
     {

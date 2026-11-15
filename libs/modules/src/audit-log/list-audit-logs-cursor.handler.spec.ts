@@ -1,10 +1,10 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { DomainException } from '@nestjs-fastify-nx/core';
 import { decodeCursor, encodeCursor, generateId } from '@nestjs-fastify-nx/shared';
-import { AuditLog } from '../../../domain/entities/audit-log.entity';
-import { MockAuditLogRepository } from '../../../testing/mock-audit-log-repository';
-import { ListAuditLogsCursorHandler } from './list-audit-logs-cursor.handler';
-import { ListAuditLogsCursorQuery } from './list-audit-logs-cursor.query';
+import { AuditLog } from './audit-log.entity';
+import { MockAuditLogRepository } from './mock-audit-log-repository';
+import { ListAuditLogsCursorHandler } from './list-audit-logs-cursor';
+import { ListAuditLogsCursorQuery } from './list-audit-logs-cursor';
 
 const ORG_ID = '019dd1a5-9235-70db-8d57-54ef90400001';
 const OTHER_ORG_ID = '019dd1a5-9235-70db-8d57-54ef90400002';

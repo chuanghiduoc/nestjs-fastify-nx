@@ -1,5 +1,5 @@
 import type { DecodedCursor } from '@nestjs-fastify-nx/shared';
-import type { AuditLog } from '../entities/audit-log.entity';
+import type { AuditLog } from './audit-log.entity';
 
 export const AUDIT_LOG_REPOSITORY_PORT = Symbol('AuditLogRepositoryPort');
 
