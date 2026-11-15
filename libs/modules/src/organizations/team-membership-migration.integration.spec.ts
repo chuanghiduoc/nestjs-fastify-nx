@@ -8,7 +8,7 @@ it('initializes team counters and unique nullable membership keys', async () => 
   const client = new Client({ connectionString: containers.postgres.getConnectionUri() });
   try {
     await client.connect();
-    const migrations = new URL('../../../../../../prisma/migrations/', import.meta.url);
+    const migrations = new URL('../../../../prisma/migrations/', import.meta.url);
     await client.query(
       readFileSync(new URL('20260501000000_init/migration.sql', migrations), 'utf8'),
     );
