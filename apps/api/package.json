@@ -15,7 +15,6 @@
     "@nestjs-fastify-nx/infra-redis": "workspace:*",
     "@nestjs-fastify-nx/infra-storage": "workspace:*",
     "@nestjs-fastify-nx/modules": "workspace:*",
-    "@nestjs-fastify-nx/modules-feature-flags": "workspace:*",
     "@nestjs-fastify-nx/modules-organizations": "workspace:*",
     "@nestjs-fastify-nx/modules-upload": "workspace:*",
     "@nestjs-fastify-nx/modules-users": "workspace:*",

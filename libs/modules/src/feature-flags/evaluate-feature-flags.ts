@@ -1,9 +1,20 @@
 import { Inject } from '@nestjs/common';
-import { QueryHandler, type IQueryHandler } from '@nestjs/cqrs';
-import { FEATURE_FLAG_REPOSITORY } from '../../../domain/ports/feature-flag-repository.port';
-import type { FeatureFlagRepositoryPort } from '../../../domain/ports/feature-flag-repository.port';
-import type { EvaluatedFlagsDto } from '../../dto/feature-flag.dto';
-import { EvaluateFeatureFlagsQuery } from './evaluate-feature-flags.query';
+import { Query, QueryHandler, type IQueryHandler } from '@nestjs/cqrs';
+import {
+  FEATURE_FLAG_REPOSITORY,
+  type FeatureFlagRepositoryPort,
+} from './feature-flag-repository.port';
+import type { EvaluatedFlagsDto } from './feature-flag.dto';
+
+export class EvaluateFeatureFlagsQuery extends Query<EvaluatedFlagsDto> {
+  constructor(
+    readonly organizationId: string,
+    /** Bucketing subject — the caller, so a partial rollout is stable per user. */
+    readonly subjectId: string,
+  ) {
+    super();
+  }
+}
 
 @QueryHandler(EvaluateFeatureFlagsQuery)
 export class EvaluateFeatureFlagsHandler implements IQueryHandler<

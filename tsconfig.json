@@ -66,9 +66,6 @@
       "path": "./libs/infra/authorization"
     },
     {
-      "path": "./libs/modules/feature-flags"
-    },
-    {
       "path": "./libs/modules/organizations"
     },
     {

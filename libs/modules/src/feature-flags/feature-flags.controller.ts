@@ -40,18 +40,18 @@ import {
 } from '@nestjs-fastify-nx/infra-auth';
 import { RequirePermission } from '@nestjs-fastify-nx/infra-authorization';
 import { PERMISSIONS } from '@nestjs-fastify-nx/shared';
-import { ListFeatureFlagsQuery } from '../../application/queries/list-feature-flags/list-feature-flags.query';
-import { EvaluateFeatureFlagsQuery } from '../../application/queries/evaluate-feature-flags/evaluate-feature-flags.query';
-import { CreateFeatureFlagCommand } from '../../application/commands/create-feature-flag/create-feature-flag.command';
-import { UpdateFeatureFlagCommand } from '../../application/commands/update-feature-flag/update-feature-flag.command';
-import { DeleteFeatureFlagCommand } from '../../application/commands/delete-feature-flag/delete-feature-flag.command';
-import type { EvaluatedFlagsDto, FeatureFlagDto } from '../../application/dto/feature-flag.dto';
+import { ListFeatureFlagsQuery } from './list-feature-flags';
+import { EvaluateFeatureFlagsQuery } from './evaluate-feature-flags';
+import { CreateFeatureFlagCommand } from './create-feature-flag';
+import { UpdateFeatureFlagCommand } from './update-feature-flag';
+import { DeleteFeatureFlagCommand } from './delete-feature-flag';
+import type { EvaluatedFlagsDto, FeatureFlagDto } from './feature-flag.dto';
 import {
   CreateFeatureFlagDto,
   EvaluatedFlagsResponseDto,
   FeatureFlagResponseDto,
   UpdateFeatureFlagDto,
-} from '../dto/feature-flag.dto';
+} from './feature-flags.dto';
 
 const FEATURE_FLAGS_PATH = '/api/v1/feature-flags';
 

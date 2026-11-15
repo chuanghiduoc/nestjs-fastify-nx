@@ -1,5 +1,5 @@
 import type { DecodedCursor } from '@nestjs-fastify-nx/shared';
-import type { FeatureFlag, FeatureFlagChanges } from '../entities/feature-flag.entity';
+import type { FeatureFlag, FeatureFlagChanges } from './feature-flag.entity';
 
 export const FEATURE_FLAG_REPOSITORY = Symbol('FEATURE_FLAG_REPOSITORY');
 

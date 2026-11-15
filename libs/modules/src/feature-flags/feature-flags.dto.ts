@@ -10,7 +10,7 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
-import { KEY_PATTERN } from '../../domain/entities/feature-flag.entity';
+import { KEY_PATTERN } from './feature-flag.entity';
 
 export class CreateFeatureFlagDto {
   @ApiProperty({

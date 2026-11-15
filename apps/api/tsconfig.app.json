@@ -31,9 +31,6 @@
       "path": "../../libs/modules/organizations/tsconfig.lib.json"
     },
     {
-      "path": "../../libs/modules/feature-flags/tsconfig.lib.json"
-    },
-    {
       "path": "../../libs/modules/tsconfig.lib.json"
     },
     {

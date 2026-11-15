@@ -1,10 +1,10 @@
 import { paginateNewestFirst } from '@nestjs-fastify-nx/shared';
-import { FeatureFlag, type FeatureFlagChanges } from '../domain/entities/feature-flag.entity';
+import { FeatureFlag, type FeatureFlagChanges } from './feature-flag.entity';
 import type {
   FeatureFlagRepositoryPort,
   FindFeatureFlagsCursorOptions,
   FindFeatureFlagsCursorResult,
-} from '../domain/ports/feature-flag-repository.port';
+} from './feature-flag-repository.port';
 
 export class InMemoryFeatureFlagRepository implements FeatureFlagRepositoryPort {
   private readonly flags = new Map<string, FeatureFlag>();

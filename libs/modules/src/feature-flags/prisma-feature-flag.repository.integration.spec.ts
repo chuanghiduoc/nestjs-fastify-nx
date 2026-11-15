@@ -6,7 +6,7 @@ import {
 } from '@nestjs-fastify-nx/testing';
 import type { TestContainers } from '@nestjs-fastify-nx/testing';
 import { PrismaService } from '@nestjs-fastify-nx/infra-database';
-import { FeatureFlag } from '../../domain/entities/feature-flag.entity';
+import { FeatureFlag } from './feature-flag.entity';
 import { PrismaFeatureFlagRepository } from './prisma-feature-flag.repository';
 
 const ORG_ID = '019dd1a5-9235-70db-8d57-540400000001';

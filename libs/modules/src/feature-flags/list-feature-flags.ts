@@ -1,12 +1,29 @@
 import { Inject } from '@nestjs/common';
-import { QueryHandler, type IQueryHandler } from '@nestjs/cqrs';
+import { Query, QueryHandler, type IQueryHandler } from '@nestjs/cqrs';
 import { DomainException } from '@nestjs-fastify-nx/core';
 import { invalidCursorProblem } from '@nestjs-fastify-nx/contracts';
 import { decodeCursor, lastCursorOf, type DecodedCursor } from '@nestjs-fastify-nx/shared';
-import { FEATURE_FLAG_REPOSITORY } from '../../../domain/ports/feature-flag-repository.port';
-import type { FeatureFlagRepositoryPort } from '../../../domain/ports/feature-flag-repository.port';
-import { toFeatureFlagDto, type FeatureFlagDto } from '../../dto/feature-flag.dto';
-import { ListFeatureFlagsQuery, type ListFeatureFlagsResult } from './list-feature-flags.query';
+import {
+  FEATURE_FLAG_REPOSITORY,
+  type FeatureFlagRepositoryPort,
+} from './feature-flag-repository.port';
+import { toFeatureFlagDto, type FeatureFlagDto } from './feature-flag.dto';
+
+export interface ListFeatureFlagsResult {
+  data: FeatureFlagDto[];
+  hasMore: boolean;
+  lastCursor: string | null;
+}
+
+export class ListFeatureFlagsQuery extends Query<ListFeatureFlagsResult> {
+  constructor(
+    readonly organizationId: string,
+    readonly limit: number,
+    readonly startingAfter?: string,
+  ) {
+    super();
+  }
+}
 
 @QueryHandler(ListFeatureFlagsQuery)
 export class ListFeatureFlagsHandler implements IQueryHandler<

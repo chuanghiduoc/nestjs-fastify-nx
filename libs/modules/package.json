@@ -17,6 +17,10 @@
       "types": "./src/audit-log/index.ts",
       "default": "./src/audit-log/index.ts"
     },
+    "./feature-flags": {
+      "types": "./src/feature-flags/index.ts",
+      "default": "./src/feature-flags/index.ts"
+    },
     "./notifications": {
       "types": "./src/notifications/index.ts",
       "default": "./src/notifications/index.ts"

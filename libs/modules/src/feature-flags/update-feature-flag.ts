@@ -1,14 +1,43 @@
 import { Inject } from '@nestjs/common';
-import { CommandHandler, type ICommandHandler } from '@nestjs/cqrs';
+import { Command, CommandHandler, type ICommandHandler } from '@nestjs/cqrs';
 import { EVENT_PUBLISHER_PORT, type EventPublisherPort } from '@nestjs-fastify-nx/core';
 import { PrismaService } from '@nestjs-fastify-nx/infra-database';
 import { DOMAIN_EVENTS, generateId } from '@nestjs-fastify-nx/shared';
-import { FEATURE_FLAG_REPOSITORY } from '../../../domain/ports/feature-flag-repository.port';
-import type { FeatureFlagRepositoryPort } from '../../../domain/ports/feature-flag-repository.port';
-import type { FeatureFlagChanges } from '../../../domain/entities/feature-flag.entity';
-import { toFeatureFlagDto, type FeatureFlagDto } from '../../dto/feature-flag.dto';
-import { featureFlagNotFound } from '../../feature-flag-errors';
-import { UpdateFeatureFlagCommand } from './update-feature-flag.command';
+import {
+  FEATURE_FLAG_REPOSITORY,
+  type FeatureFlagRepositoryPort,
+} from './feature-flag-repository.port';
+import type { FeatureFlagChanges } from './feature-flag.entity';
+import { toFeatureFlagDto, type FeatureFlagDto } from './feature-flag.dto';
+import { featureFlagNotFound } from './feature-flag-errors';
+
+export interface UpdateFeatureFlagInput {
+  readonly organizationId: string;
+  readonly userId: string;
+  readonly id: string;
+  readonly description?: string | null;
+  readonly enabled?: boolean;
+  readonly rolloutPercentage?: number;
+}
+
+export class UpdateFeatureFlagCommand extends Command<FeatureFlagDto> {
+  readonly organizationId: string;
+  readonly userId: string;
+  readonly id: string;
+  readonly description?: string | null;
+  readonly enabled?: boolean;
+  readonly rolloutPercentage?: number;
+
+  constructor(input: UpdateFeatureFlagInput) {
+    super();
+    this.organizationId = input.organizationId;
+    this.userId = input.userId;
+    this.id = input.id;
+    this.description = input.description;
+    this.enabled = input.enabled;
+    this.rolloutPercentage = input.rolloutPercentage;
+  }
+}
 
 @CommandHandler(UpdateFeatureFlagCommand)
 export class UpdateFeatureFlagHandler implements ICommandHandler<

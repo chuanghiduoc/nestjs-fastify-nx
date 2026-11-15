@@ -2,13 +2,13 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '@nestjs-fastify-nx/infra-database';
 import { Prisma } from '@nestjs-fastify-nx/infra-database';
 import { keysetAfter, takePage } from '@nestjs-fastify-nx/shared';
-import { FeatureFlag, type FeatureFlagChanges } from '../../domain/entities/feature-flag.entity';
+import { FeatureFlag, type FeatureFlagChanges } from './feature-flag.entity';
 import type {
   FeatureFlagRepositoryPort,
   FindFeatureFlagsCursorOptions,
   FindFeatureFlagsCursorResult,
-} from '../../domain/ports/feature-flag-repository.port';
-import { featureFlagKeyTaken } from '../../application/feature-flag-errors';
+} from './feature-flag-repository.port';
+import { featureFlagKeyTaken } from './feature-flag-errors';
 
 type FeatureFlagRow = {
   id: string;
