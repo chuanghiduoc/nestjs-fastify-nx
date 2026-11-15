@@ -136,7 +136,7 @@ jobs:
         run: |
           cp .env.example .env
           touch .env.api .env.worker .env.scheduler .env.migration
-          docker compose -f docker/compose.yml -f docker/compose.prod.yml config -q
+          docker compose --env-file .env -f docker/compose.yml -f docker/compose.prod.yml config -q
 
   docker-smoke:
     needs: main
