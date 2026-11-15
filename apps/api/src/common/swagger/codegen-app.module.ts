@@ -15,7 +15,7 @@ import { AdminModule } from '@nestjs-fastify-nx/composition-admin';
 import { AuditLogModule } from '@nestjs-fastify-nx/modules-audit-log';
 import { OrganizationsModule } from '@nestjs-fastify-nx/modules-organizations';
 import { ApiKeysModule } from '@nestjs-fastify-nx/modules-api-keys';
-import { NotificationsModule } from '@nestjs-fastify-nx/modules-notifications';
+import { NotificationsModule } from '@nestjs-fastify-nx/modules/notifications';
 import { FeatureFlagsModule } from '@nestjs-fastify-nx/modules-feature-flags';
 import { TermsModule } from '@nestjs-fastify-nx/modules-terms';
 import { SessionsModule } from '@nestjs-fastify-nx/modules/sessions';

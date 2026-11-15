@@ -1,11 +1,22 @@
 import { Inject } from '@nestjs/common';
-import { CommandHandler, type ICommandHandler } from '@nestjs/cqrs';
-import { NOTIFICATION_REPOSITORY } from '../../../domain/ports/notification-repository.port';
-import type { NotificationRepositoryPort } from '../../../domain/ports/notification-repository.port';
+import { Command, CommandHandler, type ICommandHandler } from '@nestjs/cqrs';
 import {
-  MarkAllNotificationsReadCommand,
-  type MarkAllNotificationsReadResult,
-} from './mark-all-notifications-read.command';
+  NOTIFICATION_REPOSITORY,
+  type NotificationRepositoryPort,
+} from './notification-repository.port';
+
+export interface MarkAllNotificationsReadResult {
+  marked: number;
+}
+
+export class MarkAllNotificationsReadCommand extends Command<MarkAllNotificationsReadResult> {
+  constructor(
+    readonly organizationId: string,
+    readonly userId: string,
+  ) {
+    super();
+  }
+}
 
 @CommandHandler(MarkAllNotificationsReadCommand)
 export class MarkAllNotificationsReadHandler implements ICommandHandler<

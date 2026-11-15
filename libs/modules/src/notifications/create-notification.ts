@@ -1,4 +1,10 @@
-import { Command } from '@nestjs/cqrs';
+import { Inject } from '@nestjs/common';
+import { Command, CommandHandler, type ICommandHandler } from '@nestjs/cqrs';
+import {
+  NOTIFICATION_REPOSITORY,
+  type NotificationRepositoryPort,
+} from './notification-repository.port';
+import { Notification } from './notification.entity';
 
 export interface CreateNotificationInput {
   /** Deterministic id for idempotent writes (e.g. outbox eventId + recipient). */
@@ -32,5 +38,27 @@ export class CreateNotificationCommand extends Command<void> {
     this.body = input.body;
     this.data = input.data;
     this.occurredAt = input.occurredAt;
+  }
+}
+
+@CommandHandler(CreateNotificationCommand)
+export class CreateNotificationHandler implements ICommandHandler<CreateNotificationCommand, void> {
+  constructor(
+    @Inject(NOTIFICATION_REPOSITORY) private readonly notifications: NotificationRepositoryPort,
+  ) {}
+
+  async execute(command: CreateNotificationCommand): Promise<void> {
+    await this.notifications.create(
+      Notification.create({
+        id: command.id,
+        organizationId: command.organizationId,
+        userId: command.userId,
+        type: command.type,
+        title: command.title,
+        body: command.body,
+        data: command.data,
+        createdAt: command.occurredAt,
+      }),
+    );
   }
 }

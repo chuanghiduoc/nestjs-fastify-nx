@@ -2,12 +2,12 @@ import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService, jsonObjectOrEmpty } from '@nestjs-fastify-nx/infra-database';
 import { Prisma } from '@nestjs-fastify-nx/infra-database';
 import { keysetAfter, takePage } from '@nestjs-fastify-nx/shared';
-import { Notification } from '../../domain/entities/notification.entity';
+import { Notification } from './notification.entity';
 import type {
   FindNotificationsCursorOptions,
   FindNotificationsCursorResult,
   NotificationRepositoryPort,
-} from '../../domain/ports/notification-repository.port';
+} from './notification-repository.port';
 
 type NotificationRow = {
   id: string;

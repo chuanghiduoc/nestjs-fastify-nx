@@ -1,10 +1,10 @@
 import { paginateNewestFirst } from '@nestjs-fastify-nx/shared';
-import { Notification } from '../domain/entities/notification.entity';
+import { Notification } from './notification.entity';
 import type {
   FindNotificationsCursorOptions,
   FindNotificationsCursorResult,
   NotificationRepositoryPort,
-} from '../domain/ports/notification-repository.port';
+} from './notification-repository.port';
 
 export class InMemoryNotificationRepository implements NotificationRepositoryPort {
   private readonly notifications = new Map<string, Notification>();

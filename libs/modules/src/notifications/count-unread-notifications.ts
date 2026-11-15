@@ -1,9 +1,22 @@
 import { Inject } from '@nestjs/common';
-import { QueryHandler, type IQueryHandler } from '@nestjs/cqrs';
-import { NOTIFICATION_REPOSITORY } from '../../../domain/ports/notification-repository.port';
-import type { NotificationRepositoryPort } from '../../../domain/ports/notification-repository.port';
-import type { UnreadCountDto } from '../../dto/notification.dto';
-import { CountUnreadNotificationsQuery } from './count-unread-notifications.query';
+import { Query, QueryHandler, type IQueryHandler } from '@nestjs/cqrs';
+import {
+  NOTIFICATION_REPOSITORY,
+  type NotificationRepositoryPort,
+} from './notification-repository.port';
+
+export interface UnreadCountDto {
+  unread: number;
+}
+
+export class CountUnreadNotificationsQuery extends Query<UnreadCountDto> {
+  constructor(
+    readonly organizationId: string,
+    readonly userId: string,
+  ) {
+    super();
+  }
+}
 
 @QueryHandler(CountUnreadNotificationsQuery)
 export class CountUnreadNotificationsHandler implements IQueryHandler<

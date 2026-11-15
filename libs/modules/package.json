@@ -9,6 +9,10 @@
       "types": "./src/index.ts",
       "default": "./src/index.ts"
     },
+    "./notifications": {
+      "types": "./src/notifications/index.ts",
+      "default": "./src/notifications/index.ts"
+    },
     "./sessions": {
       "types": "./src/sessions/index.ts",
       "default": "./src/sessions/index.ts"
@@ -21,6 +25,7 @@
     "@nestjs-fastify-nx/infra-authorization": "workspace:*",
     "@nestjs-fastify-nx/infra-database": "workspace:*",
     "@nestjs-fastify-nx/shared": "workspace:*",
-    "@nestjs-fastify-nx/testing": "workspace:*"
+    "@nestjs-fastify-nx/testing": "workspace:*",
+    "@nestjs-fastify-nx/infra-messaging": "workspace:*"
   }
 }

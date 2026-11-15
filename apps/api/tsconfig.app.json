@@ -22,9 +22,6 @@
   ],
   "references": [
     {
-      "path": "../../libs/modules/tsconfig.lib.json"
-    },
-    {
       "path": "../../libs/modules/users/tsconfig.lib.json"
     },
     {
@@ -37,9 +34,6 @@
       "path": "../../libs/modules/organizations/tsconfig.lib.json"
     },
     {
-      "path": "../../libs/modules/notifications/tsconfig.lib.json"
-    },
-    {
       "path": "../../libs/modules/feature-flags/tsconfig.lib.json"
     },
     {
@@ -47,6 +41,9 @@
     },
     {
       "path": "../../libs/modules/api-keys/tsconfig.lib.json"
+    },
+    {
+      "path": "../../libs/modules/tsconfig.lib.json"
     },
     {
       "path": "../../libs/infra/observability/tsconfig.lib.json"

@@ -72,9 +72,6 @@
       "path": "./libs/modules/feature-flags"
     },
     {
-      "path": "./libs/modules/notifications"
-    },
-    {
       "path": "./libs/modules/organizations"
     },
     {

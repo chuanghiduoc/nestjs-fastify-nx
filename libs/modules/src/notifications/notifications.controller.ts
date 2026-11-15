@@ -30,20 +30,21 @@ import {
 } from '@nestjs-fastify-nx/infra-auth';
 import { RequirePermission } from '@nestjs-fastify-nx/infra-authorization';
 import { PERMISSIONS } from '@nestjs-fastify-nx/shared';
-import { ListNotificationsQuery } from '../../application/queries/list-notifications/list-notifications.query';
-import { CountUnreadNotificationsQuery } from '../../application/queries/count-unread-notifications/count-unread-notifications.query';
-import { MarkNotificationReadCommand } from '../../application/commands/mark-notification-read/mark-notification-read.command';
+import { ListNotificationsQuery } from './list-notifications';
+import { CountUnreadNotificationsQuery } from './count-unread-notifications';
+import { MarkNotificationReadCommand } from './mark-notification-read';
 import {
   MarkAllNotificationsReadCommand,
   type MarkAllNotificationsReadResult,
-} from '../../application/commands/mark-all-notifications-read/mark-all-notifications-read.command';
-import type { NotificationDto, UnreadCountDto } from '../../application/dto/notification.dto';
+} from './mark-all-notifications-read';
+import type { NotificationDto } from './list-notifications';
+import type { UnreadCountDto } from './count-unread-notifications';
 import {
   ListNotificationsFilterDto,
   MarkAllReadResponseDto,
   NotificationResponseDto,
   UnreadCountResponseDto,
-} from '../dto/notification.dto';
+} from './notifications.dto';
 
 const NOTIFICATIONS_PATH = '/api/v1/notifications';
 

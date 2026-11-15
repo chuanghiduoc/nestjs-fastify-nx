@@ -1,10 +1,21 @@
 import { Inject } from '@nestjs/common';
-import { CommandHandler, type ICommandHandler } from '@nestjs/cqrs';
+import { Command, CommandHandler, type ICommandHandler } from '@nestjs/cqrs';
 import { DomainException } from '@nestjs-fastify-nx/core';
 import { ERROR_CODES, I18N_KEYS, fieldProblem } from '@nestjs-fastify-nx/contracts';
-import { NOTIFICATION_REPOSITORY } from '../../../domain/ports/notification-repository.port';
-import type { NotificationRepositoryPort } from '../../../domain/ports/notification-repository.port';
-import { MarkNotificationReadCommand } from './mark-notification-read.command';
+import {
+  NOTIFICATION_REPOSITORY,
+  type NotificationRepositoryPort,
+} from './notification-repository.port';
+
+export class MarkNotificationReadCommand extends Command<void> {
+  constructor(
+    readonly organizationId: string,
+    readonly userId: string,
+    readonly id: string,
+  ) {
+    super();
+  }
+}
 
 @CommandHandler(MarkNotificationReadCommand)
 export class MarkNotificationReadHandler implements ICommandHandler<

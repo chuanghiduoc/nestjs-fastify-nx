@@ -5,7 +5,7 @@ import { DomainException } from '@nestjs-fastify-nx/core';
 import type { DomainEvent } from '@nestjs-fastify-nx/core';
 import { DOMAIN_EVENTS, organizationEventPayloadSchema } from '@nestjs-fastify-nx/shared';
 import { ERROR_CODES } from '@nestjs-fastify-nx/contracts';
-import { CreateNotificationCommand } from '../commands/create-notification/create-notification.command';
+import { CreateNotificationCommand } from './create-notification';
 
 export const NOTIFICATION_TYPES = {
   MEMBER_ADDED: 'organization.member_added',

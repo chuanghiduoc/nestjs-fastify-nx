@@ -18,7 +18,6 @@
     "@nestjs-fastify-nx/modules-api-keys": "workspace:*",
     "@nestjs-fastify-nx/modules-audit-log": "workspace:*",
     "@nestjs-fastify-nx/modules-feature-flags": "workspace:*",
-    "@nestjs-fastify-nx/modules-notifications": "workspace:*",
     "@nestjs-fastify-nx/modules-organizations": "workspace:*",
     "@nestjs-fastify-nx/modules-terms": "workspace:*",
     "@nestjs-fastify-nx/modules-upload": "workspace:*",

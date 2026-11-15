@@ -1,12 +1,55 @@
 import { Inject } from '@nestjs/common';
-import { QueryHandler, type IQueryHandler } from '@nestjs/cqrs';
+import { Query, QueryHandler, type IQueryHandler } from '@nestjs/cqrs';
 import { DomainException } from '@nestjs-fastify-nx/core';
 import { invalidCursorProblem } from '@nestjs-fastify-nx/contracts';
 import { decodeCursor, lastCursorOf, type DecodedCursor } from '@nestjs-fastify-nx/shared';
-import { NOTIFICATION_REPOSITORY } from '../../../domain/ports/notification-repository.port';
-import type { NotificationRepositoryPort } from '../../../domain/ports/notification-repository.port';
-import type { NotificationDto } from '../../dto/notification.dto';
-import { ListNotificationsQuery, type ListNotificationsResult } from './list-notifications.query';
+import {
+  NOTIFICATION_REPOSITORY,
+  type NotificationRepositoryPort,
+} from './notification-repository.port';
+
+export interface NotificationDto {
+  id: string;
+  type: string;
+  title: string;
+  body: string;
+  data: Record<string, unknown>;
+  readAt: Date | null;
+  createdAt: Date;
+}
+
+export interface ListNotificationsResult {
+  data: NotificationDto[];
+  hasMore: boolean;
+  lastCursor: string | null;
+}
+
+export interface ListNotificationsFilters {
+  readonly startingAfter?: string;
+  readonly unreadOnly?: boolean;
+}
+
+export class ListNotificationsQuery extends Query<ListNotificationsResult> {
+  readonly organizationId: string;
+  readonly userId: string;
+  readonly limit: number;
+  readonly startingAfter?: string;
+  readonly unreadOnly: boolean;
+
+  constructor(
+    organizationId: string,
+    userId: string,
+    limit: number,
+    filters: ListNotificationsFilters = {},
+  ) {
+    super();
+    this.organizationId = organizationId;
+    this.userId = userId;
+    this.limit = limit;
+    this.startingAfter = filters.startingAfter;
+    this.unreadOnly = filters.unreadOnly ?? false;
+  }
+}
 
 @QueryHandler(ListNotificationsQuery)
 export class ListNotificationsHandler implements IQueryHandler<
