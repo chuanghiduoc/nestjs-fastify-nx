@@ -46,10 +46,10 @@ run "Semgrep"     "${SCRIPT_DIR}/scan-sast.sh"
 
 PREFIX="${IMAGE_REGISTRY:-ghcr.io}/${IMAGE_NAMESPACE:-local}"
 TAG="${IMAGE_TAG:-latest}"
-if docker image inspect "${PREFIX}/api:${TAG}" >/dev/null 2>&1; then
+if docker image inspect "${PREFIX}/app:${TAG}" >/dev/null 2>&1; then
   run "Trivy" "${SCRIPT_DIR}/scan-images.sh"
 else
-  sec::warn "Skipping Trivy — ${PREFIX}/api:${TAG} not built locally."
+  sec::warn "Skipping Trivy - ${PREFIX}/app:${TAG} not built locally."
   sec::warn "  Run ./scripts/build-prod.sh first to enable image scans."
 fi
 

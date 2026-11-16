@@ -90,9 +90,16 @@ updates:
     groups:
       compose-images:
         patterns: ['*']
+    ignore:
+      # Garage v2.5.0 restricts the lifecycle-configuration endpoints to keys with owner permission,
+      # while the bucket-scoped app key is deliberately read+write only (docker/garage/provision.sh).
+      # Upgrading needs a dedicated owner-scoped provisioning key first; until then v2.5+ breaks
+      # garage-init with a 403 on PutBucketLifecycleConfiguration.
+      - dependency-name: dxflrs/garage
+        versions: ['>=2.5.0']
 
   - package-ecosystem: docker
-    # Single multi-stage Dockerfile at the repo root builds all four app images.
+    # Single multi-stage Dockerfile at the repo root builds the app and migration images.
     directory: /
     schedule:
       interval: weekly

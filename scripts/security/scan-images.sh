@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Trivy — image vuln scan for the four production targets.
+# Trivy - image vuln scan for the two production targets (app, migration).
 #
 # Defaults match release.yml's gate so a clean local run implies a clean CI run:
 #   --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1
 #
 # Usage:
-#   scan-images.sh                 # all four images
-#   scan-images.sh api worker      # subset
+#   scan-images.sh                 # both images
+#   scan-images.sh app             # subset
 #   TRIVY_EXIT_CODE=0 ...          # warn-only (e.g. for build-dev.sh)
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -17,7 +17,7 @@ if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
   echo "Usage: ./scripts/security/scan-images.sh [APP...] [--help]"
   echo ""
   echo "Arguments:"
-  echo "  APP...   Image names to scan (default: api worker scheduler migration)"
+  echo "  APP...   Image names to scan (default: app migration)"
   echo ""
   echo "Env flags:"
   echo "  TRIVY_VERSION     Override Trivy version (default: 0.62.0)"
@@ -42,7 +42,7 @@ PREFIX="${IMAGE_REGISTRY:-ghcr.io}/${IMAGE_NAMESPACE:-local}"
 TAG="${IMAGE_TAG:-latest}"
 
 if [[ $# -eq 0 ]]; then
-  apps=(api worker scheduler migration)
+  apps=(app migration)
 else
   apps=("$@")
 fi

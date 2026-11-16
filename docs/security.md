@@ -86,7 +86,7 @@ scan. Scope: OS packages (Alpine APK), language packages (npm), and known
 misconfigurations.
 
 ```bash
-./scripts/security/scan-images.sh                # all four images
+./scripts/security/scan-images.sh                # both images (app + migration)
 ./scripts/security/scan-images.sh api            # subset
 TRIVY_EXIT_CODE=0 ./scripts/security/scan-images.sh   # warn-only
 ```
