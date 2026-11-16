@@ -3,8 +3,9 @@
 # Build all four apps in a single workspace pass. Shared libraries are bundled
 # from source and their TypeScript project references are cached independently.
 #
-# Targets: api-dev / worker-dev / scheduler-dev / migration-dev (compose.dev.yml)
-#          api / worker / scheduler / migration (compose.prod.yml)
+# Targets: app-dev / migration-dev (compose.dev.yml); app / migration (compose.prod.yml).
+#          The per-service api-dev/worker-dev/scheduler-dev and api/worker/scheduler
+#          targets remain as the per-image rollback path.
 
 ARG NODE_VERSION=24.18.0-alpine3.24
 ARG NODE_DIGEST=sha256:a0b9bf06e4e6193cf7a0f58816cc935ff8c2a908f81e6f1a95432d679c54fbfd

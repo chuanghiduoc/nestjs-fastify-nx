@@ -51,6 +51,10 @@ done
 if [[ $PROD -eq 1 ]]; then
   OVERLAY="docker/compose.prod.yml"
   STACK_LABEL="prod"
+  # compose.prod.yml interpolates ${APP_IMAGE:?}/${MIGRATION_IMAGE:?}; `down` still parses the
+  # file, so give the placeholders a value that compose accepts. Nothing is pulled or started.
+  export APP_IMAGE="${APP_IMAGE:-teardown-placeholder}"
+  export MIGRATION_IMAGE="${MIGRATION_IMAGE:-teardown-placeholder}"
 else
   OVERLAY="docker/compose.dev.yml"
   STACK_LABEL="dev"
