@@ -119,8 +119,27 @@ docker compose --env-file .env -f docker/compose.yml -f docker/compose.prod.yml 
 ```
 
 The per-service Dockerfile targets (`api`, `worker`, `scheduler`) remain as the
-per-image rollback path — build one of those only when you need to roll a single
-service back to an older artifact independent of the other two.
+per-image rollback path. Changing `APP_IMAGE` moves api, worker and scheduler
+together; to roll **one** service back independently, pin that service to its own
+image **and** restore its original entry point in a compose override — those
+images ship the bundle at `dist/main.js`, while the shared image is addressed
+per service at `dist/apps/<service>/main.js`:
+
+```yaml
+# docker/compose.rollback.yml — one service only
+services:
+  worker:
+    image: ghcr.io/your-org/worker@sha256:<older-digest>
+    command: ['node', 'dist/main.js']
+```
+
+```bash
+docker compose --env-file .env \
+  -f docker/compose.yml -f docker/compose.prod.yml -f docker/compose.rollback.yml \
+  up -d --no-deps worker
+```
+
+The other two services keep running the shared `APP_IMAGE`.
 
 ### Small VPS: the lite profile
 

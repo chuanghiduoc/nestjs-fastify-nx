@@ -163,7 +163,7 @@ jobs:
           } >> .env
 
       # depends_on chains every service (infra + migration + garage-init), so this
-      # one command builds all four app images and boots the whole stack. --wait
+      # one command builds both app images (shared app + migration) and boots the whole stack. --wait
       # blocks on worker/scheduler healthchecks and migration completing; a crash
       # loop or failed migration trips --wait-timeout and fails.
       - name: Build images and boot stack

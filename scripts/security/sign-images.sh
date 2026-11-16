@@ -43,7 +43,7 @@ shift || true
 if [[ $# -gt 0 ]]; then
   APPS=("$@")
 else
-  APPS=(api worker scheduler migration)
+  APPS=(app migration)
 fi
 
 cosign() { sec::docker_run --rm -e COSIGN_EXPERIMENTAL=1 "${COSIGN_IMAGE}" "$@"; }
