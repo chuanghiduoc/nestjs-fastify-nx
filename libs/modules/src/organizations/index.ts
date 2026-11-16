@@ -1,29 +1,35 @@
 export { OrganizationsModule } from './organizations.module';
-export { EnsurePersonalOrganizationCommand } from './ensure-personal-organization';
+export { EnsurePersonalOrganizationCommand } from './application/commands/ensure-personal-organization';
 
-export { INVITATION_STATUSES, type InvitationStatus } from './invitation-repository.port';
+export {
+  INVITATION_STATUSES,
+  type InvitationStatus,
+} from './domain/ports/invitation-repository.port';
 
-export { GetCurrentOrganizationQuery } from './get-current-organization';
+export { GetCurrentOrganizationQuery } from './application/queries/get-current-organization';
 export {
   ListOrganizationRolesQuery,
   type ListOrganizationRolesResult,
-} from './list-organization-roles';
-export { ListTeamsQuery, type ListTeamsResult } from './list-teams';
-export { ListInvitationsQuery, type ListInvitationsResult } from './list-invitations';
-export { CreateOrganizationRoleCommand } from './create-organization-role';
-export { UpdateOrganizationRoleCommand } from './update-organization-role';
-export { DeleteOrganizationRoleCommand } from './delete-organization-role';
-export { CreateTeamCommand } from './create-team';
-export { UpdateTeamCommand } from './update-team';
-export { DeleteTeamCommand } from './delete-team';
-export { CancelInvitationCommand } from './cancel-invitation';
+} from './application/queries/list-organization-roles';
+export { ListTeamsQuery, type ListTeamsResult } from './application/queries/list-teams';
+export {
+  ListInvitationsQuery,
+  type ListInvitationsResult,
+} from './application/queries/list-invitations';
+export { CreateOrganizationRoleCommand } from './application/commands/create-organization-role';
+export { UpdateOrganizationRoleCommand } from './application/commands/update-organization-role';
+export { DeleteOrganizationRoleCommand } from './application/commands/delete-organization-role';
+export { CreateTeamCommand } from './application/commands/create-team';
+export { UpdateTeamCommand } from './application/commands/update-team';
+export { DeleteTeamCommand } from './application/commands/delete-team';
+export { CancelInvitationCommand } from './application/commands/cancel-invitation';
 
 export type {
   InvitationDto,
   OrganizationDto,
   OrganizationRoleDto,
   TeamDto,
-} from './organization-role-application.dto';
+} from './application/dto/organization-role-application.dto';
 
 export {
   CreateOrganizationRoleDto,
@@ -36,4 +42,4 @@ export {
   TeamResponseDto,
   UpdateOrganizationRoleDto,
   UpdateTeamDto,
-} from './organization-roles.dto';
+} from './presentation/dto/organization-roles.dto';
