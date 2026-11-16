@@ -10,7 +10,7 @@ services:
   # One-shot: assigns the single-node layout, imports the bucket-scoped app key, creates the
   # STORAGE_BUCKET and applies its orphan-expiry lifecycle rule. Idempotent across restarts.
   garage-init:
-    image: curlimages/curl:8.22.0@sha256:58adaa4e8dca9c988bae2aba4ab3434a0bb2da16bbe3f92dec39ec7785166777
+    image: curlimages/curl:8.23.0@sha256:3fb7e13e5d179a845c97d78204f3f1064d1907037f26a3ebf91710571151fd93
     restart: 'no'
     depends_on:
       garage:
@@ -76,7 +76,7 @@ services:
   # Fake SMTP for dev/CI mail testing — UI at http://localhost:8025.
   # Prod deployments terminate at real SMTP via MAIL_HOST in .env.
   mailpit:
-    image: axllent/mailpit:v1.30.4
+    image: axllent/mailpit:v1.33.1
     restart: unless-stopped
     mem_limit: 64m
     cpus: 0.25
