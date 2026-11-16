@@ -316,10 +316,10 @@ export default defineConfig(
   },
 
   // Leaf contexts are flat folders: the application layer is the operation files themselves, so
-  // the framework-agnostic DTO rule keys on what a file IS (dto/controller/module/presentation)
-  // instead of the folder it sits in. Engine contexts keep their presentation/ folder — their
-  // application/dto/*.dto.ts files stay pure TS, so only leaf-root *.dto.ts and */presentation/**
-  // are exempt.
+  // the framework-agnostic DTO rule keys on what a file IS (dto/controller/presentation) instead of
+  // the folder it sits in. Engine contexts keep their presentation/ folder — their
+  // application/dto/*.dto.ts files stay pure TS, so only leaf-root *.dto.ts, *.controller.ts and
+  // */presentation/** are exempt; module files are not.
   {
     files: ['libs/modules/src/**/*.ts'],
     ignores: [

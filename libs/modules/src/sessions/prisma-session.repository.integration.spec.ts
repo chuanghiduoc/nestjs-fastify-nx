@@ -83,6 +83,20 @@ describe('PrismaSessionRepository (integration)', () => {
     ]);
   });
 
+  it('never projects the session token', async () => {
+    await seedSession('019dd1a5-9235-70db-8d57-54010000000d', USER_ID);
+
+    const result = await repository.findAllCursor({
+      userId: USER_ID,
+      limit: 10,
+      activeOnly: false,
+      now: new Date(),
+    });
+
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0]).not.toHaveProperty('token');
+  });
+
   it('paginates same-timestamp sessions without repeating a row', async () => {
     const sameTime = new Date('2026-02-01T00:00:00.000Z');
     for (const suffix of ['01', '02', '03']) {

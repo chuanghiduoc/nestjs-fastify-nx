@@ -121,7 +121,7 @@ is the value to quote in a bug report — it appears on every log line for that 
 | `422`  | `ProblemDetailsValidationPipe`, `DomainException({ kind: 'validation' })`, `Idempotency-Key` reused with a different body | `ApiCommonErrors({ validation: true })`           |
 | `429`  | `@fastify/rate-limit` (auth routes), `ThrottlerGuard`                                                                     | `ApiCommonErrors` (always)                        |
 | `500`  | Anything unhandled — always generic, never echoes the cause                                                               | `ApiCommonErrors` (always)                        |
-| `501`  | `NotImplementedException` — what a freshly generated repository throws                                                    | status map fallback                               |
+| `501`  | `NotImplementedException` raised by an unimplemented adapter or route                                                     | status map fallback                               |
 | `503`  | `@fastify/under-pressure` load shedding, failed health probe                                                              | `ApiCommonErrors` (always)                        |
 | `504`  | `TimeoutInterceptor` past `HTTP_REQUEST_TIMEOUT_MS`                                                                       | `ApiCommonErrors` (always)                        |
 

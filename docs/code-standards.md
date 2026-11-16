@@ -258,7 +258,7 @@ describe('CreateUserHandler', () => {
 
 | Convention     | Style       | Example                           |
 | -------------- | ----------- | --------------------------------- |
-| File names     | kebab-case  | `create-user.handler.ts`          |
+| File names     | kebab-case  | `create-user.ts`                  |
 | Class names    | PascalCase  | `CreateUserHandler`               |
 | Function names | camelCase   | `publishUserRegistered()`         |
 | JSON keys      | camelCase   | `{ userId: '...', email: '...' }` |

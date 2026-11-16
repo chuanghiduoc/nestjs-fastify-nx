@@ -27,7 +27,10 @@ function contextOfResolvedPath(segments) {
       segment === 'libs' && segments[index + 1] === 'modules' && segments[index + 2] === 'src',
   );
   if (rootIndex === -1) return undefined;
-  return segments.length > rootIndex + 4 ? segments[rootIndex + 3] : undefined;
+  if (segments.length <= rootIndex + 3) return undefined;
+  const candidate = segments[rootIndex + 3];
+  if (candidate.includes('.')) return undefined;
+  return candidate;
 }
 
 function resolveRelativeSpecifier(filename, specifier) {

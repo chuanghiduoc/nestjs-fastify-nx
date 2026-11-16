@@ -90,7 +90,7 @@ export class <%= className %>Controller {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'List <%= fileName %> records for the caller organization.' })
   @ApiOkResponse({
-    type: <%= className %>ResponseDto,
+    type: [<%= className %>ResponseDto],
     description: 'List of <%= fileName %> records.',
   })
   @ApiCommonErrors()

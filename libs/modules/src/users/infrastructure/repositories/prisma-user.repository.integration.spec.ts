@@ -6,6 +6,8 @@ import {
 } from '@nestjs-fastify-nx/testing';
 import type { TestContainers } from '@nestjs-fastify-nx/testing';
 import type { DecodedCursor } from '@nestjs-fastify-nx/shared';
+import { isDomainException } from '@nestjs-fastify-nx/core';
+import { ERROR_CODES } from '@nestjs-fastify-nx/contracts';
 import { UserFactory } from '../../testing/user.factory';
 import { PrismaUserRepository } from './prisma-user.repository';
 import { PrismaService } from '@nestjs-fastify-nx/infra-database';
@@ -62,6 +64,24 @@ describe('PrismaUserRepository (integration)', () => {
     const found = await repository.findById(user.id);
     if (!found) throw new Error('expected user to be persisted');
     expect(found.email.toString()).toBe('repo@test.com');
+  });
+
+  it('maps a duplicate email to user_already_exists with permanent=false', async () => {
+    const first = UserFactory.create({ email: 'dup@test.com' });
+    await repository.save(first);
+    const second = UserFactory.create({ email: 'dup@test.com' });
+
+    try {
+      await repository.save(second);
+      expect.unreachable('expected a duplicate email to be rejected');
+    } catch (err) {
+      expect(isDomainException(err)).toBe(true);
+      if (isDomainException(err)) {
+        expect(err.kind).toBe('conflict');
+        expect(err.code).toBe(ERROR_CODES.USER_ALREADY_EXISTS);
+        expect(err.permanent).toBe(false);
+      }
+    }
   });
 
   it('returns null for unknown id', async () => {

@@ -96,5 +96,26 @@ ruleTester.run('modules/no-cross-context-imports', rule, {
       filename: 'libs/modules/src/users/presentation/controllers/users.controller.ts',
       errors: [{ messageId: 'crossContext', data: { importer: 'users', imported: 'sessions' } }],
     },
+    {
+      code: `import { OrganizationsModule } from '../organizations';`,
+      filename: 'libs/modules/src/users/users.module.ts',
+      errors: [
+        { messageId: 'crossContext', data: { importer: 'users', imported: 'organizations' } },
+      ],
+    },
+    {
+      code: `import { OrganizationsModule } from '../organizations/';`,
+      filename: 'libs/modules/src/users/users.module.ts',
+      errors: [
+        { messageId: 'crossContext', data: { importer: 'users', imported: 'organizations' } },
+      ],
+    },
+    {
+      code: `import { OrganizationsModule } from '../../../organizations';`,
+      filename: 'libs/modules/src/users/application/queries/list-users-cursor.ts',
+      errors: [
+        { messageId: 'crossContext', data: { importer: 'users', imported: 'organizations' } },
+      ],
+    },
   ],
 });

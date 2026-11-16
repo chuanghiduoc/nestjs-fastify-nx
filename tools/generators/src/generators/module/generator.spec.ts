@@ -223,8 +223,9 @@ describe('module generator', () => {
 
       const repo = tree.read('libs/modules/src/orders/prisma-orders.repository.ts', 'utf-8') ?? '';
       expect(repo).toContain('implements OrdersRepositoryPort');
-      expect(repo).toContain('writeTarget()');
-      expect(repo).toContain('readTarget()');
+      expect(repo).toMatch(/writeTarget\(\)\.orders\.create/);
+      expect(repo).toMatch(/writeTarget\(\)\.orders\.findFirst/);
+      expect(repo).toMatch(/readTarget\(\)\.orders\.findMany/);
       expect(repo).toContain('organizationId');
       expect(repo).toContain('keysetAfter');
       expect(repo).toContain('takePage');

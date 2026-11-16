@@ -17,7 +17,7 @@ export class Prisma<%= className %>Repository implements <%= className %>Reposit
   }
 
   async findById(organizationId: string, id: string): Promise<<%= className %>Record | null> {
-    return this.prisma.readTarget().<%= propertyName %>.findFirst({
+    return this.prisma.writeTarget().<%= propertyName %>.findFirst({
       where: { organizationId, id },
     });
   }

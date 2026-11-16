@@ -6,6 +6,8 @@ import {
 } from '@nestjs-fastify-nx/testing';
 import type { TestContainers } from '@nestjs-fastify-nx/testing';
 import { PrismaService } from '@nestjs-fastify-nx/infra-database';
+import { isDomainException } from '@nestjs-fastify-nx/core';
+import { ERROR_CODES } from '@nestjs-fastify-nx/contracts';
 import { Term, TERM_TYPE } from './term.entity';
 import { PrismaTermRepository } from './prisma-term.repository';
 
@@ -150,5 +152,32 @@ describe('PrismaTermRepository (integration)', () => {
 
     const row = await prisma.db.termAcceptance.findFirstOrThrow({ where: { termId: term.id } });
     expect(row.userId).toBeNull();
+  });
+
+  it('maps a duplicate type+version to TERM_VERSION_TAKEN', async () => {
+    const term = Term.create({
+      id: '019dd1a5-9235-70db-8d57-540300000011',
+      type: TERM_TYPE.TERMS_OF_SERVICE,
+      version: 'v1',
+      content: 'body',
+    });
+    await repository.create(term);
+    const duplicate = Term.create({
+      id: '019dd1a5-9235-70db-8d57-540300000012',
+      type: TERM_TYPE.TERMS_OF_SERVICE,
+      version: 'v1',
+      content: 'other body',
+    });
+
+    try {
+      await repository.create(duplicate);
+      expect.unreachable('expected a duplicate type+version to be rejected');
+    } catch (err) {
+      expect(isDomainException(err)).toBe(true);
+      if (isDomainException(err)) {
+        expect(err.kind).toBe('conflict');
+        expect(err.code).toBe(ERROR_CODES.TERM_VERSION_TAKEN);
+      }
+    }
   });
 }, 90_000);
