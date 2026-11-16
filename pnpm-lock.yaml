@@ -278,8 +278,8 @@ importers:
         specifier: ^12.0.13
         version: 12.0.13(@typescript/typescript6@6.0.2)(prettier@3.9.10)
       '@nestjs/testing':
-        specifier: ^12.4.0
-        version: 12.4.0(@nestjs/common@12.4.0(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@12.4.0)
+        specifier: ^12.4.1
+        version: 12.4.1(@nestjs/common@12.4.0(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@12.4.0)
       '@nx/devkit':
         specifier: 24.0.5
         version: 24.0.5(nx@24.0.5(@swc-node/register@1.12.1(@swc/core@1.16.22(@swc/helpers@0.5.24))(@swc/types@0.1.28)(@typescript/typescript6@6.0.2))(@swc/core@1.16.22(@swc/helpers@0.5.24)))
@@ -2322,8 +2322,8 @@ packages:
       typeorm:
         optional: true
 
-  '@nestjs/testing@12.4.0':
-    resolution: {integrity: sha512-jRnK2OwXABrhkqrGL+hCxHO5IO1gpz0Zhew/ga3ND4dNqgTUAwLmntbnQo17uKo1V2oj2H5VsYamMqkixTma3g==}
+  '@nestjs/testing@12.4.1':
+    resolution: {integrity: sha512-OG/UgCpTacBJwLp/Zy8VFemdxHQdqPUCvsdQuepQGEyiVvdlf+AsZDxoUzLIshiRcz1uBeGEAkprQ23wZo+mLQ==}
     peerDependencies:
       '@nestjs/common': ^12.0.0
       '@nestjs/core': ^12.0.0
@@ -11662,7 +11662,7 @@ snapshots:
       '@nestjs/swagger': 12.1.1(@fastify/static@10.1.10)(@nestjs/common@12.4.0(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@12.4.0)(@typescript/typescript6@6.0.2)(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)
       '@prisma/client': 7.10.1(@typescript/typescript6@6.0.2)(prisma@7.10.1(@types/node@26.6.6)(@types/react@19.3.0)(@typescript/typescript6@6.0.2)(magicast@0.5.5)(react-dom@19.2.5(react@19.2.5))(react@19.2.5))
 
-  '@nestjs/testing@12.4.0(@nestjs/common@12.4.0(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@12.4.0)':
+  '@nestjs/testing@12.4.1(@nestjs/common@12.4.0(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@12.4.0)':
     dependencies:
       '@nestjs/common': 12.4.0(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2)
       '@nestjs/core': 12.4.0(@nestjs/common@12.4.0(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/websockets@12.4.0)(reflect-metadata@0.2.2)(rxjs@7.8.2)
