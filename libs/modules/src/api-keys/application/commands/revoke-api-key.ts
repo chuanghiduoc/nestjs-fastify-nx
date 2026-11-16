@@ -8,7 +8,10 @@ import {
 import { ERROR_CODES, I18N_KEYS, fieldProblem } from '@nestjs-fastify-nx/contracts';
 import { PrismaService } from '@nestjs-fastify-nx/infra-database';
 import { DOMAIN_EVENTS, generateId } from '@nestjs-fastify-nx/shared';
-import { API_KEY_REPOSITORY, type ApiKeyRepositoryPort } from './api-key-repository.port';
+import {
+  API_KEY_REPOSITORY,
+  type ApiKeyRepositoryPort,
+} from '../../domain/ports/api-key-repository.port';
 
 export class RevokeApiKeyCommand extends Command<void> {
   constructor(

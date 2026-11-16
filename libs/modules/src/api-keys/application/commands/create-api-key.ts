@@ -8,9 +8,12 @@ import {
 } from '@nestjs-fastify-nx/core';
 import { PrismaService } from '@nestjs-fastify-nx/infra-database';
 import { DOMAIN_EVENTS, generateId } from '@nestjs-fastify-nx/shared';
-import { API_KEY_REPOSITORY, type ApiKeyRepositoryPort } from './api-key-repository.port';
-import { ApiKey } from './api-key.entity';
-import { toApiKeyDto, type IssuedApiKeyDto } from './api-key.dto';
+import {
+  API_KEY_REPOSITORY,
+  type ApiKeyRepositoryPort,
+} from '../../domain/ports/api-key-repository.port';
+import { ApiKey } from '../../domain/entities/api-key.entity';
+import { toApiKeyDto, type IssuedApiKeyDto } from '../dto/api-key.dto';
 
 export interface CreateApiKeyInput {
   readonly organizationId: string;

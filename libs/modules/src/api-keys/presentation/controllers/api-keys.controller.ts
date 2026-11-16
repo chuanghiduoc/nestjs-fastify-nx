@@ -33,16 +33,16 @@ import {
 } from '@nestjs-fastify-nx/infra-auth';
 import { RequirePermission } from '@nestjs-fastify-nx/infra-authorization';
 import { PERMISSIONS } from '@nestjs-fastify-nx/shared';
-import { ListApiKeysQuery } from './list-api-keys';
-import { CreateApiKeyCommand } from './create-api-key';
-import { RevokeApiKeyCommand } from './revoke-api-key';
-import type { ApiKeyDto, IssuedApiKeyDto } from './api-key.dto';
+import { ListApiKeysQuery } from '../../application/queries/list-api-keys';
+import { CreateApiKeyCommand } from '../../application/commands/create-api-key';
+import { RevokeApiKeyCommand } from '../../application/commands/revoke-api-key';
+import type { ApiKeyDto, IssuedApiKeyDto } from '../../application/dto/api-key.dto';
 import {
   ApiKeyResponseDto,
   CreateApiKeyDto,
   IssuedApiKeyResponseDto,
   ListApiKeysFilterDto,
-} from './api-keys.dto';
+} from '../dto/api-keys.dto';
 
 const API_KEYS_PATH = '/api/v1/api-keys';
 const CREATE_LIMIT = { default: { limit: 10, ttl: 60_000 } };

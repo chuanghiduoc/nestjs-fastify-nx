@@ -1,5 +1,5 @@
 import type { Permission } from '@nestjs-fastify-nx/shared';
-import type { ApiKey } from './api-key.entity';
+import type { ApiKey } from '../../domain/entities/api-key.entity';
 
 export interface ApiKeyDto {
   id: string;

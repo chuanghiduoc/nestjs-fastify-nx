@@ -1,10 +1,10 @@
 import { paginateNewestFirst } from '@nestjs-fastify-nx/shared';
-import type { ApiKey } from './api-key.entity';
+import type { ApiKey } from '../domain/entities/api-key.entity';
 import type {
   ApiKeyRepositoryPort,
   FindApiKeysCursorOptions,
   FindApiKeysCursorResult,
-} from './api-key-repository.port';
+} from '../domain/ports/api-key-repository.port';
 
 export class InMemoryApiKeyRepository implements ApiKeyRepositoryPort {
   private readonly keys = new Map<string, ApiKey>();

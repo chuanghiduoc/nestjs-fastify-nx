@@ -3,8 +3,11 @@ import { Query, QueryHandler, type IQueryHandler } from '@nestjs/cqrs';
 import { DomainException } from '@nestjs-fastify-nx/core';
 import { invalidCursorProblem } from '@nestjs-fastify-nx/contracts';
 import { decodeCursor, lastCursorOf, type DecodedCursor } from '@nestjs-fastify-nx/shared';
-import { API_KEY_REPOSITORY, type ApiKeyRepositoryPort } from './api-key-repository.port';
-import { toApiKeyDto, type ApiKeyDto } from './api-key.dto';
+import {
+  API_KEY_REPOSITORY,
+  type ApiKeyRepositoryPort,
+} from '../../domain/ports/api-key-repository.port';
+import { toApiKeyDto, type ApiKeyDto } from '../dto/api-key.dto';
 
 export interface ListApiKeysResult {
   data: ApiKeyDto[];
