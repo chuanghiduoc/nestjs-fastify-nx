@@ -1,4 +1,4 @@
-import type { FeatureFlag } from './feature-flag.entity';
+import type { FeatureFlag } from '../../domain/entities/feature-flag.entity';
 
 export interface FeatureFlagDto {
   id: string;

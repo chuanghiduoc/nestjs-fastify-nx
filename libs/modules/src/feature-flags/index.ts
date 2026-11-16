@@ -1,14 +1,17 @@
 export { FeatureFlagsModule } from './feature-flags.module';
 
-export { ListFeatureFlagsQuery, type ListFeatureFlagsResult } from './list-feature-flags';
-export { EvaluateFeatureFlagsQuery } from './evaluate-feature-flags';
-export { CreateFeatureFlagCommand } from './create-feature-flag';
-export { UpdateFeatureFlagCommand } from './update-feature-flag';
-export { DeleteFeatureFlagCommand } from './delete-feature-flag';
-export type { EvaluatedFlagsDto, FeatureFlagDto } from './feature-flag.dto';
+export {
+  ListFeatureFlagsQuery,
+  type ListFeatureFlagsResult,
+} from './application/queries/list-feature-flags';
+export { EvaluateFeatureFlagsQuery } from './application/queries/evaluate-feature-flags';
+export { CreateFeatureFlagCommand } from './application/commands/create-feature-flag';
+export { UpdateFeatureFlagCommand } from './application/commands/update-feature-flag';
+export { DeleteFeatureFlagCommand } from './application/commands/delete-feature-flag';
+export type { EvaluatedFlagsDto, FeatureFlagDto } from './application/dto/feature-flag.dto';
 export {
   CreateFeatureFlagDto,
   EvaluatedFlagsResponseDto,
   FeatureFlagResponseDto,
   UpdateFeatureFlagDto,
-} from './feature-flags.dto';
+} from './presentation/dto/feature-flags.dto';

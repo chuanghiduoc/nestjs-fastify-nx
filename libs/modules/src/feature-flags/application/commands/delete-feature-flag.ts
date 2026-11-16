@@ -6,8 +6,8 @@ import { DOMAIN_EVENTS, generateId } from '@nestjs-fastify-nx/shared';
 import {
   FEATURE_FLAG_REPOSITORY,
   type FeatureFlagRepositoryPort,
-} from './feature-flag-repository.port';
-import { featureFlagNotFound } from './feature-flag-errors';
+} from '../../domain/ports/feature-flag-repository.port';
+import { featureFlagNotFound } from '../feature-flag-errors';
 
 export class DeleteFeatureFlagCommand extends Command<void> {
   constructor(

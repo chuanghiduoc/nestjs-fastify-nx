@@ -6,8 +6,8 @@ import { decodeCursor, lastCursorOf, type DecodedCursor } from '@nestjs-fastify-
 import {
   FEATURE_FLAG_REPOSITORY,
   type FeatureFlagRepositoryPort,
-} from './feature-flag-repository.port';
-import { toFeatureFlagDto, type FeatureFlagDto } from './feature-flag.dto';
+} from '../../domain/ports/feature-flag-repository.port';
+import { toFeatureFlagDto, type FeatureFlagDto } from '../dto/feature-flag.dto';
 
 export interface ListFeatureFlagsResult {
   data: FeatureFlagDto[];

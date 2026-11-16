@@ -6,42 +6,41 @@ import { DOMAIN_EVENTS, generateId } from '@nestjs-fastify-nx/shared';
 import {
   FEATURE_FLAG_REPOSITORY,
   type FeatureFlagRepositoryPort,
-} from './feature-flag-repository.port';
-import type { FeatureFlagChanges } from './feature-flag.entity';
-import { toFeatureFlagDto, type FeatureFlagDto } from './feature-flag.dto';
-import { featureFlagNotFound } from './feature-flag-errors';
+} from '../../domain/ports/feature-flag-repository.port';
+import { FeatureFlag } from '../../domain/entities/feature-flag.entity';
+import { toFeatureFlagDto, type FeatureFlagDto } from '../dto/feature-flag.dto';
 
-export interface UpdateFeatureFlagInput {
+export interface CreateFeatureFlagInput {
   readonly organizationId: string;
   readonly userId: string;
-  readonly id: string;
+  readonly key: string;
   readonly description?: string | null;
   readonly enabled?: boolean;
   readonly rolloutPercentage?: number;
 }
 
-export class UpdateFeatureFlagCommand extends Command<FeatureFlagDto> {
+export class CreateFeatureFlagCommand extends Command<FeatureFlagDto> {
   readonly organizationId: string;
   readonly userId: string;
-  readonly id: string;
+  readonly key: string;
   readonly description?: string | null;
   readonly enabled?: boolean;
   readonly rolloutPercentage?: number;
 
-  constructor(input: UpdateFeatureFlagInput) {
+  constructor(input: CreateFeatureFlagInput) {
     super();
     this.organizationId = input.organizationId;
     this.userId = input.userId;
-    this.id = input.id;
+    this.key = input.key;
     this.description = input.description;
     this.enabled = input.enabled;
     this.rolloutPercentage = input.rolloutPercentage;
   }
 }
 
-@CommandHandler(UpdateFeatureFlagCommand)
-export class UpdateFeatureFlagHandler implements ICommandHandler<
-  UpdateFeatureFlagCommand,
+@CommandHandler(CreateFeatureFlagCommand)
+export class CreateFeatureFlagHandler implements ICommandHandler<
+  CreateFeatureFlagCommand,
   FeatureFlagDto
 > {
   constructor(
@@ -50,44 +49,33 @@ export class UpdateFeatureFlagHandler implements ICommandHandler<
     @Inject(EVENT_PUBLISHER_PORT) private readonly events: EventPublisherPort,
   ) {}
 
-  async execute(command: UpdateFeatureFlagCommand): Promise<FeatureFlagDto> {
-    const existing = await this.flags.findById(command.organizationId, command.id);
-    if (!existing) throw featureFlagNotFound();
-
-    const changes: FeatureFlagChanges = {
+  async execute(command: CreateFeatureFlagCommand): Promise<FeatureFlagDto> {
+    const flag = FeatureFlag.create({
+      organizationId: command.organizationId,
+      key: command.key,
       description: command.description,
       enabled: command.enabled,
       rolloutPercentage: command.rolloutPercentage,
-    };
-    const updated = existing.withChanges(changes);
+    });
 
     await this.prisma.transaction(async () => {
-      const applied = await this.flags.update(
-        command.organizationId,
-        command.id,
-        changes,
-        updated.updatedAt,
-      );
-      if (!applied) throw featureFlagNotFound();
-
+      await this.flags.create(flag);
       await this.events.publish({
         eventId: generateId(),
-        eventType: DOMAIN_EVENTS.FEATURE_FLAGS_UPDATED,
-        aggregateId: updated.id,
+        eventType: DOMAIN_EVENTS.FEATURE_FLAGS_CREATED,
+        aggregateId: flag.id,
         occurredAt: new Date(),
         organizationId: command.organizationId,
         payload: {
           userId: command.userId,
-          key: updated.key,
-          enabled: updated.enabled,
-          previousEnabled: existing.enabled,
-          rolloutPercentage: updated.rolloutPercentage,
-          previousRolloutPercentage: existing.rolloutPercentage,
-          description: updated.description,
+          key: flag.key,
+          enabled: flag.enabled,
+          rolloutPercentage: flag.rolloutPercentage,
+          description: flag.description,
         },
       });
     });
 
-    return toFeatureFlagDto(updated);
+    return toFeatureFlagDto(flag);
   }
 }

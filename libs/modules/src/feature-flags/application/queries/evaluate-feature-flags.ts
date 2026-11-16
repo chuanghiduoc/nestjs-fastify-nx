@@ -3,8 +3,8 @@ import { Query, QueryHandler, type IQueryHandler } from '@nestjs/cqrs';
 import {
   FEATURE_FLAG_REPOSITORY,
   type FeatureFlagRepositoryPort,
-} from './feature-flag-repository.port';
-import type { EvaluatedFlagsDto } from './feature-flag.dto';
+} from '../../domain/ports/feature-flag-repository.port';
+import type { EvaluatedFlagsDto } from '../dto/feature-flag.dto';
 
 export class EvaluateFeatureFlagsQuery extends Query<EvaluatedFlagsDto> {
   constructor(
