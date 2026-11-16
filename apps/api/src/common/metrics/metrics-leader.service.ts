@@ -1,7 +1,7 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { redisReconnectStrategy } from '@nestjs-fastify-nx/shared';
-import { RedisLeaderLease } from '@nestjs-fastify-nx/infra-redis';
+import { RedisLeaderLease } from '@nestjs-fastify-nx/infra/redis';
 import Redis from 'ioredis';
 import type { EnvConfig } from '../../config/env.validation';
 
@@ -10,7 +10,7 @@ import type { EnvConfig } from '../../config/env.validation';
 // N× the real value and counters inflate by the replica count. A single-writer lease fixes that:
 // exactly one replica is the "collector leader" at a time; the rest observe but do not record.
 //
-// The lease mechanics live in RedisLeaderLease (@nestjs-fastify-nx/infra-redis) — shared with the
+// The lease mechanics live in RedisLeaderLease (@nestjs-fastify-nx/infra/redis) — shared with the
 // scheduler's cron leader rather than duplicated here.
 @Injectable()
 export class MetricsLeaderService implements OnModuleInit, OnModuleDestroy {

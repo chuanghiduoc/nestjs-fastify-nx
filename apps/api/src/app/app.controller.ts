@@ -2,7 +2,7 @@ import { Controller, Get } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ApiOkResponse, ApiOperation, ApiProperty, ApiTags } from '@nestjs/swagger';
 import { ApiCommonErrors } from '@nestjs-fastify-nx/contracts';
-import { Public } from '@nestjs-fastify-nx/infra-auth';
+import { Public } from '@nestjs-fastify-nx/infra/auth';
 import type { EnvConfig } from '../config/env.validation';
 
 class ServiceInfoDto {

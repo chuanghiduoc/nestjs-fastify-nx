@@ -30,8 +30,8 @@ import {
   CurrentUser,
   requireOrganizationId,
   type AuthenticatedSession,
-} from '@nestjs-fastify-nx/infra-auth';
-import { RequirePermission } from '@nestjs-fastify-nx/infra-authorization';
+} from '@nestjs-fastify-nx/infra/auth';
+import { RequirePermission } from '@nestjs-fastify-nx/infra/authorization';
 import { PERMISSIONS } from '@nestjs-fastify-nx/shared';
 import { ListApiKeysQuery } from '../../application/queries/list-api-keys';
 import { CreateApiKeyCommand } from '../../application/commands/create-api-key';

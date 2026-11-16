@@ -33,7 +33,7 @@ Every request is identified by one id shared across all three signals and the HT
 
 ## Structured logging (pino)
 
-`nestjs-pino` + `pino-http`, configured in `libs/infra/observability/src/lib/pino-logger-config.ts`.
+`nestjs-pino` + `pino-http`, configured in `libs/infra/src/observability/lib/pino-logger-config.ts`.
 
 - **Dev**: `pino-pretty`, colourised, single-line, numeric level.
 - **Prod**: raw JSON with the level as a string label (`"level":"info"`) — what Loki / ELK /
@@ -61,7 +61,7 @@ Every request is identified by one id shared across all three signals and the HT
 
 ## Distributed tracing (OpenTelemetry)
 
-`libs/infra/observability/start-tracing.ts`, imported first in each app's `main.ts` so the SDK
+`libs/infra/src/observability/lib/start-tracing.ts`, imported first in each app's `main.ts` so the SDK
 patches `http`/`pg`/`ioredis` before they load. Enabled by `OTEL_ENABLED=true`.
 
 - **Resource**: `service.name`, `service.namespace`, `service.version`, `deployment.environment`.

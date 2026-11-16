@@ -5,7 +5,7 @@ import {
   STORAGE_PORT,
   type PresignedUpload,
   type StoragePort,
-} from '@nestjs-fastify-nx/infra-storage';
+} from '@nestjs-fastify-nx/infra/storage';
 import { extensionForMimeType } from '../../domain/entities/stored-file.entity';
 import { UPLOAD_LIMITS, type UploadLimits } from '../upload-limits';
 

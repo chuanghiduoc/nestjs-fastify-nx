@@ -34,13 +34,13 @@ import {
   toUnpaginatedListResponse,
 } from '@nestjs-fastify-nx/contracts';
 import { PERMISSIONS } from '@nestjs-fastify-nx/shared';
-import { RequirePermission } from '@nestjs-fastify-nx/infra-authorization';
-import type { PresignedUpload, StoredFile } from '@nestjs-fastify-nx/infra-storage';
+import { RequirePermission } from '@nestjs-fastify-nx/infra/authorization';
+import type { PresignedUpload, StoredFile } from '@nestjs-fastify-nx/infra/storage';
 import {
   CurrentUser,
   requireOrganizationId,
   type AuthenticatedSession,
-} from '@nestjs-fastify-nx/infra-auth';
+} from '@nestjs-fastify-nx/infra/auth';
 import { PresignUploadCommand } from '../../application/commands/presign-upload';
 import { ConfirmUploadCommand } from '../../application/commands/confirm-upload';
 import { DeleteUploadCommand } from '../../application/commands/delete-upload';

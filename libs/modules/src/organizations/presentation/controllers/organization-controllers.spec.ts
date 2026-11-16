@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CommandBus, QueryBus } from '@nestjs/cqrs';
 import { PERMISSIONS, generateId } from '@nestjs-fastify-nx/shared';
-import type { AuthenticatedSession } from '@nestjs-fastify-nx/infra-auth';
+import type { AuthenticatedSession } from '@nestjs-fastify-nx/infra/auth';
 import { OrganizationRolesController } from './organization-roles.controller';
 import { TeamsController } from './teams.controller';
 import { InvitationsController } from './invitations.controller';

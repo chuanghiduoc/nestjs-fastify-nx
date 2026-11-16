@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { BatchedPurgeRunner, type BatchedPurgeConfig } from './batched-purge.runner';
-import type { PrismaService } from '@nestjs-fastify-nx/infra-database';
+import type { PrismaService } from '@nestjs-fastify-nx/infra/database';
 
 const CONFIG: BatchedPurgeConfig = {
   table: 'sessions',

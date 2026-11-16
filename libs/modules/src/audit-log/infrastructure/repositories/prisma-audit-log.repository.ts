@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { PrismaService, jsonObjectOrEmpty } from '@nestjs-fastify-nx/infra-database';
-import { Prisma } from '@nestjs-fastify-nx/infra-database';
+import { PrismaService, jsonObjectOrEmpty } from '@nestjs-fastify-nx/infra/database';
+import { Prisma } from '@nestjs-fastify-nx/infra/database';
 import { keysetAfter, takePage } from '@nestjs-fastify-nx/shared';
 import type {
   AuditLogRepositoryPort,

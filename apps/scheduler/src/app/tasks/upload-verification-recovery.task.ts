@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import type { Queue } from 'bullmq';
-import { PrismaService } from '@nestjs-fastify-nx/infra-database';
+import { PrismaService } from '@nestjs-fastify-nx/infra/database';
 import { enqueueUploadVerification } from '@nestjs-fastify-nx/modules/upload';
 import { positiveIntEnv, QUEUE_NAMES } from '@nestjs-fastify-nx/shared';
 import { SchedulerLeaderService } from '../leadership/scheduler-leader.service';

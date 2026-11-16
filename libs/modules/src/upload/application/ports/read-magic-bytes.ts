@@ -1,4 +1,4 @@
-import type { StoragePort } from '@nestjs-fastify-nx/infra-storage';
+import type { StoragePort } from '@nestjs-fastify-nx/infra/storage';
 import { assertMagicBytesMatch } from '../../domain/entities/stored-file.entity';
 import type { UploadLimits } from '../upload-limits';
 

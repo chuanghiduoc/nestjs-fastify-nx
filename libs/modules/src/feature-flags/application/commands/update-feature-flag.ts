@@ -1,7 +1,7 @@
 import { Inject } from '@nestjs/common';
 import { Command, CommandHandler, type ICommandHandler } from '@nestjs/cqrs';
 import { EVENT_PUBLISHER_PORT, type EventPublisherPort } from '@nestjs-fastify-nx/core';
-import { PrismaService } from '@nestjs-fastify-nx/infra-database';
+import { PrismaService } from '@nestjs-fastify-nx/infra/database';
 import { DOMAIN_EVENTS, generateId } from '@nestjs-fastify-nx/shared';
 import {
   FEATURE_FLAG_REPOSITORY,

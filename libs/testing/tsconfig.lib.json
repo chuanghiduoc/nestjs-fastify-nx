@@ -20,9 +20,5 @@
     "src/**/*.test.jsx",
     "src/**/*.spec.jsx"
   ],
-  "references": [
-    {
-      "path": "../infra/database/tsconfig.lib.json"
-    }
-  ]
+  "references": []
 }

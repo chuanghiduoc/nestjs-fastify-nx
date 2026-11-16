@@ -1,7 +1,7 @@
 import { Controller, Get, Res, UseGuards, VERSION_NEUTRAL } from '@nestjs/common';
 import { SkipThrottle } from '@nestjs/throttler';
 import { ApiExcludeController } from '@nestjs/swagger';
-import { Public } from '@nestjs-fastify-nx/infra-auth';
+import { Public } from '@nestjs-fastify-nx/infra/auth';
 import type { FastifyReply } from 'fastify';
 import { MetricsService } from './metrics.service';
 import { MetricsIpAllowGuard } from './metrics-ip-allow.guard';

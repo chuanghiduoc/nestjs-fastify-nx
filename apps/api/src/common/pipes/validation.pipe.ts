@@ -5,7 +5,7 @@ import {
   validatorToCode,
   type ValidationErrorItemDto,
 } from '@nestjs-fastify-nx/contracts';
-import { mapConstraintToI18nKey, VALIDATION_CONSTRAINT_KEYS } from '@nestjs-fastify-nx/infra-i18n';
+import { mapConstraintToI18nKey, VALIDATION_CONSTRAINT_KEYS } from '@nestjs-fastify-nx/infra/i18n';
 import { I18N_KEYS } from '@nestjs-fastify-nx/contracts';
 
 export class ProblemDetailsValidationPipe extends ValidationPipe {

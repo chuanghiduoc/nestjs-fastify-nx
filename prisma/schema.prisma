@@ -1,6 +1,6 @@
 generator client {
   provider            = "prisma-client"
-  output              = "../libs/infra/database/src/generated/prisma"
+  output              = "../libs/infra/src/database/generated/prisma"
   runtime             = "nodejs"
   moduleFormat        = "esm"
   importFileExtension = ""

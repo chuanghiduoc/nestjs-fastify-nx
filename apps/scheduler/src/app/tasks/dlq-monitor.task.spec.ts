@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, type Mock } from 'vitest';
-import type * as InfraRedis from '@nestjs-fastify-nx/infra-redis';
+import type * as InfraRedis from '@nestjs-fastify-nx/infra/redis';
 
 interface QueueMock {
   name: string;
@@ -15,7 +15,7 @@ const { routeSpy, queues } = vi.hoisted(() => ({
   queues: new Map<string, QueueMock>(),
 }));
 
-vi.mock('@nestjs-fastify-nx/infra-redis', async (importOriginal) => {
+vi.mock('@nestjs-fastify-nx/infra/redis', async (importOriginal) => {
   const actual = await importOriginal<typeof InfraRedis>();
   return { ...actual, routeFailedJobToDlq: (...args: unknown[]) => routeSpy(...args) };
 });

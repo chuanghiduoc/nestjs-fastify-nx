@@ -48,7 +48,7 @@ Three things that are **not** what you would guess:
 
 ## Architecture & boundaries
 
-DDD layering enforced by Nx tags + `@nx/enforce-module-boundaries` (`eslint.config.mjs`); context-to-context edges inside the modules group are enforced by the custom `modules-scale/no-cross-context-imports` rule:
+DDD layering enforced by Nx tags + `@nx/enforce-module-boundaries` (`eslint.config.mjs`); folder-to-folder edges inside the `modules` and `infra` groups are enforced by the custom `libs-groups/no-cross-context-imports` rule:
 
 | Tag                                                | May depend on                                                |
 | -------------------------------------------------- | ------------------------------------------------------------ |
@@ -62,9 +62,11 @@ DDD layering enforced by Nx tags + `@nx/enforce-module-boundaries` (`eslint.conf
 | `scope:client`                                     | shared, contracts                                            |
 | `scope:testing`                                    | modules, infra, core, shared, contracts                      |
 
-**Boundaries are sacred.** If lint fails on `@nx/enforce-module-boundaries` or `modules-scale/no-cross-context-imports`, fix the architecture — never relax the rule and never add a cross-module import. Cross-context aggregation goes through `scope:composition`, one-way. The `scope:modules` row is scope-level only: all contexts live in one `modules` project, so it says nothing about edges between context folders — sibling-context imports are what `modules-scale/no-cross-context-imports` forbids.
+**Boundaries are sacred.** If lint fails on `@nx/enforce-module-boundaries` or `libs-groups/no-cross-context-imports`, fix the architecture — never relax the rule and never add a cross-module import. Cross-context aggregation goes through `scope:composition`, one-way. The `scope:modules` and `scope:infra` rows are scope-level only: all contexts live in one `modules` project and all adapters in one `infra` project, so they say nothing about edges between folders — those are what `libs-groups/no-cross-context-imports` constrains.
 
 Inside `libs/modules/src/<ctxA>/`, importing `@nestjs-fastify-nx/modules/<ctxB>` (`ctxB !== ctxA`) is an error, and every consumer (apps, composition) must import through a context barrel — `@nestjs-fastify-nx/modules/<ctx>/<internal-path>` is an error everywhere.
+
+The `infra` group is `libs/infra/src/<folder>/` for `auth`, `authorization`, `database`, `i18n`, `messaging`, `observability`, `redis`, `storage` — one Nx project (`infra`, tag `scope:infra`) and one workspace package. `libs/infra/package.json` maps `./<folder>` → `./src/<folder>/index.ts` (plus `./authorization/testing`); consumers import `@nestjs-fastify-nx/infra/<folder>` and deep subpaths are an error. Sibling folders may import only along the documented DAG — `auth → database, i18n`, `authorization → auth, database`, `messaging → database`; every other cross-folder import is an error. Cross-group imports (`modules → infra`, `apps → infra`) are allowed and stay with `@nx/enforce-module-boundaries`.
 
 `scope:composition` libs are **orchestrators only**: wire routes, call CQRS handlers from several modules. A `domain/` or `application/` layer growing inside one means the rule is being broken — the logic belongs in the owning module, and what is missing is a domain event. Lint will not catch this.
 
@@ -76,7 +78,8 @@ Test files (`*.spec.ts`, `*.integration.ts`, `e2e/**`) are exempt from boundary 
 apps/{api,worker,scheduler,migration}/     api owns HTTP+GraphQL+WS; e2e at apps/api/e2e/
 libs/modules/src/<context>/                 bounded-context folders — one group project (see below)
 libs/composition/admin/                    cross-context orchestration + Bull Board
-libs/{core,infra,contracts,shared}/        auth, errors, outbox · db/redis/storage/… · DTOs · utils
+libs/infra/src/<folder>/                   adapters — one group project (see above)
+libs/{core,contracts,shared}/              errors, outbox · DTOs · utils
 libs/testing/                              Testcontainers + DatabaseCleaner harness
 libs/api-client/                           Orval output from the live OpenAPI spec
 prisma/ docker/ scripts/ docs/ tools/generators/
@@ -126,7 +129,7 @@ pnpm gen:module <name> | gen:composition | gen:lib | gen:app | rm:module | rm:pr
 3. **No mocks for DB tests** — integration tests hit real Postgres via Testcontainers (`libs/testing`).
 4. **e2e lives at `apps/api/e2e/`**, never `apps/api/test/`. Use `createTestApp()`.
 5. **Conventional Commits** (lefthook + commitlint): `feat|fix|chore|test|docs|refactor|ci|perf|build|revert|style`, subject lowercase, ≤100 chars.
-6. **Validation is declarative.** Pipes and decorators, not hand-rolled `if`/regex. Id path params MUST be `@Param('id', new ParseUUIDPipe({ version: '7' }))` — a bare `ParseUUIDPipe` accepts any version. Read the caller via `@CurrentUser() user: AuthenticatedSession` from `@nestjs-fastify-nx/infra-auth` — never `@Req() req: FastifyRequest & { user }`, and never a per-module copy of that decorator. Reserve `if`/`else` for authorization logic no decorator can express.
+6. **Validation is declarative.** Pipes and decorators, not hand-rolled `if`/regex. Id path params MUST be `@Param('id', new ParseUUIDPipe({ version: '7' }))` — a bare `ParseUUIDPipe` accepts any version. Read the caller via `@CurrentUser() user: AuthenticatedSession` from `@nestjs-fastify-nx/infra/auth` — never `@Req() req: FastifyRequest & { user }`, and never a per-module copy of that decorator. Reserve `if`/`else` for authorization logic no decorator can express.
 7. **Pre-commit gate (mandatory)**: `pnpm nx affected -t lint test build typecheck --base=origin/main` — `origin/main`, not `main`, or `affected` silently returns nothing. Changes under `apps/api/` also need `pnpm nx run api:e2e`. Locally, lefthook runs lint+typecheck on staged files and the same origin/main-scoped lint+typecheck on pre-push; the full gate (test/build/e2e) runs in CI. Coverage thresholds are 60% for every project via `vitest.shared.ts`; the only carve-out is `libs/testing`, whose Testcontainers harness cannot be unit-tested (its helpers and `DatabaseCleaner` are covered).
 8. **Authorization has two axes that must not be mixed.** `User.role` (`ADMIN`/`USER`) + `@Roles()` is the _provider's own staff_, for back-office surfaces only. Every tenant-facing endpoint uses `@RequirePermission()` + `PermissionGuard` instead. Putting `@Roles('ADMIN')` on a tenant endpoint locks out the org owner **and** exposes other tenants. Two engines (Better Auth's plugin for `/api/auth/organization/*`, `PostgresPbacAdapter` for `/api/v1/*`) must stay in step — details in `docs/agent-gotchas.md`.
 

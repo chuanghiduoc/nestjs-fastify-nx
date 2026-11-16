@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { PrismaService } from '@nestjs-fastify-nx/infra-database';
+import { PrismaService } from '@nestjs-fastify-nx/infra/database';
 import type {
   OrganizationRepositoryPort,
   OrganizationSummary,

@@ -1,7 +1,7 @@
 import { Module, type DynamicModule, type ModuleMetadata, type Provider } from '@nestjs/common';
 import { BullModule } from '@nestjs/bullmq';
-import { StorageModule } from '@nestjs-fastify-nx/infra-storage';
-import { DatabaseModule } from '@nestjs-fastify-nx/infra-database';
+import { StorageModule } from '@nestjs-fastify-nx/infra/storage';
+import { DatabaseModule } from '@nestjs-fastify-nx/infra/database';
 import { QUEUE_NAMES } from '@nestjs-fastify-nx/shared';
 import { UploadController } from './presentation/controllers/upload.controller';
 import { PresignUploadHandler } from './application/commands/presign-upload';

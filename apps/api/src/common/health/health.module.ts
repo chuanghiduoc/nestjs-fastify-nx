@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { TerminusModule } from '@nestjs/terminus';
-import { PrismaReplicationLagHealthIndicator } from '@nestjs-fastify-nx/infra-database';
+import { PrismaReplicationLagHealthIndicator } from '@nestjs-fastify-nx/infra/database';
 import { MetricsIpAllowGuard } from '../metrics/metrics-ip-allow.guard';
 import { HealthController } from './health.controller';
 import { PrismaHealthIndicator } from './prisma-health.indicator';

@@ -37,8 +37,8 @@ import {
   resolveOrganizationId,
   type AuthenticatedApiKey,
   type AuthenticatedSession,
-} from '@nestjs-fastify-nx/infra-auth';
-import { RequirePermission } from '@nestjs-fastify-nx/infra-authorization';
+} from '@nestjs-fastify-nx/infra/auth';
+import { RequirePermission } from '@nestjs-fastify-nx/infra/authorization';
 import { PERMISSIONS } from '@nestjs-fastify-nx/shared';
 import { ListFeatureFlagsQuery } from '../../application/queries/list-feature-flags';
 import { EvaluateFeatureFlagsQuery } from '../../application/queries/evaluate-feature-flags';

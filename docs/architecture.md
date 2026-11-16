@@ -23,14 +23,16 @@ nestjs-fastify-nx/
 │   │       └── sessions/        # the caller's own sessions: list and revoke
 │   ├── composition/   # Cross-cutting aggregators (scope:composition)
 │   │   └── admin/     # admin surface + Bull Board (scope:composition tag; composed into api)
-│   ├── infra/        # Adapters
-│   │   ├── auth/         # Better Auth integration, BetterAuthGuard, RolesGuard
-│   │   ├── database/     # Prisma service + module
-│   │   ├── redis/        # Cache + Queue modules + DLQ helpers
-│   │   ├── messaging/    # Event bus, transactional outbox publisher + relay
-│   │   ├── storage/      # S3 adapter (StoragePort)
-│   │   ├── i18n/         # I18N_KEYS + locale resolution used by the error filter
-│   │   └── observability/# OpenTelemetry SDK bootstrap, metrics, Sentry init
+│   ├── infra/        # Adapters — ONE group project + workspace package
+│   │   └── src/
+│   │       ├── auth/           # Better Auth integration, BetterAuthGuard, RolesGuard
+│   │       ├── authorization/  # PBAC adapters + PermissionGuard
+│   │       ├── database/       # Prisma service + module
+│   │       ├── i18n/           # locale resolution + validation message keys used by the error filter
+│   │       ├── redis/          # Cache + Queue modules + DLQ helpers
+│   │       ├── messaging/      # Event bus, transactional outbox publisher + relay
+│   │       ├── storage/        # S3 adapter (StoragePort)
+│   │       └── observability/  # OpenTelemetry SDK bootstrap, metrics, Sentry init
 │   ├── core/         # Cross-cutting: base classes, decorators, errors
 │   ├── shared/       # Pure utilities (uuid v7, pagination, queue names)
 │   ├── contracts/    # Cross-module DTOs, integration event schemas
@@ -73,10 +75,12 @@ flowchart TD
         sess["sessions"]
     end
 
-    subgraph infra["libs/infra/ · scope:infra · adapters"]
+    subgraph infra["libs/infra/src/ · one group project · scope:infra"]
         direction LR
         infraAuth["auth"]
+        infraAuthorization["authorization"]
         database["database"]
+        i18n["i18n"]
         redis["redis"]
         messaging["messaging"]
         storage["storage"]
@@ -106,7 +110,7 @@ flowchart TD
     class api,worker,scheduler,migration appBox;
     class comp compBox;
     class users,audit,upload,orgs,apikeys,notif,flags,terms,sess modBox;
-    class infraAuth,database,redis,messaging,storage,observability infraBox;
+    class infraAuth,infraAuthorization,database,i18n,redis,messaging,storage,observability infraBox;
     class core,contracts,shared baseBox;
 ```
 
@@ -154,15 +158,28 @@ walks through every file role one-by-one — what it is, why it exists, when you
 create one, and how to wire it — using the real `users` and `sessions` folders as
 the examples.
 
+**Infra group** — `libs/infra/src/<folder>/` is the adapter counterpart: one Nx
+project (`infra`, tag `scope:infra`) and one workspace package whose `exports`
+map resolves `@nestjs-fastify-nx/infra/<folder>` to that folder's `index.ts`
+(plus `@nestjs-fastify-nx/infra/authorization/testing`). The eight folders are
+`auth`, `authorization`, `database`, `i18n`, `messaging`, `observability`,
+`redis`, `storage`. Sibling folders may import only along the documented DAG —
+`auth → database, i18n`, `authorization → auth, database`, `messaging →
+database`; every other cross-folder import is an error. Cross-group imports
+(`modules → infra`) are allowed and stay with `@nx/enforce-module-boundaries`.
+
 Authentication is delegated to [Better Auth](https://better-auth.com) (mounted by
-`libs/infra/auth`), so feature modules do not own login/logout flows or token
+`libs/infra/src/auth`), so feature modules do not own login/logout flows or token
 adapters — they only consume the resulting session via `BetterAuthGuard`.
 
 ## Module Boundary Rules
 
 Scope-level edges are enforced by `@nx/enforce-module-boundaries`; the edges
-**between context folders** inside the group are enforced by the custom
-`modules-scale/no-cross-context-imports` rule (see `eslint.config.mjs`):
+**between folders** inside a group are enforced by the custom
+`libs-groups/no-cross-context-imports` rule (see `eslint.config.mjs`). The
+`modules` group allows no sibling-folder import at all; the `infra` group allows
+only its documented DAG — `auth → database, i18n`, `authorization → auth,
+database`, `messaging → database`:
 
 | Source tag          | Allowed dependencies                                 |
 | ------------------- | ---------------------------------------------------- |
@@ -241,7 +258,7 @@ rules and may import `scope:testing` (Testcontainers helpers, fixtures).
 ## Auth Flow
 
 Authentication is handled end-to-end by [Better Auth](https://better-auth.com),
-mounted at `/api/auth/*` by `BetterAuthModule` (in `libs/infra/auth`). It owns
+mounted at `/api/auth/*` by `BetterAuthModule` (in `libs/infra/src/auth`). It owns
 the session schema, password hashing (scrypt via `better-auth/crypto`), and
 cookie issuance. The full endpoint catalogue is published at
 `/api/auth/reference`.

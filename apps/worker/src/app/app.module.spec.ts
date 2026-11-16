@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import { Test } from '@nestjs/testing';
-import { PrismaService } from '@nestjs-fastify-nx/infra-database';
+import { PrismaService } from '@nestjs-fastify-nx/infra/database';
 import { AppModule } from './app.module';
 
 // Every other worker test constructs its class directly, so a provider that exists in the code but

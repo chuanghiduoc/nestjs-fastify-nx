@@ -5,7 +5,7 @@ import {
   deployTestMigrations,
 } from '@nestjs-fastify-nx/testing';
 import type { TestContainers } from '@nestjs-fastify-nx/testing';
-import { PrismaService } from '@nestjs-fastify-nx/infra-database';
+import { PrismaService } from '@nestjs-fastify-nx/infra/database';
 import { ALL_PERMISSIONS, PERMISSIONS } from '@nestjs-fastify-nx/shared';
 import { OrganizationRole } from '../../domain/entities/organization-role.entity';
 import { PrismaOrganizationRoleRepository } from './prisma-organization-role.repository';

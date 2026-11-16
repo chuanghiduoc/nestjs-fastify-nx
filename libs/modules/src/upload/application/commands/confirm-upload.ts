@@ -8,7 +8,7 @@ import {
   type ObjectMetadata,
   type StoragePort,
   type StoredFile as StoredFileResult,
-} from '@nestjs-fastify-nx/infra-storage';
+} from '@nestjs-fastify-nx/infra/storage';
 import {
   assertMimeAllowed,
   assertOwnsSourceKey,

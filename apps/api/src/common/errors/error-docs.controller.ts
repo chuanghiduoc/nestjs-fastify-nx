@@ -1,6 +1,6 @@
 import { Controller, Get, NotFoundException, Param, Res, VERSION_NEUTRAL } from '@nestjs/common';
 import { ApiExcludeController } from '@nestjs/swagger';
-import { Public } from '@nestjs-fastify-nx/infra-auth';
+import { Public } from '@nestjs-fastify-nx/infra/auth';
 import { findErrorTypeDoc } from '@nestjs-fastify-nx/contracts';
 import type { FastifyReply } from 'fastify';
 import { renderErrorDocPage, renderErrorIndexPage } from './error-docs.page';

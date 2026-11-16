@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
-import { DatabaseModule } from '@nestjs-fastify-nx/infra-database';
-import { MessagingModule } from '@nestjs-fastify-nx/infra-messaging';
+import { DatabaseModule } from '@nestjs-fastify-nx/infra/database';
+import { MessagingModule } from '@nestjs-fastify-nx/infra/messaging';
 import { NOTIFICATION_REPOSITORY } from './notification-repository.port';
 import { PrismaNotificationRepository } from './prisma-notification.repository';
 import { ListNotificationsHandler } from './list-notifications';

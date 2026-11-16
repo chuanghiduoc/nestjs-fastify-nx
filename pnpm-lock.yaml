@@ -403,30 +403,9 @@ importers:
       '@nestjs-fastify-nx/core':
         specifier: workspace:*
         version: link:../../libs/core
-      '@nestjs-fastify-nx/infra-auth':
+      '@nestjs-fastify-nx/infra':
         specifier: workspace:*
-        version: link:../../libs/infra/auth
-      '@nestjs-fastify-nx/infra-authorization':
-        specifier: workspace:*
-        version: link:../../libs/infra/authorization
-      '@nestjs-fastify-nx/infra-database':
-        specifier: workspace:*
-        version: link:../../libs/infra/database
-      '@nestjs-fastify-nx/infra-i18n':
-        specifier: workspace:*
-        version: link:../../libs/infra/i18n
-      '@nestjs-fastify-nx/infra-messaging':
-        specifier: workspace:*
-        version: link:../../libs/infra/messaging
-      '@nestjs-fastify-nx/infra-observability':
-        specifier: workspace:*
-        version: link:../../libs/infra/observability
-      '@nestjs-fastify-nx/infra-redis':
-        specifier: workspace:*
-        version: link:../../libs/infra/redis
-      '@nestjs-fastify-nx/infra-storage':
-        specifier: workspace:*
-        version: link:../../libs/infra/storage
+        version: link:../../libs/infra
       '@nestjs-fastify-nx/modules':
         specifier: workspace:*
         version: link:../../libs/modules
@@ -444,21 +423,9 @@ importers:
       '@nestjs-fastify-nx/core':
         specifier: workspace:*
         version: link:../../libs/core
-      '@nestjs-fastify-nx/infra-database':
+      '@nestjs-fastify-nx/infra':
         specifier: workspace:*
-        version: link:../../libs/infra/database
-      '@nestjs-fastify-nx/infra-messaging':
-        specifier: workspace:*
-        version: link:../../libs/infra/messaging
-      '@nestjs-fastify-nx/infra-observability':
-        specifier: workspace:*
-        version: link:../../libs/infra/observability
-      '@nestjs-fastify-nx/infra-redis':
-        specifier: workspace:*
-        version: link:../../libs/infra/redis
-      '@nestjs-fastify-nx/infra-storage':
-        specifier: workspace:*
-        version: link:../../libs/infra/storage
+        version: link:../../libs/infra
       '@nestjs-fastify-nx/modules':
         specifier: workspace:*
         version: link:../../libs/modules
@@ -471,18 +438,9 @@ importers:
       '@nestjs-fastify-nx/core':
         specifier: workspace:*
         version: link:../../libs/core
-      '@nestjs-fastify-nx/infra-database':
+      '@nestjs-fastify-nx/infra':
         specifier: workspace:*
-        version: link:../../libs/infra/database
-      '@nestjs-fastify-nx/infra-observability':
-        specifier: workspace:*
-        version: link:../../libs/infra/observability
-      '@nestjs-fastify-nx/infra-redis':
-        specifier: workspace:*
-        version: link:../../libs/infra/redis
-      '@nestjs-fastify-nx/infra-storage':
-        specifier: workspace:*
-        version: link:../../libs/infra/storage
+        version: link:../../libs/infra
       '@nestjs-fastify-nx/modules':
         specifier: workspace:*
         version: link:../../libs/modules
@@ -497,12 +455,9 @@ importers:
       '@nestjs-fastify-nx/contracts':
         specifier: workspace:*
         version: link:../../contracts
-      '@nestjs-fastify-nx/infra-auth':
+      '@nestjs-fastify-nx/infra':
         specifier: workspace:*
-        version: link:../../infra/auth
-      '@nestjs-fastify-nx/infra-authorization':
-        specifier: workspace:*
-        version: link:../../infra/authorization
+        version: link:../../infra
       '@nestjs-fastify-nx/modules':
         specifier: workspace:*
         version: link:../../modules
@@ -522,110 +477,20 @@ importers:
         specifier: workspace:*
         version: link:../shared
 
-  libs/infra/auth:
+  libs/infra:
     devDependencies:
       '@nestjs-fastify-nx/contracts':
         specifier: workspace:*
-        version: link:../../contracts
+        version: link:../contracts
       '@nestjs-fastify-nx/core':
         specifier: workspace:*
-        version: link:../../core
-      '@nestjs-fastify-nx/infra-database':
-        specifier: workspace:*
-        version: link:../database
-      '@nestjs-fastify-nx/infra-i18n':
-        specifier: workspace:*
-        version: link:../i18n
+        version: link:../core
       '@nestjs-fastify-nx/shared':
         specifier: workspace:*
-        version: link:../../shared
-
-  libs/infra/authorization:
-    devDependencies:
-      '@nestjs-fastify-nx/contracts':
-        specifier: workspace:*
-        version: link:../../contracts
-      '@nestjs-fastify-nx/core':
-        specifier: workspace:*
-        version: link:../../core
-      '@nestjs-fastify-nx/infra-auth':
-        specifier: workspace:*
-        version: link:../auth
-      '@nestjs-fastify-nx/infra-database':
-        specifier: workspace:*
-        version: link:../database
-      '@nestjs-fastify-nx/shared':
-        specifier: workspace:*
-        version: link:../../shared
+        version: link:../shared
       '@nestjs-fastify-nx/testing':
         specifier: workspace:*
-        version: link:../../testing
-
-  libs/infra/database:
-    devDependencies:
-      '@nestjs-fastify-nx/contracts':
-        specifier: workspace:*
-        version: link:../../contracts
-      '@nestjs-fastify-nx/core':
-        specifier: workspace:*
-        version: link:../../core
-      '@nestjs-fastify-nx/shared':
-        specifier: workspace:*
-        version: link:../../shared
-
-  libs/infra/i18n:
-    devDependencies:
-      '@nestjs-fastify-nx/contracts':
-        specifier: workspace:*
-        version: link:../../contracts
-
-  libs/infra/messaging:
-    devDependencies:
-      '@nestjs-fastify-nx/contracts':
-        specifier: workspace:*
-        version: link:../../contracts
-      '@nestjs-fastify-nx/core':
-        specifier: workspace:*
-        version: link:../../core
-      '@nestjs-fastify-nx/infra-database':
-        specifier: workspace:*
-        version: link:../database
-      '@nestjs-fastify-nx/shared':
-        specifier: workspace:*
-        version: link:../../shared
-      '@nestjs-fastify-nx/testing':
-        specifier: workspace:*
-        version: link:../../testing
-
-  libs/infra/observability:
-    devDependencies:
-      '@nestjs-fastify-nx/core':
-        specifier: workspace:*
-        version: link:../../core
-      '@nestjs-fastify-nx/shared':
-        specifier: workspace:*
-        version: link:../../shared
-
-  libs/infra/redis:
-    devDependencies:
-      '@nestjs-fastify-nx/shared':
-        specifier: workspace:*
-        version: link:../../shared
-
-  libs/infra/storage:
-    devDependencies:
-      '@nestjs-fastify-nx/contracts':
-        specifier: workspace:*
-        version: link:../../contracts
-      '@nestjs-fastify-nx/core':
-        specifier: workspace:*
-        version: link:../../core
-      '@nestjs-fastify-nx/infra-i18n':
-        specifier: workspace:*
-        version: link:../i18n
-      '@nestjs-fastify-nx/shared':
-        specifier: workspace:*
-        version: link:../../shared
+        version: link:../testing
 
   libs/modules:
     devDependencies:
@@ -635,24 +500,9 @@ importers:
       '@nestjs-fastify-nx/core':
         specifier: workspace:*
         version: link:../core
-      '@nestjs-fastify-nx/infra-auth':
+      '@nestjs-fastify-nx/infra':
         specifier: workspace:*
-        version: link:../infra/auth
-      '@nestjs-fastify-nx/infra-authorization':
-        specifier: workspace:*
-        version: link:../infra/authorization
-      '@nestjs-fastify-nx/infra-database':
-        specifier: workspace:*
-        version: link:../infra/database
-      '@nestjs-fastify-nx/infra-messaging':
-        specifier: workspace:*
-        version: link:../infra/messaging
-      '@nestjs-fastify-nx/infra-redis':
-        specifier: workspace:*
-        version: link:../infra/redis
-      '@nestjs-fastify-nx/infra-storage':
-        specifier: workspace:*
-        version: link:../infra/storage
+        version: link:../infra
       '@nestjs-fastify-nx/shared':
         specifier: workspace:*
         version: link:../shared
@@ -666,11 +516,7 @@ importers:
         specifier: ^4.6.7
         version: 4.6.7
 
-  libs/testing:
-    devDependencies:
-      '@nestjs-fastify-nx/infra-database':
-        specifier: workspace:*
-        version: link:../infra/database
+  libs/testing: {}
 
   tools/generators: {}
 

@@ -1,7 +1,7 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { PrismaService } from '@nestjs-fastify-nx/infra-database';
-import { STORAGE_PORT, type StoragePort } from '@nestjs-fastify-nx/infra-storage';
+import { PrismaService } from '@nestjs-fastify-nx/infra/database';
+import { STORAGE_PORT, type StoragePort } from '@nestjs-fastify-nx/infra/storage';
 import { positiveIntEnv, STORED_FILE_STATUS } from '@nestjs-fastify-nx/shared';
 import { SchedulerLeaderService } from '../leadership/scheduler-leader.service';
 

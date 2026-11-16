@@ -2,7 +2,7 @@ import { Module, MiddlewareConsumer, NestModule } from '@nestjs/common';
 import { LoggerModule } from 'nestjs-pino';
 import { ClsModule } from 'nestjs-cls';
 import type { IncomingMessage } from 'http';
-import { buildPinoLoggerConfig } from '@nestjs-fastify-nx/infra-observability';
+import { buildPinoLoggerConfig } from '@nestjs-fastify-nx/infra/observability';
 import { REQUEST_CONTEXT_KEYS } from '@nestjs-fastify-nx/core';
 import { CorrelationIdMiddleware } from './correlation-id.middleware';
 import { ensureRequestIds } from './request-id';

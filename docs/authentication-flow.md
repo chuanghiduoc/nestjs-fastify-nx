@@ -7,12 +7,12 @@ API. A Nest guard does not protect Better Auth endpoints.
 
 | Responsibility                                   | Owner                             | Entry point                                                             |
 | ------------------------------------------------ | --------------------------------- | ----------------------------------------------------------------------- |
-| Credentials, OAuth accounts, session persistence | Better Auth                       | `libs/infra/auth/src/lib/better-auth.config.ts`                         |
+| Credentials, OAuth accounts, session persistence | Better Auth                       | `libs/infra/src/auth/lib/better-auth.config.ts`                         |
 | Active-account checks on auth endpoints          | Auth adapter                      | `hooks.before` and `databaseHooks.session.create.before` in that config |
 | Initial organization for a new session           | Organizations application command | `EnsurePersonalOrganizationCommand`                                     |
 | Connect session creation to the command          | API composition                   | `apps/api/src/common/auth/authentication.module.ts`                     |
-| Authenticate REST and GraphQL requests           | Auth guard                        | `libs/infra/auth/src/lib/better-auth.guard.ts`                          |
-| Tenant business permissions                      | Authorization adapter             | `libs/infra/authorization`                                              |
+| Authenticate REST and GraphQL requests           | Auth guard                        | `libs/infra/src/auth/lib/better-auth.guard.ts`                          |
+| Tenant business permissions                      | Authorization adapter             | `libs/infra/src/authorization`                                          |
 | Organization plugin endpoint permissions         | Better Auth organization plugin   | `organization-access-control.ts`                                        |
 | Durable events for auth-owned tables             | PostgreSQL triggers               | `prisma/migrations/20260501000000_init/migration.sql`                   |
 

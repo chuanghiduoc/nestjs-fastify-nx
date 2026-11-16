@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { CleanupTask } from './cleanup.task';
-import type { PrismaService } from '@nestjs-fastify-nx/infra-database';
+import type { PrismaService } from '@nestjs-fastify-nx/infra/database';
 
 const mockPgClient = {
   connect: vi.fn(),

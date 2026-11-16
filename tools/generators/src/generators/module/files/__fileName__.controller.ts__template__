@@ -11,7 +11,7 @@ import {
   ListResponseDto,
   toCursorListResponse,
 } from '@nestjs-fastify-nx/contracts';
-import { CurrentUser, requireOrganizationId, type AuthenticatedSession } from '@nestjs-fastify-nx/infra-auth';
+import { CurrentUser, requireOrganizationId, type AuthenticatedSession } from '@nestjs-fastify-nx/infra/auth';
 import { Create<%= className %>Command } from './create-<%= fileName %>';
 import { List<%= className %>Query } from './list-<%= fileName %>';
 import {
@@ -75,7 +75,7 @@ export class <%= className %>Controller {
 <% } else { %>import { Controller, Get, HttpCode, HttpStatus, Query } from '@nestjs/common';
 import { ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { ApiCommonErrors, ListResponseDto, toUnpaginatedListResponse } from '@nestjs-fastify-nx/contracts';
-import { CurrentUser, type AuthenticatedSession } from '@nestjs-fastify-nx/infra-auth';
+import { CurrentUser, type AuthenticatedSession } from '@nestjs-fastify-nx/infra/auth';
 import {
   <%= className %>ResponseDto,
   List<%= className %>FilterDto,

@@ -4,7 +4,7 @@ import {
   STORAGE_PORT,
   type StoragePort,
   type StoredFile as StoredFileResult,
-} from '@nestjs-fastify-nx/infra-storage';
+} from '@nestjs-fastify-nx/infra/storage';
 import { StoredFile } from '../domain/entities/stored-file.entity';
 import {
   UPLOAD_VERIFICATION_DISPATCHER,

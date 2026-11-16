@@ -65,7 +65,7 @@
       "cache": true,
       "dependsOn": [
         "^build",
-        { "projects": ["infra-database"], "target": "prisma-generate", "params": "ignore" }
+        { "projects": ["infra"], "target": "prisma-generate", "params": "ignore" }
       ],
       "inputs": ["backendBuild", "^production"]
     },

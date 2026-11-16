@@ -5,7 +5,7 @@ import {
   deployTestMigrations,
 } from '@nestjs-fastify-nx/testing';
 import type { TestContainers } from '@nestjs-fastify-nx/testing';
-import { PrismaService } from '@nestjs-fastify-nx/infra-database';
+import { PrismaService } from '@nestjs-fastify-nx/infra/database';
 import { PERMISSIONS } from '@nestjs-fastify-nx/shared';
 import { ApiKey, type ApiKeyProps } from '../../domain/entities/api-key.entity';
 import { PrismaApiKeyRepository } from './prisma-api-key.repository';

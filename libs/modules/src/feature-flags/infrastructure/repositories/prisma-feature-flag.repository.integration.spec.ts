@@ -5,7 +5,7 @@ import {
   deployTestMigrations,
 } from '@nestjs-fastify-nx/testing';
 import type { TestContainers } from '@nestjs-fastify-nx/testing';
-import { PrismaService } from '@nestjs-fastify-nx/infra-database';
+import { PrismaService } from '@nestjs-fastify-nx/infra/database';
 import { FeatureFlag } from '../../domain/entities/feature-flag.entity';
 import { PrismaFeatureFlagRepository } from './prisma-feature-flag.repository';
 

@@ -62,7 +62,7 @@ vitest.config.*.timestamp*
 .claude/worktrees
 .claude/agent-memory/
 .claude/settings.local.json
-libs/infra/database/src/generated/
+libs/infra/src/database/generated/
 .test-tmp/
 .code-review-graph/
 .serena/

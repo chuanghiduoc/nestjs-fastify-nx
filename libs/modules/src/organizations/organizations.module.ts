@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { DatabaseModule } from '@nestjs-fastify-nx/infra-database';
+import { DatabaseModule } from '@nestjs-fastify-nx/infra/database';
 import { ORGANIZATION_REPOSITORY } from './domain/ports/organization-repository.port';
 import { ORGANIZATION_ROLE_REPOSITORY } from './domain/ports/organization-role-repository.port';
 import { TEAM_REPOSITORY } from './domain/ports/team-repository.port';

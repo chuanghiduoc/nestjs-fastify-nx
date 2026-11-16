@@ -5,7 +5,7 @@ import {
   deployTestMigrations,
 } from '@nestjs-fastify-nx/testing';
 import type { TestContainers } from '@nestjs-fastify-nx/testing';
-import { PrismaService } from '@nestjs-fastify-nx/infra-database';
+import { PrismaService } from '@nestjs-fastify-nx/infra/database';
 import { PrismaSessionRepository } from './prisma-session.repository';
 
 const USER_ID = '019dd1a5-9235-70db-8d57-540100000001';

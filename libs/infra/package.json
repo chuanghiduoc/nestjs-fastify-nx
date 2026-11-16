@@ -1,0 +1,55 @@
+{
+  "name": "@nestjs-fastify-nx/infra",
+  "version": "0.0.1",
+  "private": true,
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./auth": {
+      "types": "./src/auth/index.ts",
+      "default": "./src/auth/index.ts"
+    },
+    "./authorization": {
+      "types": "./src/authorization/index.ts",
+      "default": "./src/authorization/index.ts"
+    },
+    "./authorization/testing": {
+      "types": "./src/authorization/index.testing.ts",
+      "default": "./src/authorization/index.testing.ts"
+    },
+    "./database": {
+      "types": "./src/database/index.ts",
+      "default": "./src/database/index.ts"
+    },
+    "./i18n": {
+      "types": "./src/i18n/index.ts",
+      "default": "./src/i18n/index.ts"
+    },
+    "./messaging": {
+      "types": "./src/messaging/index.ts",
+      "default": "./src/messaging/index.ts"
+    },
+    "./observability": {
+      "types": "./src/observability/index.ts",
+      "default": "./src/observability/index.ts"
+    },
+    "./redis": {
+      "types": "./src/redis/index.ts",
+      "default": "./src/redis/index.ts"
+    },
+    "./storage": {
+      "types": "./src/storage/index.ts",
+      "default": "./src/storage/index.ts"
+    }
+  },
+  "devDependencies": {
+    "@nestjs-fastify-nx/contracts": "workspace:*",
+    "@nestjs-fastify-nx/core": "workspace:*",
+    "@nestjs-fastify-nx/shared": "workspace:*",
+    "@nestjs-fastify-nx/testing": "workspace:*"
+  }
+}

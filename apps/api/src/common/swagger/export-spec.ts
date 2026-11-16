@@ -46,7 +46,7 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe, VersioningType } from '@nestjs/common';
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { FastifyAdapter } from '@nestjs/platform-fastify';
-import { PrismaService } from '@nestjs-fastify-nx/infra-database';
+import { PrismaService } from '@nestjs-fastify-nx/infra/database';
 import { GLOBAL_PREFIX, GLOBAL_PREFIX_EXCLUDES } from '../http/global-prefix';
 
 const noConnect = (): Promise<void> => Promise.resolve();

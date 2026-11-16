@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { PrismaService } from '@nestjs-fastify-nx/infra-database';
+import { PrismaService } from '@nestjs-fastify-nx/infra/database';
 import { positiveIntEnv } from '@nestjs-fastify-nx/shared';
 
 export interface BatchedPurgeConfig {

@@ -5,6 +5,6 @@
  *
  * The SDK is a no-op unless `OTEL_ENABLED=true`.
  */
-import { startTracing } from '@nestjs-fastify-nx/infra-observability';
+import { startTracing } from '@nestjs-fastify-nx/infra/observability';
 
 startTracing({ serviceName: 'nestjs-fastify-scheduler' });

@@ -27,8 +27,8 @@ import {
   ListResponseDto,
   toUnpaginatedListResponse,
 } from '@nestjs-fastify-nx/contracts';
-import { CurrentUser, Roles, type AuthenticatedSession } from '@nestjs-fastify-nx/infra-auth';
-import { RequirePermission } from '@nestjs-fastify-nx/infra-authorization';
+import { CurrentUser, Roles, type AuthenticatedSession } from '@nestjs-fastify-nx/infra/auth';
+import { RequirePermission } from '@nestjs-fastify-nx/infra/authorization';
 import { PERMISSIONS, PLATFORM_ROLES } from '@nestjs-fastify-nx/shared';
 import { ListPublishedTermsQuery } from './list-published-terms';
 import { GetLatestTermQuery } from './get-latest-term';

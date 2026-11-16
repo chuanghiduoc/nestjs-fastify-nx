@@ -6,7 +6,7 @@ import {
   STORAGE_PORT,
   type StoragePort,
   type StoredFile as StoredFileResult,
-} from '@nestjs-fastify-nx/infra-storage';
+} from '@nestjs-fastify-nx/infra/storage';
 import {
   StoredFile,
   extensionForMimeType,

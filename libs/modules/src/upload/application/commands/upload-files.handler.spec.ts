@@ -1,7 +1,7 @@
 import type * as NodeFs from 'node:fs';
 import { Readable } from 'node:stream';
 import { describe, expect, it, vi } from 'vitest';
-import type { StoragePort } from '@nestjs-fastify-nx/infra-storage';
+import type { StoragePort } from '@nestjs-fastify-nx/infra/storage';
 import type { StoredFileRepositoryPort } from '../../domain/ports/stored-file-repository.port';
 import type { StoredFile, StoredFileProps } from '../../domain/entities/stored-file.entity';
 import { UploadFilesCommand } from './upload-files';

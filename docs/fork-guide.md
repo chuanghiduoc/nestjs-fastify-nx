@@ -151,7 +151,7 @@ send the cookie from the same origin; other clients should use `auth.token`.
 | Concern                                     | Location                             |
 | ------------------------------------------- | ------------------------------------ |
 | HTTP bootstrap, CORS, Helmet, rate limiting | `apps/api/src/main.ts`               |
-| Authentication, sessions, and role guards   | `libs/infra/auth`                    |
+| Authentication, sessions, and role guards   | `libs/infra/src/auth`                |
 | User use cases and repositories             | `libs/modules/src/users`             |
 | Upload presign and confirmation             | `libs/modules/src/upload`            |
 | Roles, teams, invitations                   | `libs/modules/src/organizations`     |
@@ -165,7 +165,7 @@ send the cookie from the same origin; other clients should use `auth.token`.
 | Prisma schema and migrations                | `prisma/`                            |
 | Queue processing                            | `apps/worker`                        |
 | Cron jobs and outbox relay                  | `apps/scheduler`                     |
-| Database, Redis, and S3 adapters            | `libs/infra`                         |
+| Database, Redis, and S3 adapters            | `libs/infra/src`                     |
 | DTOs, errors, and OpenAPI contracts         | `libs/contracts`                     |
 | Generated REST client                       | `libs/api-client`                    |
 

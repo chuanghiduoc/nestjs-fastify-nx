@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { DatabaseModule } from '@nestjs-fastify-nx/infra-database';
+import { DatabaseModule } from '@nestjs-fastify-nx/infra/database';
 import { <%= constantName %>_REPOSITORY } from './<%= fileName %>-repository.port';
 import { Prisma<%= className %>Repository } from './prisma-<%= fileName %>.repository';<% if (withCqrs) { %>
 import { Create<%= className %>Handler } from './create-<%= fileName %>';

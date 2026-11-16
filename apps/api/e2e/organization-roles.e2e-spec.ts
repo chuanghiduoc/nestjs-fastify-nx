@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import request from 'supertest';
-import { PrismaService } from '@nestjs-fastify-nx/infra-database';
+import { PrismaService } from '@nestjs-fastify-nx/infra/database';
 import { PERMISSIONS, SYSTEM_ROLES } from '@nestjs-fastify-nx/shared';
 import { createTestApp, cookieHeaderFromSetCookies, type TestAppContext } from './test-app';
 

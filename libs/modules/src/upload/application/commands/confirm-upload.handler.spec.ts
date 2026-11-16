@@ -3,7 +3,7 @@ import type { Mock } from 'vitest';
 import { DomainException, isDomainException } from '@nestjs-fastify-nx/core';
 import { ERROR_CODES } from '@nestjs-fastify-nx/contracts';
 import { STORED_FILE_STATUS } from '@nestjs-fastify-nx/shared';
-import type { ObjectMetadata, StoragePort } from '@nestjs-fastify-nx/infra-storage';
+import type { ObjectMetadata, StoragePort } from '@nestjs-fastify-nx/infra/storage';
 import { StoredFile, type StoredFileProps } from '../../domain/entities/stored-file.entity';
 import type { StoredFileRepositoryPort } from '../../domain/ports/stored-file-repository.port';
 import type { UploadVerificationDispatcher } from '../ports/upload-verification.dispatcher';

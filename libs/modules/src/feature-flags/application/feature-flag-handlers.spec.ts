@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { EventPublisherPort } from '@nestjs-fastify-nx/core';
-import type { PrismaService } from '@nestjs-fastify-nx/infra-database';
+import type { PrismaService } from '@nestjs-fastify-nx/infra/database';
 import { DOMAIN_EVENTS, generateId } from '@nestjs-fastify-nx/shared';
 import { FeatureFlag } from '../domain/entities/feature-flag.entity';
 import type { FeatureFlagRepositoryPort } from '../domain/ports/feature-flag-repository.port';

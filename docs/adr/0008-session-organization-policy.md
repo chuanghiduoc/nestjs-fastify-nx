@@ -16,7 +16,7 @@ The auth adapter requires an `AuthSessionPolicy` when it is configured. API
 composition supplies the policy through `BetterAuthModule.forRoot()` and maps
 organization resolution to `EnsurePersonalOrganizationCommand` on CommandBus.
 The Organizations module registers the handler and owns its repository port.
-Neither infra-auth nor another bounded context imports the handler.
+Neither the `infra` group's `auth` folder nor another bounded context imports the handler.
 
 Provisioning stays synchronous before session insertion. The application handler
 selects the existing membership or computes defaults; the repository serializes
@@ -43,7 +43,7 @@ in place. See [the flow guide](../authentication-flow.md) for the exact boundary
 ## Alternatives rejected
 
 - Moving the helper to another infra file keeps domain ownership implicit.
-- Importing Organizations from infra-auth violates module boundaries.
+- Importing Organizations from the `infra` group's `auth` folder violates module boundaries.
 - An asynchronous signup listener cannot guarantee an organization on the first
   session, and does not cover existing users without memberships at sign-in.
 - Replacing the organization plugin in the same change mixes a behavior-preserving

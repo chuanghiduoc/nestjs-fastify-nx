@@ -1,7 +1,7 @@
 /// <reference types="vitest/globals" />
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { HealthIndicatorService } from '@nestjs/terminus';
-import type { PrismaService } from '@nestjs-fastify-nx/infra-database';
+import type { PrismaService } from '@nestjs-fastify-nx/infra/database';
 import { PrismaHealthIndicator } from './prisma-health.indicator';
 
 function buildPrisma(queryRaw: ReturnType<typeof vi.fn>): PrismaService {

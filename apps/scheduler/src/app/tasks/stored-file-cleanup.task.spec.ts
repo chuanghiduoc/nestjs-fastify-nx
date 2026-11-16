@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { PrismaService } from '@nestjs-fastify-nx/infra-database';
-import type { StoragePort } from '@nestjs-fastify-nx/infra-storage';
+import type { PrismaService } from '@nestjs-fastify-nx/infra/database';
+import type { StoragePort } from '@nestjs-fastify-nx/infra/storage';
 import { StoredFileCleanupTask } from './stored-file-cleanup.task';
 import type { SchedulerLeaderService } from '../leadership/scheduler-leader.service';
 

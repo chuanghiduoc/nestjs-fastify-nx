@@ -308,10 +308,10 @@ export default defineConfig(
     files: ['**/*.ts'],
     ignores: ['**/*.spec.ts', '**/*.test.ts', '**/*.integration.ts', '**/e2e/**'],
     plugins: {
-      'modules-scale': { rules: { 'no-cross-context-imports': noCrossContextImports } },
+      'libs-groups': { rules: { 'no-cross-context-imports': noCrossContextImports } },
     },
     rules: {
-      'modules-scale/no-cross-context-imports': 'error',
+      'libs-groups/no-cross-context-imports': 'error',
     },
   },
 
@@ -321,7 +321,7 @@ export default defineConfig(
   // application/dto/*.dto.ts files stay pure TS, so only leaf-root *.dto.ts, *.controller.ts and
   // */presentation/** are exempt; module files are not.
   {
-    files: ['libs/modules/src/**/*.ts'],
+    files: ['libs/modules/src/**/*.ts', 'libs/infra/src/**/*.ts'],
     ignores: [
       '**/presentation/**',
       'libs/modules/src/*/*.dto.ts',

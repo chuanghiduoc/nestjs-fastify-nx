@@ -16,9 +16,9 @@ import type { Server, Socket } from 'socket.io';
 import { createAdapter } from '@socket.io/redis-adapter';
 import Redis from 'ioredis';
 import { ConfigService } from '@nestjs/config';
-import { BETTER_AUTH_INSTANCE } from '@nestjs-fastify-nx/infra-auth';
-import type { BetterAuthInstance } from '@nestjs-fastify-nx/infra-auth';
-import { closeQuietly } from '@nestjs-fastify-nx/infra-redis';
+import { BETTER_AUTH_INSTANCE } from '@nestjs-fastify-nx/infra/auth';
+import type { BetterAuthInstance } from '@nestjs-fastify-nx/infra/auth';
+import { closeQuietly } from '@nestjs-fastify-nx/infra/redis';
 import { redisReconnectStrategy } from '@nestjs-fastify-nx/shared';
 import {
   applyWsMessageRateLimit,

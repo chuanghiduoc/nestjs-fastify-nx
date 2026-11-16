@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { CommandBus } from '@nestjs/cqrs';
-import { BetterAuthModule, type AuthSessionPolicy } from '@nestjs-fastify-nx/infra-auth';
+import { BetterAuthModule, type AuthSessionPolicy } from '@nestjs-fastify-nx/infra/auth';
 import {
   EnsurePersonalOrganizationCommand,
   OrganizationsModule,

@@ -1,4 +1,23 @@
-const PACKAGE = '@nestjs-fastify-nx/modules';
+const GROUPS = [
+  {
+    name: 'modules',
+    package: '@nestjs-fastify-nx/modules',
+    root: ['libs', 'modules', 'src'],
+    allowedEdges: undefined,
+    allowedSubpaths: [],
+  },
+  {
+    name: 'infra',
+    package: '@nestjs-fastify-nx/infra',
+    root: ['libs', 'infra', 'src'],
+    allowedEdges: {
+      auth: ['database', 'i18n'],
+      authorization: ['auth', 'database'],
+      messaging: ['database'],
+    },
+    allowedSubpaths: ['authorization/testing'],
+  },
+];
 
 function splitPath(filename) {
   return String(filename ?? '')
@@ -6,31 +25,34 @@ function splitPath(filename) {
     .split('/');
 }
 
-function importerContextOf(filename) {
-  const segments = splitPath(filename);
-  const rootIndex = segments.findIndex(
-    (segment, index) =>
-      segment === 'libs' && segments[index + 1] === 'modules' && segments[index + 2] === 'src',
+function findRootIndex(segments, root) {
+  return segments.findIndex((segment, index) =>
+    root.every((expected, offset) => segments[index + offset] === expected),
   );
-  if (rootIndex === -1) {
-    return { insideGroup: false, context: undefined };
-  }
-  return {
-    insideGroup: true,
-    context: segments.length > rootIndex + 4 ? segments[rootIndex + 3] : undefined,
-  };
 }
 
-function contextOfResolvedPath(segments) {
-  const rootIndex = segments.findIndex(
-    (segment, index) =>
-      segment === 'libs' && segments[index + 1] === 'modules' && segments[index + 2] === 'src',
-  );
+function folderAtRoot(segments, group) {
+  const rootIndex = findRootIndex(segments, group.root);
   if (rootIndex === -1) return undefined;
-  if (segments.length <= rootIndex + 3) return undefined;
-  const candidate = segments[rootIndex + 3];
-  if (candidate.includes('.')) return undefined;
-  return candidate;
+  const candidateIndex = rootIndex + group.root.length;
+  if (segments.length <= candidateIndex) return undefined;
+  const candidate = segments[candidateIndex];
+  if (!candidate || candidate.includes('.')) return undefined;
+  return { group, folder: candidate };
+}
+
+function importerGroupOf(filename) {
+  const segments = splitPath(filename);
+  for (const group of GROUPS) {
+    const rootIndex = findRootIndex(segments, group.root);
+    if (rootIndex === -1) continue;
+    const folderIndex = rootIndex + group.root.length;
+    return {
+      group,
+      folder: segments.length > folderIndex + 1 ? segments[folderIndex] : undefined,
+    };
+  }
+  return { group: undefined, folder: undefined };
 }
 
 function resolveRelativeSpecifier(filename, specifier) {
@@ -50,13 +72,23 @@ function resolveRelativeSpecifier(filename, specifier) {
 }
 
 function importFacts(source) {
-  if (typeof source !== 'string' || !source.startsWith(PACKAGE)) return undefined;
-  const rest = source.slice(PACKAGE.length);
-  if (rest === '') return { kind: 'root' };
-  if (!rest.startsWith('/')) return undefined;
-  const segments = rest.slice(1).split('/').filter(Boolean);
-  if (segments.length === 0) return { kind: 'root' };
-  return { kind: 'context', context: segments[0], deep: segments.length > 1 };
+  for (const group of GROUPS) {
+    if (!source.startsWith(group.package)) continue;
+    const rest = source.slice(group.package.length);
+    if (rest === '') return { group, kind: 'root' };
+    if (!rest.startsWith('/')) return undefined;
+    const segments = rest.slice(1).split('/').filter(Boolean);
+    if (segments.length === 0) return { group, kind: 'root' };
+    const subpath = segments.join('/');
+    const deep = segments.length > 1 && !group.allowedSubpaths.includes(subpath);
+    return { group, kind: 'folder', folder: segments[0], deep };
+  }
+  return undefined;
+}
+
+function crossFolderAllowed(group, importerFolder, importedFolder) {
+  if (!group.allowedEdges) return false;
+  return (group.allowedEdges[importerFolder] ?? []).includes(importedFolder);
 }
 
 export default {
@@ -65,33 +97,37 @@ export default {
     schema: [],
     messages: {
       crossContext:
-        'Context "{{importer}}" cannot import context "{{imported}}": cross-context communication goes through libs/composition.',
+        'Folder "{{importer}}" cannot import folder "{{imported}}" of the "{{group}}" group: cross-folder communication goes through the group barrel, a documented allowed edge, or libs/composition.',
       deepImport:
-        'Deep import into "{{context}}": import only the context barrel "@nestjs-fastify-nx/modules/{{context}}".',
+        'Deep import into "{{folder}}": import only the group barrel "@nestjs-fastify-nx/{{group}}/{{folder}}".',
       rootOutsideGroup:
-        'The group root "@nestjs-fastify-nx/modules" is only importable inside libs/modules/src; import the specific context instead.',
+        'The group root "@nestjs-fastify-nx/{{group}}" is only importable inside its own group source tree; import the specific folder instead.',
     },
   },
   create(context) {
-    const { insideGroup, context: importerContext } = importerContextOf(
-      context.filename ?? context.physicalFilename,
-    );
+    const importer = importerGroupOf(context.filename ?? context.physicalFilename);
+    const importerGroup = importer.group;
 
     function checkRelative(sourceNode) {
-      if (!importerContext) return;
+      if (!importerGroup || !importer.folder) return;
       const resolved = resolveRelativeSpecifier(
         context.filename ?? context.physicalFilename,
         sourceNode?.value,
       );
       if (!resolved) return;
-      const targetContext = contextOfResolvedPath(resolved);
-      if (targetContext && targetContext !== importerContext) {
-        context.report({
-          node: sourceNode,
-          messageId: 'crossContext',
-          data: { importer: importerContext, imported: targetContext },
-        });
-      }
+      const target = folderAtRoot(resolved, importerGroup);
+      if (!target) return;
+      if (target.folder === importer.folder) return;
+      if (crossFolderAllowed(importerGroup, importer.folder, target.folder)) return;
+      context.report({
+        node: sourceNode,
+        messageId: 'crossContext',
+        data: {
+          importer: importer.folder,
+          imported: target.folder,
+          group: importerGroup.name,
+        },
+      });
     }
 
     function checkSource(sourceNode) {
@@ -104,8 +140,12 @@ export default {
       const facts = importFacts(source);
       if (!facts) return;
       if (facts.kind === 'root') {
-        if (!insideGroup) {
-          context.report({ node: sourceNode, messageId: 'rootOutsideGroup' });
+        if (importerGroup !== facts.group) {
+          context.report({
+            node: sourceNode,
+            messageId: 'rootOutsideGroup',
+            data: { group: facts.group.name },
+          });
         }
         return;
       }
@@ -113,17 +153,23 @@ export default {
         context.report({
           node: sourceNode,
           messageId: 'deepImport',
-          data: { context: facts.context },
+          data: { folder: facts.folder, group: facts.group.name },
         });
         return;
       }
-      if (importerContext && facts.context !== importerContext) {
-        context.report({
-          node: sourceNode,
-          messageId: 'crossContext',
-          data: { importer: importerContext, imported: facts.context },
-        });
-      }
+      if (!importer.folder) return;
+      if (facts.group !== importerGroup) return;
+      if (facts.folder === importer.folder) return;
+      if (crossFolderAllowed(importerGroup, importer.folder, facts.folder)) return;
+      context.report({
+        node: sourceNode,
+        messageId: 'crossContext',
+        data: {
+          importer: importer.folder,
+          imported: facts.folder,
+          group: importerGroup.name,
+        },
+      });
     }
 
     function checkDynamicImport(node) {

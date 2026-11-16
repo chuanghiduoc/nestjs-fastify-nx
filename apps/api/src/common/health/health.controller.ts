@@ -3,8 +3,8 @@ import { HealthCheck, HealthCheckService, MemoryHealthIndicator } from '@nestjs/
 import { SkipThrottle } from '@nestjs/throttler';
 import { ApiOkResponse, ApiOperation, ApiProperty, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { ApiCommonErrors, buildProblemExample } from '@nestjs-fastify-nx/contracts';
-import { Public } from '@nestjs-fastify-nx/infra-auth';
-import { PrismaReplicationLagHealthIndicator } from '@nestjs-fastify-nx/infra-database';
+import { Public } from '@nestjs-fastify-nx/infra/auth';
+import { PrismaReplicationLagHealthIndicator } from '@nestjs-fastify-nx/infra/database';
 import { MetricsIpAllowGuard } from '../metrics/metrics-ip-allow.guard';
 import { PrismaHealthIndicator } from './prisma-health.indicator';
 import { RedisCacheHealthIndicator, RedisQueueHealthIndicator } from './redis.health';

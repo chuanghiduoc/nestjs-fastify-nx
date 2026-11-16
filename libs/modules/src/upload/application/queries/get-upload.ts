@@ -2,7 +2,7 @@ import { Inject } from '@nestjs/common';
 import { Query, QueryHandler, type IQueryHandler } from '@nestjs/cqrs';
 import { AUTHORIZATION_PORT, type AuthorizationPort } from '@nestjs-fastify-nx/core';
 import { PERMISSIONS, RESOURCE_TYPES } from '@nestjs-fastify-nx/shared';
-import type { StoredFile } from '@nestjs-fastify-nx/infra-storage';
+import type { StoredFile } from '@nestjs-fastify-nx/infra/storage';
 import { objectNotFound } from '../../domain/entities/stored-file.entity';
 import {
   STORED_FILE_REPOSITORY,

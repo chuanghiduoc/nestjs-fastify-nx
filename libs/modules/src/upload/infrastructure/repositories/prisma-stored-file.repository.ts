@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { PrismaService, type TransactionClient } from '@nestjs-fastify-nx/infra-database';
+import { PrismaService, type TransactionClient } from '@nestjs-fastify-nx/infra/database';
 import { STORED_FILE_STATUS, type StoredFileStatus } from '@nestjs-fastify-nx/shared';
 import { StoredFile, type StoredFileProps } from '../../domain/entities/stored-file.entity';
 import type {

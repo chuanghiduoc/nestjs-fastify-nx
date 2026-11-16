@@ -408,7 +408,7 @@ here). BullMQ custom `jobId`s must never contain `:`.
 ### `prisma-<ctx>.repository.ts` — the Prisma adapter
 
 An `@Injectable()` implementing a repository port, talking to Prisma — the
-only file in the context importing `@nestjs-fastify-nx/infra-database`. Prisma
+only file in the context importing `@nestjs-fastify-nx/infra/database`. Prisma
 types (`Prisma`, model rows) come from that same barrel, not from
 `@prisma/client` directly (the Prisma 7 `prisma-client` generator emits into
 the database lib and re-exports through its barrel). Create one per
@@ -501,7 +501,7 @@ concrete instance of "composition orchestrates, modules own the rule" (see
 `@ApiCommonErrors` for RFC 9457 Swagger docs. Return the presentation
 response DTO, not the application result type. Route-scoped param decorators
 belong in a shared lib, not the context: use `@CurrentUser()` from
-`@nestjs-fastify-nx/infra-auth`, which returns `AuthenticatedSession` and
+`@nestjs-fastify-nx/infra/auth`, which returns `AuthenticatedSession` and
 works for both REST and GraphQL — a per-context copy would duplicate the type
 and force every module to re-cast `@Req() req: FastifyRequest & { user } }`.
 `AuthenticatedSession` is what `BetterAuthGuard` attaches to the request —
@@ -604,7 +604,7 @@ A process like `worker` has no business mounting `UsersController` or its
 Swagger metadata, but still needs `UserRegisteredListener` alive to process
 `users.registered` events — import this slice instead of the full module.
 
-**Rules**: one context folder can never import another (`modules-scale/no-cross-context-imports`).
+**Rules**: one context folder can never import another (`libs-groups/no-cross-context-imports`).
 Cross-context data sharing goes through `scope:composition` or a domain
 event.
 

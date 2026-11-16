@@ -40,9 +40,9 @@ Three-layer design enforced by `@nx/enforce-module-boundaries`:
 
 1. **Bounded Contexts** (`libs/modules/src/*`) — DDD modules that never import each other: `users`, `audit-log`, `upload`, `organizations`, `api-keys`, `notifications`, `feature-flags`, `terms`, `sessions`.
 2. **Composition Layer** (`libs/composition/*`) — cross-context features that depend on modules. Example: `admin` dashboard.
-3. **Platform Layer** (`libs/infra/*`, `libs/core/*`) — shared auth, database, messaging, observability. Used by everything above.
+3. **Platform Layer** (`libs/infra/src/*` folders, `libs/core/*`) — shared auth, database, messaging, observability. Used by everything above.
 
-**Key Rule:** If you're adding a feature that needs two modules, put it in composition — never cross-import modules directly. Scope-level edges are enforced by `@nx/enforce-module-boundaries`; edges between context folders inside `libs/modules/src/` are separately enforced by the custom `modules-scale/no-cross-context-imports` rule — both must pass.
+**Key Rule:** If you're adding a feature that needs two modules, put it in composition — never cross-import modules directly. Scope-level edges are enforced by `@nx/enforce-module-boundaries`; edges between folders inside `libs/modules/src/` and `libs/infra/src/` are separately enforced by the custom `libs-groups/no-cross-context-imports` rule (the infra group allows only its documented adapter DAG) — both must pass.
 
 See [docs/architecture.md](./docs/architecture.md) for the full diagram.
 
