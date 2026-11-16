@@ -6,7 +6,7 @@ import { decodeCursor, lastCursorOf, type DecodedCursor } from '@nestjs-fastify-
 import {
   AUDIT_LOG_REPOSITORY_PORT,
   type AuditLogRepositoryPort,
-} from './audit-log-repository.port';
+} from '../../domain/ports/audit-log-repository.port';
 
 export interface AuditLogListItemDto {
   readonly id: string;

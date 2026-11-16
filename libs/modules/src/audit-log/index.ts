@@ -6,6 +6,6 @@ export {
   type ListAuditLogsCursorResult,
   type ListAuditLogsCursorFilters,
   type AuditLogListItemDto,
-} from './list-audit-logs-cursor';
-export { ListAuditLogsCursorFilterDto } from './list-audit-logs-cursor-filter.dto';
-export { AuditLogResponseDto } from './audit-log-response.dto';
+} from './application/queries/list-audit-logs-cursor';
+export { ListAuditLogsCursorFilterDto } from './presentation/dto/list-audit-logs-cursor-filter.dto';
+export { AuditLogResponseDto } from './presentation/dto/audit-log-response.dto';

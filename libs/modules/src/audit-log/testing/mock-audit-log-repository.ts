@@ -3,8 +3,8 @@ import type {
   AuditLogRepositoryPort,
   FindAuditLogsCursorOptions,
   FindAuditLogsCursorResult,
-} from './audit-log-repository.port';
-import type { AuditLog } from './audit-log.entity';
+} from '../domain/ports/audit-log-repository.port';
+import type { AuditLog } from '../domain/entities/audit-log.entity';
 
 export class MockAuditLogRepository implements AuditLogRepositoryPort {
   private readonly entries = new Map<string, AuditLog>();

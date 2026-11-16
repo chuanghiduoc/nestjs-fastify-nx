@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { RecordAuditLogHandler } from './record-audit-log';
 import { RecordAuditLogCommand, type RecordAuditLogInput } from './record-audit-log';
-import type { AuditLogRepositoryPort } from './audit-log-repository.port';
-import { AuditLog } from './audit-log.entity';
+import type { AuditLogRepositoryPort } from '../../domain/ports/audit-log-repository.port';
+import { AuditLog } from '../../domain/entities/audit-log.entity';
 
 const EVT_ID = '00000000-0000-4000-8000-000000000001';
 

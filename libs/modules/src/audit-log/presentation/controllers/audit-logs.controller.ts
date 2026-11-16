@@ -14,10 +14,13 @@ import {
 } from '@nestjs-fastify-nx/infra-auth';
 import { RequirePermission } from '@nestjs-fastify-nx/infra-authorization';
 import { PERMISSIONS } from '@nestjs-fastify-nx/shared';
-import { ListAuditLogsCursorQuery, type ListAuditLogsCursorResult } from './list-audit-logs-cursor';
-import type { AuditLogListItemDto } from './list-audit-logs-cursor';
-import { ListAuditLogsCursorFilterDto } from './list-audit-logs-cursor-filter.dto';
-import { AuditLogResponseDto } from './audit-log-response.dto';
+import {
+  ListAuditLogsCursorQuery,
+  type ListAuditLogsCursorResult,
+} from '../../application/queries/list-audit-logs-cursor';
+import type { AuditLogListItemDto } from '../../application/queries/list-audit-logs-cursor';
+import { ListAuditLogsCursorFilterDto } from '../dto/list-audit-logs-cursor-filter.dto';
+import { AuditLogResponseDto } from '../dto/audit-log-response.dto';
 
 const AUDIT_LOGS_PATH = '/api/v1/audit-logs';
 

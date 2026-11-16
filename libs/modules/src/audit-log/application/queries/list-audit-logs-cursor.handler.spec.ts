@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { DomainException } from '@nestjs-fastify-nx/core';
 import { decodeCursor, encodeCursor, generateId } from '@nestjs-fastify-nx/shared';
-import { AuditLog } from './audit-log.entity';
-import { MockAuditLogRepository } from './mock-audit-log-repository';
+import { AuditLog } from '../../domain/entities/audit-log.entity';
+import { MockAuditLogRepository } from '../../testing/mock-audit-log-repository';
 import { ListAuditLogsCursorHandler } from './list-audit-logs-cursor';
 import { ListAuditLogsCursorQuery } from './list-audit-logs-cursor';
 

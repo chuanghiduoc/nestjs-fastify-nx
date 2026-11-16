@@ -3,8 +3,8 @@ import { Command, CommandHandler, type ICommandHandler } from '@nestjs/cqrs';
 import {
   AUDIT_LOG_REPOSITORY_PORT,
   type AuditLogRepositoryPort,
-} from './audit-log-repository.port';
-import { AuditLog } from './audit-log.entity';
+} from '../../domain/ports/audit-log-repository.port';
+import { AuditLog } from '../../domain/entities/audit-log.entity';
 
 export interface RecordAuditLogInput {
   readonly eventId: string;
