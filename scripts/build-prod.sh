@@ -21,7 +21,7 @@ source "${SCRIPT_DIR}/security/_lib.sh"
 if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
   echo "Usage: ./scripts/build-prod.sh [--help]"
   echo ""
-  echo "Builds production images for api, worker, scheduler, and migration, then"
+  echo "Builds the production app image (api + worker + scheduler, per-service command) and the migration image, then"
   echo "boots the full stack so /docs, /health, and the worker queues are reachable."
   echo "Reads IMAGE_REGISTRY / IMAGE_NAMESPACE / IMAGE_TAG from .env or environment."
   echo ""
@@ -81,7 +81,7 @@ echo ""
 sec::ok "All production images built:"
 printf '  %-14s %10s\n' 'service' 'size'
 printf '  %-14s %10s\n' '-------' '----'
-for svc in api worker scheduler migration; do
+for svc in app migration; do
   image="${PREFIX}/${svc}:${IMAGE_TAG}"
   size_bytes=$(docker image inspect "$image" --format '{{.Size}}')
   size_mb=$(awk -v b="$size_bytes" 'BEGIN { printf "%.0f", b / 1024 / 1024 }')
@@ -92,9 +92,7 @@ done
 # never boot a floating tag. Those refs are exactly what this script just built, so export them —
 # without this the boot below dies on "MIGRATION_IMAGE is missing a value" no matter how complete
 # the operator's .env is.
-export API_IMAGE="${PREFIX}/api:${IMAGE_TAG}"
-export WORKER_IMAGE="${PREFIX}/worker:${IMAGE_TAG}"
-export SCHEDULER_IMAGE="${PREFIX}/scheduler:${IMAGE_TAG}"
+export APP_IMAGE="${PREFIX}/app:${IMAGE_TAG}"
 export MIGRATION_IMAGE="${PREFIX}/migration:${IMAGE_TAG}"
 
 # Image vulnerability scanning is the CI gate's job (release.yml runs Trivy per
@@ -109,8 +107,7 @@ if [[ "${NO_UP:-0}" = "1" ]]; then
   # The image refs live only in this process, and compose.prod.yml requires them, so the printed
   # command carries them inline — copying a bare `docker compose up` would fail on the first ${*_IMAGE:?}.
   sec::ok "Bring the stack up manually:"
-  echo "    API_IMAGE=${API_IMAGE} WORKER_IMAGE=${WORKER_IMAGE} \\"
-  echo "    SCHEDULER_IMAGE=${SCHEDULER_IMAGE} MIGRATION_IMAGE=${MIGRATION_IMAGE} \\"
+  echo "    APP_IMAGE=${APP_IMAGE} MIGRATION_IMAGE=${MIGRATION_IMAGE} \\"
   echo "    docker compose -p \"${COMPOSE_PROJECT}\" --env-file .env -f docker/compose.yml -f docker/compose.prod.yml up -d"
   exit 0
 fi

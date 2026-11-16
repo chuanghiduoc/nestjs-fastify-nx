@@ -68,15 +68,9 @@ jobs:
         # prime-build-cache compiled the shared workspace once; each matrix job
         # restores that stage and only installs its service-specific dependencies.
         include:
-          - app: api
+          - app: app
             dockerfile: Dockerfile
-            target: api
-          - app: worker
-            dockerfile: Dockerfile
-            target: worker
-          - app: scheduler
-            dockerfile: Dockerfile
-            target: scheduler
+            target: app
           - app: migration
             dockerfile: Dockerfile
             target: migration

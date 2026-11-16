@@ -432,16 +432,14 @@ readiness probe before routing real traffic.
 
 ### `compose.prod.yml` refuses to start because an image digest is missing
 
-Symptom: Compose reports that `API_IMAGE`, `WORKER_IMAGE`, `SCHEDULER_IMAGE`, or
-`MIGRATION_IMAGE` is unset or is not immutable.
+Symptom: Compose reports that `APP_IMAGE` or `MIGRATION_IMAGE` is unset or is
+not immutable.
 
-Cause: production runs only explicitly selected, digest-pinned images. Set all
-four values in `.env`:
+Cause: production runs only explicitly selected, digest-pinned images. Set both
+values in `.env`:
 
 ```bash
-API_IMAGE=ghcr.io/your-org/api@sha256:<digest>
-WORKER_IMAGE=ghcr.io/your-org/worker@sha256:<digest>
-SCHEDULER_IMAGE=ghcr.io/your-org/scheduler@sha256:<digest>
+APP_IMAGE=ghcr.io/your-org/app@sha256:<digest>
 MIGRATION_IMAGE=ghcr.io/your-org/migration@sha256:<digest>
 ```
 

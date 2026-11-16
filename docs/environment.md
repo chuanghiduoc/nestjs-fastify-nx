@@ -336,9 +336,7 @@ few seconds. If that Redis is unreachable the surface fails closed with `503`.
 
 | Variable             | Default | Required | Description                                  |
 | -------------------- | ------- | -------- | -------------------------------------------- |
-| `API_IMAGE`          | —       | Prod     | Immutable API reference ending in `@sha256:` |
-| `WORKER_IMAGE`       | —       | Prod     | Immutable worker image reference             |
-| `SCHEDULER_IMAGE`    | —       | Prod     | Immutable scheduler image reference          |
+| `APP_IMAGE`          | —       | Prod     | Immutable app image (api/worker/scheduler)   |
 | `MIGRATION_IMAGE`    | —       | Prod     | Immutable migration image reference          |
 | `API_PORT`           | `3000`  | No       | Host port mapped to the API container        |
 | `API_DEBUG_PORT`     | `9229`  | No       | Host port mapped to the Node inspector (dev) |

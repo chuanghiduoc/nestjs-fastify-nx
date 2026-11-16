@@ -146,6 +146,7 @@ services:
       - postgres
 
   worker:
+    command: ['node', 'dist/apps/worker/main.js']
     restart: unless-stopped
     environment:
       TZ: ${TZ:-UTC}
@@ -169,6 +170,7 @@ services:
       start_period: 10s
 
   scheduler:
+    command: ['node', 'dist/apps/scheduler/main.js']
     restart: unless-stopped
     environment:
       TZ: ${TZ:-UTC}
