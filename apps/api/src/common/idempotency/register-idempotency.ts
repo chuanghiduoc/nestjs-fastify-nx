@@ -3,7 +3,7 @@ import { HttpStatus, type NestInterceptor } from '@nestjs/common';
 import { of } from 'rxjs';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type Redis from 'ioredis';
-import { prepareMultipartUploads } from '@nestjs-fastify-nx/modules-upload';
+import { prepareMultipartUploads } from '@nestjs-fastify-nx/modules/upload';
 import { positiveIntEnv } from '@nestjs-fastify-nx/shared';
 import { ERROR_CODES } from '@nestjs-fastify-nx/contracts';
 import type { AuthenticatedSession, AuthenticatedApiKey } from '@nestjs-fastify-nx/infra-auth';

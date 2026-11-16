@@ -22,34 +22,7 @@
   ],
   "references": [
     {
-      "path": "../../libs/modules/users/tsconfig.lib.json"
-    },
-    {
-      "path": "../../libs/modules/upload/tsconfig.lib.json"
-    },
-    {
-      "path": "../../libs/modules/terms/tsconfig.lib.json"
-    },
-    {
-      "path": "../../libs/modules/sessions/tsconfig.lib.json"
-    },
-    {
-      "path": "../../libs/modules/organizations/tsconfig.lib.json"
-    },
-    {
-      "path": "../../libs/modules/notifications/tsconfig.lib.json"
-    },
-    {
-      "path": "../../libs/modules/feature-flags/tsconfig.lib.json"
-    },
-    {
-      "path": "../../libs/modules/audit-log/tsconfig.lib.json"
-    },
-    {
-      "path": "../../libs/modules/api-keys/tsconfig.lib.json"
-    },
-    {
-      "path": "../../libs/infra/redis/tsconfig.lib.json"
+      "path": "../../libs/modules/tsconfig.lib.json"
     },
     {
       "path": "../../libs/infra/observability/tsconfig.lib.json"
@@ -74,6 +47,9 @@
     },
     {
       "path": "../../libs/infra/auth/tsconfig.lib.json"
+    },
+    {
+      "path": "../../libs/infra/redis/tsconfig.lib.json"
     },
     {
       "path": "../../libs/testing/tsconfig.lib.json"

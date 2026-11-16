@@ -10,16 +10,17 @@ nestjs-fastify-nx/
 │   ├── scheduler/    # Scheduled tasks (@nestjs/schedule)
 │   └── migration/    # One-shot prisma migrate deploy + optional seed
 ├── libs/
-│   ├── modules/      # Bounded contexts (DDD)
-│   │   ├── users/           # scope:modules — user profile, admin listing
-│   │   ├── audit-log/       # scope:modules — event listener writes rows; RLS-bound read API
-│   │   ├── upload/          # scope:modules — multipart handler, file processing
-│   │   ├── organizations/   # scope:modules — custom roles, teams, invitations, current org
-│   │   ├── api-keys/        # scope:modules — machine credentials (ADR-0007)
-│   │   ├── notifications/   # scope:modules — in-app notifications fed by domain events
-│   │   ├── feature-flags/   # scope:modules — per-organization flags, deterministic rollout
-│   │   ├── terms/           # scope:modules — legal documents + per-user acceptance
-│   │   └── sessions/        # scope:modules — the caller's own sessions: list and revoke
+│   ├── modules/      # Bounded contexts (DDD) — ONE group project + workspace package
+│   │   └── src/
+│   │       ├── users/           # user profile, admin listing
+│   │       ├── audit-log/       # event listener writes rows; RLS-bound read API
+│   │       ├── upload/          # multipart handler, file processing
+│   │       ├── organizations/   # custom roles, teams, invitations, current org
+│   │       ├── api-keys/        # machine credentials (ADR-0007)
+│   │       ├── notifications/   # in-app notifications fed by domain events
+│   │       ├── feature-flags/   # per-organization flags, deterministic rollout
+│   │       ├── terms/           # legal documents + per-user acceptance
+│   │       └── sessions/        # the caller's own sessions: list and revoke
 │   ├── composition/   # Cross-cutting aggregators (scope:composition)
 │   │   └── admin/     # admin surface + Bull Board (scope:composition tag; composed into api)
 │   ├── infra/        # Adapters
@@ -59,7 +60,7 @@ flowchart TD
 
     comp["libs/composition/ · scope:composition<br/>(admin · Bull Board)"]
 
-    subgraph modules["libs/modules/ · scope:modules · bounded contexts"]
+    subgraph modules["libs/modules/src/ · one group project · scope:modules"]
         direction LR
         users["users"]
         audit["audit-log"]
@@ -111,33 +112,47 @@ flowchart TD
 
 ## Domain Module Layout (DDD + Hexagonal)
 
-Each `libs/modules/<context>` follows this structure:
+Every bounded context is a **folder** under `libs/modules/src/<context>/` — the
+whole group is one Nx project (`modules`, tag `scope:modules`) and one workspace
+package whose `exports` map resolves `@nestjs-fastify-nx/modules/<ctx>` to the
+folder's `index.ts`. Two tiers share that folder shape:
+
+**Leaf** (default) — flat folder, DDD layers as file roles:
 
 ```
-module/src/
-  domain/
-    entities/          # Aggregate roots
-    value-objects/     # Immutable VOs
-    events/            # Domain events (e.g. UserRegistered)
-    ports/             # Interfaces (repository ports, etc.)
-  application/
-    commands/          # CQRS command handlers
-    queries/           # CQRS query handlers
-    listeners/         # Domain-event subscribers
-    dto/               # Application-layer transport types
-  infrastructure/
-    repositories/      # Prisma implementations of domain ports
-  presentation/
-    controllers/       # HTTP handlers
-    dto/               # Request/response DTOs
-    decorators/        # Module-specific param decorators (shared @CurrentUser lives in infra-auth)
-  module.ts
-  index.ts             # Public barrel — re-export only what consumers need
+libs/modules/src/<context>/                # flat folder
+  <context>.entity.ts                      # aggregate root (when invariants demand it)
+  <context>-repository.port.ts             # repository port + DI token
+  create-<context>.ts                      # colocated: Command + @CommandHandler
+  list-<context>.ts                        # colocated: Query + @QueryHandler
+  <context>.controller.ts                  # HTTP surface (buses only, never handlers)
+  <context>.dto.ts                         # presentation DTOs (class-validator; @ApiProperty replies)
+  prisma-<context>.repository.ts           # Prisma adapter + colocated .integration.spec.ts
+  <context>.module.ts                      # wiring: port→adapter, handlers, controller
+  index.ts                                 # public barrel — commands/queries + result types, never handlers
+```
+
+**Engine** (promoted) — same context folder, which **may** grow DDD subfolders.
+Nothing requires the full set: a context keeps only the folders it needs
+(`upload` has `application/ports/` + `infrastructure/dispatchers/` +
+`presentation/multipart/`, `users` has `domain/value-objects/`, several engines
+ship no `application/dto/`). Command/query files stay colocated and specs stay
+next to sources:
+
+```
+libs/modules/src/<context>/
+  domain/{entities,value-objects,ports}/                # optional
+  application/{commands,queries,listeners,ports,dto}/   # optional
+  infrastructure/{repositories,dispatchers}/            # optional
+  presentation/{controllers,dto}/                       # optional, context subfolders allowed
+  testing/                                              # optional
+  <context>.module.ts  <context>-listeners.module.ts (optional)  index.ts    # context root
 ```
 
 **New to the codebase?** [`domain-module-anatomy.md`](./domain-module-anatomy.md)
-walks through every file above one-by-one — what it is, why it exists, when you
-create one, and how to wire it — using the real `users` module as the example.
+walks through every file role one-by-one — what it is, why it exists, when you
+create one, and how to wire it — using the real `users` and `sessions` folders as
+the examples.
 
 Authentication is delegated to [Better Auth](https://better-auth.com) (mounted by
 `libs/infra/auth`), so feature modules do not own login/logout flows or token
@@ -145,23 +160,25 @@ adapters — they only consume the resulting session via `BetterAuthGuard`.
 
 ## Module Boundary Rules
 
-Enforced by `@nx/enforce-module-boundaries` (see `eslint.config.mjs`):
+Scope-level edges are enforced by `@nx/enforce-module-boundaries`; the edges
+**between context folders** inside the group are enforced by the custom
+`modules-scale/no-cross-context-imports` rule (see `eslint.config.mjs`):
 
-| Source tag          | Allowed dependencies                                             |
-| ------------------- | ---------------------------------------------------------------- |
-| `scope:api`         | modules, composition, infra, core, shared, contracts             |
-| `scope:worker`      | modules, infra, core, shared, contracts                          |
-| `scope:scheduler`   | modules, infra, core, shared, contracts                          |
-| `scope:migration`   | _(empty — intentional; thin prisma deploy wrapper)_              |
-| `scope:composition` | modules, composition, infra, core, shared, contracts             |
-| `scope:modules`     | infra, core, shared, contracts _(NEVER another `scope:modules`)_ |
-| `scope:infra`       | infra, core, shared, contracts                                   |
-| `scope:core`        | shared                                                           |
-| `scope:contracts`   | shared                                                           |
-| `scope:shared`      | _(empty — leaf of the graph)_                                    |
-| `scope:client`      | shared, contracts _(generated API client)_                       |
-| `scope:tools`       | _(empty — generators depend on nothing internal)_                |
-| `scope:testing`     | modules, infra, core, shared, contracts                          |
+| Source tag          | Allowed dependencies                                 |
+| ------------------- | ---------------------------------------------------- |
+| `scope:api`         | modules, composition, infra, core, shared, contracts |
+| `scope:worker`      | modules, infra, core, shared, contracts              |
+| `scope:scheduler`   | modules, infra, core, shared, contracts              |
+| `scope:migration`   | _(empty — intentional; thin prisma deploy wrapper)_  |
+| `scope:composition` | modules, composition, infra, core, shared, contracts |
+| `scope:modules`     | infra, core, shared, contracts                       |
+| `scope:infra`       | infra, core, shared, contracts                       |
+| `scope:core`        | shared                                               |
+| `scope:contracts`   | shared                                               |
+| `scope:shared`      | _(empty — leaf of the graph)_                        |
+| `scope:client`      | shared, contracts _(generated API client)_           |
+| `scope:tools`       | _(empty — generators depend on nothing internal)_    |
+| `scope:testing`     | modules, infra, core, shared, contracts              |
 
 Visualised — solid arrows are allowed dependencies; the dashed crossed arrow is
 the one rule the linter exists to enforce:
@@ -173,7 +190,7 @@ flowchart TD
     scheduler["scope:scheduler"]
     comp["scope:composition"]
 
-    subgraph bc["scope:modules · bounded contexts"]
+    subgraph bc["libs/modules/src/ · one group project · bounded contexts"]
         direction LR
         m1["users"]
         m2["audit-log"]
@@ -742,7 +759,6 @@ flowchart TD
     CH["Command handlers (tx)"] --> db
     FW["findById / findByEmail<br/>read-your-writes"] --> db
     FA["findAllCursor (admin list)"] --> dbRead
-    EX["exists (lag-tolerant pre-check)"] --> dbRead
 
     classDef primary fill:#1e3a8a,stroke:#1e40af,color:#fff;
     classDef replica fill:#065f46,stroke:#047857,color:#fff;
@@ -762,19 +778,22 @@ flowchart TD
 
 ### What uses `dbRead` (replica, falls back to primary)
 
-| Consumer                             | Notes                                                                                                           |
-| ------------------------------------ | --------------------------------------------------------------------------------------------------------------- |
-| `PrismaUserRepository.findAllCursor` | Admin user-list — stale by a few ms is acceptable.                                                              |
-| `PrismaUserRepository.exists`        | Pre-check before write; a false-negative on lag is safe — the unique constraint on the DB enforces correctness. |
+| Consumer                             | Notes                                              |
+| ------------------------------------ | -------------------------------------------------- |
+| `PrismaUserRepository.findAllCursor` | Admin user-list — stale by a few ms is acceptable. |
 
 ### Read-your-writes pattern
 
 Single-row PK/UK lookups (`findById`, `findByEmail`) stay on the primary so a
 caller reading immediately after a write on the same request always observes
-the latest row. List/aggregate queries (`findAllCursor`) and lag-tolerant
-pre-checks (`exists`) ride the replica. When introducing a new finder, ask
-"could a request write then read this row in the same handler?" — if yes, use
-`prisma.db`; if no, `prisma.dbRead`.
+the latest row. List/aggregate queries (`findAllCursor`) ride the replica. When
+introducing a new finder, ask "could a request write then read this row in the
+same handler?" — if yes, use `writeTarget()`; if no, `readTarget()`.
+
+Repositories resolve their client through `PrismaService.writeTarget()` /
+`readTarget()`, never the raw `db` / `dbRead` clients: only the accessors honor
+an ambient interactive transaction, so a direct client would silently lose
+outbox atomicity (see `docs/code-standards.md` → Read Replica Routing).
 
 ### Zero-overhead single-node default
 

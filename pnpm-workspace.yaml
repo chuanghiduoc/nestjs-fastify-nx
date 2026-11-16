@@ -3,7 +3,6 @@ packages:
   - 'libs/*'
   - 'libs/composition/*'
   - 'libs/infra/*'
-  - 'libs/modules/*'
   - 'tools/*'
 
 # pnpm 11 ships these two on by default; kept explicit as the repo's stated posture.

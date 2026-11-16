@@ -11,7 +11,7 @@ import {
   LivenessProbeService,
   buildPinoLoggerConfig,
 } from '@nestjs-fastify-nx/infra-observability';
-import { UploadVerificationModule } from '@nestjs-fastify-nx/modules-upload';
+import { UploadVerificationModule } from '@nestjs-fastify-nx/modules/upload';
 import { EmailNotificationProcessor } from './processors/email-notification.processor';
 import { UploadVerificationProcessor } from './processors/upload-verification.processor';
 import { MailModule } from './mail/mail.module';

@@ -6,7 +6,7 @@ import {
   UserRole,
   UserStatus,
   type UserListItemDto,
-} from '@nestjs-fastify-nx/modules-users';
+} from '@nestjs-fastify-nx/modules/users';
 import { AdminUsersController } from './admin-users.controller';
 
 const SESSION = {

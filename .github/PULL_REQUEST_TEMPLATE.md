@@ -19,7 +19,7 @@ reviewers can land your change quickly.
 
 ## Affected scope
 
-<!-- Which apps / libs / scopes are touched? e.g. apps/api, libs/modules/users -->
+<!-- Which apps / libs / scopes are touched? e.g. apps/api, libs/modules/src/users -->
 
 ## Checklist
 
@@ -28,7 +28,7 @@ reviewers can land your change quickly.
 - [ ] Updated relevant `.md` files (README, docs/, CHANGELOG)
 - [ ] No `TODO` / `FIXME` left in production code
 - [ ] No JWT / refresh-token plumbing reintroduced (auth is Better Auth cookies)
-- [ ] Module boundaries respected (`scope:modules` does not import another `scope:modules`)
+- [ ] Module boundaries respected (context folders never import each other; barrels only)
 - [ ] Added/updated tests where it makes sense
 
 ## Screenshots / logs (optional)

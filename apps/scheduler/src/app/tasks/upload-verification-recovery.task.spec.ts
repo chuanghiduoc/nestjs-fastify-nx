@@ -1,11 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Queue } from 'bullmq';
 import type { PrismaService } from '@nestjs-fastify-nx/infra-database';
-import { enqueueUploadVerification } from '@nestjs-fastify-nx/modules-upload';
+import { enqueueUploadVerification } from '@nestjs-fastify-nx/modules/upload';
 import type { SchedulerLeaderService } from '../leadership/scheduler-leader.service';
 import { UploadVerificationRecoveryTask } from './upload-verification-recovery.task';
 
-vi.mock('@nestjs-fastify-nx/modules-upload', () => ({
+vi.mock('@nestjs-fastify-nx/modules/upload', () => ({
   enqueueUploadVerification: vi.fn().mockResolvedValue(undefined),
 }));
 

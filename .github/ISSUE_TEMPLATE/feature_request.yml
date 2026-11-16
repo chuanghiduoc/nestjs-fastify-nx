@@ -36,7 +36,7 @@ body:
         - apps/scheduler
         - apps/migration
         - libs/infra/*
-        - libs/modules/*
+        - libs/modules/src/*
         - libs/core/*
         - libs/shared
         - libs/contracts

@@ -1,5 +1,4 @@
 export * from './admin';
-export * from './api.schemas';
 export * from './api-keys';
 export * from './app';
 export * from './audit-logs';
@@ -12,3 +11,4 @@ export * from './sessions';
 export * from './terms';
 export * from './upload';
 export * from './users';
+export * from './api.schemas';

@@ -1,0 +1,43 @@
+import { Injectable } from '@nestjs/common';
+import { PrismaService } from '@nestjs-fastify-nx/infra-database';
+import { keysetAfter, takePage } from '@nestjs-fastify-nx/shared';
+import type {
+  Find<%= className %>CursorOptions,
+  Find<%= className %>CursorResult,
+  <%= className %>Record,
+  <%= className %>RepositoryPort,
+} from './<%= fileName %>-repository.port';
+
+@Injectable()
+export class Prisma<%= className %>Repository implements <%= className %>RepositoryPort {
+  constructor(private readonly prisma: PrismaService) {}
+
+  async create(record: <%= className %>Record): Promise<void> {
+    await this.prisma.writeTarget().<%= propertyName %>.create({ data: { ...record } });
+  }
+
+  async findById(organizationId: string, id: string): Promise<<%= className %>Record | null> {
+    return this.prisma.writeTarget().<%= propertyName %>.findFirst({
+      where: { organizationId, id },
+    });
+  }
+
+  async findAllCursor(
+    options: Find<%= className %>CursorOptions,
+  ): Promise<Find<%= className %>CursorResult> {
+    const where = options.startingAfter
+      ? {
+          organizationId: options.organizationId,
+          AND: [keysetAfter(options.startingAfter)],
+        }
+      : { organizationId: options.organizationId };
+
+    const rows = await this.prisma.readTarget().<%= propertyName %>.findMany({
+      where,
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: options.limit + 1,
+    });
+
+    return takePage(rows, options.limit);
+  }
+}

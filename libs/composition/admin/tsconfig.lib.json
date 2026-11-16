@@ -25,7 +25,7 @@
       "path": "../../shared/tsconfig.lib.json"
     },
     {
-      "path": "../../modules/users/tsconfig.lib.json"
+      "path": "../../modules/tsconfig.lib.json"
     },
     {
       "path": "../../infra/authorization/tsconfig.lib.json"
