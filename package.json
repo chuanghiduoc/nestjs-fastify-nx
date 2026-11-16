@@ -113,7 +113,7 @@
     "@commitlint/config-conventional": "^21.2.4",
     "@eslint/js": "^10.0.1",
     "@nestjs/schematics": "^12.0.13",
-    "@nestjs/testing": "^12.4.0",
+    "@nestjs/testing": "^12.4.1",
     "@nx/devkit": "24.0.5",
     "@nx/eslint": "24.0.3",
     "@nx/eslint-plugin": "24.0.5",
