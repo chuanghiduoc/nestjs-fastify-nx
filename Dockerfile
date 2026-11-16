@@ -22,7 +22,8 @@ ENV PNPM_HOME=/pnpm \
 WORKDIR /app
 
 FROM node:${NODE_VERSION}@${NODE_DIGEST} AS runtime
-RUN apk add --no-cache tini tzdata gcompat \
+RUN apk upgrade --no-cache \
+    && apk add --no-cache tini tzdata gcompat \
     && rm -rf /usr/local/lib/node_modules/npm \
               /usr/local/lib/node_modules/corepack \
               /usr/local/bin/npm /usr/local/bin/npx \
