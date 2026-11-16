@@ -1,7 +1,7 @@
 import { Inject } from '@nestjs/common';
 import { Query, QueryHandler, type IQueryHandler } from '@nestjs/cqrs';
 import { TERM_REPOSITORY, type TermRepositoryPort } from './term-repository.port';
-import type { TermAcceptanceDto } from './term.dto';
+import type { TermAcceptanceDto } from './term.types';
 
 export interface ListMyTermAcceptancesResult {
   data: TermAcceptanceDto[];

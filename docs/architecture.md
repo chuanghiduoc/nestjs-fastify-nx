@@ -120,30 +120,33 @@ folder's `index.ts`. Two tiers share that folder shape:
 **Leaf** (default) — flat folder, DDD layers as file roles:
 
 ```
-modules/src/<context>/                     # flat folder
+libs/modules/src/<context>/                # flat folder
   <context>.entity.ts                      # aggregate root (when invariants demand it)
   <context>-repository.port.ts             # repository port + DI token
   create-<context>.ts                      # colocated: Command + @CommandHandler
   list-<context>.ts                        # colocated: Query + @QueryHandler
   <context>.controller.ts                  # HTTP surface (buses only, never handlers)
-  <context>.dto.ts                         # presentation DTOs — only file importing swagger/class-validator
+  <context>.dto.ts                         # presentation DTOs (class-validator; @ApiProperty replies)
   prisma-<context>.repository.ts           # Prisma adapter + colocated .integration.spec.ts
   <context>.module.ts                      # wiring: port→adapter, handlers, controller
-  <context>-listeners.module.ts            # listeners-only slice (worker/scheduler hosts)
   index.ts                                 # public barrel — commands/queries + result types, never handlers
 ```
 
-**Engine** (promoted) — same context folder with DDD subfolders; command/query
-files stay colocated and specs stay next to sources:
+**Engine** (promoted) — same context folder, which **may** grow DDD subfolders.
+Nothing requires the full set: a context keeps only the folders it needs
+(`upload` has `application/ports/` + `infrastructure/dispatchers/` +
+`presentation/multipart/`, `users` has `domain/value-objects/`, several engines
+ship no `application/dto/`). Command/query files stay colocated and specs stay
+next to sources:
 
 ```
-modules/src/<context>/
-  domain/{entities,value-objects,ports}/
-  application/{commands,queries,listeners,ports,dto}/
-  infrastructure/{repositories,dispatchers}/
-  presentation/{controllers,dto}/
-  testing/
-  <context>.module.ts  <context>-listeners.module.ts  index.ts    # context root
+libs/modules/src/<context>/
+  domain/{entities,value-objects,ports}/                # optional
+  application/{commands,queries,listeners,ports,dto}/   # optional
+  infrastructure/{repositories,dispatchers}/            # optional
+  presentation/{controllers,dto}/                       # optional, context subfolders allowed
+  testing/                                              # optional
+  <context>.module.ts  <context>-listeners.module.ts (optional)  index.ts    # context root
 ```
 
 **New to the codebase?** [`domain-module-anatomy.md`](./domain-module-anatomy.md)
@@ -161,21 +164,21 @@ Scope-level edges are enforced by `@nx/enforce-module-boundaries`; the edges
 **between context folders** inside the group are enforced by the custom
 `modules-scale/no-cross-context-imports` rule (see `eslint.config.mjs`):
 
-| Source tag          | Allowed dependencies                                             |
-| ------------------- | ---------------------------------------------------------------- |
-| `scope:api`         | modules, composition, infra, core, shared, contracts             |
-| `scope:worker`      | modules, infra, core, shared, contracts                          |
-| `scope:scheduler`   | modules, infra, core, shared, contracts                          |
-| `scope:migration`   | _(empty — intentional; thin prisma deploy wrapper)_              |
-| `scope:composition` | modules, composition, infra, core, shared, contracts             |
-| `scope:modules`     | infra, core, shared, contracts _(NEVER another `scope:modules`)_ |
-| `scope:infra`       | infra, core, shared, contracts                                   |
-| `scope:core`        | shared                                                           |
-| `scope:contracts`   | shared                                                           |
-| `scope:shared`      | _(empty — leaf of the graph)_                                    |
-| `scope:client`      | shared, contracts _(generated API client)_                       |
-| `scope:tools`       | _(empty — generators depend on nothing internal)_                |
-| `scope:testing`     | modules, infra, core, shared, contracts                          |
+| Source tag          | Allowed dependencies                                 |
+| ------------------- | ---------------------------------------------------- |
+| `scope:api`         | modules, composition, infra, core, shared, contracts |
+| `scope:worker`      | modules, infra, core, shared, contracts              |
+| `scope:scheduler`   | modules, infra, core, shared, contracts              |
+| `scope:migration`   | _(empty — intentional; thin prisma deploy wrapper)_  |
+| `scope:composition` | modules, composition, infra, core, shared, contracts |
+| `scope:modules`     | infra, core, shared, contracts                       |
+| `scope:infra`       | infra, core, shared, contracts                       |
+| `scope:core`        | shared                                               |
+| `scope:contracts`   | shared                                               |
+| `scope:shared`      | _(empty — leaf of the graph)_                        |
+| `scope:client`      | shared, contracts _(generated API client)_           |
+| `scope:tools`       | _(empty — generators depend on nothing internal)_    |
+| `scope:testing`     | modules, infra, core, shared, contracts              |
 
 Visualised — solid arrows are allowed dependencies; the dashed crossed arrow is
 the one rule the linter exists to enforce:
@@ -756,7 +759,6 @@ flowchart TD
     CH["Command handlers (tx)"] --> db
     FW["findById / findByEmail<br/>read-your-writes"] --> db
     FA["findAllCursor (admin list)"] --> dbRead
-    EX["exists (lag-tolerant pre-check)"] --> dbRead
 
     classDef primary fill:#1e3a8a,stroke:#1e40af,color:#fff;
     classDef replica fill:#065f46,stroke:#047857,color:#fff;
@@ -776,19 +778,22 @@ flowchart TD
 
 ### What uses `dbRead` (replica, falls back to primary)
 
-| Consumer                             | Notes                                                                                                           |
-| ------------------------------------ | --------------------------------------------------------------------------------------------------------------- |
-| `PrismaUserRepository.findAllCursor` | Admin user-list — stale by a few ms is acceptable.                                                              |
-| `PrismaUserRepository.exists`        | Pre-check before write; a false-negative on lag is safe — the unique constraint on the DB enforces correctness. |
+| Consumer                             | Notes                                              |
+| ------------------------------------ | -------------------------------------------------- |
+| `PrismaUserRepository.findAllCursor` | Admin user-list — stale by a few ms is acceptable. |
 
 ### Read-your-writes pattern
 
 Single-row PK/UK lookups (`findById`, `findByEmail`) stay on the primary so a
 caller reading immediately after a write on the same request always observes
-the latest row. List/aggregate queries (`findAllCursor`) and lag-tolerant
-pre-checks (`exists`) ride the replica. When introducing a new finder, ask
-"could a request write then read this row in the same handler?" — if yes, use
-`prisma.db`; if no, `prisma.dbRead`.
+the latest row. List/aggregate queries (`findAllCursor`) ride the replica. When
+introducing a new finder, ask "could a request write then read this row in the
+same handler?" — if yes, use `writeTarget()`; if no, `readTarget()`.
+
+Repositories resolve their client through `PrismaService.writeTarget()` /
+`readTarget()`, never the raw `db` / `dbRead` clients: only the accessors honor
+an ambient interactive transaction, so a direct client would silently lose
+outbox atomicity (see `docs/code-standards.md` → Read Replica Routing).
 
 ### Zero-overhead single-node default
 

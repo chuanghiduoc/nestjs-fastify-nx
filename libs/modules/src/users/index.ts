@@ -10,7 +10,6 @@ export {
 export {
   ListUsersCursorQuery,
   type ListUsersCursorResult,
-  type ListUsersCursorFilters,
 } from './application/queries/list-users-cursor';
 export type { UserListItemDto } from './application/dto/user-list-item.dto';
 

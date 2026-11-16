@@ -63,7 +63,7 @@ export class ListUsersCursorHandler implements IQueryHandler<
       id: user.id,
       email: user.email.toString(),
       name: user.name,
-      role: user.organizationRole ?? user.role,
+      role: user.organizationRole ?? '',
       status: user.status,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,

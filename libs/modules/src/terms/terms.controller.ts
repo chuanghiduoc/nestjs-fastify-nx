@@ -36,7 +36,7 @@ import { ListMyTermAcceptancesQuery } from './list-my-term-acceptances';
 import { CreateTermCommand } from './create-term';
 import { PublishTermCommand } from './publish-term';
 import { AcceptTermCommand } from './accept-term';
-import type { TermAcceptanceDto, TermDto } from './term.dto';
+import type { TermAcceptanceDto, TermDto } from './term.types';
 import { TERM_TYPE, TERM_TYPES, type TermType } from './term.entity';
 import { CreateTermDto, TermAcceptanceResponseDto, TermResponseDto } from './terms.dto';
 

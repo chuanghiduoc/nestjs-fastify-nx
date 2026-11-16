@@ -30,7 +30,7 @@ libs/modules/src/products/
 ├── products.module.ts                        # wires repository + handlers + controller
 ├── index.ts                                  # public barrel — commands/queries + result types, never handlers
 ├── products.controller.ts + .spec.ts          # HTTP surface, bus dispatch, bus-mock unit spec
-├── products.dto.ts                            # presentation DTOs — the only file importing @nestjs/swagger/class-validator
+├── products.dto.ts                            # presentation DTOs — class-validator here, @ApiProperty on responses
 ├── create-products.ts                        # colocated: CreateProductsCommand + @CommandHandler
 ├── list-products.ts                          # colocated: ListProductsQuery + @QueryHandler
 ├── products-repository.port.ts               # repository port + record type
@@ -44,12 +44,12 @@ The import path `@nestjs-fastify-nx/modules/products` resolves through the group
 
 ## Promoting a leaf to engine
 
-When a context grows real invariants or listeners, promote it to the **engine tier**: add the DDD subfolders inside the same context folder and move files into them. The group project, exports map, barrel entry, and module wiring keep working — only import paths change.
+When a context grows real invariants or listeners, promote it to the **engine tier**: add the DDD subfolders it actually needs inside the same context folder and move files into them. The engine tier **may** grow these folders — the tree below is the full menu, not a contract. Each engine owns a different subset of the optional folders: `upload` has `application/ports/` + `infrastructure/dispatchers/`, `users` has `domain/value-objects/`, and several engines have no `application/dto/`. The group project, exports map, barrel entry, and module wiring keep working — only import paths change.
 
 ```
 libs/modules/src/products/
 ├── products.module.ts               # stays at the context root
-├── products-listeners.module.ts     # listeners-only slice (worker/scheduler hosts)
+├── products-listeners.module.ts     # optional listeners-only slice (worker/scheduler hosts)
 ├── index.ts                         # stays at the context root; exports point into subfolders
 ├── domain/
 │   ├── entities/products.entity.ts (+ spec)
@@ -70,7 +70,7 @@ libs/modules/src/products/
 └── testing/                         # in-memory repositories, factories
 ```
 
-The generator does not scaffold the engine tier — promotion is a deliberate manual move (or `pnpm gen:module` a fresh leaf and port the code). Live examples: `libs/modules/src/users`, `organizations`, `upload`.
+The generator does not scaffold the engine tier — promotion is a deliberate manual move (or `pnpm gen:module` a fresh leaf and port the code). Live examples: `libs/modules/src/users`, `libs/modules/src/organizations`, `libs/modules/src/upload` — each one keeps a different subset of the optional folders.
 
 ## Removing a module
 
@@ -222,7 +222,7 @@ export class ProductsController {
 
 `ProblemDetailsValidationPipe` is wired globally — no extra setup needed for 422 validation envelopes.
 
-**Register handlers**: add each `@QueryHandler`/`@CommandHandler` to the module's `providers` array (they do not need to be exported). The `CqrsModule.forRoot()` explorer in each runnable app (`api`, `scheduler`, `codegen-app`) discovers them across all loaded modules — no manual bus registration.
+**Register handlers**: add each `@QueryHandler`/`@CommandHandler` to the module's `providers` array (they do not need to be exported). The `CqrsModule.forRoot()` explorer in each runnable app (`api`, `worker`, `scheduler`) and the `codegen-app` module used for spec export discovers them across all loaded modules — no manual bus registration.
 
 ## Testing Pattern
 

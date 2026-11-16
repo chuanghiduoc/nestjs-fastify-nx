@@ -2,7 +2,7 @@ import { Inject } from '@nestjs/common';
 import { Command, CommandHandler, type ICommandHandler } from '@nestjs/cqrs';
 import { TERM_REPOSITORY, type TermRepositoryPort } from './term-repository.port';
 import type { Term } from './term.entity';
-import { toTermDto, type TermDto } from './term.dto';
+import { toTermDto, type TermDto } from './term.types';
 import { termNotFound } from './term-errors';
 
 export class PublishTermCommand extends Command<TermDto> {

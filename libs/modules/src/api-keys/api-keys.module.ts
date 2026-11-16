@@ -17,5 +17,6 @@ import { ApiKeysController } from './presentation/controllers/api-keys.controlle
     CreateApiKeyHandler,
     RevokeApiKeyHandler,
   ],
+  exports: [API_KEY_REPOSITORY],
 })
 export class ApiKeysModule {}

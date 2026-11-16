@@ -5,7 +5,7 @@ Prisma 7 integration for the workspace. Owns `PrismaService` (the single
 the `DatabaseModule` that wires it globally.
 
 **Tag**: `scope:infra` — consumed by feature modules' repository adapters in
-`libs/modules/*/src/infrastructure/`.
+`libs/modules/src/*/infrastructure/`.
 
 ## Repository accessors
 

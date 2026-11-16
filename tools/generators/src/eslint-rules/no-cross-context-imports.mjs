@@ -1,5 +1,4 @@
 const PACKAGE = '@nestjs-fastify-nx/modules';
-const GROUP_SOURCE_ROOT = 'libs/modules/src';
 
 function splitPath(filename) {
   return String(filename ?? '')
@@ -9,10 +8,42 @@ function splitPath(filename) {
 
 function importerContextOf(filename) {
   const segments = splitPath(filename);
-  if (segments.slice(0, 3).join('/') !== GROUP_SOURCE_ROOT) {
+  const rootIndex = segments.findIndex(
+    (segment, index) =>
+      segment === 'libs' && segments[index + 1] === 'modules' && segments[index + 2] === 'src',
+  );
+  if (rootIndex === -1) {
     return { insideGroup: false, context: undefined };
   }
-  return { insideGroup: true, context: segments.length > 4 ? segments[3] : undefined };
+  return {
+    insideGroup: true,
+    context: segments.length > rootIndex + 4 ? segments[rootIndex + 3] : undefined,
+  };
+}
+
+function contextOfResolvedPath(segments) {
+  const rootIndex = segments.findIndex(
+    (segment, index) =>
+      segment === 'libs' && segments[index + 1] === 'modules' && segments[index + 2] === 'src',
+  );
+  if (rootIndex === -1) return undefined;
+  return segments.length > rootIndex + 4 ? segments[rootIndex + 3] : undefined;
+}
+
+function resolveRelativeSpecifier(filename, specifier) {
+  const segments = splitPath(filename);
+  if (segments.length === 0) return undefined;
+  const stack = segments.slice(0, -1);
+  for (const segment of String(specifier).replace(/\\/g, '/').split('/')) {
+    if (segment === '' || segment === '.') continue;
+    if (segment === '..') {
+      if (stack.length === 0) return undefined;
+      stack.pop();
+      continue;
+    }
+    stack.push(segment);
+  }
+  return stack;
 }
 
 function importFacts(source) {
@@ -43,8 +74,31 @@ export default {
       context.filename ?? context.physicalFilename,
     );
 
+    function checkRelative(sourceNode) {
+      if (!importerContext) return;
+      const resolved = resolveRelativeSpecifier(
+        context.filename ?? context.physicalFilename,
+        sourceNode?.value,
+      );
+      if (!resolved) return;
+      const targetContext = contextOfResolvedPath(resolved);
+      if (targetContext && targetContext !== importerContext) {
+        context.report({
+          node: sourceNode,
+          messageId: 'crossContext',
+          data: { importer: importerContext, imported: targetContext },
+        });
+      }
+    }
+
     function checkSource(sourceNode) {
-      const facts = importFacts(sourceNode?.value);
+      const source = sourceNode?.value;
+      if (typeof source !== 'string') return;
+      if (source.startsWith('.')) {
+        checkRelative(sourceNode);
+        return;
+      }
+      const facts = importFacts(source);
       if (!facts) return;
       if (facts.kind === 'root') {
         if (!insideGroup) {

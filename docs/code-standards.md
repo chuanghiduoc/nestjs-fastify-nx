@@ -151,7 +151,7 @@ application layer import `@nestjs/swagger`, and the layering is gone the moment 
 must stay callable from REST, GraphQL, or a queue consumer without dragging HTTP along.
 
 ```typescript
-// libs/modules/src/users/application/queries/list-users-cursor.ts
+// libs/modules/src/users/application/dto/user-list-item.dto.ts
 // Pure TS. No @nestjs/swagger, no class-validator — nothing framework-shaped.
 export interface UserListItemDto {
   id: string;
@@ -160,7 +160,7 @@ export interface UserListItemDto {
 }
 
 // libs/modules/src/users/presentation/dto/auth-response.dto.ts
-// Swagger + class-validator decorators live here and nowhere else.
+// Swagger decorators live under presentation/ — this DTO and the controller.
 export class UserListItemResponseDto {
   @ApiProperty()
   id!: string;
@@ -173,7 +173,10 @@ export class UserListItemResponseDto {
 }
 ```
 
-The duplication is the point: it buys the boundary. Sensitive columns are kept out of responses by
+The duplication is the point: it buys the boundary. **Placement rule:**
+`class-validator` belongs only in DTO files; `@nestjs/swagger` only under
+`presentation/` (DTOs and controllers). Operation files, ports and modules stay
+framework-agnostic. Sensitive columns are kept out of responses by
 projecting into a purpose-built DTO that simply never declares them — not by `@Exclude`.
 
 **Re-export from module barrel only what is public.** Keep domain entities and repositories private. Command/query **handlers stay private** — they are registered with the global `CommandBus`/`QueryBus` by `CqrsModule.forRoot()`'s explorer and are never injected directly. Export the **command/query classes + their result types** so composition libs and cross-cutting resolvers can dispatch `commandBus.execute(new SomeCommand(...))` / `queryBus.execute(new SomeQuery(...))`. Queries/commands extend `Query<TResult>`/`Command<TResult>` so `execute()` infers the return type.

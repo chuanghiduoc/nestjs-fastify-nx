@@ -15,23 +15,27 @@ maps `./<ctx>` → `./src/<ctx>/index.ts`, so consumers import
 `@nestjs-fastify-nx/modules/<ctx>` and nothing else. There is no per-context
 project, package, or tsconfig.
 
-Contexts grow along a **tier ladder**: the leaf tier stays flat; promoting to engine adds the DDD subfolders inside the same context folder (the group project, exports map, and barrels never change).
+Contexts grow along a **tier ladder**: the leaf tier stays flat; promoting to engine **may** add DDD subfolders inside the same context folder (the group project, exports map, and barrels never change).
 
 - **Leaf** (the default, and what `pnpm gen:module` scaffolds): a flat folder
   of ~10-20 files. One colocated operation file per command/query,
   `<ctx>.dto.ts`, `<ctx>.controller.ts`, `<ctx>-repository.port.ts`,
   `prisma-<ctx>.repository.ts` + colocated `.integration.spec.ts`.
 - **Engine** (promoted when invariants or listener count force it): the same
-  context folder grows the DDD subfolders —
-  `domain/{entities,value-objects,ports}/`,
-  `application/{commands,queries,listeners,ports,dto}/`,
-  `infrastructure/{repositories,dispatchers}/`,
-  `presentation/{controllers,dto}/`, `testing/` — while command/query files
+  context folder **may** grow the DDD subfolders —
+  `domain/{entities,value-objects,ports}/` (optional),
+  `application/{commands,queries,listeners,ports,dto}/` (optional),
+  `infrastructure/{repositories,dispatchers}/` (optional),
+  `presentation/{controllers,dto}/` (optional, plus context-specific subfolders
+  such as `upload`'s `presentation/multipart/`, which ships the Fastify
+  multipart hook), `testing/` (optional) — while command/query files
   stay **colocated** (one file per operation holding both the class and its
   handler), specs sit next to sources, and `<ctx>.module.ts` /
   `<ctx>-listeners.module.ts` / `index.ts` stay at the context-folder root.
-  Current engines: `users`, `organizations`, `api-keys`, `feature-flags`,
-  `upload`, `audit-log`.
+  A context creates only the folders it needs: `upload` has `application/ports/`
+  - `infrastructure/dispatchers/`, `users` has `domain/value-objects/`, and
+    several engines have no `application/dto/`. Current engines: `users`,
+    `organizations`, `api-keys`, `feature-flags`, `upload`, `audit-log`.
 - **Composition**: `libs/composition/*` — orchestrator-only, still one Nx
   project each. Not part of the group; see [`architecture.md`](./architecture.md).
 
@@ -87,7 +91,7 @@ GetUserProfileHandler (@QueryHandler, application/queries/get-user-profile.ts)
 UserRepositoryPort (domain/ports/user-repository.port.ts)  ◄─────┘
   ▲ implements
 PrismaUserRepository (infrastructure/repositories/prisma-user.repository.ts)
-  │ this.prisma.db.user.findUnique(...)
+  │ this.prisma.writeTarget().user.findUnique(...)
   ▼
 Postgres
 ```
@@ -221,11 +225,12 @@ A `Command<TResult>` subclass (input) and its `@CommandHandler` (the use case
 that mutates state) in ONE file — a single, explicit, named write operation.
 Create one file per state-changing use case. `users` has none today (creation
 and session lifecycle are fully owned by Better Auth); the shape below is the
-scaffold's `create-orders.ts`, structurally identical to
-`audit-log`'s `record-audit-log.ts`:
+scaffold's hypothetical leaf file — `orders` is not a real context — and is
+structurally identical to `audit-log`'s
+`application/commands/record-audit-log.ts`:
 
 ```typescript
-// libs/modules/src/orders/create-orders.ts
+// hypothetical leaf scaffold: libs/modules/src/orders/create-orders.ts
 export class CreateOrdersCommand extends Command<OrdersDto> {
   constructor(readonly input: CreateOrdersInput) {
     super();
@@ -427,23 +432,26 @@ export class PrismaUserRepository implements UserRepositoryPort {
     });
   }
 
-  // Primary (not dbRead) — /users/me reads immediately after sign-up; replica lag would return null.
+  // writeTarget(), not readTarget() — /users/me reads immediately after sign-up; replica lag would return null.
   async findById(id: string): Promise<User | null> {
-    const raw = await this.prisma.db.user.findUnique({ where: { id } });
+    const raw = await this.prisma.writeTarget().user.findUnique({ where: { id } });
     return raw ? this.mapToEntity(raw as UserRow) : null;
   }
 
   async findAllCursor(options: FindAllCursorOptions): Promise<FindAllCursorResult> {
-    // builds a Prisma `where`, reads from this.prisma.dbRead (replica-tolerant), take: limit + 1
+    // builds a Prisma `where`, reads from this.prisma.readTarget() (replica-tolerant), take: limit + 1
   }
 }
 ```
 
-`this.prisma.db` (primary) serves `findById`, `findByEmail`, `save`;
-`this.prisma.dbRead` (replica, falls back to primary) serves `findAllCursor`,
-`exists` — see [`architecture.md`](./architecture.md) for the read-your-writes
-rule. `prisma.writeTarget()` / `readTarget()` also honor an ambient
-transaction — see `docs/agent-gotchas.md`.
+`this.prisma.writeTarget()` serves `findById`, `findByEmail`, `save` — the
+primary client, or the ambient transaction when `prisma.transaction(...)` is
+open. `this.prisma.readTarget()` serves `findAllCursor` — the replica when
+`DATABASE_REPLICA_URL` is set, falling back to the primary. Never call
+`prisma.db` / `prisma.dbRead` directly: those bypass the AsyncLocalStorage
+transaction and silently lose outbox atomicity. See
+[`architecture.md`](./architecture.md) for the read-your-writes rule and
+`docs/agent-gotchas.md` for the transaction accessor contract.
 
 **Rules**: translate Prisma error codes here (`P2002` → `DomainException` with
 `kind: 'conflict'` and the domain `code`; every other Prisma error is re-thrown
@@ -502,9 +510,11 @@ don't confuse it with the `User` entity, and don't redefine it per context.
 ### `<ctx>.dto.ts` — request/response DTOs
 
 A class with `class-validator` decorators for requests and
-`@nestjs/swagger`'s `@ApiProperty` for responses — **the only file in a
-context allowed to import `@nestjs/swagger` or `class-validator`** (enforced
-by ESLint). Create one per request/response shape.
+`@nestjs/swagger`'s `@ApiProperty` for responses. `class-validator` belongs
+only in DTO files; `@nestjs/swagger` only under `presentation/` — DTOs here and
+the controllers that carry `@ApiTags`/`@ApiOkResponse`. Operation files, ports
+and modules stay framework-agnostic (enforced by ESLint). Create one per
+request/response shape.
 
 ```typescript
 // in sessions.dto.ts
@@ -534,9 +544,10 @@ fields without redeclaring them.
 | `ListUsersCursorFilterDto` | presentation | `class-validator` + `@ApiPropertyOptional` | validates + documents the incoming query string             |
 
 **Rules**: never let `@nestjs/swagger` or `class-validator` leak into an
-operation file or a port. If you're importing an application type into a
-controller's `@ApiOkResponse`, create the presentation counterpart in
-`<ctx>.dto.ts` instead.
+operation file, a port, or a module. In a leaf the presentation DTO lives in
+`<ctx>.dto.ts`; in an engine it lives under `presentation/dto/`. If you're
+importing an application type into a controller's `@ApiOkResponse`, create the
+presentation counterpart under `presentation/` instead.
 
 ### `<ctx>.module.ts` — the module wiring
 
@@ -567,8 +578,10 @@ repository directly — nothing does for `users` today, so it exports nothing;
 never export a handler, they're found by the CQRS bus explorer purely
 because they're in `providers`.
 
-**The `*-listeners.module.ts` split** (`users-listeners.module.ts`) is what
-marks a context as an engine:
+**The `*-listeners.module.ts` split** (`users-listeners.module.ts`) is an
+optional host-slimming slice, not a tier marker: only `users` and `audit-log`
+keep one, and a small context registers its listener class inline in the main
+module (`notifications`):
 
 ```typescript
 // Listeners-only slice for hosts that should not load the HTTP controller
@@ -677,7 +690,7 @@ Say you're adding "update display name" to `users`. Touch files in order
    port, call the domain method, `save()`.
 4. **`infrastructure/repositories/prisma-user.repository.ts`** — update the
    adapter if the new field needs mapping.
-5. **`presentation/dto/users.dto.ts`** — request DTO (`class-validator`);
+5. **`presentation/dto/auth-response.dto.ts`** — request DTO (`class-validator`);
    response DTO if the shape changed.
 6. **`presentation/controllers/users.controller.ts`** — add the route, inject
    `CommandBus`, dispatch the command.

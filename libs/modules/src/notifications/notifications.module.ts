@@ -27,6 +27,7 @@ const providers = [
     MarkNotificationReadHandler,
     MarkAllNotificationsReadHandler,
   ],
+  exports: [NOTIFICATION_REPOSITORY],
 })
 export class NotificationsModule {}
 

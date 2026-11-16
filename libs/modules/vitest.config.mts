@@ -4,5 +4,6 @@ export default defineVitestConfig({
   name: 'modules',
   rootDir: 'libs/modules',
   integrationTests: true,
-  coverageExclude: ['src/**/prisma-*.repository.ts'],
+  testTimeout: 60_000,
+  hookTimeout: 60_000,
 });

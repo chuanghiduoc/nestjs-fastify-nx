@@ -22,5 +22,6 @@ import { TermsController } from './terms.controller';
     PublishTermHandler,
     AcceptTermHandler,
   ],
+  exports: [TERM_REPOSITORY],
 })
 export class TermsModule {}

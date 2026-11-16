@@ -21,5 +21,6 @@ import { FeatureFlagsController } from './presentation/controllers/feature-flags
     UpdateFeatureFlagHandler,
     DeleteFeatureFlagHandler,
   ],
+  exports: [FEATURE_FLAG_REPOSITORY],
 })
 export class FeatureFlagsModule {}

@@ -338,12 +338,12 @@ export default defineConfig(
             {
               name: '@nestjs/swagger',
               message:
-                'Swagger decorators belong in <ctx>.dto.ts / presentation only — operation files must stay framework-agnostic.',
+                'Swagger decorators belong under presentation/ (DTOs and controllers) - operation files, ports and modules stay framework-agnostic.',
             },
             {
               name: 'class-validator',
               message:
-                'Operation files are pure TS — class-validator decorators belong in <ctx>.dto.ts / presentation only.',
+                'class-validator belongs in DTO files only - operation files, ports and modules stay framework-agnostic.',
             },
           ],
         },

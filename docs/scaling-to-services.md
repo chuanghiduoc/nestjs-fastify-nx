@@ -46,7 +46,7 @@ pnpm gen:app <name>                     # new deployable
 # Dockerfile: new target; docker/compose.*.yml: new service
 ```
 
-The new app imports the same `libs/modules/*` and `libs/infra/*`. Webpack's `generatePackageJson`
+The new app imports the same `libs/modules/src/*` and `libs/infra/*`. Webpack's `generatePackageJson`
 prunes its dependencies automatically. **No application code changes.**
 
 Gains independent deploy, scaling and blast radius. Does not gain data isolation.

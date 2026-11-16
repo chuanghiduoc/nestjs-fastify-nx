@@ -1,13 +1,9 @@
 export { NotificationsModule, NotificationsListenersModule } from './notifications.module';
 
-export {
-  NOTIFICATION_TYPES,
-  MembershipNotificationListener,
-} from './membership-notification.listener';
+export { NOTIFICATION_TYPES } from './membership-notification.listener';
 export {
   ListNotificationsQuery,
   type ListNotificationsResult,
-  type ListNotificationsFilters,
   type NotificationDto,
 } from './list-notifications';
 export { CountUnreadNotificationsQuery, type UnreadCountDto } from './count-unread-notifications';

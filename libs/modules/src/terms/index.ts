@@ -10,5 +10,5 @@ export {
 export { CreateTermCommand } from './create-term';
 export { PublishTermCommand } from './publish-term';
 export { AcceptTermCommand } from './accept-term';
-export type { TermAcceptanceDto, TermDto } from './term.dto';
+export type { TermAcceptanceDto, TermDto } from './term.types';
 export { CreateTermDto, TermAcceptanceResponseDto, TermResponseDto } from './terms.dto';

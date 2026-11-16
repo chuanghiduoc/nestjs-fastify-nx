@@ -50,19 +50,19 @@ Three things that are **not** what you would guess:
 
 DDD layering enforced by Nx tags + `@nx/enforce-module-boundaries` (`eslint.config.mjs`); context-to-context edges inside the modules group are enforced by the custom `modules-scale/no-cross-context-imports` rule:
 
-| Tag                                                | May depend on                                                      |
-| -------------------------------------------------- | ------------------------------------------------------------------ |
-| `scope:api`                                        | modules, composition, infra, core, shared, contracts               |
-| `scope:worker` / `scope:scheduler`                 | modules, infra, core, shared, contracts (**no** composition)       |
-| `scope:composition`                                | modules, composition, infra, core, shared, contracts               |
-| `scope:modules`                                    | infra, core, shared, contracts — **never another `scope:modules`** |
-| `scope:infra`                                      | core, shared, contracts, infra                                     |
-| `scope:core` / `scope:contracts`                   | shared                                                             |
-| `scope:shared` / `scope:tools` / `scope:migration` | nothing (leaves)                                                   |
-| `scope:client`                                     | shared, contracts                                                  |
-| `scope:testing`                                    | modules, infra, core, shared, contracts                            |
+| Tag                                                | May depend on                                                |
+| -------------------------------------------------- | ------------------------------------------------------------ |
+| `scope:api`                                        | modules, composition, infra, core, shared, contracts         |
+| `scope:worker` / `scope:scheduler`                 | modules, infra, core, shared, contracts (**no** composition) |
+| `scope:composition`                                | modules, composition, infra, core, shared, contracts         |
+| `scope:modules`                                    | infra, core, shared, contracts                               |
+| `scope:infra`                                      | core, shared, contracts, infra                               |
+| `scope:core` / `scope:contracts`                   | shared                                                       |
+| `scope:shared` / `scope:tools` / `scope:migration` | nothing (leaves)                                             |
+| `scope:client`                                     | shared, contracts                                            |
+| `scope:testing`                                    | modules, infra, core, shared, contracts                      |
 
-**Boundaries are sacred.** If lint fails on `@nx/enforce-module-boundaries` or `modules-scale/no-cross-context-imports`, fix the architecture — never relax the rule and never add a cross-module import. Cross-context aggregation goes through `scope:composition`, one-way.
+**Boundaries are sacred.** If lint fails on `@nx/enforce-module-boundaries` or `modules-scale/no-cross-context-imports`, fix the architecture — never relax the rule and never add a cross-module import. Cross-context aggregation goes through `scope:composition`, one-way. The `scope:modules` row is scope-level only: all contexts live in one `modules` project, so it says nothing about edges between context folders — sibling-context imports are what `modules-scale/no-cross-context-imports` forbids.
 
 Inside `libs/modules/src/<ctxA>/`, importing `@nestjs-fastify-nx/modules/<ctxB>` (`ctxB !== ctxA`) is an error, and every consumer (apps, composition) must import through a context barrel — `@nestjs-fastify-nx/modules/<ctx>/<internal-path>` is an error everywhere.
 
@@ -87,12 +87,12 @@ prisma/ docker/ scripts/ docs/ tools/generators/
 A bounded context is a **folder** under `libs/modules/src/<context>/` — the whole group is ONE Nx project (`modules`, tag `scope:modules`) and ONE workspace package. `libs/modules/package.json` maps `./<ctx>` → `./src/<ctx>/index.ts` per context; consumers import `@nestjs-fastify-nx/modules/<ctx>`. No per-context project, package, or tsconfig exists.
 
 - **Leaf** (default for a new context): flat folder. `<ctx>.module.ts`, `index.ts`, `<ctx>.controller.ts` + spec, `<ctx>.dto.ts`, one colocated operation file per command/query (`create-<ctx>.ts` holds both the `Command` and its `@CommandHandler`), `<ctx>-repository.port.ts`, `prisma-<ctx>.repository.ts` + colocated `.integration.spec.ts`. An entity or value-object file may sit flat when invariants demand it.
-- **Engine** (promoted, not preemptive): the same context folder grows DDD subfolders — `domain/{entities,value-objects,ports}/`, `application/{commands,queries,listeners,ports,dto}/`, `infrastructure/{repositories,dispatchers}/`, `presentation/{controllers,dto}/`, `testing/`. Command/query files stay **colocated** (one file per operation holding both the class and its handler), specs sit next to sources, and `<ctx>.module.ts` / `<ctx>-listeners.module.ts` / `index.ts` stay at the context-folder root.
+- **Engine** (promoted, not preemptive): the same context folder **may** grow DDD subfolders — `domain/{entities,value-objects,ports}/` (optional), `application/{commands,queries,listeners,ports,dto}/` (optional), `infrastructure/{repositories,dispatchers}/` (optional), `presentation/{controllers,dto}/` (optional, plus context-specific subfolders such as `upload`'s `presentation/multipart/`), `testing/` (optional). A context creates only the ones it needs: `upload` has `application/ports/` + `infrastructure/dispatchers/`, `users` has `domain/value-objects/`, and several engines have no `application/dto/`. Command/query files stay **colocated** (one file per operation holding both the class and its handler), specs sit next to sources, and `<ctx>.module.ts` / `<ctx>-listeners.module.ts` / `index.ts` stay at the context-folder root.
 - **Composition**: unchanged (`libs/composition/*`), orchestrator-only, still one Nx project each.
 
 Rules that bite:
 
-- DTO naming is **always singular**: `<ctx>.dto.ts` (leaf) or `presentation/dto/<name>.dto.ts` (engine) is the presentation DTO — the only place in a context that may import `@nestjs/swagger`/`class-validator`. Application result types are **pure TS**: in the operation files for a leaf, in `application/dto/` when several engine operations share them; a presentation DTO is never reused as an application type.
+- DTO naming is **always singular**: `<ctx>.dto.ts` (leaf) or `presentation/dto/<name>.dto.ts` (engine) is the presentation DTO. `class-validator` belongs only in DTO files; `@nestjs/swagger` only under `presentation/` (DTOs and controllers) — operation files, ports and modules stay framework-agnostic. Application result types are **pure TS**: in the operation files for a leaf, in `application/dto/` when several engine operations share them; a presentation DTO is never reused as an application type.
 - A repository port goes in `<ctx>-repository.port.ts` (leaf) or `domain/ports/<name>.port.ts` (engine); an outbound capability with no domain meaning (queue dispatcher, mailer) gets its own `<name>.dispatcher.ts` under `application/ports/` (engine) or a flat `<name>.dispatcher.ts` file.
 - **CQRS**: handlers are found by the bus explorer (`CqrsModule.forRoot()` per runnable app) — never inject a handler directly, dispatch through `CommandBus`/`QueryBus`. Commands/queries extend `Command<T>`/`Query<T>`; the barrel exports them and their result types, **not** the handlers.
 - **Domain events flow through the outbox**, never the in-memory `@nestjs/cqrs` EventBus, and never `eventEmitter.emit()` / `queue.add()` from a command handler — those are lost on rollback. Two producer paths and the full ruleset: `docs/agent-gotchas.md`.
