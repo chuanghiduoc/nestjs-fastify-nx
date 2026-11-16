@@ -1,4 +1,0 @@
-<% if (withCqrs) { %>// Command classes only. Handlers stay internal — CqrsModule's explorer registers them from the
-// module's providers, and injecting one directly bypasses the bus.
-export { Create<%= className %>Command } from './commands/create-<%= fileName %>/create-<%= fileName %>.command';
-<% } %>

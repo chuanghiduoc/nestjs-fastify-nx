@@ -3,7 +3,7 @@
     "module": {
       "factory": "./src/generators/module/generator",
       "schema": "./src/generators/module/schema.json",
-      "description": "Scaffold a new DDD module with domain/application/infrastructure/presentation layers"
+      "description": "Scaffold a folder module in the libs/modules group (leaf tier) or a composition project"
     }
   }
 }

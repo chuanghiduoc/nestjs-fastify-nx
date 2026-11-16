@@ -82,7 +82,7 @@ If you've ever shipped a Node service to production, you've written this code al
 ## Highlights
 
 - **Four runnable services** — `api`, `worker`, `scheduler`, `migration` — sharing a single Nx workspace and one pnpm lockfile.
-- **DDD + CQRS layout** with bounded contexts under `libs/modules/*`, infrastructure adapters under `libs/infra/*`, cross-cutting plumbing under `libs/core/*`.
+- **DDD + CQRS layout** with bounded contexts as folders in the `libs/modules` group project, infrastructure adapters under `libs/infra/*`, cross-cutting plumbing under `libs/core/*`.
 - **Better Auth (cookie sessions, scrypt hashing)** with WebSocket session reuse via a custom Socket.io adapter.
 - **Tenant self-service out of the box** — custom roles, teams, invitations, in-app notifications, feature flags with deterministic rollout, legal-terms acceptance, and session/device revocation, all behind the same permission model.
 - **API keys for machine-to-machine access** — SHA-256 digest at rest, scopes that can never exceed the issuer's own permissions, and routes that opt in explicitly ([ADR-0007](docs/adr/0007-api-key-authentication.md)).
@@ -215,10 +215,11 @@ pnpm nx test api                    # vitest
 pnpm nx build api --configuration=production
 
 # Scaffolding & removal
-pnpm gen:module <name>              # DDD bounded context under libs/modules/
+pnpm gen:module <name>              # bounded-context folder under libs/modules/src/ (group project)
 pnpm gen:composition <name>         # cross-context lib under libs/composition/
 pnpm gen:lib <name>                 # generic library
-pnpm rm:project <name>              # remove a lib/app + clean references
+pnpm rm:module <name>              # remove a folder module + drop its exports-map entry
+pnpm rm:project <name>             # remove a lib/app + clean references
 
 # Housekeeping
 pnpm sync                           # nx sync (project references)

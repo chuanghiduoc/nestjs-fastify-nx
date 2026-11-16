@@ -1,0 +1,104 @@
+<% if (withCqrs) { %>import { Body, Controller, Get, HttpCode, HttpStatus, Post, Query } from '@nestjs/common';
+import { CommandBus, QueryBus } from '@nestjs/cqrs';
+import {
+  ApiCreatedResponse,
+  ApiOperation,
+  ApiTags,
+} from '@nestjs/swagger';
+import {
+  ApiCommonErrors,
+  ApiPaginatedResponse,
+  ListResponseDto,
+  toCursorListResponse,
+} from '@nestjs-fastify-nx/contracts';
+import { CurrentUser, requireOrganizationId, type AuthenticatedSession } from '@nestjs-fastify-nx/infra-auth';
+import { Create<%= className %>Command } from './create-<%= fileName %>';
+import { List<%= className %>Query } from './list-<%= fileName %>';
+import {
+  Create<%= className %>Dto,
+  <%= className %>ResponseDto,
+  List<%= className %>FilterDto,
+} from './<%= fileName %>.dto';
+
+const <%= constantName %>_PATH = '/api/v1/<%= fileName %>';
+
+@ApiTags('<%= fileName %>')
+@Controller('<%= fileName %>')
+export class <%= className %>Controller {
+  constructor(
+    private readonly queryBus: QueryBus,
+    private readonly commandBus: CommandBus,
+  ) {}
+
+  @Post()
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Create a new <%= fileName %> for the caller organization.' })
+  @ApiCreatedResponse({
+    type: <%= className %>ResponseDto,
+    description: 'The created <%= fileName %>.',
+  })
+  @ApiCommonErrors({ validation: true })
+  async create(
+    @CurrentUser() user: AuthenticatedSession,
+    @Body() body: Create<%= className %>Dto,
+  ): Promise<<%= className %>ResponseDto> {
+    return this.commandBus.execute(
+      new Create<%= className %>Command({
+        organizationId: requireOrganizationId(user),
+        userId: user.userId,
+        name: body.name,
+      }),
+    );
+  }
+
+  @Get()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'List <%= fileName %> records for the caller organization.' })
+  @ApiPaginatedResponse(<%= className %>ResponseDto)
+  @ApiCommonErrors()
+  async list(
+    @CurrentUser() user: AuthenticatedSession,
+    @Query() filter: List<%= className %>FilterDto,
+  ): Promise<ListResponseDto<<%= className %>ResponseDto>> {
+    const result = await this.queryBus.execute(
+      new List<%= className %>Query(requireOrganizationId(user), filter.limit, filter.startingAfter),
+    );
+
+    return toCursorListResponse({
+      url: <%= constantName %>_PATH,
+      items: result.data,
+      hasMore: result.hasMore,
+      lastCursor: result.lastCursor,
+    });
+  }
+}
+<% } else { %>import { Controller, Get, HttpCode, HttpStatus, Query } from '@nestjs/common';
+import { ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiCommonErrors, ListResponseDto, toUnpaginatedListResponse } from '@nestjs-fastify-nx/contracts';
+import { CurrentUser, type AuthenticatedSession } from '@nestjs-fastify-nx/infra-auth';
+import {
+  <%= className %>ResponseDto,
+  List<%= className %>FilterDto,
+} from './<%= fileName %>.dto';
+
+const <%= constantName %>_PATH = '/api/v1/<%= fileName %>';
+
+@ApiTags('<%= fileName %>')
+@Controller('<%= fileName %>')
+export class <%= className %>Controller {
+  @Get()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'List <%= fileName %> records for the caller organization.' })
+  @ApiOkResponse({
+    type: [<%= className %>ResponseDto],
+    description: 'List of <%= fileName %> records.',
+  })
+  @ApiCommonErrors()
+  list(
+    @CurrentUser() _user: AuthenticatedSession,
+    @Query() _filter: List<%= className %>FilterDto,
+  ): ListResponseDto<<%= className %>ResponseDto> {
+    return toUnpaginatedListResponse(<%= constantName %>_PATH, []);
+  }
+}
+<% } %>

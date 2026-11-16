@@ -13,9 +13,9 @@ import {
   buildPinoLoggerConfig,
   LivenessProbeService,
 } from '@nestjs-fastify-nx/infra-observability';
-import { UsersListenersModule } from '@nestjs-fastify-nx/modules-users';
-import { AuditLogListenersModule } from '@nestjs-fastify-nx/modules-audit-log';
-import { NotificationsListenersModule } from '@nestjs-fastify-nx/modules-notifications';
+import { UsersListenersModule } from '@nestjs-fastify-nx/modules/users';
+import { AuditLogListenersModule } from '@nestjs-fastify-nx/modules/audit-log';
+import { NotificationsListenersModule } from '@nestjs-fastify-nx/modules/notifications';
 import { validateSchedulerConfig } from '../config/env.validation';
 import { BatchedPurgeRunner } from './tasks/batched-purge.runner';
 import { CleanupTask } from './tasks/cleanup.task';

@@ -3,7 +3,7 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { Client as PgClient } from 'pg';
 import { PrismaService } from '@nestjs-fastify-nx/infra-database';
 import { injectDatabasePassword, positiveIntEnv } from '@nestjs-fastify-nx/shared';
-import { UserStatus } from '@nestjs-fastify-nx/modules-users';
+import { UserStatus } from '@nestjs-fastify-nx/modules/users';
 import { SchedulerLeaderService } from '../leadership/scheduler-leader.service';
 
 @Injectable()

@@ -1,0 +1,60 @@
+import { Inject } from '@nestjs/common';
+import { Command, CommandHandler, type ICommandHandler } from '@nestjs/cqrs';
+import { generateId } from '@nestjs-fastify-nx/shared';
+import {
+  <%= constantName %>_REPOSITORY,
+  type <%= className %>RepositoryPort,
+} from './<%= fileName %>-repository.port';
+
+export interface <%= className %>Dto {
+  id: string;
+  organizationId: string;
+  userId: string;
+  name: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface Create<%= className %>Input {
+  readonly organizationId: string;
+  readonly userId: string;
+  readonly name: string;
+}
+
+export class Create<%= className %>Command extends Command<<%= className %>Dto> {
+  readonly organizationId: string;
+  readonly userId: string;
+  readonly name: string;
+
+  constructor(input: Create<%= className %>Input) {
+    super();
+    this.organizationId = input.organizationId;
+    this.userId = input.userId;
+    this.name = input.name;
+  }
+}
+
+@CommandHandler(Create<%= className %>Command)
+export class Create<%= className %>Handler implements ICommandHandler<
+  Create<%= className %>Command,
+  <%= className %>Dto
+> {
+  constructor(
+    @Inject(<%= constantName %>_REPOSITORY) private readonly <%= propertyName %>: <%= className %>RepositoryPort,
+  ) {}
+
+  async execute(command: Create<%= className %>Command): Promise<<%= className %>Dto> {
+    const record = {
+      id: generateId(),
+      organizationId: command.organizationId,
+      userId: command.userId,
+      name: command.name,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    await this.<%= propertyName %>.create(record);
+
+    return record;
+  }
+}

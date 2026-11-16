@@ -1,0 +1,8 @@
+export { <%= className %>Module } from './<%= fileName %>.module';
+<% if (withCqrs) { %>export { Create<%= className %>Command } from './create-<%= fileName %>';
+export type { <%= className %>Dto } from './create-<%= fileName %>';
+export {
+  List<%= className %>Query,
+  type List<%= className %>Result,
+} from './list-<%= fileName %>';
+<% } %>

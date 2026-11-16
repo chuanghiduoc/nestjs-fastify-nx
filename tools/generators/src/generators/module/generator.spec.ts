@@ -1,8 +1,54 @@
 /// <reference types="vitest/globals" />
 import { createTreeWithEmptyWorkspace } from '@nx/devkit/testing';
-import { readProjectConfiguration, readJson } from '@nx/devkit';
+import { getProjects, readJson, readProjectConfiguration } from '@nx/devkit';
 import type { Tree } from '@nx/devkit';
+import * as ts from 'typescript';
 import { moduleGenerator } from './generator';
+
+const GROUP_PACKAGE = 'libs/modules/package.json';
+
+interface ParsedSourceFile extends ts.SourceFile {
+  readonly parseDiagnostics: readonly ts.Diagnostic[];
+}
+
+function listTypeScriptFiles(tree: Tree, dir: string): string[] {
+  return tree.children(dir).flatMap((entry) => {
+    const entryPath = `${dir}/${entry}`;
+    if (!tree.isFile(entryPath)) {
+      return listTypeScriptFiles(tree, entryPath);
+    }
+    return entryPath.endsWith('.ts') ? [entryPath] : [];
+  });
+}
+
+function parseTypeScriptFile(tree: Tree, file: string): ParsedSourceFile {
+  const source = tree.read(file, 'utf-8') ?? '';
+  return ts.createSourceFile(
+    file,
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS,
+  ) as ParsedSourceFile;
+}
+
+function seedGroupPackage(tree: Tree): void {
+  tree.write(
+    GROUP_PACKAGE,
+    JSON.stringify(
+      {
+        name: '@nestjs-fastify-nx/modules',
+        version: '0.0.1',
+        private: true,
+        exports: {
+          '.': { types: './src/index.ts', default: './src/index.ts' },
+        },
+      },
+      null,
+      2,
+    ),
+  );
+}
 
 describe('module generator', () => {
   let tree: Tree;
@@ -29,254 +75,303 @@ describe('module generator', () => {
     if (!tree.exists('tsconfig.base.json')) {
       tree.write('tsconfig.base.json', JSON.stringify({ compilerOptions: { composite: true } }));
     }
+    seedGroupPackage(tree);
   });
 
-  it('creates project configuration tagged with scope only', async () => {
-    await moduleGenerator(tree, { name: 'orders', directory: 'modules', withCqrs: true });
+  describe('folder modules (directory=modules)', () => {
+    it('scaffolds a flat folder under libs/modules/src and registers no project', async () => {
+      await moduleGenerator(tree, { name: 'orders', directory: 'modules', withCqrs: true });
 
-    const config = readProjectConfiguration(tree, 'modules-orders');
-    expect(config.root).toBe('libs/modules/orders');
-    expect(config.tags).toEqual(['scope:modules']);
-    // No explicit targets — typecheck/lint/test are all inferred by the
-    // workspace plugins from tsconfig/eslint/vitest configs.
-    expect(config.targets?.['test']).toBeUndefined();
+      expect(tree.exists('libs/modules/src/orders/orders.module.ts')).toBe(true);
+      expect([...getProjects(tree).keys()]).not.toContain('modules-orders');
+      expect(() => readProjectConfiguration(tree, 'modules-orders')).toThrow();
+    });
+
+    it('emits the leaf file set with colocated operations and adapter', async () => {
+      await moduleGenerator(tree, { name: 'orders', directory: 'modules', withCqrs: true });
+      const folder = 'libs/modules/src/orders';
+
+      for (const file of [
+        'orders.module.ts',
+        'index.ts',
+        'orders.controller.ts',
+        'orders.controller.spec.ts',
+        'orders.dto.ts',
+        'create-orders.ts',
+        'list-orders.ts',
+        'orders-repository.port.ts',
+        'prisma-orders.repository.ts',
+        'prisma-orders.repository.integration.spec.ts',
+      ]) {
+        expect(tree.exists(`${folder}/${file}`), file).toBe(true);
+      }
+    });
+
+    it('generates parsable TypeScript for kebab-case names', async () => {
+      await moduleGenerator(tree, { name: 'order-items', directory: 'modules', withCqrs: true });
+      const folder = 'libs/modules/src/order-items';
+
+      const create = tree.read(`${folder}/create-order-items.ts`, 'utf-8') ?? '';
+      expect(create).toContain('private readonly orderItems:');
+      expect(create).toContain('this.orderItems.create(');
+      expect(create).not.toContain('order-items.');
+
+      const repository = tree.read(`${folder}/prisma-order-items.repository.ts`, 'utf-8') ?? '';
+      expect(repository).toContain('.orderItems.create(');
+      expect(repository).toContain('.orderItems.findFirst(');
+      expect(repository).toContain('.orderItems.findMany(');
+      expect(repository).not.toContain('order-items.');
+
+      const generated = listTypeScriptFiles(tree, folder);
+      expect(generated.length).toBeGreaterThan(0);
+      for (const file of generated) {
+        expect(parseTypeScriptFile(tree, file).parseDiagnostics, file).toEqual([]);
+      }
+    });
+
+    it('emits no project files: no package.json, project.json, tsconfig or vitest config', async () => {
+      await moduleGenerator(tree, { name: 'orders', directory: 'modules', withCqrs: true });
+
+      expect(tree.exists('libs/modules/orders')).toBe(false);
+      for (const file of [
+        'package.json',
+        'project.json',
+        'tsconfig.json',
+        'tsconfig.lib.json',
+        'tsconfig.spec.json',
+        'vitest.config.mts',
+      ]) {
+        expect(tree.exists(`libs/modules/src/orders/${file}`), file).toBe(false);
+      }
+    });
+
+    it('adds the exports-map entry to the group package.json and keeps entries sorted', async () => {
+      seedGroupPackageModified(tree);
+      await moduleGenerator(tree, { name: 'orders', directory: 'modules', withCqrs: true });
+
+      const pkg = readJson(tree, GROUP_PACKAGE);
+      expect(pkg.exports['./orders']).toEqual({
+        types: './src/orders/index.ts',
+        default: './src/orders/index.ts',
+      });
+      expect(pkg.exports['./users']).toEqual({
+        types: './src/users/index.ts',
+        default: './src/users/index.ts',
+      });
+      expect(pkg.exports['.']).toEqual({ types: './src/index.ts', default: './src/index.ts' });
+      expect(Object.keys(pkg.exports)).toEqual([...Object.keys(pkg.exports)].sort());
+    });
+
+    it('colocates the command with its handler in one operation file', async () => {
+      await moduleGenerator(tree, { name: 'orders', directory: 'modules', withCqrs: true });
+
+      const create = tree.read('libs/modules/src/orders/create-orders.ts', 'utf-8') ?? '';
+      expect(create).toContain(
+        "import { Command, CommandHandler, type ICommandHandler } from '@nestjs/cqrs'",
+      );
+      expect(create).toContain('export class CreateOrdersCommand extends Command<OrdersDto>');
+      expect(create).toContain('@CommandHandler(CreateOrdersCommand)');
+      expect(create).toMatch(/implements ICommandHandler<\s*CreateOrdersCommand,\s*OrdersDto\s*>/);
+      expect(create).not.toContain('@Injectable()');
+    });
+
+    it('colocates the query with its handler in one operation file', async () => {
+      await moduleGenerator(tree, { name: 'orders', directory: 'modules', withCqrs: true });
+
+      const list = tree.read('libs/modules/src/orders/list-orders.ts', 'utf-8') ?? '';
+      expect(list).toContain(
+        "import { Query, QueryHandler, type IQueryHandler } from '@nestjs/cqrs'",
+      );
+      expect(list).toContain('export class ListOrdersQuery extends Query<ListOrdersResult>');
+      expect(list).toContain('@QueryHandler(ListOrdersQuery)');
+      expect(list).toMatch(/implements IQueryHandler<\s*ListOrdersQuery,\s*ListOrdersResult\s*>/);
+    });
+
+    it('registers the repository provider and both handlers in the module', async () => {
+      await moduleGenerator(tree, { name: 'orders', directory: 'modules', withCqrs: true });
+
+      const moduleFile = tree.read('libs/modules/src/orders/orders.module.ts', 'utf-8') ?? '';
+      expect(moduleFile).toContain('ORDERS_REPOSITORY, useClass: PrismaOrdersRepository');
+      expect(moduleFile).toContain('ListOrdersHandler');
+      expect(moduleFile).toContain('CreateOrdersHandler');
+    });
+
+    it('exports commands and queries from the barrel, never handlers', async () => {
+      await moduleGenerator(tree, { name: 'orders', directory: 'modules', withCqrs: true });
+
+      const barrel = tree.read('libs/modules/src/orders/index.ts', 'utf-8') ?? '';
+      expect(barrel).toContain('CreateOrdersCommand');
+      expect(barrel).toContain('ListOrdersQuery');
+      expect(barrel).not.toContain('CreateOrdersHandler');
+      expect(barrel).not.toContain('ListOrdersHandler');
+    });
+
+    it('controller dispatches through the buses and validates the id param declaratively', async () => {
+      await moduleGenerator(tree, { name: 'orders', directory: 'modules', withCqrs: true });
+
+      const controller = tree.read('libs/modules/src/orders/orders.controller.ts', 'utf-8') ?? '';
+      expect(controller).toContain('@CurrentUser()');
+      expect(controller).toContain('requireOrganizationId(');
+      expect(controller).toContain('new CreateOrdersCommand');
+      expect(controller).toContain('new ListOrdersQuery');
+      expect(controller).toContain('@ApiPaginatedResponse');
+      expect(controller).not.toContain('ApiOkResponse');
+    });
+
+    it('repository adapter targets the prisma delegate with tenant scoping and keyset pagination', async () => {
+      await moduleGenerator(tree, { name: 'orders', directory: 'modules', withCqrs: true });
+
+      const repo = tree.read('libs/modules/src/orders/prisma-orders.repository.ts', 'utf-8') ?? '';
+      expect(repo).toContain('implements OrdersRepositoryPort');
+      expect(repo).toMatch(/writeTarget\(\)\.orders\.create/);
+      expect(repo).toMatch(/writeTarget\(\)\.orders\.findFirst/);
+      expect(repo).toMatch(/readTarget\(\)\.orders\.findMany/);
+      expect(repo).toContain('organizationId');
+      expect(repo).toContain('keysetAfter');
+      expect(repo).toContain('takePage');
+    });
+
+    it('integration spec colocates with the adapter and uses the Testcontainers harness', async () => {
+      await moduleGenerator(tree, { name: 'orders', directory: 'modules', withCqrs: true });
+
+      const spec =
+        tree.read(
+          'libs/modules/src/orders/prisma-orders.repository.integration.spec.ts',
+          'utf-8',
+        ) ?? '';
+      expect(spec).toContain('createTestContainers');
+      expect(spec).toContain('DatabaseCleaner');
+      expect(spec).toContain('PrismaOrdersRepository');
+    });
+
+    it('presentation dto is the only template file importing @nestjs/swagger', async () => {
+      await moduleGenerator(tree, { name: 'orders', directory: 'modules', withCqrs: true });
+
+      for (const file of [
+        'orders.module.ts',
+        'index.ts',
+        'create-orders.ts',
+        'list-orders.ts',
+        'orders-repository.port.ts',
+        'prisma-orders.repository.ts',
+      ]) {
+        const content = tree.read(`libs/modules/src/orders/${file}`, 'utf-8') ?? '';
+        expect(content, `${file} must not import @nestjs/swagger`).not.toContain('@nestjs/swagger');
+      }
+      const dto = tree.read('libs/modules/src/orders/orders.dto.ts', 'utf-8') ?? '';
+      expect(dto).toContain('@nestjs/swagger');
+    });
+
+    it('emitted files contain zero TODO or FIXME', async () => {
+      await moduleGenerator(tree, { name: 'orders', directory: 'modules', withCqrs: true });
+
+      const filesToCheck = [
+        'orders.module.ts',
+        'index.ts',
+        'orders.controller.ts',
+        'orders.dto.ts',
+        'create-orders.ts',
+        'list-orders.ts',
+        'prisma-orders.repository.ts',
+        'prisma-orders.repository.integration.spec.ts',
+      ];
+      for (const file of filesToCheck) {
+        const content = tree.read(`libs/modules/src/orders/${file}`, 'utf-8') ?? '';
+        expect(content, `${file} contains TODO`).not.toMatch(/\bTODO\b/);
+        expect(content, `${file} contains FIXME`).not.toMatch(/\bFIXME\b/);
+      }
+    });
+
+    it('refuses to scaffold over an existing folder', async () => {
+      tree.write('libs/modules/src/orders/orders.module.ts', 'export {}');
+
+      await expect(
+        moduleGenerator(tree, { name: 'orders', directory: 'modules', withCqrs: true }),
+      ).rejects.toThrow(/already exists/);
+    });
+
+    it('withCqrs=false omits the colocated operation files and still wires the repository', async () => {
+      await moduleGenerator(tree, { name: 'orders', directory: 'modules', withCqrs: false });
+
+      expect(tree.exists('libs/modules/src/orders/create-orders.ts')).toBe(false);
+      expect(tree.exists('libs/modules/src/orders/list-orders.ts')).toBe(false);
+
+      const moduleFile = tree.read('libs/modules/src/orders/orders.module.ts', 'utf-8') ?? '';
+      expect(moduleFile).toContain('ORDERS_REPOSITORY, useClass: PrismaOrdersRepository');
+      expect(moduleFile).not.toContain('CreateOrdersHandler');
+      expect(moduleFile).not.toContain('ListOrdersHandler');
+
+      const controller = tree.read('libs/modules/src/orders/orders.controller.ts', 'utf-8') ?? '';
+      expect(controller).toContain('list(');
+      expect(controller).not.toMatch(/CommandBus|QueryBus/);
+      expect(controller).not.toContain("from '@nestjs/cqrs'");
+
+      for (const file of listTypeScriptFiles(tree, 'libs/modules/src/orders')) {
+        expect(parseTypeScriptFile(tree, file).parseDiagnostics, file).toEqual([]);
+      }
+    });
   });
 
-  it('emits package, tsconfig, and vitest config for workspace linking and inference', async () => {
-    await moduleGenerator(tree, { name: 'orders', directory: 'modules', withCqrs: false });
+  describe('composition modules (directory=composition, unchanged orchestrator scaffold)', () => {
+    it('places module under libs/composition with correct project name and scope tag', async () => {
+      await moduleGenerator(tree, { name: 'admin', directory: 'composition', withCqrs: false });
 
-    expect(tree.exists('libs/modules/orders/tsconfig.json')).toBe(true);
-    expect(tree.exists('libs/modules/orders/tsconfig.lib.json')).toBe(true);
-    expect(tree.exists('libs/modules/orders/tsconfig.spec.json')).toBe(true);
-    expect(tree.exists('libs/modules/orders/vitest.config.mts')).toBe(true);
-    expect(tree.exists('libs/modules/orders/package.json')).toBe(true);
+      const config = readProjectConfiguration(tree, 'composition-admin');
+      expect(config.root).toBe('libs/composition/admin');
+      expect(config.tags).toEqual(['scope:composition']);
+      expect(tree.exists('libs/composition/admin/src/admin.module.ts')).toBe(true);
+    });
 
-    const specConfig = readJson(tree, 'libs/modules/orders/tsconfig.spec.json');
-    expect(specConfig.extends).toBe('../../../tsconfig.base.json');
-    expect(specConfig.compilerOptions.outDir).toBe('./out-tsc/spec');
-    expect(specConfig.include).not.toContain('vitest.config.mts');
+    it('composition module workspace package uses composition- prefix', async () => {
+      await moduleGenerator(tree, { name: 'billing', directory: 'composition', withCqrs: false });
 
-    const packageJson = readJson(tree, 'libs/modules/orders/package.json');
-    expect(packageJson.name).toBe('@nestjs-fastify-nx/modules-orders');
-    expect(packageJson.exports['.'].types).toBe('./src/index.ts');
-    expect(packageJson.devDependencies['@nestjs-fastify-nx/shared']).toBe('workspace:*');
+      const packageJson = readJson(tree, 'libs/composition/billing/package.json');
+      expect(packageJson.name).toBe('@nestjs-fastify-nx/composition-billing');
+    });
 
-    const vitestConfig = tree.read('libs/modules/orders/vitest.config.mts', 'utf-8');
-    expect(vitestConfig).toContain("from '../../../vitest.shared'");
-    expect(vitestConfig).toContain("name: 'modules-orders'");
-    expect(vitestConfig).toContain("rootDir: 'libs/modules/orders'");
-    expect(vitestConfig).toContain('integrationTests: true');
-    expect(vitestConfig).not.toContain('defineConfig');
-    expect(vitestConfig).not.toContain('tsconfigPaths');
-  });
+    it('emits project files (package.json, tsconfig, vitest config) for composition', async () => {
+      await moduleGenerator(tree, { name: 'billing', directory: 'composition', withCqrs: false });
 
-  it('generates full DDD domain layer', async () => {
-    await moduleGenerator(tree, { name: 'products', directory: 'modules', withCqrs: false });
+      for (const file of [
+        'package.json',
+        'tsconfig.json',
+        'tsconfig.lib.json',
+        'tsconfig.spec.json',
+        'vitest.config.mts',
+      ]) {
+        expect(tree.exists(`libs/composition/billing/${file}`), file).toBe(true);
+      }
+    });
 
-    expect(tree.exists('libs/modules/products/src/domain/entities/products.entity.ts')).toBe(true);
-    expect(tree.exists('libs/modules/products/src/domain/entities/products.entity.spec.ts')).toBe(
-      true,
-    );
-    expect(tree.exists('libs/modules/products/src/domain/value-objects/.gitkeep')).toBe(true);
-    expect(tree.exists('libs/modules/products/src/domain/events/products-created.event.ts')).toBe(
-      true,
-    );
-    expect(tree.exists('libs/modules/products/src/domain/ports/products-repository.port.ts')).toBe(
-      true,
-    );
-  });
+    it('never generates domain/application/infrastructure/testing layers for composition', async () => {
+      await moduleGenerator(tree, { name: 'billing', directory: 'composition', withCqrs: false });
 
-  it('generates full DDD application layer placeholders', async () => {
-    await moduleGenerator(tree, { name: 'products', directory: 'modules', withCqrs: false });
+      for (const layer of ['domain', 'application', 'infrastructure', 'testing']) {
+        expect(tree.exists(`libs/composition/billing/src/${layer}`), layer).toBe(false);
+      }
+      expect(tree.exists('libs/composition/billing/src/billing-listeners.module.ts')).toBe(false);
+    });
 
-    expect(tree.exists('libs/modules/products/src/application/queries/.gitkeep')).toBe(true);
-    expect(tree.exists('libs/modules/products/src/application/listeners/.gitkeep')).toBe(true);
-    expect(tree.exists('libs/modules/products/src/application/ports/.gitkeep')).toBe(true);
-    expect(tree.exists('libs/modules/products/src/application/dto/.gitkeep')).toBe(true);
-  });
+    it('leaves the group package.json untouched', async () => {
+      await moduleGenerator(tree, { name: 'admin', directory: 'composition', withCqrs: false });
 
-  it('generates infrastructure repository', async () => {
-    await moduleGenerator(tree, { name: 'products', directory: 'modules', withCqrs: false });
+      const pkg = readJson(tree, GROUP_PACKAGE);
+      expect(Object.keys(pkg.exports)).toEqual(['.']);
+    });
 
-    expect(
-      tree.exists(
-        'libs/modules/products/src/infrastructure/repositories/prisma-products.repository.ts',
-      ),
-    ).toBe(true);
-  });
+    it('names the vitest project after the resolved project name', async () => {
+      await moduleGenerator(tree, { name: 'billing', directory: 'composition', withCqrs: false });
 
-  it('generates presentation layer with dto placeholder', async () => {
-    await moduleGenerator(tree, { name: 'products', directory: 'modules', withCqrs: false });
-
-    expect(
-      tree.exists('libs/modules/products/src/presentation/controllers/products.controller.ts'),
-    ).toBe(true);
-    expect(
-      tree.exists('libs/modules/products/src/presentation/controllers/products.controller.spec.ts'),
-    ).toBe(true);
-    expect(tree.exists('libs/modules/products/src/presentation/dto/.gitkeep')).toBe(true);
-  });
-
-  it('generates testing layer (factory + mock repository)', async () => {
-    await moduleGenerator(tree, { name: 'products', directory: 'modules', withCqrs: false });
-
-    expect(tree.exists('libs/modules/products/src/testing/products.factory.ts')).toBe(true);
-    expect(tree.exists('libs/modules/products/src/testing/mock-products-repository.ts')).toBe(true);
-  });
-
-  it('pairs every scaffolded source file that carries logic with a spec', async () => {
-    await moduleGenerator(tree, { name: 'products', directory: 'modules', withCqrs: true });
-    const src = 'libs/modules/products/src';
-
-    for (const spec of [
-      'application/commands/create-products/create-products.handler.spec.ts',
-      'domain/entities/products.entity.spec.ts',
-      'domain/events/products-created.event.spec.ts',
-      'infrastructure/repositories/prisma-products.repository.spec.ts',
-      'presentation/controllers/products.controller.spec.ts',
-      'testing/mock-products-repository.spec.ts',
-    ]) {
-      expect(tree.exists(`${src}/${spec}`), spec).toBe(true);
-    }
-    expect(tree.read(`${src}/domain/events/products-created.event.spec.ts`, 'utf-8')).toContain(
-      "toBe('PRODUCTS_CREATED')",
-    );
-  });
-
-  it('emitted files contain zero TODO or FIXME', async () => {
-    await moduleGenerator(tree, { name: 'products', directory: 'modules', withCqrs: true });
-
-    const filesToCheck = [
-      'libs/modules/products/src/infrastructure/repositories/prisma-products.repository.ts',
-      'libs/modules/products/src/presentation/controllers/products.controller.ts',
-      'libs/modules/products/src/products.module.ts',
-      'libs/modules/products/src/domain/entities/products.entity.ts',
-    ];
-
-    for (const file of filesToCheck) {
-      const content = tree.read(file, 'utf-8') ?? '';
-      expect(content, `${file} contains TODO`).not.toMatch(/\bTODO\b/);
-      expect(content, `${file} contains FIXME`).not.toMatch(/\bFIXME\b/);
-    }
-  });
-
-  it('does not add legacy path aliases to tsconfig.base.json', async () => {
-    await moduleGenerator(tree, { name: 'invoices', directory: 'modules', withCqrs: false });
-
-    const tsconfig = readJson(tree, 'tsconfig.base.json');
-    expect(tsconfig.compilerOptions.paths?.['@nestjs-fastify-nx/modules-invoices']).toBeUndefined();
-  });
-
-  it('generates cqrs command files when withCqrs=true', async () => {
-    await moduleGenerator(tree, { name: 'tasks', directory: 'modules', withCqrs: true });
-
-    expect(
-      tree.exists(
-        'libs/modules/tasks/src/application/commands/create-tasks/create-tasks.command.ts',
-      ),
-    ).toBe(true);
-    expect(
-      tree.exists(
-        'libs/modules/tasks/src/application/commands/create-tasks/create-tasks.handler.ts',
-      ),
-    ).toBe(true);
-  });
-
-  // Asserting on content, not file existence: a handler missing @CommandHandler still emits both
-  // files, but the explorer never registers it and commandBus.execute fails at runtime.
-  it('generates a command that extends Command<TResult> so execute() infers the return type', async () => {
-    await moduleGenerator(tree, { name: 'tasks', directory: 'modules', withCqrs: true });
-
-    const command = tree.read(
-      'libs/modules/tasks/src/application/commands/create-tasks/create-tasks.command.ts',
-      'utf-8',
-    );
-    expect(command).toContain("import { Command } from '@nestjs/cqrs'");
-    expect(command).toContain('export class CreateTasksCommand extends Command<Tasks>');
-  });
-
-  it('generates a handler decorated with @CommandHandler and implementing ICommandHandler', async () => {
-    await moduleGenerator(tree, { name: 'tasks', directory: 'modules', withCqrs: true });
-
-    const handler = tree.read(
-      'libs/modules/tasks/src/application/commands/create-tasks/create-tasks.handler.ts',
-      'utf-8',
-    );
-    expect(handler).toContain('@CommandHandler(CreateTasksCommand)');
-    // Whitespace-tolerant: prettier reflows the generic argument list across lines.
-    expect(handler).toMatch(/implements ICommandHandler<\s*CreateTasksCommand,\s*Tasks\s*>/);
-    // @Injectable would register the class as a plain provider and hide the missing bus wiring.
-    expect(handler).not.toContain('@Injectable()');
-  });
-
-  it('exports the command from the public barrel so other scopes can dispatch it', async () => {
-    await moduleGenerator(tree, { name: 'tasks', directory: 'modules', withCqrs: true });
-
-    const barrel = tree.read('libs/modules/tasks/src/index.ts', 'utf-8');
-    expect(barrel).toContain('CreateTasksCommand');
-  });
-
-  it('keeps handlers out of every barrel', async () => {
-    await moduleGenerator(tree, { name: 'tasks', directory: 'modules', withCqrs: true });
-
-    expect(tree.read('libs/modules/tasks/src/index.ts', 'utf-8')).not.toContain(
-      'CreateTasksHandler',
-    );
-    expect(tree.read('libs/modules/tasks/src/application/index.ts', 'utf-8')).not.toContain(
-      'CreateTasksHandler',
-    );
-  });
-
-  it('names the vitest project after the resolved project name, not a hardcoded modules- prefix', async () => {
-    await moduleGenerator(tree, { name: 'billing', directory: 'composition', withCqrs: false });
-
-    const vitestConfig = tree.read('libs/composition/billing/vitest.config.mts', 'utf-8');
-    expect(vitestConfig).toContain("name: 'composition-billing'");
-    expect(vitestConfig).not.toContain('modules-billing');
-  });
-
-  it('emits controller with correct route segment (no pluralisation)', async () => {
-    await moduleGenerator(tree, { name: 'users', directory: 'modules', withCqrs: false });
-
-    const controller = tree.read(
-      'libs/modules/users/src/presentation/controllers/users.controller.ts',
-      'utf-8',
-    );
-    expect(controller).toContain("@Controller('users')");
-    expect(controller).not.toContain("@Controller('userss')");
-  });
-
-  it('places module under libs/composition with correct project name and scope tag when directory=composition', async () => {
-    await moduleGenerator(tree, { name: 'admin', directory: 'composition', withCqrs: false });
-
-    const config = readProjectConfiguration(tree, 'composition-admin');
-    expect(config.root).toBe('libs/composition/admin');
-    expect(config.tags).toEqual(['scope:composition']);
-    expect(tree.exists('libs/composition/admin/src/admin.module.ts')).toBe(true);
-  });
-
-  it('composition module workspace package uses composition- prefix', async () => {
-    await moduleGenerator(tree, { name: 'billing', directory: 'composition', withCqrs: false });
-
-    const packageJson = readJson(tree, 'libs/composition/billing/package.json');
-    expect(packageJson.name).toBe('@nestjs-fastify-nx/composition-billing');
-  });
-
-  it('modules module gets scope:modules tag (boundary integrity)', async () => {
-    await moduleGenerator(tree, { name: 'orders', directory: 'modules', withCqrs: false });
-
-    const config = readProjectConfiguration(tree, 'modules-orders');
-    expect(config.tags).toContain('scope:modules');
-    expect(config.tags).not.toContain('scope:composition');
+      const vitestConfig = tree.read('libs/composition/billing/vitest.config.mts', 'utf-8') ?? '';
+      expect(vitestConfig).toContain("name: 'composition-billing'");
+    });
   });
 
   describe('directory normalization — backward compat full paths', () => {
     it('accepts "libs/modules" as equivalent to "modules"', async () => {
       await moduleGenerator(tree, { name: 'payments', directory: 'libs/modules', withCqrs: false });
 
-      const config = readProjectConfiguration(tree, 'modules-payments');
-      expect(config.root).toBe('libs/modules/payments');
-      expect(config.tags).toContain('scope:modules');
+      expect(tree.exists('libs/modules/src/payments/payments.module.ts')).toBe(true);
     });
 
     it('accepts "libs/composition" as equivalent to "composition"', async () => {
@@ -304,3 +399,22 @@ describe('module generator', () => {
     });
   });
 });
+
+function seedGroupPackageModified(tree: Tree): void {
+  tree.write(
+    GROUP_PACKAGE,
+    JSON.stringify(
+      {
+        name: '@nestjs-fastify-nx/modules',
+        version: '0.0.1',
+        private: true,
+        exports: {
+          '.': { types: './src/index.ts', default: './src/index.ts' },
+          './users': { types: './src/users/index.ts', default: './src/users/index.ts' },
+        },
+      },
+      null,
+      2,
+    ),
+  );
+}

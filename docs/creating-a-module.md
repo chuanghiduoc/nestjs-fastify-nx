@@ -1,79 +1,84 @@
 # Creating a New Module
 
 > Want to understand what each generated file is _for_ before you start? Read
-> [`domain-module-anatomy.md`](./domain-module-anatomy.md) — it explains every
-> file type (entity, value object, port, command/query handler, repository,
-> controller, DTOs, module, barrel) with real examples from the `users` module.
+> [`domain-module-anatomy.md`](./domain-module-anatomy.md) — it explains the tier
+> ladder (leaf → engine → composition) and every file type with real examples
+> from the `users` and `sessions` modules.
 
 ## Quick Start
 
 ```bash
-pnpm gen:module products             # shortcut → libs/modules/products (+ nx sync)
-pnpm gen:composition billing-report  # shortcut → libs/composition/billing-report
+pnpm gen:module products             # → libs/modules/src/products/ (folder in the group)
+pnpm gen:composition billing-report  # → libs/composition/billing-report (Nx project)
 
 # Equivalent raw generator:
 pnpm nx g @nestjs-fastify-nx/tools-generators:module --name=products
 ```
 
-`pnpm gen:module` / `pnpm gen:composition` wrap the generator and run `nx sync` for you (see `scripts/gen-module.sh`). The name must be kebab-case (e.g. `products`, `order-items`). To remove a module later: `pnpm rm:project modules-products`.
+`pnpm gen:module` scaffolds a **leaf-tier folder** inside the `libs/modules` group and wires the `./products` entry into `libs/modules/package.json`'s exports map. No project is created, nothing is installed, nothing is synced — the import `@nestjs-fastify-nx/modules/products` resolves immediately through the group package. The name must be kebab-case (e.g. `products`, `order-items`).
+
+`pnpm gen:composition` scaffolds an orchestrator **project** under `libs/composition/` and runs `nx sync` + `pnpm install` (a new package needs its workspace symlink before it resolves).
+
+To remove a folder module later: `pnpm rm:module products` (deletes the folder, drops the exports-map entry, prints leftover references). To remove a composition project: `pnpm rm:project composition-billing-report`.
 
 Omit `--name` on the raw generator to be prompted interactively. Use `--directory=composition` when the module is a cross-cutting aggregate (default is `modules`).
 
-## Generated Structure
+## Generated Structure (leaf)
 
 ```
-libs/modules/products/
-├── src/
-│   ├── domain/
-│   │   ├── entities/
-│   │   │   ├── products.entity.ts
-│   │   │   └── products.entity.spec.ts
-│   │   ├── value-objects/          # add VOs here as needed
-│   │   ├── events/
-│   │   │   ├── products-created.event.ts
-│   │   │   └── products-created.event.spec.ts
-│   │   ├── ports/
-│   │   │   └── products-repository.port.ts
-│   │   └── index.ts
-│   ├── application/
-│   │   ├── commands/
-│   │   │   └── create-products/    # (withCqrs=true, default)
-│   │   │       ├── create-products.command.ts
-│   │   │       ├── create-products.handler.ts
-│   │   │       └── create-products.handler.spec.ts
-│   │   ├── queries/                # add query handlers here
-│   │   ├── listeners/              # add domain-event listeners here
-│   │   ├── dto/                    # application-layer DTOs
-│   │   └── index.ts
-│   ├── infrastructure/
-│   │   ├── repositories/
-│   │   │   ├── prisma-products.repository.ts
-│   │   │   └── prisma-products.repository.spec.ts   # skeleton: asserts NotImplemented
-│   │   └── index.ts
-│   ├── presentation/
-│   │   ├── controllers/
-│   │   │   ├── products.controller.ts
-│   │   │   └── products.controller.spec.ts
-│   │   ├── dto/                    # request/response DTOs
-│   │   └── index.ts
-│   ├── testing/
-│   │   ├── products.factory.ts     # in-memory test data builder
-│   │   ├── mock-products-repository.ts
-│   │   └── mock-products-repository.spec.ts
-│   ├── products.module.ts
-│   └── index.ts                   # public barrel — export only what consumers need
-├── tsconfig.json
-├── tsconfig.lib.json
-├── tsconfig.spec.json
-└── vitest.config.mts
+libs/modules/src/products/
+├── products.module.ts                        # wires repository + handlers + controller
+├── index.ts                                  # public barrel — commands/queries + result types, never handlers
+├── products.controller.ts + .spec.ts          # HTTP surface, bus dispatch, bus-mock unit spec
+├── products.dto.ts                            # presentation DTOs — class-validator here, @ApiProperty on responses
+├── create-products.ts                        # colocated: CreateProductsCommand + @CommandHandler
+├── list-products.ts                          # colocated: ListProductsQuery + @QueryHandler
+├── products-repository.port.ts               # repository port + record type
+├── prisma-products.repository.ts             # Prisma adapter against the `products` delegate
+└── prisma-products.repository.integration.spec.ts   # Testcontainers spec, colocated with the adapter
 ```
 
-Every scaffolded file that carries logic ships with a spec, so a fresh module passes the 60%
-coverage gate in CI before any feature code exists. When you implement
-`prisma-products.repository.ts`, replace its skeleton spec with a Testcontainers
-`*.integration.spec.ts` — database tests never mock Prisma.
+The scaffold references the `products` Prisma delegate, so **add the Prisma model and migrate before the first typecheck** (`pnpm db:migrate --name add-products`). The integration spec is a real Testcontainers test of create / tenant-scoped find / keyset pagination — adapt its seed once the model's columns are final.
 
-The import path `@nestjs-fastify-nx/modules-products` resolves through the pnpm workspace link created by the generated `package.json`. There are no `tsconfig` path aliases; run `pnpm install` (the generator script does it) before the first import resolves.
+The import path `@nestjs-fastify-nx/modules/products` resolves through the group package's exports map — there is no `tsconfig` path alias and no per-context package. Typecheck, lint and test run on the **group project**: `pnpm nx run modules:typecheck`, `pnpm nx test modules` (the colocated unit specs) and `pnpm nx test modules -- integration` for the integration lane (`integration` is a vitest filename filter that matches only `*.integration.spec.ts`).
+
+## Promoting a leaf to engine
+
+When a context grows real invariants or listeners, promote it to the **engine tier**: add the DDD subfolders it actually needs inside the same context folder and move files into them. The engine tier **may** grow these folders — the tree below is the full menu, not a contract. Each engine owns a different subset of the optional folders: `upload` has `application/ports/` + `infrastructure/dispatchers/`, `users` has `domain/value-objects/`, and several engines have no `application/dto/`. The group project, exports map, barrel entry, and module wiring keep working — only import paths change.
+
+```
+libs/modules/src/products/
+├── products.module.ts               # stays at the context root
+├── products-listeners.module.ts     # optional listeners-only slice (worker/scheduler hosts)
+├── index.ts                         # stays at the context root; exports point into subfolders
+├── domain/
+│   ├── entities/products.entity.ts (+ spec)
+│   ├── value-objects/
+│   └── ports/products-repository.port.ts
+├── application/
+│   ├── commands/create-products.ts            # Command + @CommandHandler, colocated
+│   ├── queries/list-products.ts               # Query + @QueryHandler, colocated
+│   ├── listeners/product-registered.listener.ts (+ spec)
+│   ├── ports/                                 # outbound capabilities (queue dispatchers, …)
+│   └── dto/                                   # shared pure-TS result types
+├── infrastructure/
+│   ├── repositories/prisma-products.repository.ts (+ colocated .integration.spec.ts)
+│   └── dispatchers/
+├── presentation/
+│   ├── controllers/products.controller.ts (+ spec)
+│   └── dto/products.dto.ts
+└── testing/                         # in-memory repositories, factories
+```
+
+The generator does not scaffold the engine tier — promotion is a deliberate manual move (or `pnpm gen:module` a fresh leaf and port the code). Live examples: `libs/modules/src/users`, `libs/modules/src/organizations`, `libs/modules/src/upload` — each one keeps a different subset of the optional folders.
+
+## Removing a module
+
+```bash
+pnpm rm:module products
+```
+
+Deletes `libs/modules/src/products/`, drops the `./products` exports-map entry, and greps `apps/` + `libs/` for leftover `@nestjs-fastify-nx/modules/products` references so nothing dangles. Finish with the affected gate.
 
 ## Composition Variant
 
@@ -84,32 +89,28 @@ Use `--directory=composition` for cross-cutting aggregates that orchestrate mult
 pnpm nx g @nestjs-fastify-nx/tools-generators:module --name=billing-report --directory=composition
 ```
 
-This produces the same DDD layout under `libs/composition/billing-report/` with two differences:
+This produces a presentation-only project under `libs/composition/billing-report/`:
 
-- Project name: `composition-billing-report` (not `modules-billing-report`)
-- Scope tag: `scope:composition` (not `scope:modules`)
+- Project name: `composition-billing-report`
+- Scope tag: `scope:composition`
 - Import path: `@nestjs-fastify-nx/composition-billing-report`
+- Owns `package.json`, `tsconfig.*`, `vitest.config.mts` — a real Nx project, unlike a folder module
 
 **When to use composition vs modules:**
 
-| Use `modules`                                  | Use `composition`                                            |
+| Use `modules` (folder)                         | Use `composition` (project)                                  |
 | ---------------------------------------------- | ------------------------------------------------------------ |
 | Single bounded context (users, orders, upload) | Orchestrates 2+ bounded contexts                             |
 | Owns its own Prisma model                      | Aggregates read-models from other modules                    |
-| Other modules must NOT import it               | Composition can depend on `scope:modules`; never the reverse |
+| Other contexts must NOT import it              | Composition can depend on `scope:modules`; never the reverse |
 
-The `@nx/enforce-module-boundaries` rule enforces this: `scope:modules` libs cannot import from each
-other, but `scope:composition` can import from `scope:modules`. If you find yourself needing
-cross-module imports inside a `scope:modules` lib, extract a composition lib instead.
+Context-to-context edges inside the group are enforced by the `modules-scale/no-cross-context-imports` ESLint rule; scope-level edges by `@nx/enforce-module-boundaries`. If you find yourself needing a cross-context import inside `libs/modules/src/<ctxA>/`, extract a composition lib instead — or, when data must arrive reactively, a domain event through the outbox.
 
-## Targets are inferred — no config to edit
+## Targets — group project vs composition project
 
-The generator writes **no explicit targets** into `project.json`. `typecheck` (from
-`tsconfig.json`), `lint` (from the workspace ESLint config), and `test` (from
-`vitest.config.mts`) are all inferred by the workspace Nx plugins. Libraries have no `build`
-target: the four apps bundle library source through webpack. A freshly generated module is
-picked up automatically — you never hand-edit `nx.json` or add a `test` target. Run `nx test <name>`,
-`nx lint <name>`, etc. immediately.
+A folder module has **no project and no targets of its own**. The single `modules` project owns `typecheck`, `lint`, and `test` for every context folder; its `vitest.config.mts` sets the aggregate coverage threshold and runs the integration lane. Nothing to edit, nothing to register.
+
+A composition project's targets are inferred from its config files — `typecheck` (from `tsconfig.json`), `lint` (from the workspace ESLint config), and `test` (from `vitest.config.mts`). Libraries have no `build` target: the four apps bundle library source through webpack.
 
 ## Infrastructure & generic libraries
 
@@ -129,12 +130,12 @@ storage…), not DDD bounded contexts, so the DDD module generator doesn't apply
 
 ## After Generating
 
-1. **Add Prisma model** to `prisma/schema.prisma`
-2. **Run migration**: `pnpm prisma migrate dev --name add-products`
-3. **Implement repository**: replace `NotImplementedException` stubs in `prisma-products.repository.ts`
-4. **Expand entity** with domain properties and business rules
+1. **Add Prisma model** to `prisma/schema.prisma` (the scaffold's port and adapter assume it)
+2. **Run migration**: `pnpm db:migrate --name add-products`
+3. **Adapt the record type**: adjust `products-repository.port.ts` and the adapter's `create`/`find` shapes to the real columns
+4. **Add permissions** if the surface is tenant-facing: declare them in `@nestjs-fastify-nx/shared` and decorate the controller with `@RequirePermission()`
 5. **Wire into AppModule**: add `ProductsModule` to `apps/api/src/app/app.module.ts`
-6. **Run tests**: `pnpm nx test modules-products`
+6. **Run tests**: `pnpm nx test modules`
 
 ## Example: Domain Entity with Business Rules
 
@@ -221,16 +222,17 @@ export class ProductsController {
 
 `ProblemDetailsValidationPipe` is wired globally — no extra setup needed for 422 validation envelopes.
 
-**Register handlers**: add each `@QueryHandler`/`@CommandHandler` to the module's `providers` array (they do not need to be exported). The `CqrsModule.forRoot()` explorer in each runnable app (`api`, `scheduler`, `codegen-app`) discovers them across all loaded modules — no manual bus registration.
+**Register handlers**: add each `@QueryHandler`/`@CommandHandler` to the module's `providers` array (they do not need to be exported). The `CqrsModule.forRoot()` explorer in each runnable app (`api`, `worker`, `scheduler`) and the `codegen-app` module used for spec export discovers them across all loaded modules — no manual bus registration.
 
 ## Testing Pattern
 
-- **Unit tests**: inject `MockProductsRepository` from `libs/modules/products/src/testing/`
-- **Integration tests**: use Testcontainers via `@nestjs-fastify-nx/testing` (real Postgres)
+- **Unit tests**: colocated `*.spec.ts` next to the unit under test — controller specs mock the buses, handler specs use the context's in-memory repository (add one when a handler needs it)
+- **Integration tests**: the colocated `prisma-<ctx>.repository.integration.spec.ts` uses Testcontainers via `@nestjs-fastify-nx/testing` (real Postgres) — database tests never mock Prisma
 - **E2E tests**: add spec at `apps/api/e2e/products.e2e-spec.ts` — assert on the resource directly
   (`res.body.id`), and on `application/problem+json` for error paths (`res.body.code`, `res.body.errors[]`)
 
 ```bash
-pnpm nx test modules-products          # unit
-pnpm nx run api:e2e                    # e2e (requires Docker)
+pnpm nx test modules                # group unit lane (every context folder)
+pnpm nx test modules -- integration # group integration lane (requires Docker)
+pnpm nx run api:e2e                 # e2e (requires Docker)
 ```

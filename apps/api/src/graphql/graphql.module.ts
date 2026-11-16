@@ -4,7 +4,7 @@ import { GraphQLModule } from '@nestjs/graphql';
 import { MercuriusDriver, type MercuriusDriverConfig } from '@nestjs/mercurius';
 import { NoSchemaIntrospectionCustomRule } from 'graphql';
 import type { FastifyReply, FastifyRequest } from 'fastify';
-import { UsersModule } from '@nestjs-fastify-nx/modules-users';
+import { UsersModule } from '@nestjs-fastify-nx/modules/users';
 import type { EnvConfig } from '../config/env.validation';
 import { GRAPHQL_PATH } from '../common/http/global-prefix';
 import { createGraphqlErrorFormatter } from './graphql-error-formatter';

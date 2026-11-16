@@ -5,7 +5,7 @@ import type { Job } from 'bullmq';
 import {
   VerifyUploadCommand,
   type UploadVerificationRequest,
-} from '@nestjs-fastify-nx/modules-upload';
+} from '@nestjs-fastify-nx/modules/upload';
 import { UploadVerificationProcessor } from './upload-verification.processor';
 
 function build() {

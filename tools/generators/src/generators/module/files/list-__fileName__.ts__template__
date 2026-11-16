@@ -1,0 +1,53 @@
+import { Inject } from '@nestjs/common';
+import { Query, QueryHandler, type IQueryHandler } from '@nestjs/cqrs';
+import { DomainException } from '@nestjs-fastify-nx/core';
+import { invalidCursorProblem } from '@nestjs-fastify-nx/contracts';
+import { decodeCursor, lastCursorOf, type DecodedCursor } from '@nestjs-fastify-nx/shared';
+import {
+  <%= constantName %>_REPOSITORY,
+  type <%= className %>RepositoryPort,
+} from './<%= fileName %>-repository.port';
+import type { <%= className %>Dto } from './create-<%= fileName %>';
+
+export interface List<%= className %>Result {
+  data: <%= className %>Dto[];
+  hasMore: boolean;
+  lastCursor: string | null;
+}
+
+export class List<%= className %>Query extends Query<List<%= className %>Result> {
+  constructor(
+    readonly organizationId: string,
+    readonly limit: number,
+    readonly startingAfter?: string,
+  ) {
+    super();
+  }
+}
+
+@QueryHandler(List<%= className %>Query)
+export class List<%= className %>Handler implements IQueryHandler<
+  List<%= className %>Query,
+  List<%= className %>Result
+> {
+  constructor(
+    @Inject(<%= constantName %>_REPOSITORY) private readonly <%= propertyName %>: <%= className %>RepositoryPort,
+  ) {}
+
+  async execute(query: List<%= className %>Query): Promise<List<%= className %>Result> {
+    const { items, hasMore } = await this.<%= propertyName %>.findAllCursor({
+      organizationId: query.organizationId,
+      startingAfter: this.decodeStartingAfter(query.startingAfter),
+      limit: query.limit,
+    });
+
+    return { data: items, hasMore, lastCursor: lastCursorOf(items) };
+  }
+
+  private decodeStartingAfter(raw?: string): DecodedCursor | undefined {
+    if (!raw) return undefined;
+    const decoded = decodeCursor(raw);
+    if (!decoded) throw new DomainException(invalidCursorProblem());
+    return decoded;
+  }
+}

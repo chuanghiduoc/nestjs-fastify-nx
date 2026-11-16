@@ -18,14 +18,18 @@ delete `node_modules\@prisma\engines` and reinstall.
 means a project file moved or a new dependency was added. Run
 `pnpm nx sync` once and commit the resulting changes.
 
-### Vitest cannot find tests in `libs/modules/*`
+### Vitest cannot find tests in a new folder module
 
-There is no `vitest.workspace.ts`. Each project owns a `vitest.config.mts`
-built with `defineVitestConfig` from the workspace-root `vitest.shared.ts`, and
-the `@nx/vitest` plugin infers the project's `test` target from it. If a newly
-generated lib has no `test` target, confirm `vitest.config.mts` exists, then run
-`pnpm nx reset` so the daemon re-reads the project graph. The include/exclude
-globals live in `vitest.shared.ts`, not in the per-project file.
+Folder modules have **no project and no `vitest.config.mts` of their own**. The
+single `libs/modules/vitest.config.mts` (its `rootDir` is `libs/modules`) picks
+a new `src/<context>/**/*.spec.ts` up automatically. Standalone libs
+(`libs/infra/*`, `libs/core`, composition projects) keep their own
+`vitest.config.mts` built with `defineVitestConfig` from the workspace-root
+`vitest.shared.ts`, and the `@nx/vitest` plugin infers their `test` target from
+it. If a new standalone lib has no `test` target, confirm its
+`vitest.config.mts` exists, then run `pnpm nx reset` so the daemon re-reads the
+project graph. The include/exclude globals live in `vitest.shared.ts`, not in
+the per-project file.
 
 ### `cannot find module '@nestjs-fastify-nx/...'` after a fresh checkout
 
@@ -54,9 +58,9 @@ move so pnpm recreates the workspace link.
 
 Symptom: `Cannot find module from apps/api/src/common/upload`.
 
-Cause: upload module moved from `apps/api/src/common/upload` to `libs/modules/upload`.
+Cause: upload module moved from `apps/api/src/common/upload` to `libs/modules/src/upload`.
 
-Resolution: update your import to `@nestjs-fastify-nx/modules-upload`.
+Resolution: update your import to `@nestjs-fastify-nx/modules/upload`.
 
 ### Nx marks a build/typecheck "flaky", or `tsc` errors with TS6305 / EPERM
 
@@ -501,7 +505,7 @@ and security hardening steps.
 `AuditLog` rows are written by `AuditLogListener`, which subscribes to
 specific events. If an action you expected to be audited is missing, check
 that the producing aggregate publishes an event registered in the listener's
-event map (see `libs/modules/audit-log/src/application/listeners/`).
+event map (see `libs/modules/src/audit-log/application/listeners/audit-log.listener.ts`).
 
 ## Inspecting slow queries
 

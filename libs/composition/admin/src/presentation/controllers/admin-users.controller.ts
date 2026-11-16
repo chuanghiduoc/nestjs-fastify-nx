@@ -18,7 +18,7 @@ import {
   ListUsersCursorFilterDto,
   ListUsersCursorQuery,
   UserListItemResponseDto,
-} from '@nestjs-fastify-nx/modules-users';
+} from '@nestjs-fastify-nx/modules/users';
 
 const ADMIN_USERS_PATH = '/api/v1/admin/users';
 

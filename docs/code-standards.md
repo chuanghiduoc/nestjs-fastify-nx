@@ -108,10 +108,10 @@ strings, so a literal silently ships English to every locale.
 **Collect a module's exceptions in one file when more than one handler raises the same failure.**
 A module with several handlers that each answer `not_found` for the same aggregate ends up with the
 same twenty-line literal repeated, and the copies drift. Put small factories in
-`application/<context>-errors.ts` and import them:
+`<context>-errors.ts` and import them:
 
 ```typescript
-// libs/modules/organizations/src/application/organization-errors.ts
+// libs/modules/src/organizations/application/organization-errors.ts
 export const roleInUse = () =>
   conflict(
     'role',
@@ -151,7 +151,7 @@ application layer import `@nestjs/swagger`, and the layering is gone the moment 
 must stay callable from REST, GraphQL, or a queue consumer without dragging HTTP along.
 
 ```typescript
-// libs/modules/users/src/application/dto/user-list-item.dto.ts
+// libs/modules/src/users/application/dto/user-list-item.dto.ts
 // Pure TS. No @nestjs/swagger, no class-validator — nothing framework-shaped.
 export interface UserListItemDto {
   id: string;
@@ -159,8 +159,8 @@ export interface UserListItemDto {
   role: string;
 }
 
-// libs/modules/users/src/presentation/dto/auth-response.dto.ts
-// Swagger + class-validator decorators live here and nowhere else.
+// libs/modules/src/users/presentation/dto/auth-response.dto.ts
+// Swagger decorators live under presentation/ — this DTO and the controller.
 export class UserListItemResponseDto {
   @ApiProperty()
   id!: string;
@@ -173,20 +173,24 @@ export class UserListItemResponseDto {
 }
 ```
 
-The duplication is the point: it buys the boundary. Sensitive columns are kept out of responses by
+The duplication is the point: it buys the boundary. **Placement rule:**
+`class-validator` belongs only in DTO files; `@nestjs/swagger` only in
+presentation DTOs and controllers (`<ctx>.dto.ts` / `<ctx>.controller.ts` in a
+leaf, `presentation/**` in an engine). Operation files and ports stay
+framework-agnostic. Sensitive columns are kept out of responses by
 projecting into a purpose-built DTO that simply never declares them — not by `@Exclude`.
 
 **Re-export from module barrel only what is public.** Keep domain entities and repositories private. Command/query **handlers stay private** — they are registered with the global `CommandBus`/`QueryBus` by `CqrsModule.forRoot()`'s explorer and are never injected directly. Export the **command/query classes + their result types** so composition libs and cross-cutting resolvers can dispatch `commandBus.execute(new SomeCommand(...))` / `queryBus.execute(new SomeQuery(...))`. Queries/commands extend `Query<TResult>`/`Command<TResult>` so `execute()` infers the return type.
 
 ```typescript
-// libs/modules/users/src/index.ts
+// libs/modules/src/users/index.ts
 export { UsersModule } from './users.module';
 export type { UserListItemDto } from './application/dto/user-list-item.dto';
 // Query class + result type — consumers dispatch via QueryBus, no handler injection.
 export {
   GetUserProfileQuery,
   type UserProfileResult,
-} from './application/queries/get-user-profile/get-user-profile.query';
+} from './application/queries/get-user-profile';
 
 // Don't export: User (entity), UserRepository, GetUserProfileHandler (handlers are
 // found by the CqrsModule explorer, so they never need to leave the module).
@@ -194,11 +198,11 @@ export {
 
 ## Module Boundaries
 
-**Enforce strict DDD boundaries** via `@nx/enforce-module-boundaries` in `eslint.config.mjs`. Lint errors on imports must be fixed by extracting to a composition lib — never relax the rule.
+**Enforce strict DDD boundaries** via `@nx/enforce-module-boundaries` plus the custom `modules-scale/no-cross-context-imports` rule in `eslint.config.mjs`. Lint errors on imports must be fixed by extracting to a composition lib — never relax the rule.
 
 ```typescript
 // DO: composition lib aggregates
-// libs/composition/admin/src/controllers/admin-users.controller.ts
+// libs/composition/admin/src/presentation/controllers/admin-users.controller.ts
 export class AdminUsersController {
   constructor(
     private readonly usersModule: UsersModule,
@@ -206,8 +210,8 @@ export class AdminUsersController {
   ) {}
 }
 
-// DON'T: direct cross-module imports
-// libs/modules/users/src/… → libs/modules/audit-log/src/…
+// DON'T: direct cross-context imports
+// libs/modules/src/users/… → libs/modules/src/audit-log/…
 ```
 
 See `docs/architecture.md` → Module Boundary Rules for the full dependency matrix.
@@ -254,7 +258,7 @@ describe('CreateUserHandler', () => {
 
 | Convention     | Style       | Example                           |
 | -------------- | ----------- | --------------------------------- |
-| File names     | kebab-case  | `create-user.handler.ts`          |
+| File names     | kebab-case  | `create-user.ts`                  |
 | Class names    | PascalCase  | `CreateUserHandler`               |
 | Function names | camelCase   | `publishUserRegistered()`         |
 | JSON keys      | camelCase   | `{ userId: '...', email: '...' }` |

@@ -1,0 +1,213 @@
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Req,
+  Res,
+} from '@nestjs/common';
+import { CommandBus, QueryBus } from '@nestjs/cqrs';
+import type { FastifyRequest, FastifyReply } from 'fastify';
+import { Throttle } from '@nestjs/throttler';
+import {
+  ApiBody,
+  ApiConsumes,
+  ApiCookieAuth,
+  ApiCreatedResponse,
+  ApiNoContentResponse,
+  ApiOkResponse,
+  ApiOperation,
+  ApiParam,
+  ApiTags,
+} from '@nestjs/swagger';
+import { ClsService } from 'nestjs-cls';
+import { REQUEST_CONTEXT_KEYS, type RequestContextStore } from '@nestjs-fastify-nx/core';
+import {
+  ApiCommonErrors,
+  ApiUnpaginatedListResponse,
+  ListResponseDto,
+  toUnpaginatedListResponse,
+} from '@nestjs-fastify-nx/contracts';
+import { PERMISSIONS } from '@nestjs-fastify-nx/shared';
+import { RequirePermission } from '@nestjs-fastify-nx/infra-authorization';
+import type { PresignedUpload, StoredFile } from '@nestjs-fastify-nx/infra-storage';
+import {
+  CurrentUser,
+  requireOrganizationId,
+  type AuthenticatedSession,
+} from '@nestjs-fastify-nx/infra-auth';
+import { PresignUploadCommand } from '../../application/commands/presign-upload';
+import { ConfirmUploadCommand } from '../../application/commands/confirm-upload';
+import { DeleteUploadCommand } from '../../application/commands/delete-upload';
+import { PresignUploadDto } from '../dto/presign-upload.dto';
+import { ConfirmUploadDto } from '../dto/confirm-upload.dto';
+import { PresignedUploadDto } from '../dto/presigned-upload.dto';
+import { StoredFileDto } from '../dto/stored-file.dto';
+import {
+  prepareMultipartUpload,
+  prepareMultipartUploads,
+  type PreparedMultipartUpload,
+} from '../multipart/prepare-multipart-upload';
+import { UploadFilesCommand } from '../../application/commands/upload-files';
+import { GetUploadQuery } from '../../application/queries/get-upload';
+
+const PRESIGN_LIMIT = { default: { limit: 10, ttl: 60_000 } };
+const CONFIRM_LIMIT = { default: { limit: 30, ttl: 60_000 } };
+const DELETE_LIMIT = { default: { limit: 30, ttl: 60_000 } };
+
+@ApiTags('upload')
+@Controller('upload')
+@ApiCookieAuth('session')
+export class UploadController {
+  constructor(
+    private readonly commandBus: CommandBus,
+    private readonly cls: ClsService<RequestContextStore>,
+    private readonly queryBus: QueryBus,
+  ) {}
+
+  private buildUploadFilesCommand(
+    user: AuthenticatedSession,
+    files: readonly PreparedMultipartUpload[],
+  ): UploadFilesCommand {
+    return new UploadFilesCommand({
+      organizationId: requireOrganizationId(user),
+      userId: user.userId,
+      files,
+      signal: files[0].signal,
+      correlationId: this.cls.get(REQUEST_CONTEXT_KEYS.correlationId),
+    });
+  }
+
+  @Post()
+  @RequirePermission(PERMISSIONS.FILE_CREATE)
+  @Throttle(PRESIGN_LIMIT)
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['file'],
+      properties: { file: { type: 'string', format: 'binary' } },
+    },
+  })
+  @ApiCreatedResponse({ type: StoredFileDto })
+  @ApiCommonErrors({ payloadTooLarge: true })
+  @ApiOperation({ summary: 'Upload one file through the backend.' })
+  async upload(
+    @CurrentUser() user: AuthenticatedSession,
+    @Req() request: FastifyRequest,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ): Promise<StoredFile> {
+    const file = await prepareMultipartUpload(request, reply);
+    const [result] = await this.commandBus.execute(this.buildUploadFilesCommand(user, [file]));
+    return result;
+  }
+
+  @Post('batch')
+  @RequirePermission(PERMISSIONS.FILE_CREATE)
+  @Throttle(PRESIGN_LIMIT)
+  @HttpCode(HttpStatus.OK)
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['file'],
+      properties: { file: { type: 'array', items: { type: 'string', format: 'binary' } } },
+    },
+  })
+  @ApiUnpaginatedListResponse(StoredFileDto, {
+    description: 'Batch result. Not paginated.',
+  })
+  @ApiCommonErrors({ payloadTooLarge: true })
+  @ApiOperation({ summary: 'Upload multiple files through the backend as one batch.' })
+  async uploadBatch(
+    @CurrentUser() user: AuthenticatedSession,
+    @Req() request: FastifyRequest,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ): Promise<ListResponseDto<StoredFile>> {
+    const files = await prepareMultipartUploads(request, reply);
+    const data = await this.commandBus.execute(this.buildUploadFilesCommand(user, files));
+    return toUnpaginatedListResponse('/api/v1/upload/batch', data);
+  }
+
+  @Get(':id')
+  @ApiOkResponse({ type: StoredFileDto })
+  @ApiCommonErrors({ notFound: true })
+  @ApiOperation({ summary: 'Read upload status and a download URL when ready.' })
+  getUpload(
+    @CurrentUser() user: AuthenticatedSession,
+    @Param('id', new ParseUUIDPipe({ version: '7' })) id: string,
+  ): Promise<StoredFile> {
+    return this.queryBus.execute(new GetUploadQuery(requireOrganizationId(user), user.userId, id));
+  }
+
+  @Post('presign')
+  @RequirePermission(PERMISSIONS.FILE_CREATE)
+  @Throttle(PRESIGN_LIMIT)
+  @ApiOperation({
+    summary: 'Issue a presigned POST policy for a direct browser→S3 upload.',
+    description:
+      'Returns the URL and form fields a browser must POST `multipart/form-data` to. The policy pins `Content-Type` and the configured size cap (UPLOAD_MAX_FILE_BYTES); mismatches are rejected by S3 itself. After the upload completes, call `POST /upload/confirm` with the returned `key`.',
+  })
+  @ApiBody({ type: PresignUploadDto })
+  @ApiCreatedResponse({ type: PresignedUploadDto, description: 'Presigned upload policy issued.' })
+  @ApiCommonErrors()
+  presign(
+    @CurrentUser() user: AuthenticatedSession,
+    @Body() dto: PresignUploadDto,
+  ): Promise<PresignedUpload> {
+    return this.commandBus.execute(new PresignUploadCommand(user.userId, dto.contentType));
+  }
+
+  @Post('confirm')
+  @RequirePermission(PERMISSIONS.FILE_CREATE)
+  @Throttle(CONFIRM_LIMIT)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Confirm a direct upload completed and return its stored metadata.',
+    description:
+      'HEADs the object to verify the client actually uploaded within the policy. Rejects keys that are missing, oversized, or have a mime type outside the allow-list (defends against a stale/replayed presign).',
+  })
+  @ApiBody({ type: ConfirmUploadDto })
+  @ApiOkResponse({ type: StoredFileDto, description: 'Object verified.' })
+  // 409: a concurrent confirm of the same key can still be finalizing when this one recovers it.
+  // notFound: cross-user or missing key.
+  @ApiCommonErrors({ notFound: true, conflict: true })
+  confirm(
+    @CurrentUser() user: AuthenticatedSession,
+    @Body() dto: ConfirmUploadDto,
+  ): Promise<StoredFile> {
+    // BullMQ processing runs outside the request's CLS context, so the id travels on the command.
+    const correlationId = this.cls.get(REQUEST_CONTEXT_KEYS.correlationId);
+    return this.commandBus.execute(
+      new ConfirmUploadCommand(requireOrganizationId(user), user.userId, dto.key, correlationId),
+    );
+  }
+
+  // No @RequirePermission here: file:delete can also be held owner-scoped, and the guard evaluates
+  // permissions without a resource. Gating at the route would 403 an owner of the file before the
+  // handler could apply that grant, so the check lives in DeleteUploadHandler where the file is loaded.
+  @Delete(':id')
+  @Throttle(DELETE_LIMIT)
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({
+    summary: 'Soft-delete an uploaded file.',
+    description:
+      'Marks the file deleted and hides it from every read immediately. The object stays in storage until the scheduler purges it after STORED_FILE_PURGE_AFTER_DAYS, so a mistaken delete is recoverable until then. Repeating the call on an already-deleted file is a no-op.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Stored file id (UUID v7).' })
+  @ApiNoContentResponse({ description: 'File soft-deleted.' })
+  @ApiCommonErrors({ notFound: true })
+  deleteFile(
+    @CurrentUser() user: AuthenticatedSession,
+    @Param('id', new ParseUUIDPipe({ version: '7' })) id: string,
+  ): Promise<void> {
+    return this.commandBus.execute(
+      new DeleteUploadCommand(requireOrganizationId(user), user.userId, id),
+    );
+  }
+}

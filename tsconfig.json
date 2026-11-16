@@ -9,22 +9,13 @@
       "path": "./libs/composition/admin"
     },
     {
-      "path": "./libs/modules/audit-log"
-    },
-    {
       "path": "./libs/infra/messaging"
     },
     {
       "path": "./libs/infra/database"
     },
     {
-      "path": "./libs/modules/upload"
-    },
-    {
       "path": "./libs/infra/storage"
-    },
-    {
-      "path": "./libs/modules/users"
     },
     {
       "path": "./libs/infra/redis"
@@ -69,22 +60,7 @@
       "path": "./libs/infra/authorization"
     },
     {
-      "path": "./libs/modules/feature-flags"
-    },
-    {
-      "path": "./libs/modules/notifications"
-    },
-    {
-      "path": "./libs/modules/organizations"
-    },
-    {
-      "path": "./libs/modules/api-keys"
-    },
-    {
-      "path": "./libs/modules/sessions"
-    },
-    {
-      "path": "./libs/modules/terms"
+      "path": "./libs/modules"
     }
   ]
 }

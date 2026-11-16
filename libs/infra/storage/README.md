@@ -40,7 +40,7 @@ change in this lib, and tests can substitute an in-memory implementation
 without touching Nest's DI tree.
 
 Three places inject `STORAGE_PORT` today: the upload controller
-(`libs/modules/upload`) issues policies and confirms objects, the worker's
+(`libs/modules/src/upload`) issues policies and confirms objects, the worker's
 `upload-verification.processor` re-reads magic bytes off the final object, and
 the scheduler's `stored-file-cleanup.task` deletes abandoned ones. Feature
 modules that attach a file to a domain entity do the same and store the

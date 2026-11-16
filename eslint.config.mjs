@@ -2,6 +2,7 @@
 import nxPlugin from '@nx/eslint-plugin';
 import tseslint from 'typescript-eslint';
 import { defineConfig } from 'eslint/config';
+import noCrossContextImports from './tools/generators/src/eslint-rules/no-cross-context-imports.mjs';
 
 // @nx/eslint-plugin ships tseslint-flavoured flat configs; defineConfig's stricter
 // ConfigWithExtends doesn't accept them nominally, so widen once at the boundary.
@@ -297,6 +298,55 @@ export default defineConfig(
         projectService: false,
         project: false,
       },
+    },
+  },
+
+  // Context boundaries inside the libs/modules group: no cross-context imports, no deep imports
+  // past a context barrel, and the group root stays group-internal. Nx tags no longer see
+  // contexts once they are folders, so this rule owns that edge.
+  {
+    files: ['**/*.ts'],
+    ignores: ['**/*.spec.ts', '**/*.test.ts', '**/*.integration.ts', '**/e2e/**'],
+    plugins: {
+      'modules-scale': { rules: { 'no-cross-context-imports': noCrossContextImports } },
+    },
+    rules: {
+      'modules-scale/no-cross-context-imports': 'error',
+    },
+  },
+
+  // Leaf contexts are flat folders: the application layer is the operation files themselves, so
+  // the framework-agnostic DTO rule keys on what a file IS (dto/controller/presentation) instead of
+  // the folder it sits in. Engine contexts keep their presentation/ folder — their
+  // application/dto/*.dto.ts files stay pure TS, so only leaf-root *.dto.ts, *.controller.ts and
+  // */presentation/** are exempt; module files are not.
+  {
+    files: ['libs/modules/src/**/*.ts'],
+    ignores: [
+      '**/presentation/**',
+      'libs/modules/src/*/*.dto.ts',
+      '**/*.controller.ts',
+      '**/*.spec.ts',
+      '**/*.integration.ts',
+    ],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: '@nestjs/swagger',
+              message:
+                'Swagger decorators belong under presentation/ (DTOs and controllers) - operation files, ports and modules stay framework-agnostic.',
+            },
+            {
+              name: 'class-validator',
+              message:
+                'class-validator belongs in DTO files only - operation files, ports and modules stay framework-agnostic.',
+            },
+          ],
+        },
+      ],
     },
   },
 );

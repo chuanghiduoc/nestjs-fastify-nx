@@ -1,0 +1,31 @@
+import type { DecodedCursor } from '@nestjs-fastify-nx/shared';
+
+export const <%= constantName %>_REPOSITORY = Symbol('<%= constantName %>_REPOSITORY');
+
+export interface <%= className %>Record {
+  readonly id: string;
+  readonly organizationId: string;
+  readonly userId: string;
+  readonly name: string;
+  readonly createdAt: Date;
+  readonly updatedAt: Date;
+}
+
+export interface Find<%= className %>CursorOptions {
+  readonly organizationId: string;
+  readonly startingAfter?: DecodedCursor;
+  readonly limit: number;
+}
+
+export interface Find<%= className %>CursorResult {
+  readonly items: <%= className %>Record[];
+  readonly hasMore: boolean;
+}
+
+export interface <%= className %>RepositoryPort {
+  create(record: <%= className %>Record): Promise<void>;
+  findById(organizationId: string, id: string): Promise<<%= className %>Record | null>;
+  findAllCursor(
+    options: Find<%= className %>CursorOptions,
+  ): Promise<Find<%= className %>CursorResult>;
+}
