@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { ConfigService } from '@nestjs/config';
-import { LocalStorageAdapter, type StoragePort } from '@nestjs-fastify-nx/infra-storage';
+import { LocalStorageAdapter, type StoragePort } from '@nestjs-fastify-nx/infra/storage';
 import { LocalStagingExpiryTask } from './local-staging-expiry.task';
 import type { SchedulerLeaderService } from '../leadership/scheduler-leader.service';
 import type { SchedulerEnvConfig } from '../../config/env.validation';

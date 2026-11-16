@@ -5,7 +5,7 @@ import {
   deployTestMigrations,
 } from '@nestjs-fastify-nx/testing';
 import type { TestContainers } from '@nestjs-fastify-nx/testing';
-import { PrismaService } from '@nestjs-fastify-nx/infra-database';
+import { PrismaService } from '@nestjs-fastify-nx/infra/database';
 import { Notification } from './notification.entity';
 import { PrismaNotificationRepository } from './prisma-notification.repository';
 

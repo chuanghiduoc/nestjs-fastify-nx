@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { HeartbeatTask } from './heartbeat.task';
-import type { PrismaService } from '@nestjs-fastify-nx/infra-database';
+import type { PrismaService } from '@nestjs-fastify-nx/infra/database';
 
 /** Minimal PrismaService mock that covers the methods used by HeartbeatTask. */
 function makePrismaMock() {

@@ -1,7 +1,7 @@
 import type { ConfigService } from '@nestjs/config';
 import type { Server, Socket } from 'socket.io';
 import { describe, expect, it, vi } from 'vitest';
-import type { BetterAuthInstance } from '@nestjs-fastify-nx/infra-auth';
+import type { BetterAuthInstance } from '@nestjs-fastify-nx/infra/auth';
 import type Redis from 'ioredis';
 import { NotificationGateway } from './notification.gateway';
 

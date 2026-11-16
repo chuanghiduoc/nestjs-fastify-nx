@@ -19,7 +19,7 @@ import {
   type RequestContextStore,
 } from '@nestjs-fastify-nx/core';
 import { ERROR_CODES, I18N_KEYS, type ValidationErrorItemDto } from '@nestjs-fastify-nx/contracts';
-import { resolveRequestLocale, translateOrFallback } from '@nestjs-fastify-nx/infra-i18n';
+import { resolveRequestLocale, translateOrFallback } from '@nestjs-fastify-nx/infra/i18n';
 import { sanitizeUrlForLogging } from '@nestjs-fastify-nx/shared';
 import {
   buildProblemDetails,

@@ -6,7 +6,7 @@ import {
   type EventPublisherPort,
 } from '@nestjs-fastify-nx/core';
 import { ERROR_CODES, I18N_KEYS, fieldProblem } from '@nestjs-fastify-nx/contracts';
-import { PrismaService } from '@nestjs-fastify-nx/infra-database';
+import { PrismaService } from '@nestjs-fastify-nx/infra/database';
 import { DOMAIN_EVENTS, generateId } from '@nestjs-fastify-nx/shared';
 import {
   API_KEY_REPOSITORY,

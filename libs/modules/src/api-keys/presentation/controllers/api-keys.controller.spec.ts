@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { CommandBus, QueryBus } from '@nestjs/cqrs';
-import type { AuthenticatedSession } from '@nestjs-fastify-nx/infra-auth';
+import type { AuthenticatedSession } from '@nestjs-fastify-nx/infra/auth';
 import { PERMISSIONS, generateId } from '@nestjs-fastify-nx/shared';
 import { ApiKeysController } from './api-keys.controller';
 import { CreateApiKeyDto, ListApiKeysFilterDto } from '../dto/api-keys.dto';

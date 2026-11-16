@@ -24,8 +24,8 @@ import {
   ListResponseDto,
   toCursorListResponse,
 } from '@nestjs-fastify-nx/contracts';
-import { CurrentUser, type AuthenticatedSession } from '@nestjs-fastify-nx/infra-auth';
-import { RequirePermission } from '@nestjs-fastify-nx/infra-authorization';
+import { CurrentUser, type AuthenticatedSession } from '@nestjs-fastify-nx/infra/auth';
+import { RequirePermission } from '@nestjs-fastify-nx/infra/authorization';
 import { PERMISSIONS } from '@nestjs-fastify-nx/shared';
 import { ListMySessionsQuery } from './list-my-sessions';
 import { RevokeSessionCommand } from './revoke-session';

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AuthorizationPort, EventPublisherPort } from '@nestjs-fastify-nx/core';
-import type { PrismaService } from '@nestjs-fastify-nx/infra-database';
+import type { PrismaService } from '@nestjs-fastify-nx/infra/database';
 import { DOMAIN_EVENTS, PERMISSIONS, generateId, type Permission } from '@nestjs-fastify-nx/shared';
 import { ApiKey } from '../domain/entities/api-key.entity';
 import { InMemoryApiKeyRepository } from '../testing/in-memory-api-key-repository';

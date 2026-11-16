@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { PrismaService, type TransactionClient } from '@nestjs-fastify-nx/infra-database';
+import { PrismaService, type TransactionClient } from '@nestjs-fastify-nx/infra/database';
 import { SYSTEM_ROLES } from '@nestjs-fastify-nx/shared';
 import type { PersonalOrganizationRepositoryPort } from '../../domain/ports/personal-organization-repository.port';
 

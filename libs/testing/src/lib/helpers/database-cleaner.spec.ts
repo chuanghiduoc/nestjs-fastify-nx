@@ -1,12 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { PrismaClient } from '@nestjs-fastify-nx/infra-database';
-import { DatabaseCleaner } from './database-cleaner';
+import { DatabaseCleaner, type CleanerDatabase } from './database-cleaner';
 
 function prismaDouble(tables: string[]) {
   return {
     $queryRaw: vi.fn().mockResolvedValue(tables.map((tablename) => ({ tablename }))),
     $executeRawUnsafe: vi.fn().mockResolvedValue(1),
-  } as unknown as PrismaClient;
+  } as unknown as CleanerDatabase;
 }
 
 describe('DatabaseCleaner', () => {

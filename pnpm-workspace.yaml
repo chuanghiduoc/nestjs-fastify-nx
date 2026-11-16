@@ -2,7 +2,6 @@ packages:
   - 'apps/*'
   - 'libs/*'
   - 'libs/composition/*'
-  - 'libs/infra/*'
   - 'tools/*'
 
 # pnpm 11 ships these two on by default; kept explicit as the repo's stated posture.
@@ -46,7 +45,7 @@ peerDependencyRules:
     # version 12.0.0 itself pins, and the latest published) declares `export default EventEmitter2`
     # — the class, not a namespace. The re-export therefore resolves to an error type, `skipLibCheck`
     # hides the TS2339 at typecheck, and @typescript-eslint/no-unsafe-* correctly fails
-    # infra-messaging:lint. Runtime is unaffected (require('eventemitter2').EventEmitter2 is a
+    # infra:lint. Runtime is unaffected (require('eventemitter2').EventEmitter2 is a
     # function), so this is a typings-only upstream defect with no released fix. 3.1.0 exposes the
     # same emitAsync/@OnEvent surface this repo uses, with working types.
     '@nestjs/event-emitter>@nestjs/common': '12'

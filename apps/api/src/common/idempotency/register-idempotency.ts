@@ -6,7 +6,7 @@ import type Redis from 'ioredis';
 import { prepareMultipartUploads } from '@nestjs-fastify-nx/modules/upload';
 import { positiveIntEnv } from '@nestjs-fastify-nx/shared';
 import { ERROR_CODES } from '@nestjs-fastify-nx/contracts';
-import type { AuthenticatedSession, AuthenticatedApiKey } from '@nestjs-fastify-nx/infra-auth';
+import type { AuthenticatedSession, AuthenticatedApiKey } from '@nestjs-fastify-nx/infra/auth';
 import { sendProblem } from '../filters/problem-details.helper';
 import { ensureRequestIds } from '../logging/request-id';
 import { IdempotencyStore, type AcquireResult } from './idempotency-store';

@@ -116,7 +116,7 @@ Do **not** re-span HTTP/DB/redis (already auto-instrumented — you'd double-spa
 ## 5. Add a structured log field
 
 Request-scoped fields flow through the CLS store, surfaced by the pino `mixin`
-(`libs/infra/observability/src/lib/pino-logger-config.ts`) on **every** log line in the request —
+(`libs/infra/src/observability/lib/pino-logger-config.ts`) on **every** log line in the request —
 handlers, repositories, listeners — not just the HTTP access log. Add a field to
 `RequestContextStore` + set it in the CLS setup (`logging.module.ts`); the mixin picks it up.
 

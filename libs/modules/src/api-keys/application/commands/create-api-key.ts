@@ -6,7 +6,7 @@ import {
   type AuthorizationPort,
   type EventPublisherPort,
 } from '@nestjs-fastify-nx/core';
-import { PrismaService } from '@nestjs-fastify-nx/infra-database';
+import { PrismaService } from '@nestjs-fastify-nx/infra/database';
 import { DOMAIN_EVENTS, generateId } from '@nestjs-fastify-nx/shared';
 import {
   API_KEY_REPOSITORY,

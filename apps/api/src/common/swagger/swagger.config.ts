@@ -14,7 +14,7 @@ import {
   BETTER_AUTH_INSTANCE,
   sessionCookieName,
   type BetterAuthInstance,
-} from '@nestjs-fastify-nx/infra-auth';
+} from '@nestjs-fastify-nx/infra/auth';
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import ScalarApiReference from '@scalar/fastify-api-reference';
 import { STRICT_AUTH_PATHS } from '../auth-http/auth-rate-limits';

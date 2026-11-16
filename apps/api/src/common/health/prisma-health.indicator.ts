@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import type { HealthIndicatorResult } from '@nestjs/terminus';
 import { HealthIndicatorService } from '@nestjs/terminus';
-import { PrismaService } from '@nestjs-fastify-nx/infra-database';
+import { PrismaService } from '@nestjs-fastify-nx/infra/database';
 import { withTimeout } from '@nestjs-fastify-nx/shared';
 
 const PROBE_TIMEOUT_MS = 2_000;

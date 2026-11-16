@@ -31,8 +31,8 @@ import {
   CurrentUser,
   requireOrganizationId,
   type AuthenticatedSession,
-} from '@nestjs-fastify-nx/infra-auth';
-import { RequirePermission } from '@nestjs-fastify-nx/infra-authorization';
+} from '@nestjs-fastify-nx/infra/auth';
+import { RequirePermission } from '@nestjs-fastify-nx/infra/authorization';
 import { PERMISSIONS } from '@nestjs-fastify-nx/shared';
 import { ListTeamsQuery } from '../../application/queries/list-teams';
 import { CreateTeamCommand } from '../../application/commands/create-team';

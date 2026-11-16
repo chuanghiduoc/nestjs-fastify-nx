@@ -1,9 +1,12 @@
-import type { PrismaClient } from '@nestjs-fastify-nx/infra-database';
+export interface CleanerDatabase {
+  $executeRawUnsafe(query: string): Promise<unknown>;
+  $queryRaw<T = unknown>(strings: TemplateStringsArray, ...values: unknown[]): Promise<T>;
+}
 
 export class DatabaseCleaner {
   private truncateStatement: string | undefined;
 
-  constructor(private readonly prisma: PrismaClient) {}
+  constructor(private readonly prisma: CleanerDatabase) {}
 
   async truncateAll(): Promise<void> {
     this.truncateStatement ??= await this.buildTruncateStatement();

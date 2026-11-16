@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import { PrismaService } from '@nestjs-fastify-nx/infra-database';
-import { Prisma } from '@nestjs-fastify-nx/infra-database';
+import { PrismaService } from '@nestjs-fastify-nx/infra/database';
+import { Prisma } from '@nestjs-fastify-nx/infra/database';
 import { keysetAfter, takePage, type Permission } from '@nestjs-fastify-nx/shared';
 import { ApiKey } from '../../domain/entities/api-key.entity';
 import type {

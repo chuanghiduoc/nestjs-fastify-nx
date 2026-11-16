@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import type { Socket } from 'socket.io';
-import type { BetterAuthInstance } from '@nestjs-fastify-nx/infra-auth';
+import type { BetterAuthInstance } from '@nestjs-fastify-nx/infra/auth';
 import type Redis from 'ioredis';
 import {
   applyWsMessageRateLimit,

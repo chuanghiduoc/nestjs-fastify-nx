@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { CommandBus, QueryBus } from '@nestjs/cqrs';
-import type { AuthenticatedSession } from '@nestjs-fastify-nx/infra-auth';
+import type { AuthenticatedSession } from '@nestjs-fastify-nx/infra/auth';
 import { generateId } from '@nestjs-fastify-nx/shared';
 import { SessionsController } from './sessions.controller';
 import { ListSessionsFilterDto } from './sessions.dto';

@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import type { Logger } from 'nestjs-pino';
-import { closeQuietly } from '@nestjs-fastify-nx/infra-redis';
+import { closeQuietly } from '@nestjs-fastify-nx/infra/redis';
 import { redisReconnectStrategy } from '@nestjs-fastify-nx/shared';
 import Redis from 'ioredis';
 

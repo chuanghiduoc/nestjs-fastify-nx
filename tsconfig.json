@@ -3,34 +3,13 @@
   "files": [],
   "references": [
     {
-      "path": "./libs/infra/observability"
-    },
-    {
       "path": "./libs/composition/admin"
-    },
-    {
-      "path": "./libs/infra/messaging"
-    },
-    {
-      "path": "./libs/infra/database"
-    },
-    {
-      "path": "./libs/infra/storage"
-    },
-    {
-      "path": "./libs/infra/redis"
     },
     {
       "path": "./tools/generators"
     },
     {
       "path": "./libs/api-client"
-    },
-    {
-      "path": "./libs/infra/auth"
-    },
-    {
-      "path": "./libs/infra/i18n"
     },
     {
       "path": "./libs/contracts"
@@ -57,10 +36,10 @@
       "path": "./apps/api"
     },
     {
-      "path": "./libs/infra/authorization"
+      "path": "./libs/modules"
     },
     {
-      "path": "./libs/modules"
+      "path": "./libs/infra"
     }
   ]
 }

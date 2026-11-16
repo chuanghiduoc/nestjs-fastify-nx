@@ -5,7 +5,7 @@ import {
   deployTestMigrations,
 } from '@nestjs-fastify-nx/testing';
 import type { TestContainers } from '@nestjs-fastify-nx/testing';
-import { PrismaService } from '@nestjs-fastify-nx/infra-database';
+import { PrismaService } from '@nestjs-fastify-nx/infra/database';
 import { STORED_FILE_STATUS } from '@nestjs-fastify-nx/shared';
 import type { StoredFileProps } from '../../domain/entities/stored-file.entity';
 import { PrismaStoredFileRepository } from './prisma-stored-file.repository';

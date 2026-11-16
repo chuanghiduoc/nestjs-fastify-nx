@@ -1,6 +1,6 @@
 <% if (withCqrs) { %>import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CommandBus, QueryBus } from '@nestjs/cqrs';
-import type { AuthenticatedSession } from '@nestjs-fastify-nx/infra-auth';
+import type { AuthenticatedSession } from '@nestjs-fastify-nx/infra/auth';
 import { <%= className %>Controller } from './<%= fileName %>.controller';
 import { Create<%= className %>Command } from './create-<%= fileName %>';
 

@@ -164,7 +164,7 @@ between a lost click and a lost customer.
 Shipped: the permission catalog (`@nestjs-fastify-nx/shared`), the port and
 `applyAccessFilter` (`@nestjs-fastify-nx/core`), `PostgresPbacAdapter` and
 `InMemoryAuthorizationAdapter` with `PermissionGuard` / `@RequirePermission`
-(`@nestjs-fastify-nx/infra-authorization`), and the conformance suite — the same
+(`@nestjs-fastify-nx/infra/authorization`), and the conformance suite — the same
 16 behavioural tests run against both adapters, which is the evidence for the
 swap guarantee below.
 

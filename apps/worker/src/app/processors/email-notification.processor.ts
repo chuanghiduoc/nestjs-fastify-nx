@@ -10,7 +10,7 @@ import {
   positiveIntEnv,
   type EmailNotificationPayload,
 } from '@nestjs-fastify-nx/shared';
-import { REDIS_QUEUE_CLIENT } from '@nestjs-fastify-nx/infra-redis';
+import { REDIS_QUEUE_CLIENT } from '@nestjs-fastify-nx/infra/redis';
 import type { WorkerEnvConfig } from '../../config/env.validation';
 import { MailAdapter } from '../mail/mail.adapter';
 import { applyWorkerConcurrency } from './apply-worker-concurrency';

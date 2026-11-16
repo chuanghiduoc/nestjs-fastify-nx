@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { CommandBus, QueryBus } from '@nestjs/cqrs';
 import { CursorPaginationDto } from '@nestjs-fastify-nx/contracts';
-import type { AuthenticatedApiKey, AuthenticatedSession } from '@nestjs-fastify-nx/infra-auth';
+import type { AuthenticatedApiKey, AuthenticatedSession } from '@nestjs-fastify-nx/infra/auth';
 import { PERMISSIONS, generateId } from '@nestjs-fastify-nx/shared';
 import { FeatureFlagsController } from './feature-flags.controller';
 import { CreateFeatureFlagDto, UpdateFeatureFlagDto } from '../dto/feature-flags.dto';

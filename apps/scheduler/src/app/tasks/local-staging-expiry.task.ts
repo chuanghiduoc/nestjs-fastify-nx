@@ -5,7 +5,7 @@ import {
   LocalStorageAdapter,
   STORAGE_PORT,
   type StoragePort,
-} from '@nestjs-fastify-nx/infra-storage';
+} from '@nestjs-fastify-nx/infra/storage';
 import { SchedulerLeaderService } from '../leadership/scheduler-leader.service';
 import type { SchedulerEnvConfig } from '../../config/env.validation';
 

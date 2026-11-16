@@ -8,7 +8,7 @@
  * and headers come straight from environment variables — `env.validation.ts`
  * applies the defaults that Nest's ConfigService later surfaces.
  */
-import { startTracing } from '@nestjs-fastify-nx/infra-observability';
+import { startTracing } from '@nestjs-fastify-nx/infra/observability';
 
 // Process-specific fallback; OTEL_SERVICE_NAME overrides it when explicitly configured.
 startTracing({ serviceName: 'nestjs-fastify-api' });

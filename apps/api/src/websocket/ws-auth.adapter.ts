@@ -2,7 +2,7 @@ import type { IncomingMessage } from 'node:http';
 import type { Socket } from 'socket.io';
 import { fromNodeHeaders } from 'better-auth/node';
 import proxyaddr from 'proxy-addr';
-import type { BetterAuthInstance } from '@nestjs-fastify-nx/infra-auth';
+import type { BetterAuthInstance } from '@nestjs-fastify-nx/infra/auth';
 import { USER_STATUS } from '@nestjs-fastify-nx/shared';
 import type Redis from 'ioredis';
 import { extractBearerToken } from '../common/http/bearer-token';

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import type { PrismaService } from '@nestjs-fastify-nx/infra-database';
+import type { PrismaService } from '@nestjs-fastify-nx/infra/database';
 import { BatchedPurgeRunner } from './batched-purge.runner';
 import { InvitationCleanupTask } from './invitation-cleanup.task';
 

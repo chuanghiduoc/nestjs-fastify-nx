@@ -9,7 +9,7 @@ import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fa
 import fastifyMultipart from '@fastify/multipart';
 import type { FastifyReply } from 'fastify';
 import { DomainException } from '@nestjs-fastify-nx/core';
-import { STORAGE_PORT, type StoragePort } from '@nestjs-fastify-nx/infra-storage';
+import { STORAGE_PORT, type StoragePort } from '@nestjs-fastify-nx/infra/storage';
 import { ProblemDetailsValidationPipe } from '../pipes';
 import { LocalStorageModule } from './local-storage.module';
 

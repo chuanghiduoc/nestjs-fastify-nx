@@ -1,8 +1,0 @@
-{
-  "name": "infra-redis",
-  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
-  "sourceRoot": "libs/infra/redis/src",
-  "projectType": "library",
-  "tags": ["scope:infra"],
-  "targets": {}
-}

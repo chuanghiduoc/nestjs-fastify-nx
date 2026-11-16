@@ -6,13 +6,13 @@ import { QUEUE_NAMES } from '@nestjs-fastify-nx/shared';
 import { LoggerModule } from 'nestjs-pino';
 import { ScheduleModule } from '@nestjs/schedule';
 import { CqrsInstrumentationInitializer } from '@nestjs-fastify-nx/core';
-import { DatabaseModule } from '@nestjs-fastify-nx/infra-database';
-import { StorageModule } from '@nestjs-fastify-nx/infra-storage';
-import { OutboxRelayModule } from '@nestjs-fastify-nx/infra-messaging';
+import { DatabaseModule } from '@nestjs-fastify-nx/infra/database';
+import { StorageModule } from '@nestjs-fastify-nx/infra/storage';
+import { OutboxRelayModule } from '@nestjs-fastify-nx/infra/messaging';
 import {
   buildPinoLoggerConfig,
   LivenessProbeService,
-} from '@nestjs-fastify-nx/infra-observability';
+} from '@nestjs-fastify-nx/infra/observability';
 import { UsersListenersModule } from '@nestjs-fastify-nx/modules/users';
 import { AuditLogListenersModule } from '@nestjs-fastify-nx/modules/audit-log';
 import { NotificationsListenersModule } from '@nestjs-fastify-nx/modules/notifications';

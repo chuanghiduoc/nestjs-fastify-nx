@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { DatabaseModule } from '@nestjs-fastify-nx/infra-database';
+import { DatabaseModule } from '@nestjs-fastify-nx/infra/database';
 import { TERM_REPOSITORY } from './term-repository.port';
 import { PrismaTermRepository } from './prisma-term.repository';
 import { ListPublishedTermsHandler } from './list-published-terms';

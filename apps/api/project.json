@@ -10,7 +10,7 @@
       "dependsOn": [
         "^build",
         {
-          "projects": ["infra-database"],
+          "projects": ["infra"],
           "target": "prisma-generate",
           "params": "ignore"
         }
@@ -62,7 +62,7 @@
       "parallelism": false,
       "dependsOn": [
         {
-          "projects": ["infra-database"],
+          "projects": ["infra"],
           "target": "prisma-generate",
           "params": "ignore"
         }

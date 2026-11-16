@@ -7,7 +7,7 @@ import type { FastifyError, FastifyInstance } from 'fastify';
 import { Queue } from 'bullmq';
 import type { Redis } from 'ioredis';
 import { timingSafeEqual } from 'node:crypto';
-import { closeQueueQuietly } from '@nestjs-fastify-nx/infra-redis';
+import { closeQueueQuietly } from '@nestjs-fastify-nx/infra/redis';
 import { ERROR_CODES } from '@nestjs-fastify-nx/contracts';
 import { QUEUE_NAMES, sanitizeUrlForLogging } from '@nestjs-fastify-nx/shared';
 import { redisFixedWindowIncr } from '../rate-limit/redis-fixed-window';

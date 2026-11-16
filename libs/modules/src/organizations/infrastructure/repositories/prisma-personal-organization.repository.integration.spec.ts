@@ -5,7 +5,7 @@ import {
   deployTestMigrations,
   type TestContainers,
 } from '@nestjs-fastify-nx/testing';
-import { PrismaService } from '@nestjs-fastify-nx/infra-database';
+import { PrismaService } from '@nestjs-fastify-nx/infra/database';
 import { DOMAIN_EVENTS, SYSTEM_ROLES } from '@nestjs-fastify-nx/shared';
 import { EnsurePersonalOrganizationCommand } from '../../application/commands/ensure-personal-organization';
 import { EnsurePersonalOrganizationHandler } from '../../application/commands/ensure-personal-organization';

@@ -1,8 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { DomainException } from '@nestjs-fastify-nx/core';
 import { ERROR_CODES, I18N_KEYS } from '@nestjs-fastify-nx/contracts';
-import { PrismaService, escapeLikePattern } from '@nestjs-fastify-nx/infra-database';
-import { Prisma } from '@nestjs-fastify-nx/infra-database';
+import { PrismaService, escapeLikePattern } from '@nestjs-fastify-nx/infra/database';
+import { Prisma } from '@nestjs-fastify-nx/infra/database';
 import { keysetAfter, takePage } from '@nestjs-fastify-nx/shared';
 import { User, UserRole, UserStatus } from '../../domain/entities/user.entity';
 import type {

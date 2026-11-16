@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { BatchedPurgeRunner } from './batched-purge.runner';
 import { SessionCleanupTask } from './session-cleanup.task';
-import type { PrismaService } from '@nestjs-fastify-nx/infra-database';
+import type { PrismaService } from '@nestjs-fastify-nx/infra/database';
 
 function makePrismaMock() {
   return {

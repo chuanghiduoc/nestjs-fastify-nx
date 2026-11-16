@@ -25,31 +25,10 @@
       "path": "../../libs/modules/tsconfig.lib.json"
     },
     {
-      "path": "../../libs/infra/observability/tsconfig.lib.json"
-    },
-    {
-      "path": "../../libs/infra/messaging/tsconfig.lib.json"
-    },
-    {
-      "path": "../../libs/infra/i18n/tsconfig.lib.json"
-    },
-    {
-      "path": "../../libs/infra/authorization/tsconfig.lib.json"
-    },
-    {
       "path": "../../libs/core/tsconfig.lib.json"
     },
     {
       "path": "../../libs/composition/admin/tsconfig.lib.json"
-    },
-    {
-      "path": "../../libs/infra/storage/tsconfig.lib.json"
-    },
-    {
-      "path": "../../libs/infra/auth/tsconfig.lib.json"
-    },
-    {
-      "path": "../../libs/infra/redis/tsconfig.lib.json"
     },
     {
       "path": "../../libs/testing/tsconfig.lib.json"
@@ -61,7 +40,7 @@
       "path": "../../libs/shared/tsconfig.lib.json"
     },
     {
-      "path": "../../libs/infra/database/tsconfig.lib.json"
+      "path": "../../libs/infra/tsconfig.lib.json"
     }
   ]
 }

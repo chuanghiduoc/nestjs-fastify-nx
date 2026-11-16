@@ -10,7 +10,7 @@ import { isDomainException } from '@nestjs-fastify-nx/core';
 import { ERROR_CODES } from '@nestjs-fastify-nx/contracts';
 import { UserFactory } from '../../testing/user.factory';
 import { PrismaUserRepository } from './prisma-user.repository';
-import { PrismaService } from '@nestjs-fastify-nx/infra-database';
+import { PrismaService } from '@nestjs-fastify-nx/infra/database';
 
 const ORG_ID = '019dd1a5-9235-70db-8d57-54ef90300001';
 

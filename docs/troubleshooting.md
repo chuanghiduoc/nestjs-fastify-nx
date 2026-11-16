@@ -22,14 +22,15 @@ means a project file moved or a new dependency was added. Run
 
 Folder modules have **no project and no `vitest.config.mts` of their own**. The
 single `libs/modules/vitest.config.mts` (its `rootDir` is `libs/modules`) picks
-a new `src/<context>/**/*.spec.ts` up automatically. Standalone libs
-(`libs/infra/*`, `libs/core`, composition projects) keep their own
-`vitest.config.mts` built with `defineVitestConfig` from the workspace-root
-`vitest.shared.ts`, and the `@nx/vitest` plugin infers their `test` target from
-it. If a new standalone lib has no `test` target, confirm its
-`vitest.config.mts` exists, then run `pnpm nx reset` so the daemon re-reads the
-project graph. The include/exclude globals live in `vitest.shared.ts`, not in
-the per-project file.
+a new `src/<context>/**/*.spec.ts` up automatically. `libs/infra` works the same
+way at the group level: one `libs/infra/vitest.config.mts` (its `rootDir` is
+`libs/infra`) picks up `src/<folder>/**/*.spec.ts`. Other standalone libs
+(`libs/core`, composition projects) keep their own `vitest.config.mts` built
+with `defineVitestConfig` from the workspace-root `vitest.shared.ts`, and the
+`@nx/vitest` plugin infers their `test` target from it. If a new standalone lib
+has no `test` target, confirm its `vitest.config.mts` exists, then run
+`pnpm nx reset` so the daemon re-reads the project graph. The include/exclude
+globals live in `vitest.shared.ts`, not in the per-project file.
 
 ### `cannot find module '@nestjs-fastify-nx/...'` after a fresh checkout
 
@@ -39,9 +40,9 @@ ships a `package.json` with its `name`/`exports` and declares its siblings as
 `workspace:*`. A new lib therefore needs `pnpm install` before it resolves.
 `nx sync` only maintains TypeScript project references. The Prisma 7
 `prisma-client` generator emits the client into
-`libs/infra/database/src/generated/prisma` (gitignored — regenerated on
+`libs/infra/src/database/generated/prisma` (gitignored — regenerated on
 `postinstall`); consumers import Prisma types from the
-`@nestjs-fastify-nx/infra-database` barrel, not from `@prisma/client` directly.
+`@nestjs-fastify-nx/infra/database` barrel, not from `@prisma/client` directly.
 
 ### Import `@nestjs-fastify-nx/admin` not found (moved library)
 

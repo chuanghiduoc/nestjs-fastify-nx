@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { OutboxLagCollector } from './outbox-lag.collector';
 import type { MetricsService } from './metrics.service';
 import type { MetricsLeaderService } from './metrics-leader.service';
-import type { PrismaService } from '@nestjs-fastify-nx/infra-database';
+import type { PrismaService } from '@nestjs-fastify-nx/infra/database';
 
 type LeaderStub = MetricsLeaderService & { lostHandlers: Array<() => void> };
 

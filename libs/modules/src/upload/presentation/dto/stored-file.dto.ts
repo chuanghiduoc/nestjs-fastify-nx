@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import type { StoredFile } from '@nestjs-fastify-nx/infra-storage';
+import type { StoredFile } from '@nestjs-fastify-nx/infra/storage';
 import { STORED_FILE_STATUS, type StoredFileStatus } from '@nestjs-fastify-nx/shared';
 
 export class StoredFileDto implements StoredFile {

@@ -2,7 +2,7 @@ import { Inject, Logger } from '@nestjs/common';
 import { Command, CommandHandler, type ICommandHandler } from '@nestjs/cqrs';
 import { isDomainException } from '@nestjs-fastify-nx/core';
 import { MALWARE_SCAN_OUTCOME, STORED_FILE_STATUS } from '@nestjs-fastify-nx/shared';
-import { STORAGE_PORT, type StoragePort } from '@nestjs-fastify-nx/infra-storage';
+import { STORAGE_PORT, type StoragePort } from '@nestjs-fastify-nx/infra/storage';
 import {
   STORED_FILE_REPOSITORY,
   type StoredFileRepositoryPort,

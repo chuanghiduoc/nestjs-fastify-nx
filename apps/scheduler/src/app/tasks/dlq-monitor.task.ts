@@ -7,7 +7,7 @@ import {
   dlqJobIdFor,
   dlqNameFor,
   routeFailedJobToDlq,
-} from '@nestjs-fastify-nx/infra-redis';
+} from '@nestjs-fastify-nx/infra/redis';
 import { QUEUE_NAMES, positiveIntEnv } from '@nestjs-fastify-nx/shared';
 import { SchedulerLeaderService } from '../leadership/scheduler-leader.service';
 import type { SchedulerEnvConfig } from '../../config/env.validation';

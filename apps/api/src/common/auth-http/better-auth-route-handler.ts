@@ -3,7 +3,7 @@ import type { Logger } from 'nestjs-pino';
 import * as Sentry from '@sentry/nestjs';
 import { toNodeHandler } from 'better-auth/node';
 import type { FastifyReply, FastifyRequest } from 'fastify';
-import type { BetterAuthInstance } from '@nestjs-fastify-nx/infra-auth';
+import type { BetterAuthInstance } from '@nestjs-fastify-nx/infra/auth';
 import { ERROR_CODES } from '@nestjs-fastify-nx/contracts';
 import { sanitizeUrlForLogging } from '@nestjs-fastify-nx/shared';
 import { ensureRequestIds } from '../logging/request-id';

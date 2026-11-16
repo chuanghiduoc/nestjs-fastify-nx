@@ -16,7 +16,7 @@ import { ApiExcludeController } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
 import { Throttle } from '@nestjs/throttler';
 import type { FastifyReply, FastifyRequest } from 'fastify';
-import { Public } from '@nestjs-fastify-nx/infra-auth';
+import { Public } from '@nestjs-fastify-nx/infra/auth';
 import {
   LOCAL_STORAGE_CONTROLLER_PATH,
   LOCAL_STORAGE_DOWNLOAD_ROUTE,
@@ -25,7 +25,7 @@ import {
   requireLocalStorage,
   type LocalStorageAdapter,
   type StoragePort,
-} from '@nestjs-fastify-nx/infra-storage';
+} from '@nestjs-fastify-nx/infra/storage';
 import type { EnvConfig } from '../../config/env.validation';
 import { LocalDownloadQueryDto } from './local-download-query.dto';
 

@@ -198,7 +198,7 @@ export {
 
 ## Module Boundaries
 
-**Enforce strict DDD boundaries** via `@nx/enforce-module-boundaries` plus the custom `modules-scale/no-cross-context-imports` rule in `eslint.config.mjs`. Lint errors on imports must be fixed by extracting to a composition lib — never relax the rule.
+**Enforce strict DDD boundaries** via `@nx/enforce-module-boundaries` plus the custom `libs-groups/no-cross-context-imports` rule in `eslint.config.mjs`. The rule forbids every sibling-folder import between contexts in `libs/modules/src/`, and inside `libs/infra/src/` it allows only the documented adapter DAG — `auth → database, i18n`, `authorization → auth, database`, `messaging → database`. In the modules group, a lint error on an import must be fixed by extracting to a composition lib — never relax the rule.
 
 ```typescript
 // DO: composition lib aggregates

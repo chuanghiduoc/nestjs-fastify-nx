@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import { PrismaService } from '@nestjs-fastify-nx/infra-database';
-import { Prisma } from '@nestjs-fastify-nx/infra-database';
+import { PrismaService } from '@nestjs-fastify-nx/infra/database';
+import { Prisma } from '@nestjs-fastify-nx/infra/database';
 import { Term, type TermType } from './term.entity';
 import type { TermAcceptanceRecord, TermRepositoryPort } from './term-repository.port';
 import { termVersionTaken } from './term-errors';

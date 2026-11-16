@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
-import { DatabaseModule } from '@nestjs-fastify-nx/infra-database';
-import { MessagingModule } from '@nestjs-fastify-nx/infra-messaging';
+import { DatabaseModule } from '@nestjs-fastify-nx/infra/database';
+import { MessagingModule } from '@nestjs-fastify-nx/infra/messaging';
 import { API_KEY_REPOSITORY } from './domain/ports/api-key-repository.port';
 import { PrismaApiKeyRepository } from './infrastructure/repositories/prisma-api-key.repository';
 import { ListApiKeysHandler } from './application/queries/list-api-keys';

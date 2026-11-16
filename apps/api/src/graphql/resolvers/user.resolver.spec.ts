@@ -3,7 +3,7 @@ import { DomainException } from '@nestjs-fastify-nx/core';
 import type { QueryBus } from '@nestjs/cqrs';
 import { UserResolver } from './user.resolver';
 import { GetUserProfileQuery, ListUsersCursorQuery } from '@nestjs-fastify-nx/modules/users';
-import type { AuthenticatedSession } from '@nestjs-fastify-nx/infra-auth';
+import type { AuthenticatedSession } from '@nestjs-fastify-nx/infra/auth';
 
 const mockProfileResult = {
   id: 'u1',

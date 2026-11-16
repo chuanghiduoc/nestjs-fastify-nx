@@ -52,7 +52,7 @@ updates:
       # @nestjs/event-emitter 12.0.0 re-exports the emitter as `typeof eventemitter2.EventEmitter2`
       # from a default import, but eventemitter2@6.4.9 — the exact version it pins, and the latest
       # published — declares `export default EventEmitter2`, the class rather than a namespace. The
-      # re-export resolves to an error type and fails infra-messaging:lint on
+      # re-export resolves to an error type and fails infra:lint on
       # @typescript-eslint/no-unsafe-*. Typings only; runtime is fine. Held at 3.x, which exposes
       # the same emitAsync/@OnEvent surface. Lift once upstream fixes the declaration.
       - dependency-name: '@nestjs/event-emitter'

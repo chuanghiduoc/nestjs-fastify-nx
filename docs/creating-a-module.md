@@ -104,7 +104,7 @@ This produces a presentation-only project under `libs/composition/billing-report
 | Owns its own Prisma model                      | Aggregates read-models from other modules                    |
 | Other contexts must NOT import it              | Composition can depend on `scope:modules`; never the reverse |
 
-Context-to-context edges inside the group are enforced by the `modules-scale/no-cross-context-imports` ESLint rule; scope-level edges by `@nx/enforce-module-boundaries`. If you find yourself needing a cross-context import inside `libs/modules/src/<ctxA>/`, extract a composition lib instead — or, when data must arrive reactively, a domain event through the outbox.
+Context-to-context edges inside the group are enforced by the `libs-groups/no-cross-context-imports` ESLint rule; scope-level edges by `@nx/enforce-module-boundaries`. If you find yourself needing a cross-context import inside `libs/modules/src/<ctxA>/`, extract a composition lib instead — or, when data must arrive reactively, a domain event through the outbox.
 
 ## Targets — group project vs composition project
 
@@ -114,19 +114,26 @@ A composition project's targets are inferred from its config files — `typechec
 
 ## Infrastructure & generic libraries
 
-There is **no `gen:infra`** command — `libs/infra/*` are technical adapters (auth, database, redis,
-storage…), not DDD bounded contexts, so the DDD module generator doesn't apply (it only accepts
+There is **no `gen:infra`** command — the folders under `libs/infra/src/` (`auth`, `authorization`,
+`database`, `i18n`, `messaging`, `observability`, `redis`, `storage`) are technical adapters, not DDD
+bounded contexts, so the DDD module generator doesn't apply (it only accepts
 `--directory=modules|composition`). To add one:
 
-- **Preferred:** copy the closest existing infra lib (e.g. `libs/infra/redis`) and rename — it already
-  matches the workspace conventions (inferred targets, `defineVitestConfig` from `vitest.shared.ts`,
-  `scope:infra` tag).
+- **Preferred:** copy the closest existing infra folder (e.g. `libs/infra/src/redis`) into a new
+  folder, then add its `./<folder>` entry to the `exports` map in `libs/infra/package.json` — the
+  single `infra` project already matches the workspace conventions (`defineVitestConfig` from
+  `vitest.shared.ts`, `scope:infra` tag).
 - `pnpm gen:lib` / `pnpm gen:app` are raw `@nx/js:library` / `@nx/nest:application` passthroughs.
   Their Nx-default output drifts from this repo (it emits an explicit `build` target and the
   deprecated `nxViteTsPaths`/`nxCopyAssetsPlugin` vite plugins), so align it afterwards: delete the
   explicit targets and replace the generated vitest config with `defineVitestConfig` from
   `vitest.shared.ts`. Also add the correct `scope:*` / `type:*` tags so
   `@nx/enforce-module-boundaries` applies.
+
+Cross-folder imports inside `libs/infra/src/` are blocked by `libs-groups/no-cross-context-imports`
+unless the edge is added to the group's documented DAG in `eslint.config.mjs`. Targets run on the
+group project: `pnpm nx run infra:typecheck` and `pnpm nx test infra` (append `-- integration` for
+the integration lane).
 
 ## After Generating
 

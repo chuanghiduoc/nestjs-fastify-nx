@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { DatabaseModule } from '@nestjs-fastify-nx/infra-database';
+import { DatabaseModule } from '@nestjs-fastify-nx/infra/database';
 import { SESSION_REPOSITORY } from './session-repository.port';
 import { PrismaSessionRepository } from './prisma-session.repository';
 import { ListMySessionsHandler } from './list-my-sessions';

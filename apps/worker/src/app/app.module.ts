@@ -3,14 +3,14 @@ import { ConfigModule } from '@nestjs/config';
 import { CqrsModule } from '@nestjs/cqrs';
 import { LoggerModule } from 'nestjs-pino';
 import { CqrsInstrumentationInitializer } from '@nestjs-fastify-nx/core';
-import { DeadLetterModule, RedisQueueModule } from '@nestjs-fastify-nx/infra-redis';
-import { StorageModule } from '@nestjs-fastify-nx/infra-storage';
-import { DatabaseModule } from '@nestjs-fastify-nx/infra-database';
+import { DeadLetterModule, RedisQueueModule } from '@nestjs-fastify-nx/infra/redis';
+import { StorageModule } from '@nestjs-fastify-nx/infra/storage';
+import { DatabaseModule } from '@nestjs-fastify-nx/infra/database';
 import { QUEUE_NAMES } from '@nestjs-fastify-nx/shared';
 import {
   LivenessProbeService,
   buildPinoLoggerConfig,
-} from '@nestjs-fastify-nx/infra-observability';
+} from '@nestjs-fastify-nx/infra/observability';
 import { UploadVerificationModule } from '@nestjs-fastify-nx/modules/upload';
 import { EmailNotificationProcessor } from './processors/email-notification.processor';
 import { UploadVerificationProcessor } from './processors/upload-verification.processor';
