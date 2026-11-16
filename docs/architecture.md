@@ -115,26 +115,41 @@ flowchart TD
 Every bounded context is a **folder** under `libs/modules/src/<context>/` — the
 whole group is one Nx project (`modules`, tag `scope:modules`) and one workspace
 package whose `exports` map resolves `@nestjs-fastify-nx/modules/<ctx>` to the
-folder's `index.ts`. The DDD layers exist as **file roles, not folders**:
+folder's `index.ts`. Two tiers share that folder shape:
+
+**Leaf** (default) — flat folder, DDD layers as file roles:
 
 ```
-modules/src/<context>/                     # flat folder — leaf or engine tier
-  <context>.entity.ts                      # aggregate root (only when invariants demand it)
+modules/src/<context>/                     # flat folder
+  <context>.entity.ts                      # aggregate root (when invariants demand it)
   <context>-repository.port.ts             # repository port + DI token
   create-<context>.ts                      # colocated: Command + @CommandHandler
   list-<context>.ts                        # colocated: Query + @QueryHandler
-  <context>.controller.ts                 # HTTP surface (buses only, never handlers)
+  <context>.controller.ts                  # HTTP surface (buses only, never handlers)
   <context>.dto.ts                         # presentation DTOs — only file importing swagger/class-validator
   prisma-<context>.repository.ts           # Prisma adapter + colocated .integration.spec.ts
-  <context>.module.ts                     # wiring: port→adapter, handlers, controller
+  <context>.module.ts                      # wiring: port→adapter, handlers, controller
   <context>-listeners.module.ts            # listeners-only slice (worker/scheduler hosts)
   index.ts                                 # public barrel — commands/queries + result types, never handlers
 ```
 
+**Engine** (promoted) — same context folder with DDD subfolders; command/query
+files stay colocated and specs stay next to sources:
+
+```
+modules/src/<context>/
+  domain/{entities,value-objects,ports}/
+  application/{commands,queries,listeners,ports,dto}/
+  infrastructure/{repositories,dispatchers}/
+  presentation/{controllers,dto}/
+  testing/
+  <context>.module.ts  <context>-listeners.module.ts  index.ts    # context root
+```
+
 **New to the codebase?** [`domain-module-anatomy.md`](./domain-module-anatomy.md)
-walks through every file above one-by-one — what it is, why it exists, when you
+walks through every file role one-by-one — what it is, why it exists, when you
 create one, and how to wire it — using the real `users` and `sessions` folders as
-the example.
+the examples.
 
 Authentication is delegated to [Better Auth](https://better-auth.com) (mounted by
 `libs/infra/auth`), so feature modules do not own login/logout flows or token

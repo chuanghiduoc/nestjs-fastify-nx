@@ -15,31 +15,35 @@ maps `./<ctx>` → `./src/<ctx>/index.ts`, so consumers import
 `@nestjs-fastify-nx/modules/<ctx>` and nothing else. There is no per-context
 project, package, or tsconfig.
 
-Contexts grow along a **tier ladder**, and the tiers differ only in how many
-files the flat folder holds — never in folder structure:
+Contexts grow along a **tier ladder**: the leaf tier stays flat; promoting to engine adds the DDD subfolders inside the same context folder (the group project, exports map, and barrels never change).
 
 - **Leaf** (the default, and what `pnpm gen:module` scaffolds): a flat folder
-  of ~10–20 files. One colocated operation file per command/query,
+  of ~10-20 files. One colocated operation file per command/query,
   `<ctx>.dto.ts`, `<ctx>.controller.ts`, `<ctx>-repository.port.ts`,
   `prisma-<ctx>.repository.ts` + colocated `.integration.spec.ts`.
 - **Engine** (promoted when invariants or listener count force it): the same
-  flat folder grows entity/value-object files with real domain rules and a
-  listener slice (`<ctx>-listeners.module.ts`) for worker/scheduler hosts.
+  context folder grows the DDD subfolders —
+  `domain/{entities,value-objects,ports}/`,
+  `application/{commands,queries,listeners,ports,dto}/`,
+  `infrastructure/{repositories,dispatchers}/`,
+  `presentation/{controllers,dto}/`, `testing/` — while command/query files
+  stay **colocated** (one file per operation holding both the class and its
+  handler), specs sit next to sources, and `<ctx>.module.ts` /
+  `<ctx>-listeners.module.ts` / `index.ts` stay at the context-folder root.
   Current engines: `users`, `organizations`, `api-keys`, `feature-flags`,
   `upload`, `audit-log`.
 - **Composition**: `libs/composition/*` — orchestrator-only, still one Nx
   project each. Not part of the group; see [`architecture.md`](./architecture.md).
 
 **Promotion rule**: start a context as a leaf; promote to engine only when
-invariants or listener count force it — never preemptively. There is no
-`domain/`/`application/`/`infrastructure/`/`presentation/` subfolder to grow
-into: **the layers are file roles, not folders**. A leaf file can be
-"domain" (`<ctx>.entity.ts`), "application" (`create-<ctx>.ts`), or
-"presentation" (`<ctx>.controller.ts`) while sitting side by side.
+invariants or listener count force it — never preemptively. The leaf keeps
+**layers as file roles** (a flat `<ctx>.entity.ts` is "domain", a flat
+`create-<ctx>.ts` is "application"); the engine makes those roles explicit
+folders, so the same code keeps compiling with only import paths changing.
 
 ## 2. What DDD + Hexagonal + CQRS mean here
 
-The four layers survive as **file roles** in the flat folder:
+The four layers map to **file roles** (leaf) or **subfolders** (engine):
 
 - **domain** — `<ctx>.entity.ts`, `*.vo.ts`, `<ctx>-repository.port.ts`:
   business rules and the ports that define persistence contracts. Never
@@ -77,12 +81,12 @@ UsersController.getProfile()
   ▼
 QueryBus (@nestjs/cqrs) ── routes by query class ──┐
   ▼                                                 │
-GetUserProfileHandler (@QueryHandler, get-user-profile.ts)
+GetUserProfileHandler (@QueryHandler, application/queries/get-user-profile.ts)
   │ @Inject(USER_REPOSITORY_PORT) users              │
   ▼                                                 │
-UserRepositoryPort (user-repository.port.ts)  ◄─────┘
+UserRepositoryPort (domain/ports/user-repository.port.ts)  ◄─────┘
   ▲ implements
-PrismaUserRepository (prisma-user.repository.ts)
+PrismaUserRepository (infrastructure/repositories/prisma-user.repository.ts)
   │ this.prisma.db.user.findUnique(...)
   ▼
 Postgres
@@ -121,7 +125,7 @@ only when invariants demand it (a leaf can start with a plain record type on
 the port).
 
 ```typescript
-// libs/modules/src/users/user.entity.ts
+// libs/modules/src/users/domain/entities/user.entity.ts
 export class User {
   private constructor(private readonly props: UserProps) {}
 
@@ -156,7 +160,7 @@ concept with its own rule (email, money, slug) — `email.vo.ts` in `users` is
 the live example.
 
 ```typescript
-// libs/modules/src/users/email.vo.ts
+// libs/modules/src/users/domain/value-objects/email.vo.ts
 export class Email extends ValueObject<string> {
   private static readonly REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   private constructor(value: string) {
@@ -190,7 +194,7 @@ per aggregate needing persistence (or any capability domain must not
 implement directly, e.g. `StoragePort`).
 
 ```typescript
-// libs/modules/src/users/user-repository.port.ts
+// libs/modules/src/users/domain/ports/user-repository.port.ts
 export const USER_REPOSITORY_PORT = Symbol('USER_REPOSITORY_PORT');
 
 export interface UserRepositoryPort {
@@ -262,7 +266,7 @@ Same shape as commands, for reads: a `Query<TResult>` subclass plus its
 `@QueryHandler`, colocated in one file. Separates read models from write
 models. Create one per distinct read use case.
 
-Single-item read (`users/get-user-profile.ts`):
+Single-item read (`users/application/queries/get-user-profile.ts`):
 
 ```typescript
 export interface UserProfileResult {
@@ -297,7 +301,7 @@ export class GetUserProfileHandler implements IQueryHandler<GetUserProfileQuery,
 }
 ```
 
-Cursor-paginated list (`users/list-users-cursor.ts`):
+Cursor-paginated list (`users/application/queries/list-users-cursor.ts`):
 
 ```typescript
 export interface ListUsersCursorResult {
@@ -331,16 +335,18 @@ The handler calls `users.findAllCursor(...)`, maps entities to
 raw NestJS `NotFoundException` — the global exception filter maps `kind` to the
 status and renders RFC 9457 Problem Details. See [error-handling.md](./error-handling.md).
 
-### Application result types — pure TS, in the operation files
+### Application result types — pure TS (leaf: operation file; engine: `application/dto/`)
 
 A **pure TypeScript interface, no decorators**, declared in the operation
-file that produces it (or a small `<ctx>-application.dto.ts` when several
-operations share it — `organizations` uses this for its four DTOs).
-Application code must stay framework-agnostic — the same handler could run
-from REST, GraphQL, or a queue consumer.
+file that produces it (leaf) or in `application/dto/<name>.dto.ts` when
+several engine operations share it (`organizations`'
+`application/dto/organization-role-application.dto.ts`, `users`'
+`application/dto/user-list-item.dto.ts`). Application code must stay
+framework-agnostic — the same handler could run from REST, GraphQL, or a
+queue consumer.
 
 ```typescript
-// in list-users-cursor.ts
+// users/application/dto/user-list-item.dto.ts
 export interface UserListItemDto {
   id: string;
   email: string;
@@ -363,7 +369,7 @@ into a side effect. Create one per event type needing a reaction in this
 process.
 
 ```typescript
-// libs/modules/src/users/user-registered.listener.ts
+// libs/modules/src/users/application/listeners/user-registered.listener.ts
 @Injectable()
 export class UserRegisteredListener {
   constructor(@InjectQueue(QUEUE_NAMES.EMAIL_NOTIFICATION) private readonly emailQueue: Queue) {}
@@ -404,7 +410,7 @@ the database lib and re-exports through its barrel). Create one per
 repository port.
 
 ```typescript
-// libs/modules/src/users/prisma-user.repository.ts
+// libs/modules/src/users/infrastructure/repositories/prisma-user.repository.ts
 @Injectable()
 export class PrismaUserRepository implements UserRepositoryPort {
   constructor(private readonly prisma: PrismaService) {}
@@ -458,7 +464,7 @@ A `@Controller()` with route methods — the **only** file allowed to inject
 per resource/route group.
 
 ```typescript
-// libs/modules/src/users/users.controller.ts
+// libs/modules/src/users/presentation/controllers/users.controller.ts
 // No @UseGuards here: BetterAuthGuard and RolesGuard are registered globally as APP_GUARD in
 // apps/api. Routes are authenticated by default — @Public() opts out, @Roles() narrows.
 // @ApiCookieAuth only documents that; it enforces nothing.
@@ -597,30 +603,38 @@ resolves `@nestjs-fastify-nx/modules/users` to it.
 // libs/modules/src/users/index.ts
 export { UsersModule } from './users.module';
 export { UsersListenersModule } from './users-listeners.module';
-export { UserRole, UserStatus } from './user.entity';
+export { UserRole, UserStatus } from './domain/entities/user.entity';
 
 // Queries + result types for cross-cutting consumers (GraphQL, admin composition)
 // to dispatch through the QueryBus. Handlers stay internal.
-export { GetUserProfileQuery, type UserProfileResult } from './get-user-profile';
-export { ListUsersCursorQuery, type ListUsersCursorResult } from './list-users-cursor';
-export type { UserListItemDto } from './list-users-cursor';
+export {
+  GetUserProfileQuery,
+  type UserProfileResult,
+} from './application/queries/get-user-profile';
+export {
+  ListUsersCursorQuery,
+  type ListUsersCursorResult,
+} from './application/queries/list-users-cursor';
+export type { UserListItemDto } from './application/dto/user-list-item.dto';
 
-export { ListUsersCursorFilterDto } from './list-users-cursor-filter.dto';
-export { UserListItemResponseDto, UserProfileResponseDto } from './auth-response.dto';
+export { ListUsersCursorFilterDto } from './presentation/dto/list-users-cursor-filter.dto';
+export {
+  UserListItemResponseDto,
+  UserProfileResponseDto,
+} from './presentation/dto/auth-response.dto';
 ```
 
 **Rules**: export only what a consumer genuinely needs — handlers, the entity
 class, and adapter internals stay unexported. Adding to the barrel is
 a deliberate API decision.
 
-### `in-memory-*.ts` / `mock-*.ts` — in-memory fakes and factories
+### `testing/` (engine) or flat `in-memory-*.ts` / `mock-*.ts` (leaf) — fakes and factories
 
 An in-memory repository implementing the same port as the Prisma adapter
-(`sessions`' `in-memory-session-repository.ts`, `users`' `mock-user-repository.ts`
-
-- `user.factory.ts`). Keeps handler unit tests fast and DB-free, while the
-  colocated `*.integration.spec.ts` exercises the real adapter against
-  Testcontainers Postgres.
+(`sessions`' flat `in-memory-session-repository.ts`, `users`'
+`testing/mock-user-repository.ts` + `testing/user.factory.ts`). Keeps handler
+unit tests fast and DB-free, while the colocated `*.integration.spec.ts`
+exercises the real adapter against Testcontainers Postgres.
 
 **Rules**: fakes (like `*.spec.ts`, `*.integration.ts`) are exempt from the
 boundary lint rule, but keep them behaviorally faithful — an in-memory
@@ -652,24 +666,26 @@ Say you're adding "update display name" to `users`. Touch files in order
 (new context → run `pnpm gen:module <name>` first; see
 [`creating-a-module.md`](./creating-a-module.md)):
 
-1. **`user.entity.ts`** — VO/validation if needed, a method on `User` for the
-   invariant, a `UserNameChanged` event if other contexts must react.
-2. **`user-repository.port.ts`** — extend `UserRepositoryPort` only if a new
-   persistence operation is needed (usually `save()` already covers updates).
-3. **`update-user-name.ts`** — colocate `UpdateUserNameCommand` +
-   `UpdateUserNameHandler`: load the entity via the port, call the domain
-   method, `save()`.
-4. **`prisma-user.repository.ts`** — update the adapter if the new field
-   needs mapping.
-5. **`users.dto.ts`** — request DTO (`class-validator`); response DTO if the
-   shape changed.
-6. **`users.controller.ts`** — add the route, inject `CommandBus`, dispatch
-   the command.
+1. **`domain/entities/user.entity.ts`** — VO/validation if needed, a method on
+   `User` for the invariant, a `UserNameChanged` event if other contexts must
+   react.
+2. **`domain/ports/user-repository.port.ts`** — extend `UserRepositoryPort`
+   only if a new persistence operation is needed (usually `save()` already
+   covers updates).
+3. **`application/commands/update-user-name.ts`** — colocate
+   `UpdateUserNameCommand` + `UpdateUserNameHandler`: load the entity via the
+   port, call the domain method, `save()`.
+4. **`infrastructure/repositories/prisma-user.repository.ts`** — update the
+   adapter if the new field needs mapping.
+5. **`presentation/dto/users.dto.ts`** — request DTO (`class-validator`);
+   response DTO if the shape changed.
+6. **`presentation/controllers/users.controller.ts`** — add the route, inject
+   `CommandBus`, dispatch the command.
 7. **`users.module.ts`** — register the new handler in `providers`.
 8. **`index.ts`** — export the command/result/DTOs only if a composition lib
    or another app needs to dispatch it directly.
-9. **`mock-user-repository.ts` / `user.factory.ts`** — extend the fake for the
-   new field.
+9. **`testing/mock-user-repository.ts` / `testing/user.factory.ts`** — extend
+   the fake for the new field.
 10. **Tests** — unit-test the domain method + handler (in-memory port),
     integration-test the adapter against real Postgres, add/update an e2e
     spec (`apps/api/e2e/`).

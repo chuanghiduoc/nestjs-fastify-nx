@@ -501,7 +501,7 @@ and security hardening steps.
 `AuditLog` rows are written by `AuditLogListener`, which subscribes to
 specific events. If an action you expected to be audited is missing, check
 that the producing aggregate publishes an event registered in the listener's
-event map (see `libs/modules/src/audit-log/audit-log.listener.ts`).
+event map (see `libs/modules/src/audit-log/application/listeners/audit-log.listener.ts`).
 
 ## Inspecting slow queries
 

@@ -42,6 +42,36 @@ The scaffold references the `products` Prisma delegate, so **add the Prisma mode
 
 The import path `@nestjs-fastify-nx/modules/products` resolves through the group package's exports map — there is no `tsconfig` path alias and no per-context package. Typecheck, lint and test run on the **group project**: `pnpm nx run modules:typecheck`, `pnpm nx test modules` (the colocated unit specs) and `pnpm nx test modules -- integration` for the integration lane (`integration` is a vitest filename filter that matches only `*.integration.spec.ts`).
 
+## Promoting a leaf to engine
+
+When a context grows real invariants or listeners, promote it to the **engine tier**: add the DDD subfolders inside the same context folder and move files into them. The group project, exports map, barrel entry, and module wiring keep working — only import paths change.
+
+```
+libs/modules/src/products/
+├── products.module.ts               # stays at the context root
+├── products-listeners.module.ts     # listeners-only slice (worker/scheduler hosts)
+├── index.ts                         # stays at the context root; exports point into subfolders
+├── domain/
+│   ├── entities/products.entity.ts (+ spec)
+│   ├── value-objects/
+│   └── ports/products-repository.port.ts
+├── application/
+│   ├── commands/create-products.ts            # Command + @CommandHandler, colocated
+│   ├── queries/list-products.ts               # Query + @QueryHandler, colocated
+│   ├── listeners/product-registered.listener.ts (+ spec)
+│   ├── ports/                                 # outbound capabilities (queue dispatchers, …)
+│   └── dto/                                   # shared pure-TS result types
+├── infrastructure/
+│   ├── repositories/prisma-products.repository.ts (+ colocated .integration.spec.ts)
+│   └── dispatchers/
+├── presentation/
+│   ├── controllers/products.controller.ts (+ spec)
+│   └── dto/products.dto.ts
+└── testing/                         # in-memory repositories, factories
+```
+
+The generator does not scaffold the engine tier — promotion is a deliberate manual move (or `pnpm gen:module` a fresh leaf and port the code). Live examples: `libs/modules/src/users`, `organizations`, `upload`.
+
 ## Removing a module
 
 ```bash

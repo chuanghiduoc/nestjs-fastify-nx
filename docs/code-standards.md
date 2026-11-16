@@ -111,7 +111,7 @@ same twenty-line literal repeated, and the copies drift. Put small factories in
 `<context>-errors.ts` and import them:
 
 ```typescript
-// libs/modules/src/organizations/organization-errors.ts
+// libs/modules/src/organizations/application/organization-errors.ts
 export const roleInUse = () =>
   conflict(
     'role',
@@ -151,7 +151,7 @@ application layer import `@nestjs/swagger`, and the layering is gone the moment 
 must stay callable from REST, GraphQL, or a queue consumer without dragging HTTP along.
 
 ```typescript
-// libs/modules/src/users/list-users-cursor.ts
+// libs/modules/src/users/application/queries/list-users-cursor.ts
 // Pure TS. No @nestjs/swagger, no class-validator — nothing framework-shaped.
 export interface UserListItemDto {
   id: string;
@@ -159,7 +159,7 @@ export interface UserListItemDto {
   role: string;
 }
 
-// libs/modules/src/users/auth-response.dto.ts
+// libs/modules/src/users/presentation/dto/auth-response.dto.ts
 // Swagger + class-validator decorators live here and nowhere else.
 export class UserListItemResponseDto {
   @ApiProperty()
@@ -181,9 +181,12 @@ projecting into a purpose-built DTO that simply never declares them — not by `
 ```typescript
 // libs/modules/src/users/index.ts
 export { UsersModule } from './users.module';
-export type { UserListItemDto } from './user-list-item.dto';
+export type { UserListItemDto } from './application/dto/user-list-item.dto';
 // Query class + result type — consumers dispatch via QueryBus, no handler injection.
-export { GetUserProfileQuery, type UserProfileResult } from './get-user-profile';
+export {
+  GetUserProfileQuery,
+  type UserProfileResult,
+} from './application/queries/get-user-profile';
 
 // Don't export: User (entity), UserRepository, GetUserProfileHandler (handlers are
 // found by the CqrsModule explorer, so they never need to leave the module).
