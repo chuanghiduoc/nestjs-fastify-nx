@@ -40,7 +40,7 @@ export class Create<%= className %>Handler implements ICommandHandler<
   <%= className %>Dto
 > {
   constructor(
-    @Inject(<%= constantName %>_REPOSITORY) private readonly <%= fileName %>: <%= className %>RepositoryPort,
+    @Inject(<%= constantName %>_REPOSITORY) private readonly <%= propertyName %>: <%= className %>RepositoryPort,
   ) {}
 
   async execute(command: Create<%= className %>Command): Promise<<%= className %>Dto> {
@@ -53,7 +53,7 @@ export class Create<%= className %>Handler implements ICommandHandler<
       updatedAt: new Date(),
     };
 
-    await this.<%= fileName %>.create(record);
+    await this.<%= propertyName %>.create(record);
 
     return record;
   }

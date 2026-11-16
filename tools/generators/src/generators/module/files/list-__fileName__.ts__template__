@@ -31,11 +31,11 @@ export class List<%= className %>Handler implements IQueryHandler<
   List<%= className %>Result
 > {
   constructor(
-    @Inject(<%= constantName %>_REPOSITORY) private readonly <%= fileName %>: <%= className %>RepositoryPort,
+    @Inject(<%= constantName %>_REPOSITORY) private readonly <%= propertyName %>: <%= className %>RepositoryPort,
   ) {}
 
   async execute(query: List<%= className %>Query): Promise<List<%= className %>Result> {
-    const { items, hasMore } = await this.<%= fileName %>.findAllCursor({
+    const { items, hasMore } = await this.<%= propertyName %>.findAllCursor({
       organizationId: query.organizationId,
       startingAfter: this.decodeStartingAfter(query.startingAfter),
       limit: query.limit,

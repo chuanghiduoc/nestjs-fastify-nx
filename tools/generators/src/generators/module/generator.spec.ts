@@ -2,9 +2,35 @@
 import { createTreeWithEmptyWorkspace } from '@nx/devkit/testing';
 import { getProjects, readJson, readProjectConfiguration } from '@nx/devkit';
 import type { Tree } from '@nx/devkit';
+import * as ts from 'typescript';
 import { moduleGenerator } from './generator';
 
 const GROUP_PACKAGE = 'libs/modules/package.json';
+
+interface ParsedSourceFile extends ts.SourceFile {
+  readonly parseDiagnostics: readonly ts.Diagnostic[];
+}
+
+function listTypeScriptFiles(tree: Tree, dir: string): string[] {
+  return tree.children(dir).flatMap((entry) => {
+    const entryPath = `${dir}/${entry}`;
+    if (!tree.isFile(entryPath)) {
+      return listTypeScriptFiles(tree, entryPath);
+    }
+    return entryPath.endsWith('.ts') ? [entryPath] : [];
+  });
+}
+
+function parseTypeScriptFile(tree: Tree, file: string): ParsedSourceFile {
+  const source = tree.read(file, 'utf-8') ?? '';
+  return ts.createSourceFile(
+    file,
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS,
+  ) as ParsedSourceFile;
+}
 
 function seedGroupPackage(tree: Tree): void {
   tree.write(
@@ -78,6 +104,28 @@ describe('module generator', () => {
         'prisma-orders.repository.integration.spec.ts',
       ]) {
         expect(tree.exists(`${folder}/${file}`), file).toBe(true);
+      }
+    });
+
+    it('generates parsable TypeScript for kebab-case names', async () => {
+      await moduleGenerator(tree, { name: 'order-items', directory: 'modules', withCqrs: true });
+      const folder = 'libs/modules/src/order-items';
+
+      const create = tree.read(`${folder}/create-order-items.ts`, 'utf-8') ?? '';
+      expect(create).toContain('private readonly orderItems:');
+      expect(create).toContain('this.orderItems.create(');
+      expect(create).not.toContain('order-items.');
+
+      const repository = tree.read(`${folder}/prisma-order-items.repository.ts`, 'utf-8') ?? '';
+      expect(repository).toContain('.orderItems.create(');
+      expect(repository).toContain('.orderItems.findFirst(');
+      expect(repository).toContain('.orderItems.findMany(');
+      expect(repository).not.toContain('order-items.');
+
+      const generated = listTypeScriptFiles(tree, folder);
+      expect(generated.length).toBeGreaterThan(0);
+      for (const file of generated) {
+        expect(parseTypeScriptFile(tree, file).parseDiagnostics, file).toEqual([]);
       }
     });
 
@@ -163,9 +211,11 @@ describe('module generator', () => {
 
       const controller = tree.read('libs/modules/src/orders/orders.controller.ts', 'utf-8') ?? '';
       expect(controller).toContain('@CurrentUser()');
+      expect(controller).toContain('requireOrganizationId(');
       expect(controller).toContain('new CreateOrdersCommand');
       expect(controller).toContain('new ListOrdersQuery');
       expect(controller).toContain('@ApiPaginatedResponse');
+      expect(controller).not.toContain('ApiOkResponse');
     });
 
     it('repository adapter targets the prisma delegate with tenant scoping and keyset pagination', async () => {
@@ -239,17 +289,25 @@ describe('module generator', () => {
       ).rejects.toThrow(/already exists/);
     });
 
-    it('withCqrs=false omits the colocated operation files and bus endpoints', async () => {
+    it('withCqrs=false omits the colocated operation files and still wires the repository', async () => {
       await moduleGenerator(tree, { name: 'orders', directory: 'modules', withCqrs: false });
 
       expect(tree.exists('libs/modules/src/orders/create-orders.ts')).toBe(false);
       expect(tree.exists('libs/modules/src/orders/list-orders.ts')).toBe(false);
+
       const moduleFile = tree.read('libs/modules/src/orders/orders.module.ts', 'utf-8') ?? '';
+      expect(moduleFile).toContain('ORDERS_REPOSITORY, useClass: PrismaOrdersRepository');
       expect(moduleFile).not.toContain('CreateOrdersHandler');
       expect(moduleFile).not.toContain('ListOrdersHandler');
+
       const controller = tree.read('libs/modules/src/orders/orders.controller.ts', 'utf-8') ?? '';
-      expect(controller).not.toContain('CommandBus');
-      expect(controller).not.toContain('QueryBus');
+      expect(controller).toContain('list(');
+      expect(controller).not.toMatch(/CommandBus|QueryBus/);
+      expect(controller).not.toContain("from '@nestjs/cqrs'");
+
+      for (const file of listTypeScriptFiles(tree, 'libs/modules/src/orders')) {
+        expect(parseTypeScriptFile(tree, file).parseDiagnostics, file).toEqual([]);
+      }
     });
   });
 

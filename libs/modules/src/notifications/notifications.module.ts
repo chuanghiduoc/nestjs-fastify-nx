@@ -37,5 +37,6 @@ export class NotificationsModule {}
 @Module({
   imports: [DatabaseModule, MessagingModule],
   providers,
+  exports: [NOTIFICATION_REPOSITORY],
 })
 export class NotificationsListenersModule {}

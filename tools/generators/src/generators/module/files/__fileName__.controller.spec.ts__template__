@@ -1,5 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-<% if (withCqrs) { %>import type { CommandBus, QueryBus } from '@nestjs/cqrs';
+<% if (withCqrs) { %>import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { CommandBus, QueryBus } from '@nestjs/cqrs';
 import type { AuthenticatedSession } from '@nestjs-fastify-nx/infra-auth';
 import { <%= className %>Controller } from './<%= fileName %>.controller';
 import { Create<%= className %>Command } from './create-<%= fileName %>';
@@ -51,7 +51,8 @@ describe('<%= className %>Controller', () => {
     expect(result.hasMore).toBe(false);
   });
 });
-<% } else { %>import { Test } from '@nestjs/testing';
+<% } else { %>import { describe, expect, it } from 'vitest';
+import { Test } from '@nestjs/testing';
 import { <%= className %>Controller } from './<%= fileName %>.controller';
 
 describe('<%= className %>Controller', () => {

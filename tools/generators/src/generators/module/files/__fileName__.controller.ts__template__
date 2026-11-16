@@ -2,7 +2,6 @@
 import { CommandBus, QueryBus } from '@nestjs/cqrs';
 import {
   ApiCreatedResponse,
-  ApiOkResponse,
   ApiOperation,
   ApiTags,
 } from '@nestjs/swagger';
@@ -12,7 +11,7 @@ import {
   ListResponseDto,
   toCursorListResponse,
 } from '@nestjs-fastify-nx/contracts';
-import { CurrentUser, type AuthenticatedSession } from '@nestjs-fastify-nx/infra-auth';
+import { CurrentUser, requireOrganizationId, type AuthenticatedSession } from '@nestjs-fastify-nx/infra-auth';
 import { Create<%= className %>Command } from './create-<%= fileName %>';
 import { List<%= className %>Query } from './list-<%= fileName %>';
 import {
@@ -45,7 +44,7 @@ export class <%= className %>Controller {
   ): Promise<<%= className %>ResponseDto> {
     return this.commandBus.execute(
       new Create<%= className %>Command({
-        organizationId: user.organizationId,
+        organizationId: requireOrganizationId(user),
         userId: user.userId,
         name: body.name,
       }),
@@ -62,7 +61,7 @@ export class <%= className %>Controller {
     @Query() filter: List<%= className %>FilterDto,
   ): Promise<ListResponseDto<<%= className %>ResponseDto>> {
     const result = await this.queryBus.execute(
-      new List<%= className %>Query(user.organizationId, filter.limit, filter.startingAfter),
+      new List<%= className %>Query(requireOrganizationId(user), filter.limit, filter.startingAfter),
     );
 
     return toCursorListResponse({
@@ -95,10 +94,10 @@ export class <%= className %>Controller {
     description: 'List of <%= fileName %> records.',
   })
   @ApiCommonErrors()
-  async list(
-    @CurrentUser() user: AuthenticatedSession,
-    @Query() filter: List<%= className %>FilterDto,
-  ): Promise<ListResponseDto<<%= className %>ResponseDto>> {
+  list(
+    @CurrentUser() _user: AuthenticatedSession,
+    @Query() _filter: List<%= className %>FilterDto,
+  ): ListResponseDto<<%= className %>ResponseDto> {
     return toUnpaginatedListResponse(<%= constantName %>_PATH, []);
   }
 }

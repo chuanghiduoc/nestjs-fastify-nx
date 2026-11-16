@@ -174,8 +174,9 @@ export class UserListItemResponseDto {
 ```
 
 The duplication is the point: it buys the boundary. **Placement rule:**
-`class-validator` belongs only in DTO files; `@nestjs/swagger` only under
-`presentation/` (DTOs and controllers). Operation files, ports and modules stay
+`class-validator` belongs only in DTO files; `@nestjs/swagger` only in
+presentation DTOs and controllers (`<ctx>.dto.ts` / `<ctx>.controller.ts` in a
+leaf, `presentation/**` in an engine). Operation files and ports stay
 framework-agnostic. Sensitive columns are kept out of responses by
 projecting into a purpose-built DTO that simply never declares them — not by `@Exclude`.
 

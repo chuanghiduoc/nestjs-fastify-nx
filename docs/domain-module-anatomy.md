@@ -511,9 +511,10 @@ don't confuse it with the `User` entity, and don't redefine it per context.
 
 A class with `class-validator` decorators for requests and
 `@nestjs/swagger`'s `@ApiProperty` for responses. `class-validator` belongs
-only in DTO files; `@nestjs/swagger` only under `presentation/` — DTOs here and
-the controllers that carry `@ApiTags`/`@ApiOkResponse`. Operation files, ports
-and modules stay framework-agnostic (enforced by ESLint). Create one per
+only in DTO files; `@nestjs/swagger` only in presentation DTOs and controllers
+(`<ctx>.dto.ts` / `<ctx>.controller.ts` in a leaf, `presentation/**` in an
+engine) — the files that carry `@ApiTags`/`@ApiOkResponse`. Operation files
+and ports stay framework-agnostic (enforced by ESLint). Create one per
 request/response shape.
 
 ```typescript

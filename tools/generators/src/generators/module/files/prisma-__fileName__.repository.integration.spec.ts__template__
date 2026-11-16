@@ -38,6 +38,12 @@ describe('Prisma<%= className %>Repository (integration)', () => {
 
   beforeEach(async () => {
     await cleaner.truncateAll();
+    await prisma.db.organization.createMany({
+      data: [
+        { id: ORG_ID, name: '<%= className %> Org', slug: '<%= fileName %>-org' },
+        { id: OTHER_ORG_ID, name: 'Other <%= className %>', slug: '<%= fileName %>-other' },
+      ],
+    });
     await prisma.db.user.create({
       data: {
         id: USER_ID,
@@ -71,13 +77,15 @@ describe('Prisma<%= className %>Repository (integration)', () => {
   it('lists with keyset pagination and never crosses the organization boundary', async () => {
     const first = generateId();
     const second = generateId();
+    const third = generateId();
     await seedRecord(first, ORG_ID, 'first');
     await seedRecord(second, ORG_ID, 'second');
+    await seedRecord(third, ORG_ID, 'third');
     await seedRecord(generateId(), OTHER_ORG_ID, 'other-org');
 
     const page = await repository.findAllCursor({ organizationId: ORG_ID, limit: 2 });
-    expect(page.items.map((record) => record.id)).toEqual([second, first]);
-    expect(page.hasMore).toBe(false);
+    expect(page.items.map((record) => record.id)).toEqual([third, second]);
+    expect(page.hasMore).toBe(true);
 
     const scoped = await repository.findAllCursor({ organizationId: OTHER_ORG_ID, limit: 2 });
     expect(scoped.items).toHaveLength(1);

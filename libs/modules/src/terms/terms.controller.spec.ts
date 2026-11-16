@@ -135,7 +135,11 @@ describe('TermsController', () => {
     expect(commandBus.execute).toHaveBeenNthCalledWith(2, expect.objectContaining({ id }));
     expect(commandBus.execute).toHaveBeenNthCalledWith(
       3,
-      expect.objectContaining({ userId: USER_ID, termId: id }),
+      expect.objectContaining({
+        userId: USER_ID,
+        termId: id,
+        ipAddress: '203.0.113.4',
+      }),
     );
   });
 });

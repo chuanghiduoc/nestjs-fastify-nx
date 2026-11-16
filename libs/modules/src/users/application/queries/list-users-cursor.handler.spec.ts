@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { decodeCursor } from '@nestjs-fastify-nx/shared';
+import { decodeCursor, generateId } from '@nestjs-fastify-nx/shared';
 import { MockUserRepository } from '../../testing/mock-user-repository';
 import { UserFactory } from '../../testing/user.factory';
 import { ListUsersCursorHandler } from './list-users-cursor';
@@ -41,6 +41,29 @@ describe('ListUsersCursorHandler', () => {
     expect(result.data).toHaveLength(2);
     expect(result.hasMore).toBe(false);
     expect(result.lastCursor).not.toBeNull();
+  });
+
+  it('never leaks the platform role when the membership role is missing', async () => {
+    const createdAt = new Date('2026-01-01T00:00:00.000Z');
+    const item = {
+      id: generateId(),
+      email: 'no-membership@test.com',
+      name: 'No Membership',
+      role: 'ADMIN',
+      organizationRole: undefined,
+      status: 'ACTIVE',
+      createdAt,
+      updatedAt: createdAt,
+    };
+    const port = {
+      findAllCursor: () => Promise.resolve({ items: [item], hasMore: false }),
+    } as never;
+    const stubHandler = new ListUsersCursorHandler(port);
+
+    const result = await stubHandler.execute(new ListUsersCursorQuery(ORG_ID, 10));
+
+    expect(result.data).toHaveLength(1);
+    expect(result.data[0]?.role).toBe('');
   });
 
   it('returns first page with hasMore=true when items exceed limit', async () => {

@@ -326,7 +326,6 @@ export default defineConfig(
       '**/presentation/**',
       'libs/modules/src/*/*.dto.ts',
       '**/*.controller.ts',
-      '**/*.module.ts',
       '**/*.spec.ts',
       '**/*.integration.ts',
     ],

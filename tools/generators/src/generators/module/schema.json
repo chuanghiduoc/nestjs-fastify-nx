@@ -1,8 +1,8 @@
 {
   "$schema": "http://json-schema.org/schema",
   "$id": "ModuleGenerator",
-  "title": "DDD Module Generator",
-  "description": "Scaffold a new DDD module with domain/application/infrastructure/presentation layers",
+  "title": "Module Generator",
+  "description": "Scaffold a bounded context as a flat leaf folder under libs/modules/src/<name>/ (optional colocated CQRS command/query files), or an orchestrator project under libs/composition/<name>/ when --directory=composition",
   "type": "object",
   "properties": {
     "name": {

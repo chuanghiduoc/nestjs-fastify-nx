@@ -90,6 +90,14 @@ describe('PrismaFeatureFlagRepository (integration)', () => {
     expect(updated?.description).toBe('before');
   });
 
+  it('makes a freshly written flag visible to findAll and findById', async () => {
+    const id = '019dd1a5-9235-70db-8d57-54040000000f';
+    await repository.create(flag(id, 'read.after.write'));
+
+    expect((await repository.findById(ORG_ID, id))?.key).toBe('read.after.write');
+    expect((await repository.findAll(ORG_ID)).map((stored) => stored.id)).toEqual([id]);
+  });
+
   it('paginates same-timestamp flags on the id tiebreaker', async () => {
     const sameTime = new Date('2026-07-01T00:00:00.000Z');
     const base = {
