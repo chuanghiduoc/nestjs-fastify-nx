@@ -127,6 +127,21 @@ COPY --from=build-dev --chown=appuser:appgroup /app/dist/apps/scheduler ./dist
 USER appuser
 CMD ["node", "dist/main.js"]
 
+# One dev image for api + worker + scheduler: they already share the merged node_modules layer, so
+# the only per-service delta is the dist copy and the compose `command:`. The per-service dev
+# targets above stay for per-image debugging. No HEALTHCHECK here — compose supplies the
+# service-specific probe (HTTP liveness for api, file freshness for worker/scheduler).
+FROM runtime AS app-dev
+ENV NODE_ENV=development \
+    PORT=3000
+COPY --from=runtime-dev-deps --chown=appuser:appgroup /app/node_modules ./node_modules
+COPY --from=build-dev --chown=appuser:appgroup /app/dist/apps/api ./dist/apps/api
+COPY --from=build-dev --chown=appuser:appgroup /app/dist/apps/worker ./dist/apps/worker
+COPY --from=build-dev --chown=appuser:appgroup /app/dist/apps/scheduler ./dist/apps/scheduler
+USER appuser
+EXPOSE 3000 9229
+CMD ["node", "dist/apps/api/main.js"]
+
 # ===========================================================================
 # api, worker and scheduler share one node_modules layer: their webpack-generated
 # manifests pin identical versions, so installing the union once replaces three
@@ -228,6 +243,27 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
   CMD test -f /tmp/scheduler-alive && [ $(( $(date +%s) - $(date -r /tmp/scheduler-alive +%s) )) -lt 60 ] || exit 1
 
 CMD ["node", "dist/main.js"]
+
+
+# Production counterpart of app-dev: one image for api + worker + scheduler, selected per service
+# with `command:`. The api/worker/scheduler targets above stay as the per-image rollback path.
+# No HEALTHCHECK here — compose.prod.yml carries the service-specific probe.
+FROM runtime AS app
+ENV NODE_ENV=production \
+    PORT=3000
+COPY --from=runtime-deps  --chown=appuser:appgroup /app/node_modules ./node_modules
+COPY --from=build-prod --chown=appuser:appgroup /app/dist/apps/api ./dist/apps/api
+COPY --from=build-prod --chown=appuser:appgroup /app/dist/apps/worker ./dist/apps/worker
+COPY --from=build-prod --chown=appuser:appgroup /app/dist/apps/scheduler ./dist/apps/scheduler
+USER appuser
+EXPOSE 3000
+
+LABEL org.opencontainers.image.title="nestjs-fastify-nx-app" \
+      org.opencontainers.image.description="Production image for the api, worker and scheduler processes (one image, per-service command)." \
+      org.opencontainers.image.licenses="MIT" \
+      org.opencontainers.image.vendor="nestjs-fastify-nx"
+
+CMD ["node", "dist/apps/api/main.js"]
 
 
 FROM runtime AS migration

@@ -15,6 +15,12 @@ target "_production" {
   dockerfile = "Dockerfile"
 }
 
+target "app" {
+  inherits = ["_production"]
+  target   = "app"
+  tags     = ["${IMAGE_REGISTRY}/${IMAGE_NAMESPACE}/app:${IMAGE_TAG}"]
+}
+
 target "api" {
   inherits = ["_production"]
   target   = "api"
@@ -40,5 +46,5 @@ target "migration" {
 }
 
 group "production" {
-  targets = ["api", "worker", "scheduler", "migration"]
+  targets = ["app", "migration"]
 }

@@ -3,7 +3,7 @@
 #
 #   docker compose -f docker/compose.yml -f docker/compose.prod.yml up -d
 #
-# API_IMAGE / WORKER_IMAGE / SCHEDULER_IMAGE / MIGRATION_IMAGE are mandatory immutable
+# APP_IMAGE / MIGRATION_IMAGE are mandatory immutable
 # registry digests. Runtime variables come from separate service-specific env files so API,
 # worker, scheduler and migration do not receive one another's credentials.
 #
@@ -206,7 +206,8 @@ services:
 
   api:
     <<: [*app-security, *app-logging]
-    image: ${API_IMAGE:?Set API_IMAGE to an immutable image digest}
+    image: ${APP_IMAGE:?Set APP_IMAGE to an immutable image digest}
+    command: ['node', 'dist/apps/api/main.js']
     env_file:
       - path: ../.env.api
         required: true
@@ -239,8 +240,20 @@ services:
       redis-queue:
         condition: service_healthy
     restart: unless-stopped
-    # Liveness is the image's own node-based HEALTHCHECK (Dockerfile) — it does not depend on
-    # busybox wget flags, which Alpine silently ignores.
+    # The shared app image carries no HEALTHCHECK (one image serves api, worker and scheduler), so
+    # the liveness probe lives here: node's http client, not busybox wget (Alpine ignores -f).
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "require('http').get('http://127.0.0.1:'+(process.env.PORT||3000)+'/api/v1/health/live',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
     stop_grace_period: 30s
     deploy:
       replicas: ${API_REPLICAS:-1}
@@ -263,7 +276,7 @@ services:
 
   worker:
     <<: [*app-security, *app-logging]
-    image: ${WORKER_IMAGE:?Set WORKER_IMAGE to an immutable image digest}
+    image: ${APP_IMAGE:?Set APP_IMAGE to an immutable image digest}
     env_file:
       - path: ../.env.worker
         required: true
@@ -319,7 +332,7 @@ services:
 
   scheduler:
     <<: [*app-security, *app-logging]
-    image: ${SCHEDULER_IMAGE:?Set SCHEDULER_IMAGE to an immutable image digest}
+    image: ${APP_IMAGE:?Set APP_IMAGE to an immutable image digest}
     env_file:
       - path: ../.env.scheduler
         required: true

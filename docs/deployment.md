@@ -29,7 +29,7 @@ Images are built automatically by the [release workflow](../.github/workflows/re
 To build manually:
 
 ```bash
-# Bake submits all four targets as one BuildKit graph. Shared dependency and
+# Bake submits both targets (app, migration) as one BuildKit graph. Shared dependency and
 # Nx build stages execute once; service-specific production installs run in parallel.
 IMAGE_REGISTRY=your-registry IMAGE_NAMESPACE=your-project IMAGE_TAG=latest \
   docker buildx bake -f docker-bake.hcl production --load
@@ -99,10 +99,28 @@ docker compose --env-file .env -f docker/compose.yml -f docker/compose.prod.yml 
 
 The base `compose.yml` defines the infrastructure services (PostgreSQL, Redis,
 Garage) and healthcheck specs for worker/scheduler. The
-`compose.prod.yml` requires digest-pinned `API_IMAGE`, `WORKER_IMAGE`,
-`SCHEDULER_IMAGE`, and `MIGRATION_IMAGE`. It provisions separate database roles
-after migrations and gives each process its own env file, preventing the API,
-worker, scheduler, and migration containers from inheriting one shared secret set.
+`compose.prod.yml` requires digest-pinned `APP_IMAGE` and `MIGRATION_IMAGE`:
+one `app` image carries the api, worker and scheduler bundles and each service
+selects its process with `command:` (`node dist/apps/<service>/main.js`).
+It provisions separate database roles after migrations and gives each process
+its own env file, preventing the API, worker, scheduler, and migration
+containers from inheriting one shared secret set.
+
+### One image, three processes
+
+`api`, `worker` and `scheduler` already shared one merged `node_modules` layer,
+so they ship as a single `app` image; the deployment units stay separate
+containers, which keeps independent scaling, per-service healthchecks and
+resource limits:
+
+```bash
+docker compose --env-file .env -f docker/compose.yml -f docker/compose.prod.yml \
+  up -d --scale worker=4
+```
+
+The per-service Dockerfile targets (`api`, `worker`, `scheduler`) remain as the
+per-image rollback path — build one of those only when you need to roll a single
+service back to an older artifact independent of the other two.
 
 ### Small VPS: the lite profile
 
@@ -118,9 +136,10 @@ processes plus the data tier. Measured idle with `docker stats` on the productio
 | `compose.prod.yml + compose.lite.yml` | 195 MiB | 155 MiB | 156 MiB   | 47 MiB   | 15 MiB   | —      | —       | **568 MiB** |
 
 The scanner is the single largest consumer, which is why it is no longer part of the default stack.
-Merging api, worker and scheduler into one process would save roughly one Node baseline
+Merging api, worker and scheduler into one _process_ would save roughly one Node baseline
 (~150 MiB) but would put the RLS-bypassing worker/scheduler database roles inside the request
 path — see `docs/agent-gotchas.md` on per-process credentials — so the processes stay separate.
+They already share one _image_ (see "One image, three processes").
 
 `compose.lite.yml` is for a single host with 1–2 GiB of RAM:
 

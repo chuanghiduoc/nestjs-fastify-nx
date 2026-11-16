@@ -125,9 +125,7 @@ jobs:
       # `!override` compatibility and env-file wiring before a real deployment does.
       - name: Validate production compose overlay
         env:
-          API_IMAGE: example.invalid/api:ci
-          WORKER_IMAGE: example.invalid/worker:ci
-          SCHEDULER_IMAGE: example.invalid/scheduler:ci
+          APP_IMAGE: example.invalid/app:ci
           MIGRATION_IMAGE: example.invalid/migration:ci
           POSTGRES_ADMIN_USER: postgres
           POSTGRES_ADMIN_PASSWORD: ${{ github.run_id }}
