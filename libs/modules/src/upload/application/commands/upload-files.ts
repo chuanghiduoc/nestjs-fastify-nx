@@ -7,13 +7,17 @@ import {
   type StoragePort,
   type StoredFile as StoredFileResult,
 } from '@nestjs-fastify-nx/infra-storage';
-import { StoredFile, extensionForMimeType, type StoredFileProps } from './stored-file.entity';
+import {
+  StoredFile,
+  extensionForMimeType,
+  type StoredFileProps,
+} from '../../domain/entities/stored-file.entity';
 import {
   STORED_FILE_REPOSITORY,
   type StoredFileRepositoryPort,
-} from './stored-file-repository.port';
-import { UPLOAD_LIMITS, type UploadLimits } from './upload-limits';
-import { UploadPublicationService } from './upload-publication.service';
+} from '../../domain/ports/stored-file-repository.port';
+import { UPLOAD_LIMITS, type UploadLimits } from '../upload-limits';
+import { UploadPublicationService } from '../upload-publication.service';
 
 export interface MultipartUploadFile {
   readonly filepath: string;

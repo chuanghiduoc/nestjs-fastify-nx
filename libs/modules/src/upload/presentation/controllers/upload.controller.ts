@@ -41,20 +41,20 @@ import {
   requireOrganizationId,
   type AuthenticatedSession,
 } from '@nestjs-fastify-nx/infra-auth';
-import { PresignUploadCommand } from './presign-upload';
-import { ConfirmUploadCommand } from './confirm-upload';
-import { DeleteUploadCommand } from './delete-upload';
-import { PresignUploadDto } from './presign-upload.dto';
-import { ConfirmUploadDto } from './confirm-upload.dto';
-import { PresignedUploadDto } from './presigned-upload.dto';
-import { StoredFileDto } from './stored-file.dto';
+import { PresignUploadCommand } from '../../application/commands/presign-upload';
+import { ConfirmUploadCommand } from '../../application/commands/confirm-upload';
+import { DeleteUploadCommand } from '../../application/commands/delete-upload';
+import { PresignUploadDto } from '../dto/presign-upload.dto';
+import { ConfirmUploadDto } from '../dto/confirm-upload.dto';
+import { PresignedUploadDto } from '../dto/presigned-upload.dto';
+import { StoredFileDto } from '../dto/stored-file.dto';
 import {
   prepareMultipartUpload,
   prepareMultipartUploads,
   type PreparedMultipartUpload,
-} from './prepare-multipart-upload';
-import { UploadFilesCommand } from './upload-files';
-import { GetUploadQuery } from './get-upload';
+} from '../multipart/prepare-multipart-upload';
+import { UploadFilesCommand } from '../../application/commands/upload-files';
+import { GetUploadQuery } from '../../application/queries/get-upload';
 
 const PRESIGN_LIMIT = { default: { limit: 10, ttl: 60_000 } };
 const CONFIRM_LIMIT = { default: { limit: 30, ttl: 60_000 } };

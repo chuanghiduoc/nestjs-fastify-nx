@@ -6,8 +6,8 @@ import {
   type PresignedUpload,
   type StoragePort,
 } from '@nestjs-fastify-nx/infra-storage';
-import { extensionForMimeType } from './stored-file.entity';
-import { UPLOAD_LIMITS, type UploadLimits } from './upload-limits';
+import { extensionForMimeType } from '../../domain/entities/stored-file.entity';
+import { UPLOAD_LIMITS, type UploadLimits } from '../upload-limits';
 
 export class PresignUploadCommand extends Command<PresignedUpload> {
   constructor(

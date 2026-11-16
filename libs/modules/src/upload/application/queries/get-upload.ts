@@ -3,12 +3,12 @@ import { Query, QueryHandler, type IQueryHandler } from '@nestjs/cqrs';
 import { AUTHORIZATION_PORT, type AuthorizationPort } from '@nestjs-fastify-nx/core';
 import { PERMISSIONS, RESOURCE_TYPES } from '@nestjs-fastify-nx/shared';
 import type { StoredFile } from '@nestjs-fastify-nx/infra-storage';
-import { objectNotFound } from './stored-file.entity';
+import { objectNotFound } from '../../domain/entities/stored-file.entity';
 import {
   STORED_FILE_REPOSITORY,
   type StoredFileRepositoryPort,
-} from './stored-file-repository.port';
-import { UploadPublicationService } from './upload-publication.service';
+} from '../../domain/ports/stored-file-repository.port';
+import { UploadPublicationService } from '../upload-publication.service';
 
 export class GetUploadQuery extends Query<StoredFile> {
   constructor(

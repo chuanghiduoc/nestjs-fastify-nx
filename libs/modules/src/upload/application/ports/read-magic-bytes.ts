@@ -1,6 +1,6 @@
 import type { StoragePort } from '@nestjs-fastify-nx/infra-storage';
-import { assertMagicBytesMatch } from './stored-file.entity';
-import type { UploadLimits } from './upload-limits';
+import { assertMagicBytesMatch } from '../../domain/entities/stored-file.entity';
+import type { UploadLimits } from '../upload-limits';
 
 export interface MagicByteHeadDeps {
   readonly storage: StoragePort;

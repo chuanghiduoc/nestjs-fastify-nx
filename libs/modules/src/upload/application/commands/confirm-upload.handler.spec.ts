@@ -4,13 +4,13 @@ import { DomainException, isDomainException } from '@nestjs-fastify-nx/core';
 import { ERROR_CODES } from '@nestjs-fastify-nx/contracts';
 import { STORED_FILE_STATUS } from '@nestjs-fastify-nx/shared';
 import type { ObjectMetadata, StoragePort } from '@nestjs-fastify-nx/infra-storage';
-import { StoredFile, type StoredFileProps } from './stored-file.entity';
-import type { StoredFileRepositoryPort } from './stored-file-repository.port';
-import type { UploadVerificationDispatcher } from './upload-verification.dispatcher';
-import type { UploadLimits } from './upload-limits';
+import { StoredFile, type StoredFileProps } from '../../domain/entities/stored-file.entity';
+import type { StoredFileRepositoryPort } from '../../domain/ports/stored-file-repository.port';
+import type { UploadVerificationDispatcher } from '../ports/upload-verification.dispatcher';
+import type { UploadLimits } from '../upload-limits';
 import { ConfirmUploadCommand } from './confirm-upload';
 import { ConfirmUploadHandler } from './confirm-upload';
-import { UploadPublicationService } from './upload-publication.service';
+import { UploadPublicationService } from '../upload-publication.service';
 
 const USER_ID = '019dd1a5-9235-70db-8d57-54ef901d8185';
 const ORGANIZATION_ID = '019dd1a5-9235-70db-8d57-54ef901d8186';

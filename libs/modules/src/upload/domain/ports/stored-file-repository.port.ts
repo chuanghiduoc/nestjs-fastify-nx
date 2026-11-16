@@ -1,5 +1,5 @@
 import type { MalwareScanOutcome, StoredFileStatus } from '@nestjs-fastify-nx/shared';
-import type { StoredFile, StoredFileProps } from './stored-file.entity';
+import type { StoredFile, StoredFileProps } from '../entities/stored-file.entity';
 
 export const STORED_FILE_REPOSITORY = Symbol('STORED_FILE_REPOSITORY');
 

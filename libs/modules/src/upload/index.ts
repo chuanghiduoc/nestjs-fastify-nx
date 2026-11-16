@@ -1,10 +1,13 @@
 export { UploadModule, UploadVerificationModule } from './upload.module';
-export { VerifyUploadCommand, type VerifyUploadOutcome } from './verify-upload';
+export {
+  VerifyUploadCommand,
+  type VerifyUploadOutcome,
+} from './application/commands/verify-upload';
 export {
   MALWARE_SCANNER_PORT,
   type MalwareScannerPort,
   type MalwareScanResult,
-} from './malware-scanner.port';
-export type { UploadVerificationRequest } from './upload-verification.dispatcher';
-export { enqueueUploadVerification } from './bullmq-upload-verification.dispatcher';
-export { prepareMultipartUploads } from './prepare-multipart-upload';
+} from './domain/ports/malware-scanner.port';
+export type { UploadVerificationRequest } from './application/ports/upload-verification.dispatcher';
+export { enqueueUploadVerification } from './infrastructure/dispatchers/bullmq-upload-verification.dispatcher';
+export { prepareMultipartUploads } from './presentation/multipart/prepare-multipart-upload';

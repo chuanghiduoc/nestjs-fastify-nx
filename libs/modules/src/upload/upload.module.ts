@@ -3,19 +3,19 @@ import { BullModule } from '@nestjs/bullmq';
 import { StorageModule } from '@nestjs-fastify-nx/infra-storage';
 import { DatabaseModule } from '@nestjs-fastify-nx/infra-database';
 import { QUEUE_NAMES } from '@nestjs-fastify-nx/shared';
-import { UploadController } from './upload.controller';
-import { PresignUploadHandler } from './presign-upload';
-import { ConfirmUploadHandler } from './confirm-upload';
-import { DeleteUploadHandler } from './delete-upload';
-import { VerifyUploadHandler } from './verify-upload';
-import { UPLOAD_VERIFICATION_DISPATCHER } from './upload-verification.dispatcher';
-import { UPLOAD_LIMITS, readUploadLimits } from './upload-limits';
-import { STORED_FILE_REPOSITORY } from './stored-file-repository.port';
-import { PrismaStoredFileRepository } from './prisma-stored-file.repository';
-import { BullMqUploadVerificationDispatcher } from './bullmq-upload-verification.dispatcher';
-import { UploadPublicationService } from './upload-publication.service';
-import { UploadFilesHandler } from './upload-files';
-import { GetUploadHandler } from './get-upload';
+import { UploadController } from './presentation/controllers/upload.controller';
+import { PresignUploadHandler } from './application/commands/presign-upload';
+import { ConfirmUploadHandler } from './application/commands/confirm-upload';
+import { DeleteUploadHandler } from './application/commands/delete-upload';
+import { VerifyUploadHandler } from './application/commands/verify-upload';
+import { UPLOAD_VERIFICATION_DISPATCHER } from './application/ports/upload-verification.dispatcher';
+import { UPLOAD_LIMITS, readUploadLimits } from './application/upload-limits';
+import { STORED_FILE_REPOSITORY } from './domain/ports/stored-file-repository.port';
+import { PrismaStoredFileRepository } from './infrastructure/repositories/prisma-stored-file.repository';
+import { BullMqUploadVerificationDispatcher } from './infrastructure/dispatchers/bullmq-upload-verification.dispatcher';
+import { UploadPublicationService } from './application/upload-publication.service';
+import { UploadFilesHandler } from './application/commands/upload-files';
+import { GetUploadHandler } from './application/queries/get-upload';
 
 const uploadLimitsProvider: Provider = {
   provide: UPLOAD_LIMITS,

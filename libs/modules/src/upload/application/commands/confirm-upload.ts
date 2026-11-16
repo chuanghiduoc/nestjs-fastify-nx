@@ -16,14 +16,14 @@ import {
   objectNotFound,
   StoredFile,
   type StoredFileProps,
-} from './stored-file.entity';
-import { readHeadAndAssertMagicBytes } from './read-magic-bytes';
+} from '../../domain/entities/stored-file.entity';
+import { readHeadAndAssertMagicBytes } from '../ports/read-magic-bytes';
 import {
   STORED_FILE_REPOSITORY,
   type StoredFileRepositoryPort,
-} from './stored-file-repository.port';
-import { UPLOAD_LIMITS, type UploadLimits } from './upload-limits';
-import { UploadPublicationService } from './upload-publication.service';
+} from '../../domain/ports/stored-file-repository.port';
+import { UPLOAD_LIMITS, type UploadLimits } from '../upload-limits';
+import { UploadPublicationService } from '../upload-publication.service';
 
 function isPolicyViolation(err: unknown): boolean {
   return isDomainException(err) && err.kind === 'validation';

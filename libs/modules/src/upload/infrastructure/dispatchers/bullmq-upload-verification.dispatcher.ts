@@ -6,7 +6,7 @@ import { BULL_JOB_NAMES, QUEUE_NAMES, RETRIED_JOB_OPTIONS } from '@nestjs-fastif
 import type {
   UploadVerificationDispatcher,
   UploadVerificationRequest,
-} from './upload-verification.dispatcher';
+} from '../../application/ports/upload-verification.dispatcher';
 
 export function verificationJobId(storageKey: string): string {
   // A delimiter replacement is not injective (`a/b_c` and `a_b/c` collide). Hash the complete

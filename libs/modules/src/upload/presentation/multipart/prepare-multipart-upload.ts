@@ -14,8 +14,8 @@ import {
   assertMagicBytesMatch,
   assertMimeAllowed,
   assertSizeWithinLimit,
-} from './stored-file.entity';
-import { readUploadLimits, UPLOAD_MAGIC_BYTE_COUNT } from './upload-limits';
+} from '../../domain/entities/stored-file.entity';
+import { readUploadLimits, UPLOAD_MAGIC_BYTE_COUNT } from '../../application/upload-limits';
 
 export interface PreparedMultipartUpload {
   filepath: string;

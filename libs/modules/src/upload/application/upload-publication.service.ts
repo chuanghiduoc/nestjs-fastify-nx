@@ -5,11 +5,11 @@ import {
   type StoragePort,
   type StoredFile as StoredFileResult,
 } from '@nestjs-fastify-nx/infra-storage';
-import { StoredFile } from './stored-file.entity';
+import { StoredFile } from '../domain/entities/stored-file.entity';
 import {
   UPLOAD_VERIFICATION_DISPATCHER,
   type UploadVerificationDispatcher,
-} from './upload-verification.dispatcher';
+} from './ports/upload-verification.dispatcher';
 
 @Injectable()
 export class UploadPublicationService {

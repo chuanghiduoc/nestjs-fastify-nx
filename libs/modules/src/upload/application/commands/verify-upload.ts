@@ -6,10 +6,13 @@ import { STORAGE_PORT, type StoragePort } from '@nestjs-fastify-nx/infra-storage
 import {
   STORED_FILE_REPOSITORY,
   type StoredFileRepositoryPort,
-} from './stored-file-repository.port';
-import { MALWARE_SCANNER_PORT, type MalwareScannerPort } from './malware-scanner.port';
-import { UPLOAD_LIMITS, type UploadLimits } from './upload-limits';
-import { readHeadAndAssertMagicBytes } from './read-magic-bytes';
+} from '../../domain/ports/stored-file-repository.port';
+import {
+  MALWARE_SCANNER_PORT,
+  type MalwareScannerPort,
+} from '../../domain/ports/malware-scanner.port';
+import { UPLOAD_LIMITS, type UploadLimits } from '../upload-limits';
+import { readHeadAndAssertMagicBytes } from '../ports/read-magic-bytes';
 
 export type VerifyUploadOutcome = 'verified' | 'rejected' | 'skipped';
 

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { StoragePort } from '@nestjs-fastify-nx/infra-storage';
-import type { UploadLimits } from './upload-limits';
+import type { UploadLimits } from '../upload-limits';
 import { PresignUploadCommand } from './presign-upload';
 import { PresignUploadHandler } from './presign-upload';
 

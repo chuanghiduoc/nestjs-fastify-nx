@@ -3,9 +3,9 @@ import type { Mock } from 'vitest';
 import { MALWARE_SCAN_OUTCOME, STORED_FILE_STATUS } from '@nestjs-fastify-nx/shared';
 import { DomainException } from '@nestjs-fastify-nx/core';
 import type { StoragePort } from '@nestjs-fastify-nx/infra-storage';
-import type { StoredFileRepositoryPort } from './stored-file-repository.port';
-import type { MalwareScannerPort } from './malware-scanner.port';
-import type { UploadLimits } from './upload-limits';
+import type { StoredFileRepositoryPort } from '../../domain/ports/stored-file-repository.port';
+import type { MalwareScannerPort } from '../../domain/ports/malware-scanner.port';
+import type { UploadLimits } from '../upload-limits';
 import { VerifyUploadCommand } from './verify-upload';
 import { VerifyUploadHandler } from './verify-upload';
 

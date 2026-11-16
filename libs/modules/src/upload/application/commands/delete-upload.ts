@@ -2,11 +2,11 @@ import { Inject, Logger } from '@nestjs/common';
 import { Command, CommandHandler, type ICommandHandler } from '@nestjs/cqrs';
 import { AUTHORIZATION_PORT, type AuthorizationPort } from '@nestjs-fastify-nx/core';
 import { PERMISSIONS, RESOURCE_TYPES } from '@nestjs-fastify-nx/shared';
-import { objectNotFound } from './stored-file.entity';
+import { objectNotFound } from '../../domain/entities/stored-file.entity';
 import {
   STORED_FILE_REPOSITORY,
   type StoredFileRepositoryPort,
-} from './stored-file-repository.port';
+} from '../../domain/ports/stored-file-repository.port';
 
 export class DeleteUploadCommand extends Command<void> {
   constructor(
