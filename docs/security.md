@@ -260,8 +260,9 @@ that included it would let one compromised response hand over every other device
 
 Per-service Dockerfile properties relied on by the scanners above:
 
-- Pinned base image by SHA256 digest (rebuilds reproducible, immune to
-  tag mutation).
+- Base image pinned by SHA256 digest (immune to tag mutation); the runtime
+  stage runs `apk upgrade --no-cache` so Alpine security patches land before
+  the upstream image tag is rebuilt.
 - Non-root user (UID 1001), `STOPSIGNAL SIGTERM`, tini PID 1.
 - `compose.prod.yml` drops every capability on **both** tiers. Apps additionally run
   `read_only: true` with a `noexec,nosuid` tmpfs; postgres, redis and garage cannot
