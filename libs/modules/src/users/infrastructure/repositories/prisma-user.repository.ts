@@ -4,12 +4,12 @@ import { ERROR_CODES, I18N_KEYS } from '@nestjs-fastify-nx/contracts';
 import { PrismaService, escapeLikePattern } from '@nestjs-fastify-nx/infra-database';
 import { Prisma } from '@nestjs-fastify-nx/infra-database';
 import { keysetAfter, takePage } from '@nestjs-fastify-nx/shared';
-import { User, UserRole, UserStatus } from './user.entity';
+import { User, UserRole, UserStatus } from '../../domain/entities/user.entity';
 import type {
   FindAllCursorOptions,
   FindAllCursorResult,
   UserRepositoryPort,
-} from './user-repository.port';
+} from '../../domain/ports/user-repository.port';
 
 type UserRow = {
   id: string;

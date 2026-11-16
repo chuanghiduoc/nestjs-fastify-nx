@@ -3,8 +3,8 @@ import type {
   FindAllCursorOptions,
   FindAllCursorResult,
   UserRepositoryPort,
-} from './user-repository.port';
-import type { User } from './user.entity';
+} from '../domain/ports/user-repository.port';
+import type { User } from '../domain/entities/user.entity';
 
 type UserWithRole = User & { readonly organizationRole: string };
 

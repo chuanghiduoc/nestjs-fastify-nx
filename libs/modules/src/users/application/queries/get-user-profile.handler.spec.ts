@@ -2,9 +2,9 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { DomainException } from '@nestjs-fastify-nx/core';
 import { GetUserProfileHandler } from './get-user-profile';
 import { GetUserProfileQuery } from './get-user-profile';
-import { MockUserRepository } from './mock-user-repository';
-import { UserFactory } from './user.factory';
-import { UserRole } from './user.entity';
+import { MockUserRepository } from '../../testing/mock-user-repository';
+import { UserFactory } from '../../testing/user.factory';
+import { UserRole } from '../../domain/entities/user.entity';
 
 describe('GetUserProfileHandler', () => {
   let handler: GetUserProfileHandler;

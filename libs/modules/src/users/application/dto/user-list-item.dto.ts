@@ -1,4 +1,4 @@
-import type { UserStatus } from './user.entity';
+import type { UserStatus } from '../../domain/entities/user.entity';
 
 export interface UserListItemDto {
   id: string;

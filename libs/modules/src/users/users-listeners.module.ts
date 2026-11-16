@@ -3,7 +3,7 @@ import { BullModule } from '@nestjs/bullmq';
 import { MessagingModule } from '@nestjs-fastify-nx/infra-messaging';
 import { RedisQueueModule } from '@nestjs-fastify-nx/infra-redis';
 import { QUEUE_NAMES } from '@nestjs-fastify-nx/shared';
-import { UserRegisteredListener } from './user-registered.listener';
+import { UserRegisteredListener } from './application/listeners/user-registered.listener';
 
 // Listeners-only slice of the users feature for hosts that should not load the
 // HTTP controller (e.g. scheduler/worker). It pulls in the same EventEmitter2

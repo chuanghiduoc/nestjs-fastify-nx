@@ -6,7 +6,7 @@ import {
 } from '@nestjs-fastify-nx/testing';
 import type { TestContainers } from '@nestjs-fastify-nx/testing';
 import type { DecodedCursor } from '@nestjs-fastify-nx/shared';
-import { UserFactory } from './user.factory';
+import { UserFactory } from '../../testing/user.factory';
 import { PrismaUserRepository } from './prisma-user.repository';
 import { PrismaService } from '@nestjs-fastify-nx/infra-database';
 

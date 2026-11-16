@@ -3,9 +3,12 @@ import { Query, QueryHandler, type IQueryHandler } from '@nestjs/cqrs';
 import { DomainException } from '@nestjs-fastify-nx/core';
 import { invalidCursorProblem } from '@nestjs-fastify-nx/contracts';
 import { decodeCursor, lastCursorOf, type DecodedCursor } from '@nestjs-fastify-nx/shared';
-import { USER_REPOSITORY_PORT, type UserRepositoryPort } from './user-repository.port';
-import type { UserStatus } from './user.entity';
-import type { UserListItemDto } from './user-list-item.dto';
+import {
+  USER_REPOSITORY_PORT,
+  type UserRepositoryPort,
+} from '../../domain/ports/user-repository.port';
+import type { UserStatus } from '../../domain/entities/user.entity';
+import type { UserListItemDto } from '../dto/user-list-item.dto';
 
 export interface ListUsersCursorResult {
   data: UserListItemDto[];

@@ -2,8 +2,11 @@ import { Inject } from '@nestjs/common';
 import { Query, QueryHandler, type IQueryHandler } from '@nestjs/cqrs';
 import { DomainException } from '@nestjs-fastify-nx/core';
 import { I18N_KEYS, ERROR_CODES } from '@nestjs-fastify-nx/contracts';
-import { USER_REPOSITORY_PORT, type UserRepositoryPort } from './user-repository.port';
-import type { UserRole, UserStatus } from './user.entity';
+import {
+  USER_REPOSITORY_PORT,
+  type UserRepositoryPort,
+} from '../../domain/ports/user-repository.port';
+import type { UserRole, UserStatus } from '../../domain/entities/user.entity';
 
 export interface UserProfileResult {
   id: string;

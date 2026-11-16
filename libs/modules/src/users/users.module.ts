@@ -1,10 +1,10 @@
 import { Module } from '@nestjs/common';
-import { USER_REPOSITORY_PORT } from './user-repository.port';
-import { PrismaUserRepository } from './prisma-user.repository';
-import { GetUserProfileHandler } from './get-user-profile';
-import { ListUsersCursorHandler } from './list-users-cursor';
+import { USER_REPOSITORY_PORT } from './domain/ports/user-repository.port';
+import { PrismaUserRepository } from './infrastructure/repositories/prisma-user.repository';
+import { GetUserProfileHandler } from './application/queries/get-user-profile';
+import { ListUsersCursorHandler } from './application/queries/list-users-cursor';
 import { UsersListenersModule } from './users-listeners.module';
-import { UsersController } from './users.controller';
+import { UsersController } from './presentation/controllers/users.controller';
 
 @Module({
   imports: [UsersListenersModule],
