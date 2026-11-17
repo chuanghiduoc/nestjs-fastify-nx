@@ -75,6 +75,8 @@
         "default",
         "^default",
         "{workspaceRoot}/eslint.config.mjs",
+        "{workspaceRoot}/tsconfig.base.json",
+        "{workspaceRoot}/prisma/schema.prisma",
         "{workspaceRoot}/tools/generators/src/eslint-rules/**/*",
         "{workspaceRoot}/.prettierrc"
       ],
