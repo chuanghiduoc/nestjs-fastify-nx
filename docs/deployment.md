@@ -123,17 +123,24 @@ per-image rollback path. `release.yml` publishes only `app` and `migration`, so
 build a target before you rely on it in an incident. A rollback image must pass
 the same gate as a release image:
 
-1. Set the image name: `export IMAGE_NAMESPACE=your-org IMAGE_TAG=<tag>`.
-2. Build the target into the local daemon: `docker buildx bake worker --load`.
-3. Scan it with the release gate: `./scripts/security/scan-images.sh worker`.
+1. Check out the release that you restore in a separate worktree:
+   `git worktree add ../rollback <tag>`. Run the next steps in `../rollback`.
+   `IMAGE_TAG` only names the image; the checkout selects the source code.
+2. Set the image reference:
+   `export IMAGE_REGISTRY=ghcr.io IMAGE_NAMESPACE=your-org IMAGE_TAG=<tag>`.
+3. Build the target into the local daemon: `docker buildx bake worker --load`.
+4. Scan the image with the release gate values:
+   `TRIVY_SEVERITY=HIGH,CRITICAL TRIVY_EXIT_CODE=1 ./scripts/security/scan-images.sh worker`.
    If the scan fails, do not push the image.
-4. Push the image: `docker push "ghcr.io/${IMAGE_NAMESPACE}/worker:${IMAGE_TAG}"`.
-5. Sign it: `./scripts/security/sign-images.sh sign worker`.
-   Changing `APP_IMAGE` moves api, worker and scheduler together; to roll **one**
-   service back independently, pin that service to its own image **and** restore
-   its original entry point in a compose override — those images ship the bundle
-   at `dist/main.js`, while the shared image is addressed per service at
-   `dist/apps/<service>/main.js`:
+5. Push the image that you scanned:
+   `docker push "${IMAGE_REGISTRY}/${IMAGE_NAMESPACE}/worker:${IMAGE_TAG}"`.
+6. Sign the image: `./scripts/security/sign-images.sh sign worker`.
+
+Changing `APP_IMAGE` moves api, worker and scheduler together; to roll **one**
+service back independently, pin that service to its own image **and** restore
+its original entry point in a compose override — those images ship the bundle
+at `dist/main.js`, while the shared image is addressed per service at
+`dist/apps/<service>/main.js`:
 
 ```yaml
 # docker/compose.rollback.yml — one service only
