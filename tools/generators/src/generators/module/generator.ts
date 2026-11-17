@@ -8,6 +8,7 @@ import {
 } from '@nx/devkit';
 import type { Tree } from '@nx/devkit';
 import * as path from 'path';
+import { registerPermissions, type PermissionAction } from './register-permissions';
 import type { ModuleGeneratorSchema } from './schema';
 
 type DirectoryEnum = 'modules' | 'composition';
@@ -60,6 +61,12 @@ function generateFolderModule(tree: Tree, moduleNames: ModuleNames, withCqrs: bo
     template: '',
   });
 
+  registerPermissions(tree, {
+    constantName: moduleNames.constantName,
+    resourceType: moduleNames.fileName.replace(/-/g, '_'),
+    actions: permissionActionsFor(withCqrs),
+  });
+
   if (!withCqrs) {
     tree.delete(`${folderRoot}/create-${moduleNames.fileName}.ts`);
     tree.delete(`${folderRoot}/list-${moduleNames.fileName}.ts`);
@@ -76,6 +83,10 @@ function generateFolderModule(tree: Tree, moduleNames: ModuleNames, withCqrs: bo
     );
     return json;
   });
+}
+
+function permissionActionsFor(withCqrs: boolean): readonly PermissionAction[] {
+  return withCqrs ? ['read', 'create'] : ['read'];
 }
 
 // Composition stays a real Nx project: it owns an HTTP surface that orchestrates

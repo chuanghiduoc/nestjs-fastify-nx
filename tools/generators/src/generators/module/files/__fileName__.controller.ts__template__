@@ -12,6 +12,8 @@ import {
   toCursorListResponse,
 } from '@nestjs-fastify-nx/contracts';
 import { CurrentUser, requireOrganizationId, type AuthenticatedSession } from '@nestjs-fastify-nx/infra/auth';
+import { RequirePermission } from '@nestjs-fastify-nx/infra/authorization';
+import { PERMISSIONS } from '@nestjs-fastify-nx/shared';
 import { Create<%= className %>Command } from './create-<%= fileName %>';
 import { List<%= className %>Query } from './list-<%= fileName %>';
 import {
@@ -31,6 +33,7 @@ export class <%= className %>Controller {
   ) {}
 
   @Post()
+  @RequirePermission(PERMISSIONS.<%= constantName %>_CREATE)
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Create a new <%= fileName %> for the caller organization.' })
   @ApiCreatedResponse({
@@ -52,6 +55,7 @@ export class <%= className %>Controller {
   }
 
   @Get()
+  @RequirePermission(PERMISSIONS.<%= constantName %>_READ)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'List <%= fileName %> records for the caller organization.' })
   @ApiPaginatedResponse(<%= className %>ResponseDto)
@@ -76,6 +80,8 @@ export class <%= className %>Controller {
 import { ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { ApiCommonErrors, ListResponseDto, toUnpaginatedListResponse } from '@nestjs-fastify-nx/contracts';
 import { CurrentUser, type AuthenticatedSession } from '@nestjs-fastify-nx/infra/auth';
+import { RequirePermission } from '@nestjs-fastify-nx/infra/authorization';
+import { PERMISSIONS } from '@nestjs-fastify-nx/shared';
 import {
   <%= className %>ResponseDto,
   List<%= className %>FilterDto,
@@ -87,6 +93,7 @@ const <%= constantName %>_PATH = '/api/v1/<%= fileName %>';
 @Controller('<%= fileName %>')
 export class <%= className %>Controller {
   @Get()
+  @RequirePermission(PERMISSIONS.<%= constantName %>_READ)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'List <%= fileName %> records for the caller organization.' })
   @ApiOkResponse({
