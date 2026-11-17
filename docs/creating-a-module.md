@@ -17,6 +17,13 @@ pnpm nx g @nestjs-fastify-nx/tools-generators:module --name=products
 
 `pnpm gen:module` scaffolds a **leaf-tier folder** inside the `libs/modules` group and wires the `./products` entry into `libs/modules/package.json`'s exports map. No project is created, nothing is installed, nothing is synced — the import `@nestjs-fastify-nx/modules/products` resolves immediately through the group package. The name must be kebab-case (e.g. `products`, `order-items`).
 
+The generator also registers the permissions of the new module. For `products` it adds:
+
+- `RESOURCE_TYPES.PRODUCTS` (`'products'`) and `PERMISSIONS.PRODUCTS_CREATE` / `PERMISSIONS.PRODUCTS_READ` in `libs/shared/src/lib/permissions.ts`.
+- An `organization` scope for the resource in `RESOURCE_SCOPES` (`libs/infra/src/authorization/lib/access-policy.ts`).
+
+The generated controller guards each route with `@RequirePermission()`. Only `owner` and `admin` hold the new permissions, because they hold every permission. To give them to `member` or `viewer`, add them to that role's list in `permissions.ts`. If a resource type or permission with the same name exists, the generator stops and changes nothing.
+
 `pnpm gen:composition` scaffolds an orchestrator **project** under `libs/composition/` and runs `nx sync` + `pnpm install` (a new package needs its workspace symlink before it resolves).
 
 To remove a folder module later: `pnpm rm:module products` (deletes the folder, drops the exports-map entry, prints leftover references). To remove a composition project: `pnpm rm:project composition-billing-report`.
@@ -140,7 +147,7 @@ the integration lane).
 1. **Add Prisma model** to `prisma/schema.prisma` (the scaffold's port and adapter assume it)
 2. **Run migration**: `pnpm db:migrate --name add-products`
 3. **Adapt the record type**: adjust `products-repository.port.ts` and the adapter's `create`/`find` shapes to the real columns
-4. **Add permissions** if the surface is tenant-facing: declare them in `@nestjs-fastify-nx/shared` and decorate the controller with `@RequirePermission()`
+4. **Review permissions**: the generator registered `<CTX>_CREATE` and `<CTX>_READ`. Add more actions in `@nestjs-fastify-nx/shared` when the surface needs them, and grant them to the roles that need them
 5. **Wire into AppModule**: add `ProductsModule` to `apps/api/src/app/app.module.ts`
 6. **Run tests**: `pnpm nx test modules`
 

@@ -170,6 +170,8 @@ When done:
 ```bash
 ./scripts/teardown.sh           # stop stack + remove volumes
 ./scripts/teardown.sh --keep-volumes  # stop stack, keep data
+./scripts/teardown.sh --prod         # stop prod stack, keep data
+./scripts/teardown.sh --prod --delete-volumes  # stop prod stack + remove volumes
 ```
 
 Optional — local observability (Prometheus · Grafana · Jaeger · Loki · Alloy · OTel collector):
