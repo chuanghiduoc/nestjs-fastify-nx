@@ -296,7 +296,13 @@ docker compose exec postgres psql -U postgres -d nestjs_db \
       WHERE migration_name = '20260501000000_init';"
 ```
 
-Compare the recorded checksum against `prisma migrate diff --from-empty --to-migrations prisma/migrations` to confirm the DDL is identical and only the file content shifted.
+Prisma stores the SHA-256 hex digest of the bytes of `migration.sql` in the `checksum` column. Compute the digest of the file in a checkout of the deployed commit, and compare it with the recorded value:
+
+```bash
+sha256sum prisma/migrations/20260501000000_init/migration.sql
+```
+
+Then run `prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --script`. If it prints an empty migration, the DDL is identical and only the file content shifted.
 
 **Action (only when the schema matches — verify with `prisma migrate status` first):**
 
@@ -304,7 +310,7 @@ Compare the recorded checksum against `prisma migrate diff --from-empty --to-mig
 # Recompute and store the current checksum without re-applying DDL
 docker compose exec postgres psql -U postgres -d nestjs_db <<'SQL'
 UPDATE _prisma_migrations
-   SET checksum = '<paste the value reported by `prisma migrate diff`>'
+   SET checksum = '<output of sha256sum for the migration.sql file>'
  WHERE migration_name = '20260501000000_init';
 SQL
 
