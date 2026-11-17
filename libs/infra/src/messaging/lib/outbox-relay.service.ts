@@ -53,6 +53,7 @@ export class OutboxRelayService implements OnApplicationBootstrap, OnModuleDestr
   private running = false;
   private stopped = false;
   private lastStuckCheckAt?: number;
+  private readonly listenersStillRunning = new Set<string>();
 
   constructor(
     private readonly prisma: PrismaService,
@@ -198,6 +199,7 @@ export class OutboxRelayService implements OnApplicationBootstrap, OnModuleDestr
               WHERE "processedAt" IS NULL
                 AND attempts < $1
                 AND ("nextAttemptAt" IS NULL OR "nextAttemptAt" <= NOW())
+                AND NOT (id = ANY($5::uuid[]))
               ORDER BY "createdAt", id
               LIMIT $2
               FOR UPDATE SKIP LOCKED
@@ -219,6 +221,7 @@ export class OutboxRelayService implements OnApplicationBootstrap, OnModuleDestr
           this.batchSize,
           this.retryBaseMs / 1000,
           this.retryMaxMs / 1000,
+          [...this.listenersStillRunning],
         );
       },
       { timeout: this.txTimeoutMs },
@@ -254,9 +257,16 @@ export class OutboxRelayService implements OnApplicationBootstrap, OnModuleDestr
       organizationId: row.organizationId,
     };
 
+    let listenerSettled = false;
+    const publish = Promise.resolve()
+      .then(() => this.bus.publish(event))
+      .finally(() => {
+        listenerSettled = true;
+      });
     try {
-      await withTimeout(this.bus.publish(event), this.dispatchTimeoutMs, 'Outbox dispatch');
+      await withTimeout(publish, this.dispatchTimeoutMs, 'Outbox dispatch');
     } catch (err) {
+      if (!listenerSettled) this.holdUntilListenerSettles(row, publish);
       const message = isDomainException(err) ? `${err.code}: ${err.title}` : safeErrorSummary(err);
       this.logger.error(
         { err, eventType: row.eventType, outboxId: row.id, attempt: row.attempts },
@@ -282,6 +292,24 @@ export class OutboxRelayService implements OnApplicationBootstrap, OnModuleDestr
       );
       return false;
     }
+  }
+
+  private holdUntilListenerSettles(row: OutboxRow, publish: Promise<void>): void {
+    this.listenersStillRunning.add(row.id);
+    publish
+      .then(
+        () =>
+          this.logger.warn(
+            { outboxId: row.id },
+            'Outbox listener finished after its dispatch timeout',
+          ),
+        (err: unknown) =>
+          this.logger.warn(
+            { err, outboxId: row.id },
+            'Outbox listener failed after its dispatch timeout',
+          ),
+      )
+      .finally(() => this.listenersStillRunning.delete(row.id));
   }
 
   private async markProcessed(id: string): Promise<void> {

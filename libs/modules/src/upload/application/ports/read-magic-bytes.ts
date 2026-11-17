@@ -14,5 +14,5 @@ export async function readHeadAndAssertMagicBytes(
   bucket: string,
 ): Promise<void> {
   const head = await deps.storage.readRange(key, deps.limits.magicByteCount, bucket);
-  assertMagicBytesMatch(Buffer.from(head), contentType, key);
+  assertMagicBytesMatch(Buffer.from(head), contentType);
 }

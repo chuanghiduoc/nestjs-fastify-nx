@@ -83,12 +83,16 @@ function installTestInterceptor(app: FastifyInstance, interceptor: NestIntercept
 async function buildApp(redis: Redis): Promise<AppSetup> {
   const errors: string[] = [];
   let calls = 0;
-  const app = Fastify();
+  const app = Fastify({ ignoreTrailingSlash: true });
   await app.register(fastifyCookie);
 
   app.post('/api/v1/echo', async (req) => {
     calls += 1;
     return { calls, echoed: req.body };
+  });
+  app.post('/api/v1/api-keys', async () => {
+    calls += 1;
+    return { calls, secret: `plaintext-${calls}` };
   });
   app.get('/api/v1/echo', async () => {
     calls += 1;
@@ -392,8 +396,6 @@ describe('registerIdempotency', () => {
       headers: KEY_HEADER,
       payload: {},
     });
-    // The handler only starts after the preHandler acquired the lock, so this is the
-    // deterministic signal that the second request will observe an in-flight lock.
     await started;
 
     const conflict = await app.inject({
@@ -453,6 +455,23 @@ describe('registerIdempotency', () => {
     expect(second.json().code).toBe('idempotency_key_conflict');
     expect(callCount()).toBe(1);
   });
+
+  it.each(['/api/v1/api-keys', '/api/v1/api-keys/', '/api/v1/api-keys?x=1'])(
+    'never stores or replays the one-shot credential returned by POST %s',
+    async (url) => {
+      const { app, callCount, errors } = await buildApp(redis);
+
+      const first = await app.inject({ method: 'POST', url, headers: KEY_HEADER, payload: {} });
+      const second = await app.inject({ method: 'POST', url, headers: KEY_HEADER, payload: {} });
+
+      expect(first.statusCode).toBe(200);
+      expect(second.statusCode).toBe(409);
+      expect(second.headers['idempotent-replayed']).toBeUndefined();
+      expect(second.body).not.toContain('plaintext-');
+      expect(callCount()).toBe(1);
+      expect(errors).toEqual([]);
+    },
+  );
 
   it('rejects an over-long key with 400', async () => {
     const { app } = await buildApp(redis);

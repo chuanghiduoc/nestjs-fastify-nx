@@ -21,15 +21,17 @@ describe('EventBusService', () => {
     expect(emitter.emitAsync).toHaveBeenCalledWith(event.eventType, event);
   });
 
-  it('rejects an event that has no registered listener as a permanent failure', async () => {
+  it('rejects an event that has no registered listener as a retryable failure', async () => {
     const emitter = { emitAsync: vi.fn().mockResolvedValue([]) };
     const bus = new EventBusService(emitter as unknown as EventEmitter2);
 
     const error = await bus.publish(event).catch((caught: unknown) => caught);
 
-    expect(error).toBeInstanceOf(DomainException);
-    expect((error as DomainException).permanent).toBe(true);
-    expect((error as DomainException).message).toContain('No listener registered');
+    expect(error).toBeInstanceOf(Error);
+    expect(error).not.toBeInstanceOf(DomainException);
+    expect((error as Error).message).toContain(
+      'No listener registered for domain event "users.registered"',
+    );
   });
 
   it('propagates listener failures', async () => {

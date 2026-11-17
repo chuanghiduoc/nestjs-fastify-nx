@@ -57,7 +57,7 @@ services:
   # Connects to both redis-cache (db 0-5) and redis-queue (db 0-2).
   redis-commander:
     # Unmaintained upstream (last release ~2020). Dev-only tool — pin if instability surfaces.
-    image: rediscommander/redis-commander:latest
+    image: rediscommander/redis-commander:latest@sha256:19cd0c49f418779fa2822a0496c5e6516d0c792effc39ed20089e6268477e40a
     restart: unless-stopped
     mem_limit: 128m
     cpus: 0.25
@@ -76,7 +76,7 @@ services:
   # Fake SMTP for dev/CI mail testing — UI at http://localhost:8025.
   # Prod deployments terminate at real SMTP via MAIL_HOST in .env.
   mailpit:
-    image: axllent/mailpit:v1.33.1
+    image: axllent/mailpit:v1.33.1@sha256:aef2aacc11f075ec0fb6874275ee4a421e688e11a96ebb296134d1735c7761ce
     restart: unless-stopped
     mem_limit: 64m
     cpus: 0.25

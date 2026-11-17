@@ -65,13 +65,13 @@ export class ConfirmUploadHandler implements ICommandHandler<
         existing.organizationId !== command.organizationId ||
         existing.userId !== command.userId
       ) {
-        throw objectNotFound(command.sourceKey);
+        throw objectNotFound();
       }
       return this.recoverExisting(existing, command.correlationId);
     }
 
     const meta = await this.storage.head(command.sourceKey);
-    if (!meta) throw objectNotFound(command.sourceKey);
+    if (!meta) throw objectNotFound();
 
     await this.validateStagedObject(command.sourceKey, meta);
 
@@ -146,7 +146,7 @@ export class ConfirmUploadHandler implements ICommandHandler<
     record: StoredFile,
     correlationId?: string,
   ): Promise<StoredFileResult> {
-    if (record.status === STORED_FILE_STATUS.REJECTED) throw objectNotFound(record.sourceKey);
+    if (record.status === STORED_FILE_STATUS.REJECTED) throw objectNotFound();
 
     if (record.status !== STORED_FILE_STATUS.FINALIZING) {
       return this.publication.result(record, correlationId);

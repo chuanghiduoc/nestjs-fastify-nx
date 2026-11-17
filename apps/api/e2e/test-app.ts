@@ -176,7 +176,7 @@ async function bootstrapTestApp(): Promise<TestAppContext> {
     .compile();
 
   const app = moduleRef.createNestApplication<NestFastifyApplication>(
-    new FastifyAdapter({ bodyLimit: 64 * 1024 }),
+    new FastifyAdapter({ bodyLimit: 64 * 1024, ignoreTrailingSlash: true }),
   );
   app.setGlobalPrefix(GLOBAL_PREFIX, { exclude: [...GLOBAL_PREFIX_EXCLUDES] });
   app.enableVersioning({ type: VersioningType.URI, defaultVersion: '1' });

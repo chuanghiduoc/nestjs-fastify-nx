@@ -8,7 +8,10 @@ import type { TestContainers } from '@nestjs-fastify-nx/testing';
 import { PrismaService } from '@nestjs-fastify-nx/infra/database';
 import { ALL_PERMISSIONS, PERMISSIONS } from '@nestjs-fastify-nx/shared';
 import { OrganizationRole } from '../../domain/entities/organization-role.entity';
-import { PrismaOrganizationRoleRepository } from './prisma-organization-role.repository';
+import {
+  PrismaOrganizationRoleRepository,
+  toDeletionOutcome,
+} from './prisma-organization-role.repository';
 import { PrismaInvitationRepository } from './prisma-invitation.repository';
 import { PrismaOrganizationRepository } from './prisma-organization.repository';
 
@@ -72,6 +75,51 @@ describe('organization repositories (integration)', () => {
     await prisma.db.member.updateMany({ where: { organizationId, userId }, data: { role } });
   }
 
+  async function createOtherOrganization(): Promise<string> {
+    const other = await prisma.db.organization.create({
+      data: { name: 'Other Org', slug: 'other-org' },
+    });
+    return other.id;
+  }
+
+  describe('findByName and update', () => {
+    it('does not return a role defined by another organization', async () => {
+      const otherOrganizationId = await createOtherOrganization();
+      await defineRole('sales', otherOrganizationId);
+
+      expect(await roles.findByName(organizationId, 'sales')).toBeNull();
+    });
+
+    it('updates the permissions only inside the role owner organization', async () => {
+      const otherOrganizationId = await createOtherOrganization();
+      await defineRole('sales');
+      await defineRole('sales', otherOrganizationId);
+      const role = await roles.findByName(organizationId, 'sales');
+      if (!role) throw new Error('role fixture was not created');
+
+      const updated = role.withPermissions([PERMISSIONS.FILE_READ], ALL_PERMISSIONS);
+
+      expect(await roles.update(updated)).toBe(true);
+      expect((await roles.findByName(organizationId, 'sales'))?.permissions).toEqual([
+        PERMISSIONS.FILE_READ,
+      ]);
+      expect((await roles.findByName(otherOrganizationId, 'sales'))?.permissions).toEqual([
+        PERMISSIONS.AUDIT_LOG_READ,
+      ]);
+    });
+
+    it('reports an update of a role that no longer exists', async () => {
+      const ghost = OrganizationRole.create({
+        organizationId,
+        role: 'ghost',
+        permissions: [PERMISSIONS.AUDIT_LOG_READ],
+        grantedToActor: ALL_PERMISSIONS,
+      });
+
+      expect(await roles.update(ghost)).toBe(false);
+    });
+  });
+
   describe('deleteUnlessHeld', () => {
     it('keeps a role whose name contains the letter s while a member holds it', async () => {
       await defineRole('sales');
@@ -96,21 +144,71 @@ describe('organization repositories (integration)', () => {
     });
 
     it('ignores a holder that belongs to another organization', async () => {
-      const other = await prisma.db.organization.create({
-        data: { name: 'Other Org', slug: 'other-org' },
-      });
+      const otherOrganizationId = await createOtherOrganization();
       await defineRole('sales');
-      await defineRole('sales', other.id);
+      await defineRole('sales', otherOrganizationId);
       await prisma.db.member.create({
-        data: { organizationId: other.id, userId, role: 'sales' },
+        data: { organizationId: otherOrganizationId, userId, role: 'sales' },
       });
 
       expect(await roles.deleteUnlessHeld(organizationId, 'sales')).toBe('deleted');
-      expect(await roles.findByName(other.id, 'sales')).not.toBeNull();
+      expect(await roles.findByName(otherOrganizationId, 'sales')).not.toBeNull();
     });
 
     it('reports a role that was never defined as not found', async () => {
       expect(await roles.deleteUnlessHeld(organizationId, 'ghost')).toBe('not_found');
+    });
+
+    it('reports a role that a concurrent request already deleted as not found', () => {
+      expect(toDeletionOutcome({ found: true, holders: 0, deleted: false })).toBe('not_found');
+      expect(toDeletionOutcome({ found: true, holders: 2, deleted: false })).toBe('in_use');
+      expect(toDeletionOutcome(undefined)).toBe('not_found');
+    });
+  });
+
+  describe('invitation by id', () => {
+    async function createInvitation(forOrganization: string, status = 'pending'): Promise<string> {
+      const invitation = await prisma.db.invitation.create({
+        data: {
+          organizationId: forOrganization,
+          email: `${status}-${forOrganization}@example.com`,
+          status,
+          expiresAt: new Date(Date.now() + ONE_DAY_MS),
+          inviterId: userId,
+        },
+      });
+      return invitation.id;
+    }
+
+    it('does not find an invitation that belongs to another organization', async () => {
+      const otherOrganizationId = await createOtherOrganization();
+      const id = await createInvitation(otherOrganizationId);
+
+      expect(await invitations.findById(organizationId, id)).toBeNull();
+      expect((await invitations.findById(otherOrganizationId, id))?.id).toBe(id);
+    });
+
+    it('cancels a pending invitation exactly once', async () => {
+      const id = await createInvitation(organizationId);
+
+      expect(await invitations.cancelPending(organizationId, id)).toBe(true);
+      expect(await invitations.cancelPending(organizationId, id)).toBe(false);
+      expect((await invitations.findById(organizationId, id))?.status).toBe('canceled');
+    });
+
+    it('does not cancel an invitation that is no longer pending', async () => {
+      const id = await createInvitation(organizationId, 'accepted');
+
+      expect(await invitations.cancelPending(organizationId, id)).toBe(false);
+      expect((await invitations.findById(organizationId, id))?.status).toBe('accepted');
+    });
+
+    it('does not cancel an invitation that belongs to another organization', async () => {
+      const otherOrganizationId = await createOtherOrganization();
+      const id = await createInvitation(otherOrganizationId);
+
+      expect(await invitations.cancelPending(organizationId, id)).toBe(false);
+      expect((await invitations.findById(otherOrganizationId, id))?.status).toBe('pending');
     });
   });
 

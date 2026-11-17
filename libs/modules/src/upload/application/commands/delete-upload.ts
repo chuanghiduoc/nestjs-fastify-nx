@@ -29,7 +29,7 @@ export class DeleteUploadHandler implements ICommandHandler<DeleteUploadCommand,
 
   async execute(command: DeleteUploadCommand): Promise<void> {
     const file = await this.files.findById(command.fileId);
-    if (!file) throw objectNotFound(command.fileId);
+    if (!file) throw objectNotFound();
 
     // Decided here rather than by the route guard: the owner-scoped grant needs the resource, and
     // only this layer has loaded it. A denial answers 404, not 403 — a caller must not learn that
@@ -48,7 +48,7 @@ export class DeleteUploadHandler implements ICommandHandler<DeleteUploadCommand,
         ownerId: file.userId,
       },
     );
-    if (!decision.allowed) throw objectNotFound(command.fileId);
+    if (!decision.allowed) throw objectNotFound();
 
     const deleted = await this.files.softDelete(command.fileId);
     if (!deleted) return;

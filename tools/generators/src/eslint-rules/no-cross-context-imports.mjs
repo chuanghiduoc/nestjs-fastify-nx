@@ -19,6 +19,8 @@ const GROUPS = [
   },
 ];
 
+const GROUP_BARREL = 'index';
+
 function splitPath(filename) {
   return String(filename ?? '')
     .replace(/\\/g, '/')
@@ -38,6 +40,7 @@ function folderAtRoot(segments, group) {
   if (segments.length <= candidateIndex) return undefined;
   const candidate = segments[candidateIndex];
   if (!candidate || candidate.includes('.')) return undefined;
+  if (candidate === GROUP_BARREL && segments.length === candidateIndex + 1) return undefined;
   return { group, folder: candidate };
 }
 
@@ -102,6 +105,8 @@ export default {
         'Deep import into "{{folder}}": import only the group barrel "@nestjs-fastify-nx/{{group}}/{{folder}}".',
       rootOutsideGroup:
         'The group root "@nestjs-fastify-nx/{{group}}" is only importable inside its own group source tree; import the specific folder instead.',
+      unresolvableImport:
+        'Import specifiers inside the "{{group}}" group must be static strings so the folder boundary can be checked.',
     },
   },
   create(context) {
@@ -172,24 +177,42 @@ export default {
       });
     }
 
-    function checkDynamicImport(node) {
-      const argument = node.arguments?.[0];
-      if (argument?.type === 'Literal' && typeof argument.value === 'string') {
-        checkSource(argument);
+    function checkSpecifierNode(node) {
+      if (node?.type === 'Literal') {
+        checkSource(node);
+        return;
       }
+      if (node?.type === 'TemplateLiteral') {
+        checkTemplateSpecifier(node);
+      }
+    }
+
+    function checkTemplateSpecifier(node) {
+      if (node.expressions.length === 0) {
+        checkSource({ ...node, value: node.quasis[0].value.cooked });
+        return;
+      }
+      if (!importerGroup || !importer.folder) return;
+      context.report({
+        node,
+        messageId: 'unresolvableImport',
+        data: { group: importerGroup.name },
+      });
     }
 
     return {
       ImportDeclaration: (node) => checkSource(node.source),
       ExportNamedDeclaration: (node) => checkSource(node.source),
       ExportAllDeclaration: (node) => checkSource(node.source),
-      ImportExpression: (node) => {
-        if (node.source?.type === 'Literal' && typeof node.source.value === 'string') {
-          checkSource(node.source);
-        }
-      },
+      ImportExpression: (node) => checkSpecifierNode(node.source),
       CallExpression: (node) => {
-        if (node.callee?.type === 'Import') checkDynamicImport(node);
+        if (node.callee?.type === 'Import') checkSpecifierNode(node.arguments?.[0]);
+      },
+      TSImportType: (node) => checkSpecifierNode(node.source ?? node.argument?.literal),
+      TSImportEqualsDeclaration: (node) => {
+        if (node.moduleReference?.type === 'TSExternalModuleReference') {
+          checkSpecifierNode(node.moduleReference.expression);
+        }
       },
     };
   },

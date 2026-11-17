@@ -31,7 +31,7 @@ export class GetUploadHandler implements IQueryHandler<GetUploadQuery, StoredFil
   async execute(query: GetUploadQuery): Promise<StoredFile> {
     const file = await this.files.findById(query.fileId);
     if (!file || file.organizationId !== query.organizationId) {
-      throw objectNotFound(query.fileId);
+      throw objectNotFound();
     }
     const decision = await this.authorization.check(
       { type: 'user', userId: query.userId, organizationId: query.organizationId },
@@ -43,7 +43,7 @@ export class GetUploadHandler implements IQueryHandler<GetUploadQuery, StoredFil
         ownerId: file.userId,
       },
     );
-    if (!decision.allowed) throw objectNotFound(query.fileId);
+    if (!decision.allowed) throw objectNotFound();
     return this.publication.result(file);
   }
 }

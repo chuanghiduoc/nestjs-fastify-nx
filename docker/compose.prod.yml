@@ -277,6 +277,7 @@ services:
   worker:
     <<: [*app-security, *app-logging]
     image: ${APP_IMAGE:?Set APP_IMAGE to an immutable image digest}
+    command: ['node', 'dist/apps/worker/main.js']
     env_file:
       - path: ../.env.worker
         required: true
@@ -333,6 +334,7 @@ services:
   scheduler:
     <<: [*app-security, *app-logging]
     image: ${APP_IMAGE:?Set APP_IMAGE to an immutable image digest}
+    command: ['node', 'dist/apps/scheduler/main.js']
     env_file:
       - path: ../.env.scheduler
         required: true

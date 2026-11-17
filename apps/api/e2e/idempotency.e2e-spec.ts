@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import request from 'supertest';
+import { PERMISSIONS } from '@nestjs-fastify-nx/shared';
 import {
   createTestApp,
   cookieHeaderFromSetCookies,
@@ -94,4 +95,30 @@ describe('Idempotency E2E', () => {
     expect(second.headers['idempotent-replayed']).toBeUndefined();
     expect(second.body.key).not.toBe(first.body.key);
   });
+
+  it.each(['/api/v1/api-keys', '/api/v1/api-keys/'])(
+    'never replays the one-shot API key returned by POST %s',
+    async (url) => {
+      const key = freshKey();
+      const body = { name: 'CI bot', scopes: [PERMISSIONS.FEATURE_FLAG_READ] };
+
+      const first = await request(ctx.app.getHttpServer())
+        .post(url)
+        .set('Cookie', cookie)
+        .set('Idempotency-Key', key)
+        .send(body)
+        .expect(201);
+
+      const second = await request(ctx.app.getHttpServer())
+        .post(url)
+        .set('Cookie', cookie)
+        .set('Idempotency-Key', key)
+        .send(body)
+        .expect(409);
+
+      expect(first.body.key.startsWith('sk_')).toBe(true);
+      expect(second.headers['idempotent-replayed']).toBeUndefined();
+      expect(JSON.stringify(second.body)).not.toContain(first.body.key);
+    },
+  );
 });

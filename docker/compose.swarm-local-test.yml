@@ -8,7 +8,7 @@
 
 services:
   mailpit:
-    image: axllent/mailpit:v1.33.1
+    image: axllent/mailpit:v1.33.1@sha256:aef2aacc11f075ec0fb6874275ee4a421e688e11a96ebb296134d1735c7761ce
     restart: unless-stopped
     ports:
       # Loopback-only (matches the observability overlay): the UI is a dev convenience,

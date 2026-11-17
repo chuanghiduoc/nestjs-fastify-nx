@@ -183,7 +183,6 @@ async function saveFile(
   assertMagicBytesMatch(
     signature.subarray(0, Math.min(size, UPLOAD_MAGIC_BYTE_COUNT)),
     part.mimetype,
-    'file',
   );
   return {
     filepath: options.filepath,
