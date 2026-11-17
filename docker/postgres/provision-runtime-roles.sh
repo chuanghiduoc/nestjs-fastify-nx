@@ -38,6 +38,16 @@ ALTER ROLE :"api_user" WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICAT
 ALTER ROLE :"worker_user" WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION BYPASSRLS PASSWORD :'worker_password';
 ALTER ROLE :"scheduler_user" WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION BYPASSRLS PASSWORD :'scheduler_password';
 
+-- Several tables hold `timestamp without time zone` columns filled by NOW()/CURRENT_TIMESTAMP,
+-- which store the session's wall-clock time. Pin every role that writes them, and the database
+-- default, to UTC so a server or managed-database TimeZone setting cannot shift stored values.
+-- The settings apply to new sessions only.
+ALTER DATABASE :"db_name" SET timezone TO 'UTC';
+ALTER ROLE :"admin_user" SET timezone TO 'UTC';
+ALTER ROLE :"api_user" SET timezone TO 'UTC';
+ALTER ROLE :"worker_user" SET timezone TO 'UTC';
+ALTER ROLE :"scheduler_user" SET timezone TO 'UTC';
+
 REVOKE ALL ON DATABASE :"db_name" FROM PUBLIC;
 GRANT CONNECT ON DATABASE :"db_name" TO :"api_user", :"worker_user", :"scheduler_user";
 
