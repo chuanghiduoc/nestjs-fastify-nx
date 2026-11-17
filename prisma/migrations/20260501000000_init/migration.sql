@@ -718,9 +718,14 @@ CREATE INDEX IF NOT EXISTS "users_createdAt_id_desc_idx"
 -- row then waits for the assignment to commit, and its BEFORE trigger reads the members in a new
 -- snapshot, so it sees the new holder. A delete that commits first leaves no row to lock, and the
 -- assignment fails. The system role names below must match SYSTEM_ROLES in libs/shared.
+-- Same identity as Better Auth and PostgresPbacAdapter: split on ",", trim each name, drop empty
+-- names. Whitespace inside a role name is part of the name.
 CREATE OR REPLACE FUNCTION parse_member_roles(raw TEXT) RETURNS TEXT[] AS $$
   SELECT COALESCE(array_agg(DISTINCT name), ARRAY[]::TEXT[])
-    FROM unnest(string_to_array(regexp_replace(COALESCE(raw, ''), '\s', '', 'g'), ',')) AS name
+    FROM (
+      SELECT regexp_replace(token, '^\s+|\s+$', '', 'g') AS name
+        FROM unnest(string_to_array(COALESCE(raw, ''), ',')) AS token
+    ) AS names
    WHERE name <> '';
 $$ LANGUAGE sql IMMUTABLE;
 

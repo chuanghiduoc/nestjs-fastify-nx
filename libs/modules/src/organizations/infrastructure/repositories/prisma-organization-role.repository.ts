@@ -132,7 +132,7 @@ export class PrismaOrganizationRoleRepository implements OrganizationRoleReposit
         SELECT COUNT(*)::int AS "count"
           FROM "members"
          WHERE "organizationId" = ${organizationId}::uuid
-           AND ${role} = ANY(string_to_array(regexp_replace("role", '\\s', '', 'g'), ','))
+           AND ${role} = ANY(parse_member_roles("role"))
       ),
       deleted AS (
         DELETE FROM "organization_roles"

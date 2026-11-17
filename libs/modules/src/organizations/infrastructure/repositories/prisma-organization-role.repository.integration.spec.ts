@@ -75,6 +75,12 @@ describe('organization repositories (integration)', () => {
     );
   }
 
+  async function defineRoleOutsideTheNameRule(role: string): Promise<void> {
+    await prisma.db.organizationRole.create({
+      data: { organizationId, role, permission: '{}' },
+    });
+  }
+
   async function holdRoles(role: string): Promise<void> {
     await prisma.db.member.updateMany({ where: { organizationId, userId }, data: { role } });
   }
@@ -158,6 +164,15 @@ describe('organization repositories (integration)', () => {
 
       expect(await roles.deleteUnlessHeld(organizationId, 'sales')).toBe('deleted');
       expect(await roles.findByName(otherOrganizationId, 'sales')).not.toBeNull();
+    });
+
+    it('keeps a role whose name holds an inner space while a member holds it', async () => {
+      await defineRoleOutsideTheNameRule('sales lead');
+      await defineRoleOutsideTheNameRule('saleslead');
+      await holdRoles('owner, sales lead');
+
+      expect(await roles.deleteUnlessHeld(organizationId, 'sales lead')).toBe('in_use');
+      expect(await roles.deleteUnlessHeld(organizationId, 'saleslead')).toBe('deleted');
     });
 
     it('reports a role that was never defined as not found', async () => {
@@ -258,6 +273,16 @@ describe('organization repositories (integration)', () => {
         rejectedBy('members_role_defined'),
       );
       expect(await heldRole()).toBe('owner');
+    });
+
+    it('matches a held role by its trimmed name and keeps inner spaces', async () => {
+      await defineRoleOutsideTheNameRule('sales lead');
+
+      await holdRoles(' owner ,  sales lead ');
+      expect(await heldRole()).toBe(' owner ,  sales lead ');
+      await expect(holdRoles('owner, saleslead')).rejects.toMatchObject(
+        rejectedBy('members_role_defined'),
+      );
     });
 
     it('assigns every system role without a tenant-defined row', async () => {
