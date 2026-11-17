@@ -299,18 +299,33 @@ docker compose exec postgres psql -U postgres -d nestjs_db \
 Prisma stores the SHA-256 hex digest of the bytes of `migration.sql` in the `checksum` column. Compute the digest of the file in a checkout of the deployed commit, and compare it with the recorded value:
 
 ```bash
-sha256sum prisma/migrations/20260501000000_init/migration.sql
+sha256sum prisma/migrations/20260501000000_init/migration.sql | cut -d ' ' -f 1
 ```
 
-Then run `prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --script`. If it prints an empty migration, the DDL is identical and only the file content shifted.
+Then run `prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --script`. If it prints an empty migration, the tables, columns, indexes and constraints are identical.
 
-**Action (only when the schema matches — verify with `prisma migrate status` first):**
+`prisma migrate diff` does not compare functions or triggers. The `init` migration also creates functions and triggers (the outbox triggers and the member role integrity triggers). Compare them separately. Run this query on the live database, and on a scratch database that applied the new `init`:
+
+```sql
+SELECT 'function' AS kind, p.proname AS name
+  FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+ WHERE n.nspname = 'public'
+UNION ALL
+SELECT 'trigger', t.tgname
+  FROM pg_trigger t
+ WHERE NOT t.tgisinternal
+ORDER BY 1, 2;
+```
+
+If the live database has fewer rows, run the missing `CREATE OR REPLACE FUNCTION` and `CREATE TRIGGER` statements from the new `migration.sql` before you update the checksum. A checksum update does not run any DDL.
+
+**Action (only when the schema, the functions and the triggers match — verify with `prisma migrate status` first):**
 
 ```bash
 # Recompute and store the current checksum without re-applying DDL
 docker compose exec postgres psql -U postgres -d nestjs_db <<'SQL'
 UPDATE _prisma_migrations
-   SET checksum = '<output of sha256sum for the migration.sql file>'
+   SET checksum = '<the 64-character digest printed by the sha256sum command above>'
  WHERE migration_name = '20260501000000_init';
 SQL
 
