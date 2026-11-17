@@ -705,3 +705,75 @@ END $$;
 -- ─────────────────────────────────────────────────────────────────────────────
 CREATE INDEX IF NOT EXISTS "users_createdAt_id_desc_idx"
   ON "users" ("createdAt" DESC, "id" DESC);
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Member role integrity
+-- ─────────────────────────────────────────────────────────────────────────────
+-- "members"."role" is a comma-separated list of role names, so no foreign key can tie it to
+-- "organization_roles". These triggers enforce the same invariant: every custom role a member holds
+-- is defined in the member's organization. Better Auth assigns roles outside the API process, so an
+-- application-level check-then-write cannot close the race between assignment and deletion.
+--
+-- Assignment locks each added custom role row FOR KEY SHARE. A concurrent DELETE or rename of that
+-- row then waits for the assignment to commit, and its BEFORE trigger reads the members in a new
+-- snapshot, so it sees the new holder. A delete that commits first leaves no row to lock, and the
+-- assignment fails. The system role names below must match SYSTEM_ROLES in libs/shared.
+CREATE OR REPLACE FUNCTION parse_member_roles(raw TEXT) RETURNS TEXT[] AS $$
+  SELECT COALESCE(array_agg(DISTINCT name), ARRAY[]::TEXT[])
+    FROM unnest(string_to_array(regexp_replace(COALESCE(raw, ''), '\s', '', 'g'), ',')) AS name
+   WHERE name <> '';
+$$ LANGUAGE sql IMMUTABLE;
+
+CREATE OR REPLACE FUNCTION assert_member_roles_defined() RETURNS TRIGGER AS $$
+DECLARE
+  previous_roles TEXT[] := ARRAY[]::TEXT[];
+  added_roles TEXT[];
+  locked_count INTEGER;
+BEGIN
+  IF TG_OP = 'UPDATE' THEN
+    previous_roles := parse_member_roles(OLD."role");
+  END IF;
+  SELECT COALESCE(array_agg(name), ARRAY[]::TEXT[]) INTO added_roles
+    FROM unnest(parse_member_roles(NEW."role")) AS name
+   WHERE name NOT IN ('owner', 'admin', 'member', 'billing', 'viewer')
+     AND name <> ALL (previous_roles);
+  IF cardinality(added_roles) = 0 THEN
+    RETURN NEW;
+  END IF;
+  PERFORM 1
+     FROM "organization_roles"
+    WHERE "organizationId" = NEW."organizationId"
+      AND "role" = ANY (added_roles)
+      FOR KEY SHARE;
+  GET DIAGNOSTICS locked_count = ROW_COUNT;
+  IF locked_count < cardinality(added_roles) THEN
+    RAISE EXCEPTION 'a member role is not defined in organization %', NEW."organizationId"
+      USING ERRCODE = 'foreign_key_violation', CONSTRAINT = 'members_role_defined';
+  END IF;
+  RETURN NEW;
+END; $$ LANGUAGE plpgsql;
+CREATE TRIGGER members_role_defined BEFORE INSERT OR UPDATE OF "role" ON "members" FOR EACH ROW EXECUTE FUNCTION assert_member_roles_defined();
+
+CREATE OR REPLACE FUNCTION assert_organization_role_unheld() RETURNS TRIGGER AS $$
+BEGIN
+  IF TG_OP = 'UPDATE' AND OLD."role" = NEW."role" THEN
+    RETURN NEW;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM "organizations" WHERE "id" = OLD."organizationId") THEN
+    RETURN OLD;
+  END IF;
+  IF EXISTS (
+    SELECT 1
+      FROM "members"
+     WHERE "organizationId" = OLD."organizationId"
+       AND OLD."role" = ANY (parse_member_roles("role"))
+  ) THEN
+    RAISE EXCEPTION 'organization role is held by a member of organization %', OLD."organizationId"
+      USING ERRCODE = 'restrict_violation', CONSTRAINT = 'organization_roles_unheld';
+  END IF;
+  IF TG_OP = 'UPDATE' THEN
+    RETURN NEW;
+  END IF;
+  RETURN OLD;
+END; $$ LANGUAGE plpgsql;
+CREATE TRIGGER organization_roles_unheld BEFORE DELETE OR UPDATE OF "role" ON "organization_roles" FOR EACH ROW EXECUTE FUNCTION assert_organization_role_unheld();

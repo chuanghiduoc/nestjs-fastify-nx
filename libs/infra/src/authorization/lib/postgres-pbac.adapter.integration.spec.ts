@@ -2,8 +2,11 @@ import { Client } from 'pg';
 import { createTestContainers, deployTestMigrations } from '@nestjs-fastify-nx/testing';
 import type { TestContainers } from '@nestjs-fastify-nx/testing';
 import { PrismaService } from '@nestjs-fastify-nx/infra/database';
+import { SYSTEM_ROLES } from '@nestjs-fastify-nx/shared';
 import { PostgresPbacAdapter } from './postgres-pbac.adapter';
 import { describeAuthorizationConformance, CONFORMANCE_IDS } from './authorization-conformance';
+
+const NO_PERMISSIONS = '{}';
 
 let containers: TestContainers | undefined;
 let admin: Client | undefined;
@@ -51,6 +54,12 @@ describeAuthorizationConformance({
     return {
       authorization: new PostgresPbacAdapter(prismaService),
       async grantRoles(organizationId, userId, roles) {
+        await db.query(
+          `INSERT INTO organization_roles ("organizationId", role, permission)
+           SELECT $1, name, $3 FROM unnest($2::text[]) AS name WHERE name <> ALL ($4::text[])
+           ON CONFLICT ("organizationId", role) DO NOTHING`,
+          [organizationId, roles, NO_PERMISSIONS, Object.values(SYSTEM_ROLES)],
+        );
         await db.query(
           `INSERT INTO members ("organizationId", "userId", role) VALUES ($1, $2, $3)
            ON CONFLICT ("organizationId", "userId") DO UPDATE SET role = EXCLUDED.role`,
