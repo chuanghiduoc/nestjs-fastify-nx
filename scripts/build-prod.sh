@@ -186,7 +186,7 @@ if ! docker compose -p "$COMPOSE_PROJECT" --env-file .env "${COMPOSE_FILES[@]}" 
     sec::warn "If the migration logs below show P1000 (authentication failed): the existing"
     sec::warn "${COMPOSE_PROJECT}_postgres_data volume was initialised with different credentials."
     sec::warn "Postgres ignores POSTGRES_PASSWORD once its data directory exists. Wipe it with"
-    sec::warn "    ./scripts/teardown.sh --prod"
+    sec::warn "    ./scripts/teardown.sh --prod --delete-volumes"
     sec::warn "or restore the credentials that volume was created with."
   fi
   docker compose -p "$COMPOSE_PROJECT" --env-file .env "${COMPOSE_FILES[@]}" ps -a || true
