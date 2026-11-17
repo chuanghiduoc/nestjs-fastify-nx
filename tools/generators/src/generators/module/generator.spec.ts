@@ -4,6 +4,7 @@ import { getProjects, readJson, readProjectConfiguration } from '@nx/devkit';
 import type { Tree } from '@nx/devkit';
 import * as ts from 'typescript';
 import { moduleGenerator } from './generator';
+import { ACCESS_POLICY_FILE, PERMISSIONS_FILE } from './register-permissions';
 
 const GROUP_PACKAGE = 'libs/modules/package.json';
 
@@ -30,6 +31,30 @@ function parseTypeScriptFile(tree: Tree, file: string): ParsedSourceFile {
     true,
     ts.ScriptKind.TS,
   ) as ParsedSourceFile;
+}
+
+const PERMISSIONS_FIXTURE = [
+  'export const RESOURCE_TYPES = {',
+  "  ORDER: 'order',",
+  '} as const;',
+  '',
+  'export const PERMISSIONS = {',
+  "  ORDER_READ: 'order:read',",
+  "  ORDER_CREATE: 'order:create',",
+  '} as const;',
+  '',
+].join('\n');
+
+const ACCESS_POLICY_FIXTURE = [
+  'const RESOURCE_SCOPES: Record<ResourceType, ResourceScope> = {',
+  "  [RESOURCE_TYPES.ORDER]: 'organization',",
+  '};',
+  '',
+].join('\n');
+
+function seedPermissionCatalog(tree: Tree): void {
+  tree.write(PERMISSIONS_FILE, PERMISSIONS_FIXTURE);
+  tree.write(ACCESS_POLICY_FILE, ACCESS_POLICY_FIXTURE);
 }
 
 function seedGroupPackage(tree: Tree): void {
@@ -76,6 +101,7 @@ describe('module generator', () => {
       tree.write('tsconfig.base.json', JSON.stringify({ compilerOptions: { composite: true } }));
     }
     seedGroupPackage(tree);
+    seedPermissionCatalog(tree);
   });
 
   describe('folder modules (directory=modules)', () => {
@@ -282,6 +308,88 @@ describe('module generator', () => {
       }
     });
 
+    it('registers an organization-scoped resource with read and create permissions', async () => {
+      await moduleGenerator(tree, { name: 'order-items', directory: 'modules', withCqrs: true });
+
+      const permissions = tree.read(PERMISSIONS_FILE, 'utf-8') ?? '';
+      expect(permissions).toContain("ORDER_ITEMS: 'order_items',");
+      expect(permissions).toContain("ORDER_ITEMS_READ: 'order_items:read',");
+      expect(permissions).toContain("ORDER_ITEMS_CREATE: 'order_items:create',");
+      expect(permissions).toContain("ORDER: 'order',");
+
+      const accessPolicy = tree.read(ACCESS_POLICY_FILE, 'utf-8') ?? '';
+      expect(accessPolicy).toContain("[RESOURCE_TYPES.ORDER_ITEMS]: 'organization',");
+
+      for (const file of [PERMISSIONS_FILE, ACCESS_POLICY_FILE]) {
+        expect(parseTypeScriptFile(tree, file).parseDiagnostics, file).toEqual([]);
+      }
+    });
+
+    it('guards every generated route with the scaffolded permission', async () => {
+      await moduleGenerator(tree, { name: 'invoices', directory: 'modules', withCqrs: true });
+
+      const controller =
+        tree.read('libs/modules/src/invoices/invoices.controller.ts', 'utf-8') ?? '';
+      expect(controller).toContain("from '@nestjs-fastify-nx/infra/authorization'");
+      expect(controller).toContain('@RequirePermission(PERMISSIONS.INVOICES_CREATE)');
+      expect(controller).toContain('@RequirePermission(PERMISSIONS.INVOICES_READ)');
+      expect(controller.match(/@RequirePermission\(/g)).toHaveLength(2);
+    });
+
+    it('refuses a resource type the catalog already holds', async () => {
+      tree.write(
+        PERMISSIONS_FILE,
+        PERMISSIONS_FIXTURE.replace(
+          "  ORDER: 'order',",
+          "  ORDER: 'order',\n  INVOICES: 'invoices',",
+        ),
+      );
+
+      await expect(
+        moduleGenerator(tree, { name: 'invoices', directory: 'modules', withCqrs: true }),
+      ).rejects.toThrow(/already exists/);
+    });
+
+    it('fails loudly when the permission catalog is missing', async () => {
+      tree.delete(ACCESS_POLICY_FILE);
+
+      await expect(
+        moduleGenerator(tree, { name: 'invoices', directory: 'modules', withCqrs: true }),
+      ).rejects.toThrow(/does not exist/);
+    });
+
+    it('changes nothing when a permission key already exists for a new resource type', async () => {
+      tree.write(
+        PERMISSIONS_FILE,
+        PERMISSIONS_FIXTURE.replace(
+          "  ORDER_READ: 'order:read',",
+          "  ORDER_READ: 'order:read',\n  INVOICES_READ: 'invoices:read',",
+        ),
+      );
+      const permissionsBefore = tree.read(PERMISSIONS_FILE, 'utf-8');
+      const accessPolicyBefore = tree.read(ACCESS_POLICY_FILE, 'utf-8');
+
+      await expect(
+        moduleGenerator(tree, { name: 'invoices', directory: 'modules', withCqrs: true }),
+      ).rejects.toThrow(/already exists/);
+
+      expect(tree.read(PERMISSIONS_FILE, 'utf-8')).toBe(permissionsBefore);
+      expect(tree.read(ACCESS_POLICY_FILE, 'utf-8')).toBe(accessPolicyBefore);
+      expect(tree.exists('libs/modules/src/invoices')).toBe(false);
+    });
+
+    it('writes no module files when the access policy is missing', async () => {
+      tree.delete(ACCESS_POLICY_FILE);
+      const permissionsBefore = tree.read(PERMISSIONS_FILE, 'utf-8');
+
+      await expect(
+        moduleGenerator(tree, { name: 'invoices', directory: 'modules', withCqrs: true }),
+      ).rejects.toThrow(/does not exist/);
+
+      expect(tree.read(PERMISSIONS_FILE, 'utf-8')).toBe(permissionsBefore);
+      expect(tree.exists('libs/modules/src/invoices')).toBe(false);
+    });
+
     it('refuses to scaffold over an existing folder', async () => {
       tree.write('libs/modules/src/orders/orders.module.ts', 'export {}');
 
@@ -305,6 +413,11 @@ describe('module generator', () => {
       expect(controller).toContain('list(');
       expect(controller).not.toMatch(/CommandBus|QueryBus/);
       expect(controller).not.toContain("from '@nestjs/cqrs'");
+
+      expect(controller).toContain('@RequirePermission(PERMISSIONS.ORDERS_READ)');
+      const permissions = tree.read(PERMISSIONS_FILE, 'utf-8') ?? '';
+      expect(permissions).toContain("ORDERS_READ: 'orders:read',");
+      expect(permissions).not.toContain('ORDERS_CREATE');
 
       for (const file of listTypeScriptFiles(tree, 'libs/modules/src/orders')) {
         expect(parseTypeScriptFile(tree, file).parseDiagnostics, file).toEqual([]);
@@ -352,8 +465,11 @@ describe('module generator', () => {
       expect(tree.exists('libs/composition/billing/src/billing-listeners.module.ts')).toBe(false);
     });
 
-    it('leaves the group package.json untouched', async () => {
+    it('leaves the group package.json and the permission catalog untouched', async () => {
       await moduleGenerator(tree, { name: 'admin', directory: 'composition', withCqrs: false });
+
+      expect(tree.read(PERMISSIONS_FILE, 'utf-8')).toBe(PERMISSIONS_FIXTURE);
+      expect(tree.read(ACCESS_POLICY_FILE, 'utf-8')).toBe(ACCESS_POLICY_FIXTURE);
 
       const pkg = readJson(tree, GROUP_PACKAGE);
       expect(Object.keys(pkg.exports)).toEqual(['.']);

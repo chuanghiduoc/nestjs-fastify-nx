@@ -32,15 +32,21 @@ const fs = require('fs');
 const name = process.argv[2];
 const path = 'libs/modules/package.json';
 const pkg = JSON.parse(fs.readFileSync(path, 'utf8'));
-if (pkg.exports && pkg.exports[`./${name}`]) {
-  delete pkg.exports[`./${name}`];
+const exportsMap = pkg.exports ?? {};
+const ownedKeys = Object.keys(exportsMap).filter(
+  (key) => key === `./${name}` || key.startsWith(`./${name}/`),
+);
+for (const key of ownedKeys) {
+  delete exportsMap[key];
+}
+if (ownedKeys.length > 0) {
   fs.writeFileSync(path, JSON.stringify(pkg, null, 2) + '\n');
 }
 EOF
 
-sec::log "Dropped the './$NAME' exports-map entry"
+sec::log "Dropped the './$NAME' and './$NAME/*' exports-map entries"
 
-LEFTOVERS="$(grep -rn "@nestjs-fastify-nx/modules/$NAME" apps libs --include='*.ts' --include='*.json' || true)"
+LEFTOVERS="$(grep -rnE "@nestjs-fastify-nx/modules/${NAME}([/'\"\`]|\$)" apps libs --include='*.ts' --include='*.json' || true)"
 if [[ -n "$LEFTOVERS" ]]; then
   sec::warn "Leftover references to clean up:"
   echo "$LEFTOVERS"

@@ -21,6 +21,13 @@ type OrganizationRoleRow = {
   updatedAt: Date | null;
 };
 
+const RAW_QUERY_FAILED = 'P2010';
+const HELD_ROLE_CONSTRAINT = 'organization_roles_unheld';
+
+type DriverAdapterFailure = {
+  driverAdapterError?: { cause?: { constraint?: { index?: string } } };
+};
+
 type DeleteUnlessHeldRow = {
   found: boolean;
   holders: number;
@@ -44,6 +51,15 @@ export function toDeletionOutcome(row: DeleteUnlessHeldRow | undefined): RoleDel
   // Not deleted with no holders means a concurrent request removed the row between the snapshot the
   // count came from and the delete — absent, not in use.
   return row.holders > 0 ? 'in_use' : 'not_found';
+}
+
+function isHeldRoleRejection(err: unknown): boolean {
+  return (
+    err instanceof Prisma.PrismaClientKnownRequestError &&
+    err.code === RAW_QUERY_FAILED &&
+    (err.meta as DriverAdapterFailure | undefined)?.driverAdapterError?.cause?.constraint?.index ===
+      HELD_ROLE_CONSTRAINT
+  );
 }
 
 @Injectable()
@@ -93,6 +109,18 @@ export class PrismaOrganizationRoleRepository implements OrganizationRoleReposit
   }
 
   async deleteUnlessHeld(organizationId: string, role: string): Promise<RoleDeletionOutcome> {
+    try {
+      return toDeletionOutcome(await this.deleteWhenUnheld(organizationId, role));
+    } catch (err) {
+      if (isHeldRoleRejection(err)) return 'in_use';
+      throw err;
+    }
+  }
+
+  private async deleteWhenUnheld(
+    organizationId: string,
+    role: string,
+  ): Promise<DeleteUnlessHeldRow | undefined> {
     const rows = await this.prisma.writeTarget().$queryRaw<DeleteUnlessHeldRow[]>`
       WITH target AS (
         SELECT "id"
@@ -104,7 +132,7 @@ export class PrismaOrganizationRoleRepository implements OrganizationRoleReposit
         SELECT COUNT(*)::int AS "count"
           FROM "members"
          WHERE "organizationId" = ${organizationId}::uuid
-           AND ${role} = ANY(string_to_array(regexp_replace("role", '\\s', '', 'g'), ','))
+           AND ${role} = ANY(parse_member_roles("role"))
       ),
       deleted AS (
         DELETE FROM "organization_roles"
@@ -116,6 +144,6 @@ export class PrismaOrganizationRoleRepository implements OrganizationRoleReposit
              (SELECT "count" FROM holders) AS "holders",
              EXISTS (SELECT 1 FROM deleted) AS "deleted"
     `;
-    return toDeletionOutcome(rows[0]);
+    return rows[0];
   }
 }
