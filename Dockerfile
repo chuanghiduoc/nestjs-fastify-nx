@@ -249,7 +249,8 @@ CMD ["node", "dist/main.js"]
 
 # Production counterpart of app-dev: one image for api + worker + scheduler, selected per service
 # with `command:`. The api/worker/scheduler targets above stay as the per-image rollback path.
-# No HEALTHCHECK here — compose.prod.yml carries the service-specific probe.
+# No HEALTHCHECK here — compose.prod.yml carries the service-specific probe. The default CMD exits
+# non-zero so a deployment that forgets `command:` fails at start instead of running the api.
 FROM runtime AS app
 ENV NODE_ENV=production \
     PORT=3000
@@ -265,7 +266,7 @@ LABEL org.opencontainers.image.title="nestjs-fastify-nx-app" \
       org.opencontainers.image.licenses="MIT" \
       org.opencontainers.image.vendor="nestjs-fastify-nx"
 
-CMD ["node", "dist/apps/api/main.js"]
+CMD ["sh", "-c", "echo 'Set the container command to node dist/apps/<api|worker|scheduler>/main.js' >&2; exit 64"]
 
 
 FROM runtime AS migration

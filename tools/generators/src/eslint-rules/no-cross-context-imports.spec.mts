@@ -1,4 +1,5 @@
 import { RuleTester } from 'eslint';
+import tseslint from 'typescript-eslint';
 import rule from './no-cross-context-imports.mjs';
 
 const ruleTester = new RuleTester({
@@ -58,6 +59,14 @@ ruleTester.run('libs-groups/no-cross-context-imports', rule, {
     {
       code: `import { AuthModule } from '../auth';`,
       filename: 'libs/infra/src/authorization/lib/authorization.module.ts',
+    },
+    {
+      code: `import { ModulesGroup } from '../index';`,
+      filename: 'libs/modules/src/users/users.module.ts',
+    },
+    {
+      code: 'const mod = await import(`./users.controller`);',
+      filename: 'libs/modules/src/users/users.module.ts',
     },
   ],
   invalid: [
@@ -156,6 +165,50 @@ ruleTester.run('libs-groups/no-cross-context-imports', rule, {
       code: `import { InfraGroup } from '${INFRA}';`,
       filename: 'apps/api/src/app/app.module.ts',
       errors: [{ messageId: 'rootOutsideGroup' }],
+    },
+  ],
+});
+
+const typeScriptRuleTester = new RuleTester({
+  languageOptions: { parser: tseslint.parser, ecmaVersion: 'latest', sourceType: 'module' },
+});
+
+typeScriptRuleTester.run('libs-groups/no-cross-context-imports (TypeScript syntax)', rule, {
+  valid: [
+    {
+      code: `type Port = import('./users-repository.port').UsersRepositoryPort;`,
+      filename: 'libs/modules/src/users/users.module.ts',
+    },
+    {
+      code: `import port = require('./users-repository.port');`,
+      filename: 'libs/modules/src/users/users.module.ts',
+    },
+  ],
+  invalid: [
+    {
+      code: `type Module = import('../sessions/sessions.module').SessionsModule;`,
+      filename: 'libs/modules/src/users/users.module.ts',
+      errors: [{ messageId: 'crossContext' }],
+    },
+    {
+      code: `type Module = import('${MODULES}/sessions/sessions.module').SessionsModule;`,
+      filename: 'apps/api/src/app/app.module.ts',
+      errors: [{ messageId: 'deepImport' }],
+    },
+    {
+      code: `import sessions = require('../sessions/sessions.module');`,
+      filename: 'libs/modules/src/users/users.module.ts',
+      errors: [{ messageId: 'crossContext' }],
+    },
+    {
+      code: 'const mod = await import(`../sessions/sessions.module`);',
+      filename: 'libs/modules/src/users/users.module.ts',
+      errors: [{ messageId: 'crossContext' }],
+    },
+    {
+      code: 'const mod = await import(`${"@nestjs-fastify-nx/modules"}/sessions`);',
+      filename: 'libs/modules/src/users/users.module.ts',
+      errors: [{ messageId: 'unresolvableImport' }],
     },
   ],
 });

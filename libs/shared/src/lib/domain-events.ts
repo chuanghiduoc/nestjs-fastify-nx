@@ -72,6 +72,7 @@ export const configurationEventPayloadSchema = z.object({
   scopes: z.array(z.string()).optional(),
   previousEnabled: z.boolean().optional(),
   previousRolloutPercentage: z.number().optional(),
+  expiresAt: z.iso.datetime().nullable().optional(),
 });
 
 export type ConfigurationEventPayload = z.infer<typeof configurationEventPayloadSchema>;

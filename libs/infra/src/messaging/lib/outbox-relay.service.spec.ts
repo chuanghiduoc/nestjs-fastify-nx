@@ -32,13 +32,25 @@ function buildPrisma(opts: { claim: (limit: number) => OutboxRow[] }): {
   updateCalls: UpdateCall[];
   countMock: ReturnType<typeof vi.fn>;
   updateManyMock: ReturnType<typeof vi.fn>;
+  excludedIdsPerClaim: string[][];
 } {
   const updateCalls: UpdateCall[] = [];
+  const excludedIdsPerClaim: string[][] = [];
 
   const transaction = vi.fn(async <T>(fn: (tx: unknown) => Promise<T>) =>
     fn({
-      $queryRawUnsafe: vi.fn(async (_sql: string, _maxAttempts: number, batch: number) =>
-        opts.claim(batch),
+      $queryRawUnsafe: vi.fn(
+        async (
+          _sql: string,
+          _maxAttempts: number,
+          batch: number,
+          _retryBase: number,
+          _retryMax: number,
+          excludedIds: string[],
+        ) => {
+          excludedIdsPerClaim.push(excludedIds);
+          return opts.claim(batch);
+        },
       ),
     }),
   );
@@ -63,6 +75,7 @@ function buildPrisma(opts: { claim: (limit: number) => OutboxRow[] }): {
     updateCalls,
     countMock,
     updateManyMock,
+    excludedIdsPerClaim,
   };
 }
 
@@ -170,6 +183,50 @@ describe('OutboxRelayService', () => {
     expect(updateCalls[0].data).toHaveProperty('lastError');
     expect(updateCalls[0].data).not.toHaveProperty('processedAt');
     expect(updateCalls[0].data).not.toHaveProperty('attempts');
+  });
+
+  it('does not re-claim a row while its timed-out listener is still running', async () => {
+    process.env['OUTBOX_DISPATCH_TIMEOUT_MS'] = '20';
+    const { prisma, excludedIdsPerClaim } = buildPrisma({
+      claim: () => [buildRow({ attempts: 2 })],
+    });
+    const bus = buildBus();
+    let finishListener: () => void = () => undefined;
+    bus.publish.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        finishListener = resolve;
+      }),
+    );
+    const relay = new OutboxRelayService(prisma, bus);
+
+    await relay.tick();
+    await relay.tick();
+    expect(excludedIdsPerClaim).toEqual([[], ['row-1']]);
+
+    finishListener();
+    await new Promise((resolve) => setImmediate(resolve));
+    await relay.tick();
+    expect(excludedIdsPerClaim[2]).toEqual([]);
+  });
+
+  it('releases a timed-out row for a later claim when its listener finally rejects', async () => {
+    process.env['OUTBOX_DISPATCH_TIMEOUT_MS'] = '20';
+    const { prisma, excludedIdsPerClaim } = buildPrisma({ claim: () => [buildRow()] });
+    const bus = buildBus();
+    let failListener: (err: Error) => void = () => undefined;
+    bus.publish.mockReturnValueOnce(
+      new Promise<void>((_resolve, reject) => {
+        failListener = reject;
+      }),
+    );
+    const relay = new OutboxRelayService(prisma, bus);
+
+    await relay.tick();
+    failListener(new Error('late failure'));
+    await new Promise((resolve) => setImmediate(resolve));
+    await relay.tick();
+
+    expect(excludedIdsPerClaim).toEqual([[], []]);
   });
 
   it('re-drives rows parked by a schema-version skew on startup', async () => {

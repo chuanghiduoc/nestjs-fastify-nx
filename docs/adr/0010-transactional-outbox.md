@@ -31,7 +31,10 @@ the application layer.
    parks the row immediately (`attempts = maxAttempts`). Transient failures back
    off exponentially up to `OUTBOX_MAX_ATTEMPTS`. A dispatch is bounded by
    `OUTBOX_DISPATCH_TIMEOUT_MS` so one hung listener cannot wedge the single
-   drainer.
+   drainer. The timeout does not stop the listener, so the relay does not claim
+   that row again until the listener settles. An event with no registered
+   listener is a transient failure: during a rolling deploy, an older relay has
+   no listener for a new event type yet.
 5. **Schema-version skew parks loudly and re-drives on upgrade.** A row whose
    envelope version exceeds the relay's is parked with an explanatory `lastError`;
    the relay resets those attempts on startup after a deploy so they are retried

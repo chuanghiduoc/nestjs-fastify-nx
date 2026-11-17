@@ -104,6 +104,11 @@ overrides:
   fast-uri: '>=4.2.3 <5'
   fast-xml-builder: '>=1.2.0 <2'
   ip-address: '>=10.7.1 <11'
+  # GHSA-3g3m-2fjr-6pw4 (glob) and GHSA-g3hv-75wg-m249 (minimatch), moderate. Only glob 14.0.2+ is
+  # patched. @fastify/static reaches glob 14 through the floor raised below. rimraf 5 (via gaxios in
+  # the OTel GCP detector) declares glob 10 but calls only `glob`/`globSync`, which glob 14 keeps
+  # unchanged, so the selector moves that one edge across the glob major.
+  'rimraf>glob': '>=14.0.2 <15'
   serialize-javascript: '>=7.1.3 <8'
   '@grpc/grpc-js': '>=1.14.5 <2'
   hono: '4.12.27'
@@ -150,7 +155,8 @@ overrides:
   # 10.1.2). Capped below the next major. Also dedupes to a single @fastify/static version: the floor
   # tracks the highest range any consumer declares, so raise it whenever one moves (@bull-board/fastify
   # went ^9.1.3 -> ^10.1.3 in v9, which split the tree into 10.1.2 + 10.1.3 until this floor followed).
-  '@fastify/static': '>=10.1.3 <11'
+  # 10.1.10 is the first release on glob 14 (GHSA-3g3m-2fjr-6pw4, see the glob override above).
+  '@fastify/static': '>=10.1.10 <11'
   # cookie v2 dropped the `parse`/`serialize` exports. light-my-request@6.6.0 (Fastify core dep, and
   # what powers app.inject()) still declares ^1.0.1 and calls serialize(), so v2 breaks e2e outright.
   # Holding every consumer on 1.1.1 also keeps ONE cookie major in the tree: express@5 and engine.io

@@ -131,6 +131,9 @@ jobs:
           # Note: `load` cannot carry multi-arch, so going multi-arch means scanning per platform.
           platforms: linux/amd64
           tags: scan-candidate/${{ matrix.app }}:${{ github.sha }}
+          # Re-run the runtime stage on every release: its `apk upgrade` layer would otherwise be
+          # restored from cache and stop picking up Alpine security fixes after the first build.
+          no-cache-filters: runtime
           cache-from: |
             type=gha,scope=production-build
             type=gha,scope=${{ matrix.app }}

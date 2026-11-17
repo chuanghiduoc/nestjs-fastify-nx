@@ -50,7 +50,7 @@ function sha256(input: string): string {
 const SECRET_BEARING_REQUESTS = new Set(['POST /api/v1/api-keys']);
 
 function isSecretBearing(req: FastifyRequest): boolean {
-  return SECRET_BEARING_REQUESTS.has(`${req.method} ${req.url.split('?')[0]}`);
+  return SECRET_BEARING_REQUESTS.has(`${req.method} ${req.routeOptions.url}`);
 }
 
 function canonicalize(value: unknown): unknown {
@@ -285,12 +285,7 @@ async function completeSuccessRecord(
     );
     return;
   }
-  if (ctx.secretBearing) {
-    reportError(
-      'idempotency response carries a one-shot credential; leaving key pending until TTL',
-    );
-    return;
-  }
+  if (ctx.secretBearing) return;
   const completed = await store.complete(ctx.storeKey, ctx.ownerToken, {
     fingerprint: ctx.fingerprint,
     status,

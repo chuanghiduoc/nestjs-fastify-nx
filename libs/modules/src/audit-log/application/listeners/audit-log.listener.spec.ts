@@ -219,6 +219,34 @@ describe('AuditLogListener', () => {
       expect(JSON.stringify(command.metadata)).not.toMatch(/sk_/);
     });
 
+    it.each([
+      ['2027-01-31T00:00:00.000Z', '2027-01-31T00:00:00.000Z'],
+      ['a key that never expires', null],
+    ])(
+      'keeps the expiry of an issued api key (%s) in the audit metadata',
+      async (_label, expiresAt) => {
+        const { listener, commandBus } = buildListener();
+        const event: DomainEvent = {
+          eventId: generateId(),
+          eventType: 'api_keys.issued',
+          occurredAt: new Date('2026-08-20T15:00:00.000Z'),
+          aggregateId: RESOURCE_ID,
+          organizationId: ORG_ID,
+          payload: { userId: ACTOR_ID, name: 'CI bot', scopes: ['file:read'], expiresAt },
+        };
+
+        await listener.handleApiKeyEvent(event);
+
+        expect(dispatchedCommand(commandBus).metadata).toEqual({
+          name: 'CI bot',
+          scopes: ['file:read'],
+          expiresAt,
+          eventId: event.eventId,
+          resourceId: RESOURCE_ID,
+        });
+      },
+    );
+
     it('throws a permanent failure for an unparseable configuration payload', async () => {
       const { listener } = buildListener();
       const event: DomainEvent = {

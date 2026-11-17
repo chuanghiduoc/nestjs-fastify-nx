@@ -120,8 +120,22 @@ docker compose --env-file .env -f docker/compose.yml -f docker/compose.prod.yml 
 
 The per-service Dockerfile targets (`api`, `worker`, `scheduler`) remain as the
 per-image rollback path. `release.yml` publishes only `app` and `migration`, so
-build and push a target before relying on it in an incident — for example
-`IMAGE_NAMESPACE=your-org IMAGE_TAG=<tag> docker buildx bake worker --push`.
+build a target before you rely on it in an incident. A rollback image must pass
+the same gate as a release image:
+
+1. Check out the release that you restore in a separate worktree:
+   `git worktree add ../rollback <tag>`. Run the next steps in `../rollback`.
+   `IMAGE_TAG` only names the image; the checkout selects the source code.
+2. Set the image reference:
+   `export IMAGE_REGISTRY=ghcr.io IMAGE_NAMESPACE=your-org IMAGE_TAG=<tag>`.
+3. Build the target into the local daemon: `docker buildx bake worker --load`.
+4. Scan the image with the release gate values:
+   `TRIVY_SEVERITY=HIGH,CRITICAL TRIVY_EXIT_CODE=1 ./scripts/security/scan-images.sh worker`.
+   If the scan fails, do not push the image.
+5. Push the image that you scanned:
+   `docker push "${IMAGE_REGISTRY}/${IMAGE_NAMESPACE}/worker:${IMAGE_TAG}"`.
+6. Sign the image: `./scripts/security/sign-images.sh sign worker`.
+
 Changing `APP_IMAGE` moves api, worker and scheduler together; to roll **one**
 service back independently, pin that service to its own image **and** restore
 its original entry point in a compose override — those images ship the bundle

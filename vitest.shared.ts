@@ -15,6 +15,7 @@ export interface VitestProjectOptions {
   hookTimeout?: number;
   coverageExclude?: string[];
   coverageThresholds?: CoverageThresholds;
+  coverageThresholdGlobs?: readonly string[];
 }
 
 function computeRelativePath(rootDir: string): string {
@@ -31,6 +32,7 @@ export function createVitestConfig(options: VitestProjectOptions) {
     hookTimeout,
     coverageExclude = [],
     coverageThresholds,
+    coverageThresholdGlobs = [],
   } = options;
 
   const defaultThresholds: CoverageThresholds = {
@@ -40,9 +42,13 @@ export function createVitestConfig(options: VitestProjectOptions) {
     statements: 60,
   };
 
-  const thresholds = coverageThresholds
+  const projectThresholds = coverageThresholds
     ? { ...defaultThresholds, ...coverageThresholds }
     : defaultThresholds;
+  const thresholds = {
+    ...projectThresholds,
+    ...Object.fromEntries(coverageThresholdGlobs.map((glob) => [glob, projectThresholds])),
+  };
 
   const relativePath = computeRelativePath(rootDir);
   const isIntegrationRun = process.argv.includes('integration');

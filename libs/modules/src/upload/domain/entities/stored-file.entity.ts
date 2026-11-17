@@ -111,11 +111,7 @@ export function assertSizeWithinLimit(size: number, maxBytes: number): void {
  * The declared Content-Type is attacker-controlled: it is whatever the client asked the presign
  * policy to pin. Only the leading bytes prove what the object actually is.
  */
-export function assertMagicBytesMatch(
-  head: Buffer,
-  declaredContentType: string,
-  _key: string,
-): void {
+export function assertMagicBytesMatch(head: Buffer, declaredContentType: string): void {
   const detected = detectFileType(head);
 
   if (!detected) {
@@ -148,10 +144,10 @@ export function assertMagicBytesMatch(
 /** A key outside the caller's own prefix is reported as missing so object existence stays private. */
 export function assertOwnsSourceKey(sourceKey: string, userId: string): void {
   if (sourceKey.startsWith(`uploads/${userId}/`)) return;
-  throw objectNotFound(sourceKey);
+  throw objectNotFound();
 }
 
-export function objectNotFound(_key: string): DomainException {
+export function objectNotFound(): DomainException {
   return new DomainException(
     fieldProblem({
       kind: 'not_found',

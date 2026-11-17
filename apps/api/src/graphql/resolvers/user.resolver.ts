@@ -21,7 +21,7 @@ export class UserResolver {
   // populates `req.user` before this runs, so an unauthenticated request fails with 401 and never
   // reaches here (marking it @Public would skip the guard and leave req.user unset — `me` would then
   // return null even for signed-in users). `nullable` exists ONLY for the deleted-account race handled
-  // in the catch below; the `!userId` guard is defensive against the optional context type.
+  // in the catch below.
   @Query(() => UserType, { name: 'me', nullable: true })
   async me(@CurrentUser() user: AuthenticatedSession): Promise<UserType | null> {
     const userId = user.userId;

@@ -12,30 +12,77 @@ const event: DomainEvent = {
   payload: {},
 };
 
+type Listener = (event: DomainEvent) => unknown;
+
+function busWith(listeners: Listener[]): {
+  bus: EventBusService;
+  emitter: { listeners: ReturnType<typeof vi.fn> };
+} {
+  const emitter = { listeners: vi.fn().mockReturnValue(listeners) };
+  return { bus: new EventBusService(emitter as unknown as EventEmitter2), emitter };
+}
+
+function deferred(): { promise: Promise<void>; resolve: () => void } {
+  let resolve: () => void = () => undefined;
+  const promise = new Promise<void>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+
 describe('EventBusService', () => {
-  it('resolves after registered listeners complete', async () => {
-    const emitter = { emitAsync: vi.fn().mockResolvedValue([undefined]) };
-    const bus = new EventBusService(emitter as unknown as EventEmitter2);
+  it('resolves after every listener for the event type completes', async () => {
+    const listener = vi.fn().mockResolvedValue(undefined);
+    const { bus, emitter } = busWith([listener]);
 
     await expect(bus.publish(event)).resolves.toBeUndefined();
-    expect(emitter.emitAsync).toHaveBeenCalledWith(event.eventType, event);
+    expect(emitter.listeners).toHaveBeenCalledWith(event.eventType);
+    expect(listener).toHaveBeenCalledWith(event);
   });
 
-  it('rejects an event that has no registered listener as a permanent failure', async () => {
-    const emitter = { emitAsync: vi.fn().mockResolvedValue([]) };
-    const bus = new EventBusService(emitter as unknown as EventEmitter2);
+  it('rejects an event that has no registered listener as a retryable failure', async () => {
+    const { bus } = busWith([]);
 
     const error = await bus.publish(event).catch((caught: unknown) => caught);
 
-    expect(error).toBeInstanceOf(DomainException);
-    expect((error as DomainException).permanent).toBe(true);
-    expect((error as DomainException).message).toContain('No listener registered');
+    expect(error).toBeInstanceOf(Error);
+    expect(error).not.toBeInstanceOf(DomainException);
+    expect((error as Error).message).toContain(
+      'No listener registered for domain event "users.registered"',
+    );
   });
 
-  it('propagates listener failures', async () => {
-    const emitter = { emitAsync: vi.fn().mockRejectedValue(new Error('listener failed')) };
-    const bus = new EventBusService(emitter as unknown as EventEmitter2);
+  it('propagates a listener failure', async () => {
+    const { bus } = busWith([vi.fn().mockRejectedValue(new Error('listener failed'))]);
 
     await expect(bus.publish(event)).rejects.toThrow('listener failed');
+  });
+
+  it('propagates a listener that throws synchronously', async () => {
+    const { bus } = busWith([
+      () => {
+        throw new Error('sync failure');
+      },
+    ]);
+
+    await expect(bus.publish(event)).rejects.toThrow('sync failure');
+  });
+
+  it('does not settle while another listener is still running after one rejects', async () => {
+    const slow = deferred();
+    const { bus } = busWith([
+      vi.fn().mockRejectedValue(new Error('fast failure')),
+      () => slow.promise,
+    ]);
+    let settled = false;
+
+    const publish = bus.publish(event).finally(() => {
+      settled = true;
+    });
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(settled).toBe(false);
+
+    slow.resolve();
+    await expect(publish).rejects.toThrow('fast failure');
   });
 });
