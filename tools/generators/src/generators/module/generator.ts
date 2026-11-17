@@ -55,16 +55,16 @@ function generateFolderModule(tree: Tree, moduleNames: ModuleNames, withCqrs: bo
     throw new Error(`Folder "${folderRoot}" already exists.`);
   }
 
-  generateFiles(tree, path.join(import.meta.dirname, 'files'), folderRoot, {
-    ...moduleNames,
-    withCqrs,
-    template: '',
-  });
-
   registerPermissions(tree, {
     constantName: moduleNames.constantName,
     resourceType: moduleNames.fileName.replace(/-/g, '_'),
     actions: permissionActionsFor(withCqrs),
+  });
+
+  generateFiles(tree, path.join(import.meta.dirname, 'files'), folderRoot, {
+    ...moduleNames,
+    withCqrs,
+    template: '',
   });
 
   if (!withCqrs) {

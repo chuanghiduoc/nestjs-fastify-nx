@@ -358,6 +358,38 @@ describe('module generator', () => {
       ).rejects.toThrow(/does not exist/);
     });
 
+    it('changes nothing when a permission key already exists for a new resource type', async () => {
+      tree.write(
+        PERMISSIONS_FILE,
+        PERMISSIONS_FIXTURE.replace(
+          "  ORDER_READ: 'order:read',",
+          "  ORDER_READ: 'order:read',\n  INVOICES_READ: 'invoices:read',",
+        ),
+      );
+      const permissionsBefore = tree.read(PERMISSIONS_FILE, 'utf-8');
+      const accessPolicyBefore = tree.read(ACCESS_POLICY_FILE, 'utf-8');
+
+      await expect(
+        moduleGenerator(tree, { name: 'invoices', directory: 'modules', withCqrs: true }),
+      ).rejects.toThrow(/already exists/);
+
+      expect(tree.read(PERMISSIONS_FILE, 'utf-8')).toBe(permissionsBefore);
+      expect(tree.read(ACCESS_POLICY_FILE, 'utf-8')).toBe(accessPolicyBefore);
+      expect(tree.exists('libs/modules/src/invoices')).toBe(false);
+    });
+
+    it('writes no module files when the access policy is missing', async () => {
+      tree.delete(ACCESS_POLICY_FILE);
+      const permissionsBefore = tree.read(PERMISSIONS_FILE, 'utf-8');
+
+      await expect(
+        moduleGenerator(tree, { name: 'invoices', directory: 'modules', withCqrs: true }),
+      ).rejects.toThrow(/does not exist/);
+
+      expect(tree.read(PERMISSIONS_FILE, 'utf-8')).toBe(permissionsBefore);
+      expect(tree.exists('libs/modules/src/invoices')).toBe(false);
+    });
+
     it('refuses to scaffold over an existing folder', async () => {
       tree.write('libs/modules/src/orders/orders.module.ts', 'export {}');
 

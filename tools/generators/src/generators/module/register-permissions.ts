@@ -33,36 +33,50 @@ export function registerPermissions(tree: Tree, registration: PermissionRegistra
     throw new Error(`Resource type "${resourceType}" must be snake_case.`);
   }
 
-  insertCatalogProperties(tree, {
-    file: PERMISSIONS_FILE,
-    variableName: 'RESOURCE_TYPES',
-    properties: [{ key: constantName, value: `'${resourceType}'` }],
-    valuesAreUnique: true,
-  });
-  insertCatalogProperties(tree, {
-    file: PERMISSIONS_FILE,
-    variableName: 'PERMISSIONS',
-    properties: actions.map((action) => ({
-      key: `${constantName}_${action.toUpperCase()}`,
-      value: `'${resourceType}:${action}'`,
-    })),
-    valuesAreUnique: true,
-  });
-  insertCatalogProperties(tree, {
-    file: ACCESS_POLICY_FILE,
-    variableName: 'RESOURCE_SCOPES',
-    properties: [{ key: `[RESOURCE_TYPES.${constantName}]`, value: `'${ORGANIZATION_SCOPE}'` }],
-    valuesAreUnique: false,
-  });
+  const sources = new Map<string, string>();
+  const insertions: readonly CatalogInsertion[] = [
+    {
+      file: PERMISSIONS_FILE,
+      variableName: 'RESOURCE_TYPES',
+      properties: [{ key: constantName, value: `'${resourceType}'` }],
+      valuesAreUnique: true,
+    },
+    {
+      file: PERMISSIONS_FILE,
+      variableName: 'PERMISSIONS',
+      properties: actions.map((action) => ({
+        key: `${constantName}_${action.toUpperCase()}`,
+        value: `'${resourceType}:${action}'`,
+      })),
+      valuesAreUnique: true,
+    },
+    {
+      file: ACCESS_POLICY_FILE,
+      variableName: 'RESOURCE_SCOPES',
+      properties: [{ key: `[RESOURCE_TYPES.${constantName}]`, value: `'${ORGANIZATION_SCOPE}'` }],
+      valuesAreUnique: false,
+    },
+  ];
+
+  for (const insertion of insertions) {
+    const source = sources.get(insertion.file) ?? readCatalogFile(tree, insertion.file);
+    sources.set(insertion.file, withCatalogProperties(source, insertion));
+  }
+  for (const [file, source] of sources) {
+    tree.write(file, source);
+  }
 }
 
-function insertCatalogProperties(tree: Tree, insertion: CatalogInsertion): void {
-  const { file, variableName, properties } = insertion;
+function readCatalogFile(tree: Tree, file: string): string {
   const source = tree.read(file, 'utf-8');
   if (source === null) {
     throw new Error(`Cannot register permissions: "${file}" does not exist.`);
   }
+  return source;
+}
 
+function withCatalogProperties(source: string, insertion: CatalogInsertion): string {
+  const { file, variableName, properties } = insertion;
   const sourceFile = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true);
   const catalog = findObjectLiteral(sourceFile, variableName);
   if (!catalog) {
@@ -79,13 +93,12 @@ function insertCatalogProperties(tree: Tree, insertion: CatalogInsertion): void 
   const closingBrace = catalog.getEnd() - 1;
   const addedText = properties.map(({ key, value }) => `  ${key}: ${value},\n`).join('');
 
-  tree.write(
-    file,
+  return (
     source.slice(0, lastPropertyEnd) +
-      separator +
-      source.slice(lastPropertyEnd, closingBrace) +
-      addedText +
-      source.slice(closingBrace),
+    separator +
+    source.slice(lastPropertyEnd, closingBrace) +
+    addedText +
+    source.slice(closingBrace)
   );
 }
 
