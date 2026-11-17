@@ -10,6 +10,7 @@ import { resolveRequestLocale, translateOrFallback } from '@nestjs-fastify-nx/in
 import type { AuthSessionPolicy } from './auth-session-policy';
 import { usesSecureCookies } from './session-cookie';
 import { organizationAccessControl, organizationRoles } from './organization-access-control';
+import { assertMemberRolesDefined } from './member-role-guard';
 import { I18N_KEYS } from '@nestjs-fastify-nx/contracts';
 import {
   EMAIL_TEMPLATES,
@@ -277,6 +278,10 @@ export function createBetterAuth(
         dynamicAccessControl: { enabled: true },
         invitationExpiresIn: INVITATION_EXPIRES_IN_SECONDS,
         cancelPendingInvitationsOnReInvite: true,
+        organizationHooks: {
+          beforeAcceptInvitation: ({ invitation }) =>
+            assertMemberRolesDefined(prisma, invitation.organizationId, invitation.role),
+        },
         sendInvitationEmail: async (data, request) => {
           const lang = resolveRequestLocale(request);
           const link = `${frontendBase}/accept-invitation?id=${encodeURIComponent(data.id)}`;
