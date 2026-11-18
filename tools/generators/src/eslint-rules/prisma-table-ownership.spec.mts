@@ -34,6 +34,7 @@ const USERS_FILE = fixtureFile('libs/modules/src/users/sample.ts');
 const ORGANIZATIONS_FILE = fixtureFile('libs/modules/src/organizations/sample.ts');
 const SCHEDULER_FILE = fixtureFile('apps/scheduler/src/sample.ts');
 const INFRA_FILE = fixtureFile('libs/infra/src/auth/sample.ts');
+const FEATURE_FLAGS_FILE = fixtureFile('libs/modules/src/feature-flags/sample.ts');
 
 function moduleCode(body: string): string {
   return `import type { PrismaClient, TransactionClient, UserWhereInput } from '${MODULE_CLIENT}';
@@ -97,6 +98,21 @@ ruleTester.run('libs-groups/prisma-table-ownership', ruleWith(BASE_GRANTS), {
       filename: USERS_FILE,
     },
     { code: moduleCode('return db.featureFlag.findMany();'), filename: INFRA_FILE },
+    { code: moduleCode("return db.user['findMany']();"), filename: ORGANIZATIONS_FILE },
+    {
+      code: moduleCode('const users = db.user; return users.deleteMany({});'),
+      filename: USERS_FILE,
+    },
+    {
+      code: moduleCode('return db.$queryRaw`SELECT id AS "users" FROM feature_flags`;'),
+      filename: FEATURE_FLAGS_FILE,
+    },
+    {
+      code: moduleCode(
+        'return db.$executeRaw`UPDATE organizations o SET name = u.name FROM users u WHERE u.id = o.id`;',
+      ),
+      filename: ORGANIZATIONS_FILE,
+    },
   ],
   invalid: [
     {
@@ -133,6 +149,38 @@ ruleTester.run('libs-groups/prisma-table-ownership', ruleWith(BASE_GRANTS), {
       code: moduleCode("return db.user.create({ data: { email: 'a@b.c' } });"),
       filename: ORGANIZATIONS_FILE,
       errors: [{ messageId: 'readOnlyGrant' }],
+    },
+    {
+      code: moduleCode("return db.user['update']({ where: { id: 'u' }, data: { name: 'n' } });"),
+      filename: ORGANIZATIONS_FILE,
+      errors: [{ messageId: 'readOnlyGrant' }],
+    },
+    {
+      code: moduleCode('const users = db.user; return users.deleteMany({});'),
+      filename: ORGANIZATIONS_FILE,
+      errors: [{ messageId: 'readOnlyGrant' }],
+    },
+    {
+      code: moduleCode('const users = db.user; return users.findMany();'),
+      filename: ORGANIZATIONS_FILE,
+      errors: [{ messageId: 'readOnlyGrant' }],
+    },
+    {
+      code: moduleCode("return db.$executeRawUnsafe('TRUNCATE users');"),
+      filename: ORGANIZATIONS_FILE,
+      errors: [{ messageId: 'readOnlyGrant' }],
+    },
+    {
+      code: moduleCode(
+        "return db.$executeRaw`UPDATE users u SET name = o.name FROM organizations o WHERE o.id = 'o'`;",
+      ),
+      filename: ORGANIZATIONS_FILE,
+      errors: [{ messageId: 'readOnlyGrant' }],
+    },
+    {
+      code: moduleCode('return db.$queryRaw`SELECT 1 FROM members m, "feature_flags" f`;'),
+      filename: USERS_FILE,
+      errors: [{ messageId: 'foreignRawTable' }, { messageId: 'foreignRawTable' }],
     },
     {
       code: moduleCode(
@@ -209,18 +257,28 @@ ruleTester.run('libs-groups/prisma-table-ownership', ruleWith(BASE_GRANTS), {
 });
 
 describe('rawSqlTables', () => {
-  it('collects quoted identifiers and the names after table keywords', () => {
+  it('collects the names in table positions, quoted or not', () => {
     expect(
       rawSqlTables(
-        'SELECT EXTRACT(EPOCH FROM NOW() - MIN("createdAt")) FROM "outbox_events" o JOIN users u ON true',
+        'SELECT MIN("createdAt") AS "users" FROM "outbox_events" o JOIN public.members m ON true',
         'read',
       ),
     ).toEqual(
       new Map([
-        ['createdat', 'read'],
         ['outbox_events', 'read'],
-        ['now', 'read'],
-        ['users', 'read'],
+        ['members', 'read'],
+      ]),
+    );
+  });
+
+  it('collects every table of a comma-separated list', () => {
+    expect([
+      ...rawSqlTables('SELECT 1 FROM members m, "users" AS u, teams', 'read').keys(),
+    ]).toEqual(['members', 'users', 'teams']);
+    expect(rawSqlTables('TRUNCATE members, "users"', 'write')).toEqual(
+      new Map([
+        ['members', 'write'],
+        ['users', 'write'],
       ]),
     );
   });
@@ -234,7 +292,36 @@ describe('rawSqlTables', () => {
     expect(tables.get('members')).toBe('read');
   });
 
-  it('marks every table of an execute method as written', () => {
+  it('marks only the written table of an execute method as written', () => {
+    const tables = rawSqlTables(
+      'UPDATE organizations o SET name = u.name FROM users u WHERE u.id = o.id',
+      'write',
+    );
+    expect(tables).toEqual(
+      new Map([
+        ['organizations', 'write'],
+        ['users', 'read'],
+      ]),
+    );
+  });
+
+  it('marks an unquoted truncate target as written', () => {
+    expect(rawSqlTables('TRUNCATE users', 'write')).toEqual(new Map([['users', 'write']]));
+    expect(rawSqlTables('TRUNCATE TABLE ONLY "users" CASCADE', 'read')).toEqual(
+      new Map([['users', 'write']]),
+    );
+  });
+
+  it('marks an altered or dropped table as written', () => {
+    expect(rawSqlTables('ALTER TABLE users DISABLE TRIGGER t', 'read')).toEqual(
+      new Map([['users', 'write']]),
+    );
+    expect(rawSqlTables('DROP TABLE IF EXISTS public."audit_logs_2026_01"', 'read')).toEqual(
+      new Map([['audit_logs_2026_01', 'write']]),
+    );
+  });
+
+  it('marks every table of an execute method with no recognised write target as written', () => {
     expect(rawSqlTables('SELECT 1 FROM members', 'write').get('members')).toBe('write');
   });
 });

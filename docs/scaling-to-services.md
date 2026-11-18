@@ -97,8 +97,11 @@ Per context:
    publish succeeds but mark-processed fails.
 
 `DOMAIN_EVENTS` and the per-event payload schemas in each context's `contract` entry point are the
-wire contract for this step. They are versioned by `OUTBOX_SCHEMA_VERSION`; the relay refuses
-envelopes newer than it understands rather than guessing.
+wire contract for this step. `OUTBOX_SCHEMA_VERSION` versions the envelope only. The relay refuses
+envelopes newer than it understands rather than guessing. The relay does not version the payload or
+check its fields: it passes the payload to listeners unchanged. The payload schema in the contract
+entry point of the publishing context is the payload contract. Make only additive changes to that
+schema: add optional fields, and do not remove, rename or retype a field.
 
 ## Stage 3 — separate the core (users/auth)
 

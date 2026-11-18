@@ -55,7 +55,7 @@ export class InMemoryOrganizationRoleRepository implements OrganizationRoleRepos
     const key = this.key(role.organizationId, role.role);
     const stored = this.roles.get(key);
     if (!stored) return Promise.resolve('not_found');
-    if (stored.version !== role.version) return Promise.resolve('stale');
+    if (stored.id !== role.id || stored.version !== role.version) return Promise.resolve('stale');
 
     this.roles.set(
       key,

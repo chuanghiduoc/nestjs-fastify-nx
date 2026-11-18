@@ -189,6 +189,42 @@ describe('organization role handlers', () => {
     ]);
   });
 
+  it('answers a retryable conflict when the role was recreated under the same name since the read', async () => {
+    const original = OrganizationRole.create({
+      organizationId: ORG_ID,
+      grantedToActor: ALL_PERMISSIONS,
+      role: 'auditor',
+      permissions: [PERMISSIONS.AUDIT_LOG_READ],
+    });
+    await roles.create(original);
+    await roles.deleteUnlessHeld(ORG_ID, 'auditor');
+    const replacement = OrganizationRole.create({
+      organizationId: ORG_ID,
+      grantedToActor: ALL_PERMISSIONS,
+      role: 'auditor',
+      permissions: [PERMISSIONS.MEMBER_READ],
+    });
+    await roles.create(replacement);
+    const staleRead: OrganizationRoleRepositoryPort = {
+      findAll: (organizationId) => roles.findAll(organizationId),
+      findByName: async () => original,
+      create: (role) => roles.create(role),
+      update: (role) => roles.update(role),
+      deleteUnlessHeld: (organizationId, role) => roles.deleteUnlessHeld(organizationId, role),
+    };
+
+    const execute = new UpdateOrganizationRoleHandler(
+      staleRead,
+      authorizationHolding(ALL_PERMISSIONS),
+    ).execute(new UpdateOrganizationRoleCommand(roleCommand('auditor', [PERMISSIONS.FILE_READ])));
+
+    await expect(execute).rejects.toMatchObject({ kind: 'conflict', permanent: false });
+    const stored = await roles.findByName(ORG_ID, 'auditor');
+    expect(stored?.id).toBe(replacement.id);
+    expect(stored?.permissions).toEqual([PERMISSIONS.MEMBER_READ]);
+    expect(stored?.version).toBe(replacement.version);
+  });
+
   it('deletes a role nobody holds', async () => {
     await roles.create(
       OrganizationRole.create({

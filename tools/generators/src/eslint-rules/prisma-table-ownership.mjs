@@ -6,11 +6,15 @@ const PRISMA_CLIENT_SEGMENT = '/generated/prisma/';
 const PRISMA_MODEL_FILE = /\/generated\/prisma\/models\/(\w+)\.ts$/;
 const CLIENT_MARKER = '$queryRaw';
 const WRITE_INPUT_TYPE = /Create|Update|Upsert/;
-const QUOTED_IDENTIFIER = /"([A-Za-z_][A-Za-z0-9_]*)"/g;
-const TABLE_REFERENCE =
-  /\b(?:FROM|JOIN|INTO|UPDATE|TABLE)\s+(?:ONLY\s+)?(?:"?public"?\.)?"?([A-Za-z_][A-Za-z0-9_]*)"?/gi;
-const WRITTEN_TABLE_REFERENCE =
-  /\b(?:INSERT\s+INTO|UPDATE|DELETE\s+FROM|TRUNCATE(?:\s+TABLE)?|MERGE\s+INTO)\s+(?:ONLY\s+)?(?:"?public"?\.)?"?([A-Za-z_][A-Za-z0-9_]*)"?/gi;
+const SQL_IDENTIFIER = String.raw`(?:"[^"]+"|[A-Za-z_][A-Za-z0-9_$]*)`;
+const TABLE_KEYWORD =
+  /\b(INSERT\s+INTO|DELETE\s+FROM|MERGE\s+INTO|TRUNCATE(?:\s+TABLE)?|(?:ALTER|DROP)\s+TABLE(?:\s+IF\s+EXISTS)?|UPDATE|INTO|FROM|JOIN|USING|TABLE)\b/gi;
+const READ_TABLE_KEYWORDS = new Set(['FROM', 'JOIN', 'USING', 'TABLE']);
+const TABLE_NAME = new RegExp(
+  String.raw`^\s*(?:ONLY\s+)?(?:${SQL_IDENTIFIER}\s*\.\s*)?(${SQL_IDENTIFIER})`,
+  'i',
+);
+const NEXT_LISTED_TABLE = new RegExp(String.raw`^\s*(?:(?:AS\s+)?${SQL_IDENTIFIER}\s*)?,`, 'i');
 const WRITE_METHODS = new Set([
   'create',
   'createMany',
@@ -247,18 +251,46 @@ function rawSqlText(memberNode) {
   return '';
 }
 
-function capturedNames(sql, pattern) {
-  return [...sql.matchAll(pattern)].map(([, name]) => name.toLowerCase());
+function unquotedTableName(identifier) {
+  const name = identifier.startsWith('"') ? identifier.slice(1, -1) : identifier;
+  return name.toLowerCase();
+}
+
+function listedTables(text) {
+  const tables = [];
+  let rest = text;
+  for (;;) {
+    const table = TABLE_NAME.exec(rest);
+    if (!table) return tables;
+    tables.push(unquotedTableName(table[1]));
+    rest = rest.slice(table[0].length);
+    const separator = NEXT_LISTED_TABLE.exec(rest);
+    if (!separator) return tables;
+    rest = rest.slice(separator[0].length);
+  }
+}
+
+function keywordMode(keyword) {
+  const [leadingWord] = keyword.toUpperCase().split(/\s+/);
+  return READ_TABLE_KEYWORDS.has(leadingWord) ? 'read' : 'write';
+}
+
+function tableReferences(sql) {
+  return [...sql.matchAll(TABLE_KEYWORD)].flatMap((match) => {
+    const mode = keywordMode(match[1]);
+    const following = sql.slice(match.index + match[0].length);
+    return listedTables(following).map((table) => ({ table, mode }));
+  });
 }
 
 export function rawSqlTables(sql, methodMode) {
-  const written = new Set(capturedNames(sql, WRITTEN_TABLE_REFERENCE));
+  const references = tableReferences(sql);
+  const writesNoKnownTarget =
+    methodMode === 'write' && !references.some(({ mode }) => mode === 'write');
   const tables = new Map();
-  for (const table of [
-    ...capturedNames(sql, QUOTED_IDENTIFIER),
-    ...capturedNames(sql, TABLE_REFERENCE),
-  ]) {
-    tables.set(table, methodMode === 'write' || written.has(table) ? 'write' : 'read');
+  for (const { table, mode } of references) {
+    if (tables.get(table) === 'write') continue;
+    tables.set(table, mode === 'write' || writesNoKnownTarget ? 'write' : 'read');
   }
   return tables;
 }
@@ -266,8 +298,13 @@ export function rawSqlTables(sql, methodMode) {
 function calledMethodName(memberNode) {
   const parent = memberNode.parent;
   if (parent?.type !== 'MemberExpression' || parent.object !== memberNode) return undefined;
-  if (parent.computed || parent.property.type !== 'Identifier') return undefined;
-  return parent.property.name;
+  return memberName(parent);
+}
+
+function delegateAccessMode(memberNode) {
+  const method = calledMethodName(memberNode);
+  if (method === undefined) return 'write';
+  return WRITE_METHODS.has(method) ? 'write' : 'read';
 }
 
 const messages = {
@@ -367,8 +404,10 @@ export function createTableOwnershipRule({ models, owners, grants }) {
 
       function checkDelegate(node, model) {
         if (!receiverIsPrismaClient(node.object)) return;
-        const mode = WRITE_METHODS.has(calledMethodName(node)) ? 'write' : 'read';
-        report(node.property, model, mode, { messageId: 'foreignDelegate', data: {} });
+        report(node.property, model, delegateAccessMode(node), {
+          messageId: 'foreignDelegate',
+          data: {},
+        });
         checkDelegateArguments(node);
       }
 

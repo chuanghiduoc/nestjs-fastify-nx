@@ -159,6 +159,27 @@ describe('organization repositories (integration)', () => {
       expect(stored?.version).toBe(read.version + 1);
     });
 
+    it('reports an update from a read of a role since recreated under the same name as stale', async () => {
+      await defineRole('sales');
+      const original = await roles.findByName(organizationId, 'sales');
+      if (!original) throw new Error('role fixture was not created');
+      expect(await roles.deleteUnlessHeld(organizationId, 'sales')).toBe('deleted');
+      await defineRole('sales');
+      const replacement = await roles.findByName(organizationId, 'sales');
+      if (!replacement) throw new Error('replacement role was not created');
+      expect(replacement.id).not.toBe(original.id);
+      expect(replacement.version).toBe(original.version);
+
+      expect(
+        await roles.update(original.withPermissions([PERMISSIONS.FILE_READ], ALL_PERMISSIONS)),
+      ).toBe('stale');
+
+      const stored = await roles.findByName(organizationId, 'sales');
+      expect(stored?.id).toBe(replacement.id);
+      expect(stored?.permissions).toEqual([PERMISSIONS.AUDIT_LOG_READ]);
+      expect(stored?.version).toBe(replacement.version);
+    });
+
     it('bumps the version when a permission edit bypasses the API', async () => {
       await defineRole('sales');
       const read = await roles.findByName(organizationId, 'sales');

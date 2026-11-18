@@ -463,7 +463,11 @@ factory.
 
 #### Concurrent writes
 
-Every mutable aggregate carries a `version` column. The entity holds the
+Three aggregates have compare-and-set protection: feature flags, organization
+roles and teams. Each of them carries a `version` column. Other aggregates, for
+example `User`, have no `version` column, and their updates use
+last-write-wins. Add a `version` column before you rely on this protection for
+a new aggregate. The entity holds the
 `version` it was read with, and the repository uses that value as the expected
 version. An update is a compare-and-set: the `where` clause matches the row
 key, the tenant column and `version` together. Never expose `version` in a DTO, an

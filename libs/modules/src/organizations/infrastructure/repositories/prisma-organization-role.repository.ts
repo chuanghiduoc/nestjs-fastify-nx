@@ -106,7 +106,12 @@ export class PrismaOrganizationRoleRepository implements OrganizationRoleReposit
   async update(role: OrganizationRole): Promise<RoleUpdateOutcome> {
     const client = this.prisma.writeTarget();
     const { count } = await client.organizationRole.updateMany({
-      where: { organizationId: role.organizationId, role: role.role, version: role.version },
+      where: {
+        id: role.id,
+        organizationId: role.organizationId,
+        role: role.role,
+        version: role.version,
+      },
       data: { permission: serializePermissionStatements(role.permissions) },
     });
     if (count > 0) return 'updated';
