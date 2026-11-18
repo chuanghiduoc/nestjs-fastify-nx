@@ -100,6 +100,7 @@ CREATE TABLE "teams" (
     "name" TEXT NOT NULL,
     "organizationId" UUID NOT NULL,
     "memberCount" INTEGER NOT NULL DEFAULT 0,
+    "version" INTEGER NOT NULL DEFAULT 0,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3),
 
@@ -121,6 +122,7 @@ CREATE TABLE "organization_roles" (
     "organizationId" UUID NOT NULL,
     "role" TEXT NOT NULL,
     "permission" TEXT NOT NULL,
+    "version" INTEGER NOT NULL DEFAULT 0,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3),
 
@@ -235,6 +237,7 @@ CREATE TABLE "feature_flags" (
     "description" TEXT,
     "enabled" BOOLEAN NOT NULL DEFAULT false,
     "rolloutPercentage" INTEGER NOT NULL DEFAULT 0,
+    "version" INTEGER NOT NULL DEFAULT 0,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -389,6 +392,16 @@ ALTER TABLE "term_acceptances" ADD CONSTRAINT "term_acceptances_userId_fkey" FOR
 
 ALTER TABLE "stored_files" ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "stored_files_tenant_isolation" ON "stored_files"
+  USING ("organizationId" = NULLIF(current_setting('app.current_org_id', true), '')::uuid)
+  WITH CHECK ("organizationId" = NULLIF(current_setting('app.current_org_id', true), '')::uuid);
+
+ALTER TABLE "notifications" ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "notifications_tenant_isolation" ON "notifications"
+  USING ("organizationId" = NULLIF(current_setting('app.current_org_id', true), '')::uuid)
+  WITH CHECK ("organizationId" = NULLIF(current_setting('app.current_org_id', true), '')::uuid);
+
+ALTER TABLE "feature_flags" ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "feature_flags_tenant_isolation" ON "feature_flags"
   USING ("organizationId" = NULLIF(current_setting('app.current_org_id', true), '')::uuid)
   WITH CHECK ("organizationId" = NULLIF(current_setting('app.current_org_id', true), '')::uuid);
 
@@ -782,3 +795,11 @@ BEGIN
   RETURN OLD;
 END; $$ LANGUAGE plpgsql;
 CREATE TRIGGER organization_roles_unheld BEFORE DELETE OR UPDATE OF "role" ON "organization_roles" FOR EACH ROW EXECUTE FUNCTION assert_organization_role_unheld();
+
+CREATE OR REPLACE FUNCTION bump_row_version() RETURNS TRIGGER AS $$
+BEGIN
+  NEW."version" := OLD."version" + 1;
+  RETURN NEW;
+END; $$ LANGUAGE plpgsql;
+CREATE TRIGGER organization_roles_version BEFORE UPDATE ON "organization_roles" FOR EACH ROW WHEN (OLD."role" IS DISTINCT FROM NEW."role" OR OLD."permission" IS DISTINCT FROM NEW."permission") EXECUTE FUNCTION bump_row_version();
+CREATE TRIGGER teams_version BEFORE UPDATE ON "teams" FOR EACH ROW WHEN (OLD."name" IS DISTINCT FROM NEW."name") EXECUTE FUNCTION bump_row_version();

@@ -8,6 +8,7 @@ import {
   type FeatureFlagRepositoryPort,
 } from '../../domain/ports/feature-flag-repository.port';
 import { featureFlagNotFound } from '../feature-flag-errors';
+import type { FeatureFlagDeletedPayload } from '../../contract';
 
 export class DeleteFeatureFlagCommand extends Command<void> {
   constructor(
@@ -28,6 +29,8 @@ export class DeleteFeatureFlagHandler implements ICommandHandler<DeleteFeatureFl
   ) {}
 
   async execute(command: DeleteFeatureFlagCommand): Promise<void> {
+    const payload: FeatureFlagDeletedPayload = { userId: command.userId };
+
     await this.prisma.transaction(async () => {
       const deleted = await this.flags.delete(command.organizationId, command.id);
       if (!deleted) throw featureFlagNotFound();
@@ -38,7 +41,7 @@ export class DeleteFeatureFlagHandler implements ICommandHandler<DeleteFeatureFl
         aggregateId: command.id,
         occurredAt: new Date(),
         organizationId: command.organizationId,
-        payload: { userId: command.userId },
+        payload,
       });
     });
   }

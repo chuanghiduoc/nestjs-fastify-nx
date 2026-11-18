@@ -7,9 +7,19 @@ import {
 } from '@nestjs-fastify-nx/testing';
 import { PrismaService } from '@nestjs-fastify-nx/infra/database';
 import { DOMAIN_EVENTS, SYSTEM_ROLES } from '@nestjs-fastify-nx/shared';
+import { z } from 'zod';
 import { EnsurePersonalOrganizationCommand } from '../../application/commands/ensure-personal-organization';
 import { EnsurePersonalOrganizationHandler } from '../../application/commands/ensure-personal-organization';
 import { PrismaPersonalOrganizationRepository } from './prisma-personal-organization.repository';
+import {
+  organizationCreatedPayloadSchema,
+  organizationMemberAddedPayloadSchema,
+} from '../../contract';
+
+function triggerPayload(envelope: unknown): unknown {
+  const parsed = z.object({ payload: z.unknown() }).parse(envelope);
+  return parsed.payload;
+}
 
 describe('personal organization provisioning (integration)', () => {
   let containers: TestContainers;
@@ -57,6 +67,22 @@ describe('personal organization provisioning (integration)', () => {
     expect(events.map((event) => event.eventType).sort()).toEqual(
       [DOMAIN_EVENTS.ORGANIZATIONS_CREATED, DOMAIN_EVENTS.ORGANIZATIONS_MEMBER_ADDED].sort(),
     );
+  });
+
+  it('stores trigger payloads that satisfy the published organization contract', async () => {
+    const id = await handler.execute(new EnsurePersonalOrganizationCommand(userId));
+    const events = await prisma.db.outboxEvent.findMany({ where: { organizationId: id } });
+    const payloadOf = (eventType: string): unknown =>
+      triggerPayload(events.find((event) => event.eventType === eventType)?.payload);
+
+    expect(
+      organizationCreatedPayloadSchema.parse(payloadOf(DOMAIN_EVENTS.ORGANIZATIONS_CREATED)),
+    ).toEqual({ name: 'Workspace Owner', slug: expect.stringMatching(/^ws-/) });
+    expect(
+      organizationMemberAddedPayloadSchema.parse(
+        payloadOf(DOMAIN_EVENTS.ORGANIZATIONS_MEMBER_ADDED),
+      ),
+    ).toEqual({ userId, role: SYSTEM_ROLES.OWNER });
   });
 
   it('uses the email local part when the display name is blank', async () => {

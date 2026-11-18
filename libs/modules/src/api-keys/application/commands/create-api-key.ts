@@ -14,6 +14,7 @@ import {
 } from '../../domain/ports/api-key-repository.port';
 import { ApiKey } from '../../domain/entities/api-key.entity';
 import { toApiKeyDto, type IssuedApiKeyDto } from '../dto/api-key.dto';
+import type { ApiKeyIssuedPayload } from '../../contract';
 
 export interface CreateApiKeyInput {
   readonly organizationId: string;
@@ -65,6 +66,13 @@ export class CreateApiKeyHandler implements ICommandHandler<CreateApiKeyCommand,
       grantedToIssuer,
     });
 
+    const payload: ApiKeyIssuedPayload = {
+      userId: command.userId,
+      name: entity.name,
+      scopes: [...entity.scopes],
+      expiresAt: entity.expiresAt?.toISOString() ?? null,
+    };
+
     await this.prisma.transaction(async () => {
       await this.apiKeys.create(entity);
       await this.events.publish({
@@ -73,12 +81,7 @@ export class CreateApiKeyHandler implements ICommandHandler<CreateApiKeyCommand,
         aggregateId: entity.id,
         occurredAt: new Date(),
         organizationId: command.organizationId,
-        payload: {
-          userId: command.userId,
-          name: entity.name,
-          scopes: [...entity.scopes],
-          expiresAt: entity.expiresAt?.toISOString() ?? null,
-        },
+        payload,
       });
     });
 

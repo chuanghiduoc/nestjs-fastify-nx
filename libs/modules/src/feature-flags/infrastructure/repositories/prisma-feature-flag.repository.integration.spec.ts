@@ -81,13 +81,42 @@ describe('PrismaFeatureFlagRepository (integration)', () => {
   it('applies a partial update without clearing untouched fields', async () => {
     const id = '019dd1a5-9235-70db-8d57-54040000000e';
     await repository.create(flag(id, 'partial.flag'));
+    const stored = await repository.findById(ORG_ID, id);
+    if (!stored) throw new Error('flag fixture was not created');
 
-    expect(await repository.update(ORG_ID, id, { enabled: true }, new Date())).toBe(true);
+    expect(await repository.update(stored.withChanges({ enabled: true }))).toBe('updated');
     const updated = await repository.findById(ORG_ID, id);
 
     expect(updated?.enabled).toBe(true);
     expect(updated?.rolloutPercentage).toBe(40);
     expect(updated?.description).toBe('before');
+    expect(updated?.version).toBe(stored.version + 1);
+  });
+
+  it('lets the first of two updates from the same read win and reports the second as stale', async () => {
+    const id = '019dd1a5-9235-70db-8d57-540400000021';
+    await repository.create(flag(id, 'raced.flag'));
+    const read = await repository.findById(ORG_ID, id);
+    if (!read) throw new Error('flag fixture was not created');
+
+    expect(await repository.update(read.withChanges({ rolloutPercentage: 10 }))).toBe('updated');
+    expect(await repository.update(read.withChanges({ enabled: true }))).toBe('stale');
+
+    const stored = await repository.findById(ORG_ID, id);
+    expect(stored?.rolloutPercentage).toBe(10);
+    expect(stored?.enabled).toBe(false);
+    expect(stored?.version).toBe(read.version + 1);
+  });
+
+  it('reports not_found for a deleted flag and for a flag of another organization', async () => {
+    const id = '019dd1a5-9235-70db-8d57-540400000022';
+    await repository.create(flag(id, 'theirs.flag', OTHER_ORG_ID));
+    const hijack = flag(id, 'theirs.flag', ORG_ID);
+
+    expect(await repository.update(hijack)).toBe('not_found');
+
+    const gone = flag('019dd1a5-9235-70db-8d57-540400000023', 'gone.flag');
+    expect(await repository.update(gone)).toBe('not_found');
   });
 
   it('makes a freshly written flag visible to findAll and findById', async () => {

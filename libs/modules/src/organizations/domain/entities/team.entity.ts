@@ -4,6 +4,7 @@ import { generateId } from '@nestjs-fastify-nx/shared';
 
 const NAME_MIN_LENGTH = 1;
 const NAME_MAX_LENGTH = 100;
+const INITIAL_VERSION = 0;
 
 export interface TeamProps {
   id: string;
@@ -11,6 +12,7 @@ export interface TeamProps {
   name: string;
   createdAt: Date;
   updatedAt: Date | null;
+  version: number;
 }
 
 export interface CreateTeamInput {
@@ -48,6 +50,7 @@ export class Team {
       name: normalizeName(input.name),
       createdAt: new Date(),
       updatedAt: null,
+      version: INITIAL_VERSION,
     });
   }
 
@@ -73,5 +76,8 @@ export class Team {
   }
   get updatedAt(): Date | null {
     return this.props.updatedAt;
+  }
+  get version(): number {
+    return this.props.version;
   }
 }

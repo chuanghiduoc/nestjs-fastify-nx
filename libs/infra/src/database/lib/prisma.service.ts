@@ -274,6 +274,18 @@ export class PrismaService implements OnModuleInit, OnApplicationShutdown {
     }, limits);
   }
 
+  runTenantScoped<R>(
+    fn: (client: TransactionClient) => Promise<R>,
+    options: { readOnly: boolean },
+  ): Promise<R> {
+    const ambient = options.readOnly
+      ? (this.currentTransaction ?? this.currentReadTransaction)
+      : this.currentTransaction;
+    if (ambient) return fn(ambient);
+    if (!this.hasTenantContext) return fn(options.readOnly ? this.dbRead : this.db);
+    return this.withTenantContext(fn, { readOnly: options.readOnly });
+  }
+
   async onModuleInit(): Promise<void> {
     try {
       await this._writeClient.$connect();

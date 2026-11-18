@@ -13,6 +13,10 @@
       "types": "./src/api-keys/index.ts",
       "default": "./src/api-keys/index.ts"
     },
+    "./api-keys/contract": {
+      "types": "./src/api-keys/contract/index.ts",
+      "default": "./src/api-keys/contract/index.ts"
+    },
     "./audit-log": {
       "types": "./src/audit-log/index.ts",
       "default": "./src/audit-log/index.ts"
@@ -21,6 +25,10 @@
       "types": "./src/feature-flags/index.ts",
       "default": "./src/feature-flags/index.ts"
     },
+    "./feature-flags/contract": {
+      "types": "./src/feature-flags/contract/index.ts",
+      "default": "./src/feature-flags/contract/index.ts"
+    },
     "./notifications": {
       "types": "./src/notifications/index.ts",
       "default": "./src/notifications/index.ts"
@@ -28,6 +36,10 @@
     "./organizations": {
       "types": "./src/organizations/index.ts",
       "default": "./src/organizations/index.ts"
+    },
+    "./organizations/contract": {
+      "types": "./src/organizations/contract/index.ts",
+      "default": "./src/organizations/contract/index.ts"
     },
     "./sessions": {
       "types": "./src/sessions/index.ts",
@@ -44,6 +56,10 @@
     "./users": {
       "types": "./src/users/index.ts",
       "default": "./src/users/index.ts"
+    },
+    "./users/contract": {
+      "types": "./src/users/contract/index.ts",
+      "default": "./src/users/contract/index.ts"
     }
   },
   "devDependencies": {

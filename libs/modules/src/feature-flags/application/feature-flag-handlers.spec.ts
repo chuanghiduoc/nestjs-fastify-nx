@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { EventPublisherPort } from '@nestjs-fastify-nx/core';
+import { DomainException, type EventPublisherPort } from '@nestjs-fastify-nx/core';
 import type { PrismaService } from '@nestjs-fastify-nx/infra/database';
 import { DOMAIN_EVENTS, generateId } from '@nestjs-fastify-nx/shared';
 import { FeatureFlag } from '../domain/entities/feature-flag.entity';
@@ -15,6 +15,11 @@ import { UpdateFeatureFlagHandler } from './commands/update-feature-flag';
 import { UpdateFeatureFlagCommand } from './commands/update-feature-flag';
 import { DeleteFeatureFlagHandler } from './commands/delete-feature-flag';
 import { DeleteFeatureFlagCommand } from './commands/delete-feature-flag';
+import {
+  featureFlagCreatedPayloadSchema,
+  featureFlagDeletedPayloadSchema,
+  featureFlagUpdatedPayloadSchema,
+} from '../contract';
 
 const ORG_ID = '019dd1a5-9235-70db-8d57-54ef91200001';
 const OTHER_ORG_ID = '019dd1a5-9235-70db-8d57-54ef91200002';
@@ -30,6 +35,11 @@ function eventsDouble(): EventPublisherPort & { publish: ReturnType<typeof vi.fn
     publish: vi.fn(),
     publishAll: vi.fn(),
   } as unknown as EventPublisherPort & { publish: ReturnType<typeof vi.fn> };
+}
+
+function publishedPayload(events: ReturnType<typeof eventsDouble>): unknown {
+  const [event] = events.publish.mock.calls[0] as [{ payload: unknown }];
+  return event.payload;
 }
 
 describe('feature flag handlers', () => {
@@ -70,6 +80,41 @@ describe('feature flag handlers', () => {
         payload: expect.objectContaining({ userId: ACTOR_ID, key: 'audited.flag' }),
       }),
     );
+  });
+
+  it('publishes a created payload that satisfies its contract', async () => {
+    await new CreateFeatureFlagHandler(repository, prismaDouble, events).execute(
+      new CreateFeatureFlagCommand({ organizationId: ORG_ID, userId: ACTOR_ID, key: 'new.flag' }),
+    );
+
+    expect(featureFlagCreatedPayloadSchema.safeParse(publishedPayload(events)).success).toBe(true);
+  });
+
+  it('publishes an updated payload that satisfies its contract', async () => {
+    const flag = FeatureFlag.create({ organizationId: ORG_ID, key: 'checkout.new-flow' });
+    repository.seed(flag);
+
+    await new UpdateFeatureFlagHandler(repository, prismaDouble, events).execute(
+      new UpdateFeatureFlagCommand({
+        organizationId: ORG_ID,
+        userId: ACTOR_ID,
+        id: flag.id,
+        rolloutPercentage: 25,
+      }),
+    );
+
+    expect(featureFlagUpdatedPayloadSchema.safeParse(publishedPayload(events)).success).toBe(true);
+  });
+
+  it('publishes a deleted payload that satisfies its contract', async () => {
+    const flag = FeatureFlag.create({ organizationId: ORG_ID, key: 'checkout.new-flow' });
+    repository.seed(flag);
+
+    await new DeleteFeatureFlagHandler(repository, prismaDouble, events).execute(
+      new DeleteFeatureFlagCommand(ORG_ID, ACTOR_ID, flag.id),
+    );
+
+    expect(featureFlagDeletedPayloadSchema.safeParse(publishedPayload(events)).success).toBe(true);
   });
 
   it('lists flags scoped to the organization', async () => {
@@ -155,8 +200,7 @@ describe('feature flag handlers', () => {
       findAll: (organizationId) => repository.findAll(organizationId),
       findById: async () => flag,
       create: (f) => repository.create(f),
-      update: (organizationId, id, changes, updatedAt) =>
-        repository.update(organizationId, id, changes, updatedAt),
+      update: (f) => repository.update(f),
       delete: (organizationId, id) => repository.delete(organizationId, id),
     };
 
@@ -170,6 +214,38 @@ describe('feature flag handlers', () => {
     );
 
     await expect(execute).rejects.toMatchObject({ kind: 'not_found' });
+  });
+
+  it('answers a retryable conflict when the flag changed between the read and the write', async () => {
+    const flag = FeatureFlag.create({ organizationId: ORG_ID, key: 'checkout.new-flow' });
+    repository.seed(flag);
+    await repository.update(flag.withChanges({ rolloutPercentage: 10 }));
+    const staleRead: FeatureFlagRepositoryPort = {
+      findAllCursor: (options) => repository.findAllCursor(options),
+      findAll: (organizationId) => repository.findAll(organizationId),
+      findById: async () => flag,
+      create: (f) => repository.create(f),
+      update: (f) => repository.update(f),
+      delete: (organizationId, id) => repository.delete(organizationId, id),
+    };
+
+    const execute = new UpdateFeatureFlagHandler(staleRead, prismaDouble, events).execute(
+      new UpdateFeatureFlagCommand({
+        organizationId: ORG_ID,
+        userId: ACTOR_ID,
+        id: flag.id,
+        enabled: true,
+      }),
+    );
+
+    await expect(execute).rejects.toBeInstanceOf(DomainException);
+    await expect(execute).rejects.toMatchObject({
+      kind: 'conflict',
+      code: 'conflict',
+      permanent: false,
+    });
+    expect(events.publish).not.toHaveBeenCalled();
+    expect((await repository.findById(ORG_ID, flag.id))?.rolloutPercentage).toBe(10);
   });
 
   it('deletes a flag and reports not_found on the second call', async () => {
@@ -200,7 +276,7 @@ describe('InMemoryFeatureFlagRepository', () => {
     repository = new InMemoryFeatureFlagRepository();
   });
 
-  it('writes only the given fields, leaving the rest untouched', async () => {
+  it('writes the changed fields and bumps the version', async () => {
     const flag = FeatureFlag.create({
       organizationId: ORG_ID,
       key: 'checkout.new-flow',
@@ -208,29 +284,38 @@ describe('InMemoryFeatureFlagRepository', () => {
       rolloutPercentage: 40,
     });
     repository.seed(flag);
-    const updatedAt = new Date(flag.updatedAt.getTime() + 1000);
+    const changed = flag.withChanges({ enabled: true });
 
-    const applied = await repository.update(ORG_ID, flag.id, { enabled: true }, updatedAt);
-
-    expect(applied).toBe(true);
+    expect(await repository.update(changed)).toBe('updated');
     const stored = await repository.findById(ORG_ID, flag.id);
     expect(stored?.enabled).toBe(true);
     expect(stored?.rolloutPercentage).toBe(40);
     expect(stored?.description).toBe('before');
-    expect(stored?.updatedAt).toEqual(updatedAt);
+    expect(stored?.updatedAt).toEqual(changed.updatedAt);
+    expect(stored?.version).toBe(flag.version + 1);
   });
 
-  it('reports false when the row no longer exists', async () => {
-    expect(await repository.update(ORG_ID, generateId(), { enabled: true }, new Date())).toBe(
-      false,
-    );
-  });
-
-  it('reports false for a row belonging to another organization', async () => {
-    const flag = FeatureFlag.create({ organizationId: OTHER_ORG_ID, key: 'theirs.flag' });
+  it('reports stale when the stored version moved past the expected one', async () => {
+    const flag = FeatureFlag.create({ organizationId: ORG_ID, key: 'checkout.new-flow' });
     repository.seed(flag);
 
-    expect(await repository.update(ORG_ID, flag.id, { enabled: true }, new Date())).toBe(false);
+    expect(await repository.update(flag.withChanges({ enabled: true }))).toBe('updated');
+    expect(await repository.update(flag.withChanges({ rolloutPercentage: 5 }))).toBe('stale');
+    expect((await repository.findById(ORG_ID, flag.id))?.rolloutPercentage).toBe(100);
+  });
+
+  it('reports not_found when the row no longer exists', async () => {
+    const ghost = FeatureFlag.create({ organizationId: ORG_ID, key: 'ghost.flag' });
+
+    expect(await repository.update(ghost)).toBe('not_found');
+  });
+
+  it('reports not_found for a row belonging to another organization', async () => {
+    const flag = FeatureFlag.create({ organizationId: OTHER_ORG_ID, key: 'theirs.flag' });
+    repository.seed(flag);
+    const hijack = FeatureFlag.create({ id: flag.id, organizationId: ORG_ID, key: 'theirs.flag' });
+
+    expect(await repository.update(hijack)).toBe('not_found');
   });
 
   it('resumes strictly after the cursor, tiebreaking on id among rows sharing a timestamp', async () => {
@@ -244,6 +329,7 @@ describe('InMemoryFeatureFlagRepository', () => {
       rolloutPercentage: 100,
       createdAt: sameTime,
       updatedAt: sameTime,
+      version: 0,
     };
     repository.seed(FeatureFlag.reconstitute({ ...base, id: idA, key: 'a.flag' }));
     repository.seed(FeatureFlag.reconstitute({ ...base, id: idB, key: 'b.flag' }));

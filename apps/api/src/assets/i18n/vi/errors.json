@@ -44,8 +44,10 @@
     "role_not_found": "Không tìm thấy vai trò",
     "role_already_exists": "Tổ chức đã có vai trò trùng tên này",
     "role_in_use": "Vai trò vẫn đang được gán cho ít nhất một thành viên",
+    "role_changed_concurrently": "Vai trò đã bị thay đổi trong lúc yêu cầu này đang cập nhật. Hãy tải lại rồi thử lại.",
     "team_not_found": "Không tìm thấy nhóm",
     "team_name_taken": "Tổ chức đã có nhóm trùng tên này",
+    "team_changed_concurrently": "Nhóm đã bị thay đổi trong lúc yêu cầu này đang cập nhật. Hãy tải lại rồi thử lại.",
     "invitation_not_found": "Không tìm thấy lời mời",
     "invitation_not_pending": "Chỉ có thể huỷ lời mời đang ở trạng thái chờ"
   },
@@ -63,6 +65,7 @@
   "feature_flags": {
     "not_found": "Không tìm thấy feature flag",
     "key_taken": "Tổ chức đã có feature flag trùng key này",
+    "changed_concurrently": "Feature flag đã bị thay đổi trong lúc yêu cầu này đang cập nhật. Hãy tải lại rồi thử lại.",
     "invalid_key": "Key của feature flag phải gồm 2-100 ký tự chữ thường, số, dấu chấm, gạch ngang hoặc gạch dưới",
     "invalid_rollout": "rolloutPercentage phải nằm trong khoảng 0 đến 100"
   },

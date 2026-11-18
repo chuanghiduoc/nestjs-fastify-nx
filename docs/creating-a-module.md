@@ -145,7 +145,9 @@ the integration lane).
 ## After Generating
 
 1. **Add Prisma model** to `prisma/schema.prisma` (the scaffold's port and adapter assume it)
-2. **Run migration**: `pnpm db:migrate --name add-products`
+2. **Run migration**: `pnpm db:migrate --name add-products`. If the table is tenant-owned, enable row-level security in the same migration. Copy the `stored_files_tenant_isolation` policy. The scaffolded adapter calls `prisma.runTenantScoped()`, which binds the tenant for that policy.
+   - **Declare the table owner**: add the model to `TABLE_OWNERS` in `tools/generators/src/eslint-rules/table-ownership.map.mjs`. Lint fails until the model has an owner.
+   - **Add a `version` column** if a command updates the row after it reads the row. Refer to "Concurrent writes" in `domain-module-anatomy.md`.
 3. **Adapt the record type**: adjust `products-repository.port.ts` and the adapter's `create`/`find` shapes to the real columns
 4. **Review permissions**: the generator registered `<CTX>_CREATE` and `<CTX>_READ`. Add more actions in `@nestjs-fastify-nx/shared` when the surface needs them, and grant them to the roles that need them
 5. **Wire into AppModule**: add `ProductsModule` to `apps/api/src/app/app.module.ts`

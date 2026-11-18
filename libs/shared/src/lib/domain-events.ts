@@ -1,5 +1,3 @@
-import { z } from 'zod';
-
 // Single source of truth for domain event names. These are a published contract, not internal
 // identifiers: they are written by Postgres triggers (prisma/migrations), matched by @OnEvent
 // subscriptions in another process, and stored in outbox_events rows that outlive any deploy —
@@ -38,41 +36,3 @@ export const DOMAIN_EVENT_STREAMS = {
   FEATURE_FLAGS: 'feature_flags.*',
   API_KEYS: 'api_keys.*',
 } as const;
-
-// The payload every users.* event carries. Producers are Postgres triggers, so this is the only
-// place the shape is enforced — consumers parse, never cast.
-export const userEventPayloadSchema = z.object({
-  email: z.email(),
-  ip: z.string().optional(),
-  userAgent: z.string().optional(),
-});
-
-export type UserEventPayload = z.infer<typeof userEventPayloadSchema>;
-
-// Written by the organization triggers. `userId`/`role` are absent on organizations.created and
-// organizations.deleted, so consumers must treat them as optional rather than assume a membership.
-export const organizationEventPayloadSchema = z.object({
-  slug: z.string().optional(),
-  name: z.string().optional(),
-  userId: z.uuid().optional(),
-  role: z.string().optional(),
-  oldRole: z.string().optional(),
-  action: z.enum(['INSERT', 'UPDATE', 'DELETE']).optional(),
-});
-
-export type OrganizationEventPayload = z.infer<typeof organizationEventPayloadSchema>;
-
-export const configurationEventPayloadSchema = z.object({
-  userId: z.uuid().optional(),
-  key: z.string().optional(),
-  name: z.string().optional(),
-  enabled: z.boolean().optional(),
-  rolloutPercentage: z.number().optional(),
-  description: z.string().nullable().optional(),
-  scopes: z.array(z.string()).optional(),
-  previousEnabled: z.boolean().optional(),
-  previousRolloutPercentage: z.number().optional(),
-  expiresAt: z.iso.datetime().nullable().optional(),
-});
-
-export type ConfigurationEventPayload = z.infer<typeof configurationEventPayloadSchema>;

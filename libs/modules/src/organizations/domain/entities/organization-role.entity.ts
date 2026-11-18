@@ -8,6 +8,7 @@ import {
 } from '@nestjs-fastify-nx/shared';
 
 const ROLE_NAME_PATTERN = /^[a-z][a-z0-9_-]{1,49}$/;
+const INITIAL_VERSION = 0;
 
 export interface OrganizationRoleProps {
   id: string;
@@ -16,6 +17,7 @@ export interface OrganizationRoleProps {
   permissions: readonly Permission[];
   createdAt: Date;
   updatedAt: Date | null;
+  version: number;
 }
 
 export interface CreateOrganizationRoleInput {
@@ -121,6 +123,7 @@ export class OrganizationRole {
       permissions: resolveGrantablePermissions(input.permissions, input.grantedToActor),
       createdAt: new Date(),
       updatedAt: null,
+      version: INITIAL_VERSION,
     });
   }
 
@@ -156,5 +159,8 @@ export class OrganizationRole {
   }
   get updatedAt(): Date | null {
     return this.props.updatedAt;
+  }
+  get version(): number {
+    return this.props.version;
   }
 }

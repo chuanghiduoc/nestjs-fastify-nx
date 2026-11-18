@@ -9,6 +9,19 @@ function conflict(path: string, code: string, message: string, messageKey: strin
   return new DomainException(fieldProblem({ kind: 'conflict', code, path, message, messageKey }));
 }
 
+function changedConcurrently(path: string, message: string, messageKey: string) {
+  return new DomainException(
+    fieldProblem({
+      kind: 'conflict',
+      code: ERROR_CODES.CONFLICT,
+      path,
+      message,
+      messageKey,
+      permanent: false,
+    }),
+  );
+}
+
 export const organizationNotFound = () =>
   notFound(
     'organizationId',
@@ -39,6 +52,20 @@ export const roleInUse = () =>
     ERROR_CODES.ORGANIZATION_ROLE_IN_USE,
     'Role is still assigned to at least one member',
     I18N_KEYS.errors.organizations.role_in_use,
+  );
+
+export const roleChangedConcurrently = () =>
+  changedConcurrently(
+    'role',
+    'The role changed while this request was applying an update',
+    I18N_KEYS.errors.organizations.role_changed_concurrently,
+  );
+
+export const teamChangedConcurrently = () =>
+  changedConcurrently(
+    'id',
+    'The team changed while this request was applying an update',
+    I18N_KEYS.errors.organizations.team_changed_concurrently,
   );
 
 export const teamNotFound = () =>

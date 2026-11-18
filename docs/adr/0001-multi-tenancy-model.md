@@ -40,10 +40,16 @@ invisible rewrite.
 
 ### RLS coverage is deliberately partial today
 
-Enabled on `stored_files` — the only tenant-owned business table that currently
-exists — and on `audit_logs`, whose `SELECT` policy is tenant-scoped while its
-`INSERT` policy also admits `organizationId IS NULL` so system-originated entries
-written without a request context still land. **Not** enabled on:
+Enabled on the tenant-owned business tables `stored_files`, `notifications` and
+`feature_flags`, each with one `USING` + `WITH CHECK` policy on
+`app.current_org_id`. Also enabled on `audit_logs`, whose `SELECT` policy is
+tenant-scoped while its `INSERT` policy also admits `organizationId IS NULL` so
+system-originated entries written without a request context still land.
+Repositories on these tables go through `PrismaService.runTenantScoped()`: it
+joins the ambient transaction, binds the tenant when CLS has one, and otherwise
+uses the plain client. The plain client is correct for the `BYPASSRLS` worker and
+scheduler. Under `api_user` it fails closed: reads return zero rows and writes
+fail `WITH CHECK`. **Not** enabled on:
 
 - **Better Auth's tables** (`organizations`, `members`, `invitations`, `teams`,
   `team_members`, `organization_roles`). The plugin writes outside the request
@@ -63,22 +69,18 @@ exemption.
 
 ### Documented exemptions
 
-Three tenant-owned tables deliberately do not carry RLS, each for a reason RLS
-would break rather than protect:
+One tenant-owned table deliberately does not carry RLS, for a reason RLS would
+break rather than protect:
 
 - `api_keys` — machine authentication resolves `keyHash` before any organization
   context exists. The request that presents a key has no session tenant to bind,
   so an RLS policy would make every machine request return zero rows. Isolation
   rests on the `keyHash` unique lookup plus the guard's scope ceiling (ADR-0007).
-- `notifications` — the outbox relay writes notification rows from the scheduler,
-  which runs `BYPASSRLS` and has no request tenant; the API reads are scoped by
-  `(organizationId, userId)` in every query. Application-level scoping is the
-  enforced invariant and is covered by integration tests.
-- `feature_flags` — evaluated on the API request path where tenant context exists,
-  but also by machine API keys and future in-process consumers. The repository
-  scopes every method by `organizationId`; enabling RLS would require binding the
-  tenant on every evaluation path, including machine callers whose organization is
-  resolved from the key rather than CLS.
+
+`notifications` and `feature_flags` were on this list and are not any more. The
+scheduler writes notifications as `BYPASSRLS`, so the policy never applies to it.
+A machine caller does have a tenant: `ApiKeyGuard` binds the key's organization in
+CLS before the handler runs, exactly as `BetterAuthGuard` binds the session's.
 
 Any new tenant-owned table is still expected to enable RLS unless it joins this
 list with an argued reason in a follow-up ADR.
@@ -140,6 +142,10 @@ replica**. Keeping the replica is part of this decision, not a later optimisatio
   is mechanical and tested rather than reviewed.
 - Every tenant-scoped read costs a transaction. This must be measured, not
   assumed: the acceptance bar is **p99 regression ≤ 10%** on list endpoints.
+- Tenant-scoped access to `stored_files`, `notifications` and `feature_flags` runs
+  inside a transaction with `set_config`, so each query outside an ambient
+  transaction costs extra round trips (`BEGIN`, `set_config`, `COMMIT`). Feature
+  flag evaluation pays this on every call.
 - Room to grow: `Organization.tier` plus an optional dedicated connection string
   lets a large customer move to an isolated database later without touching
   domain code.

@@ -9,6 +9,7 @@ import { OrganizationRole } from '../../domain/entities/organization-role.entity
 import type {
   OrganizationRoleRepositoryPort,
   RoleDeletionOutcome,
+  RoleUpdateOutcome,
 } from '../../domain/ports/organization-role-repository.port';
 import { roleAlreadyExists } from '../../application/organization-errors';
 
@@ -19,6 +20,7 @@ type OrganizationRoleRow = {
   permission: string;
   createdAt: Date;
   updatedAt: Date | null;
+  version: number;
 };
 
 const RAW_QUERY_FAILED = 'P2010';
@@ -42,6 +44,7 @@ function toEntity(row: OrganizationRoleRow): OrganizationRole {
     permissions: parsePermissionStatements(row.permission).granted,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
+    version: row.version,
   });
 }
 
@@ -100,12 +103,19 @@ export class PrismaOrganizationRoleRepository implements OrganizationRoleReposit
     }
   }
 
-  async update(role: OrganizationRole): Promise<boolean> {
-    const { count } = await this.prisma.writeTarget().organizationRole.updateMany({
-      where: { organizationId: role.organizationId, role: role.role },
+  async update(role: OrganizationRole): Promise<RoleUpdateOutcome> {
+    const client = this.prisma.writeTarget();
+    const { count } = await client.organizationRole.updateMany({
+      where: { organizationId: role.organizationId, role: role.role, version: role.version },
       data: { permission: serializePermissionStatements(role.permissions) },
     });
-    return count > 0;
+    if (count > 0) return 'updated';
+
+    const current = await client.organizationRole.findUnique({
+      where: { organizationId_role: { organizationId: role.organizationId, role: role.role } },
+      select: { id: true },
+    });
+    return current ? 'stale' : 'not_found';
   }
 
   async deleteUnlessHeld(organizationId: string, role: string): Promise<RoleDeletionOutcome> {

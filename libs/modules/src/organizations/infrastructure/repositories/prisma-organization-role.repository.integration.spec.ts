@@ -7,7 +7,13 @@ import {
 } from '@nestjs-fastify-nx/testing';
 import type { TestContainers } from '@nestjs-fastify-nx/testing';
 import { PrismaService } from '@nestjs-fastify-nx/infra/database';
-import { ALL_PERMISSIONS, PERMISSIONS, SYSTEM_ROLES } from '@nestjs-fastify-nx/shared';
+import {
+  ALL_PERMISSIONS,
+  DOMAIN_EVENTS,
+  PERMISSIONS,
+  SYSTEM_ROLES,
+} from '@nestjs-fastify-nx/shared';
+import { z } from 'zod';
 import { OrganizationRole } from '../../domain/entities/organization-role.entity';
 import {
   PrismaOrganizationRoleRepository,
@@ -15,10 +21,17 @@ import {
 } from './prisma-organization-role.repository';
 import { PrismaInvitationRepository } from './prisma-invitation.repository';
 import { PrismaOrganizationRepository } from './prisma-organization.repository';
+import {
+  organizationDeletedPayloadSchema,
+  organizationMemberRemovedPayloadSchema,
+  organizationMemberRoleUpdatedPayloadSchema,
+  organizationRoleChangedPayloadSchema,
+} from '../../contract';
 
 const ONE_DAY_MS = 86_400_000;
 const LOCK_WAIT_POLL_MS = 20;
 const FOREIGN_KEY_VIOLATION = 'P2003';
+const outboxEnvelopeSchema = z.object({ payload: z.unknown() });
 
 describe('organization repositories (integration)', () => {
   let containers: TestContainers;
@@ -109,7 +122,7 @@ describe('organization repositories (integration)', () => {
 
       const updated = role.withPermissions([PERMISSIONS.FILE_READ], ALL_PERMISSIONS);
 
-      expect(await roles.update(updated)).toBe(true);
+      expect(await roles.update(updated)).toBe('updated');
       expect((await roles.findByName(organizationId, 'sales'))?.permissions).toEqual([
         PERMISSIONS.FILE_READ,
       ]);
@@ -126,7 +139,38 @@ describe('organization repositories (integration)', () => {
         grantedToActor: ALL_PERMISSIONS,
       });
 
-      expect(await roles.update(ghost)).toBe(false);
+      expect(await roles.update(ghost)).toBe('not_found');
+    });
+
+    it('lets the first of two updates from the same read win and reports the second as stale', async () => {
+      await defineRole('sales');
+      const read = await roles.findByName(organizationId, 'sales');
+      if (!read) throw new Error('role fixture was not created');
+
+      expect(
+        await roles.update(read.withPermissions([PERMISSIONS.FILE_READ], ALL_PERMISSIONS)),
+      ).toBe('updated');
+      expect(
+        await roles.update(read.withPermissions([PERMISSIONS.MEMBER_READ], ALL_PERMISSIONS)),
+      ).toBe('stale');
+
+      const stored = await roles.findByName(organizationId, 'sales');
+      expect(stored?.permissions).toEqual([PERMISSIONS.FILE_READ]);
+      expect(stored?.version).toBe(read.version + 1);
+    });
+
+    it('bumps the version when a permission edit bypasses the API', async () => {
+      await defineRole('sales');
+      const read = await roles.findByName(organizationId, 'sales');
+      if (!read) throw new Error('role fixture was not created');
+
+      await prisma.db
+        .$executeRaw`UPDATE "organization_roles" SET "permission" = '{}' WHERE "organizationId" = ${organizationId}::uuid AND "role" = 'sales'`;
+
+      expect((await roles.findByName(organizationId, 'sales'))?.version).toBe(read.version + 1);
+      expect(
+        await roles.update(read.withPermissions([PERMISSIONS.FILE_READ], ALL_PERMISSIONS)),
+      ).toBe('stale');
     });
   });
 
@@ -329,6 +373,51 @@ describe('organization repositories (integration)', () => {
       await prisma.db.organization.delete({ where: { id: organizationId } });
 
       expect(await prisma.db.organizationRole.count({ where: { organizationId } })).toBe(0);
+    });
+  });
+
+  describe('trigger payloads', () => {
+    async function storedPayloads(eventType: string): Promise<unknown[]> {
+      const rows = await prisma.db.outboxEvent.findMany({
+        where: { eventType, aggregateId: organizationId },
+      });
+      return rows.map((row) => outboxEnvelopeSchema.parse(row.payload).payload);
+    }
+
+    it('stores payloads that satisfy the published organization contract', async () => {
+      await defineRole('sales');
+      const role = await roles.findByName(organizationId, 'sales');
+      if (!role) throw new Error('role fixture was not created');
+      await roles.update(role.withPermissions([PERMISSIONS.FILE_READ], ALL_PERMISSIONS));
+      expect(await roles.deleteUnlessHeld(organizationId, 'sales')).toBe('deleted');
+      await holdRoles(SYSTEM_ROLES.ADMIN);
+      await prisma.db.member.deleteMany({ where: { organizationId, userId } });
+      await prisma.db.organization.delete({ where: { id: organizationId } });
+
+      const roleChanges = (await storedPayloads(DOMAIN_EVENTS.ORGANIZATIONS_ROLE_CHANGED))
+        .map((payload) => organizationRoleChangedPayloadSchema.parse(payload))
+        .sort((left, right) => left.action.localeCompare(right.action));
+      expect(roleChanges).toEqual([
+        { role: 'sales', action: 'DELETE' },
+        { role: 'sales', action: 'INSERT' },
+        { role: 'sales', action: 'UPDATE' },
+      ]);
+      const [roleUpdate] = await storedPayloads(DOMAIN_EVENTS.ORGANIZATIONS_MEMBER_ROLE_UPDATED);
+      expect(organizationMemberRoleUpdatedPayloadSchema.parse(roleUpdate)).toEqual({
+        userId,
+        oldRole: SYSTEM_ROLES.OWNER,
+        role: SYSTEM_ROLES.ADMIN,
+      });
+      const [removal] = await storedPayloads(DOMAIN_EVENTS.ORGANIZATIONS_MEMBER_REMOVED);
+      expect(organizationMemberRemovedPayloadSchema.parse(removal)).toEqual({
+        userId,
+        role: SYSTEM_ROLES.ADMIN,
+      });
+      const [deletion] = await storedPayloads(DOMAIN_EVENTS.ORGANIZATIONS_DELETED);
+      expect(organizationDeletedPayloadSchema.parse(deletion)).toEqual({
+        name: 'Integration Org',
+        slug: 'integration-org',
+      });
     });
   });
 

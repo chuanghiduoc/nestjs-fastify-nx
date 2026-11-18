@@ -6,10 +6,12 @@ import { DOMAIN_EVENTS, generateId } from '@nestjs-fastify-nx/shared';
 import {
   FEATURE_FLAG_REPOSITORY,
   type FeatureFlagRepositoryPort,
+  type FeatureFlagUpdateOutcome,
 } from '../../domain/ports/feature-flag-repository.port';
 import type { FeatureFlagChanges } from '../../domain/entities/feature-flag.entity';
 import { toFeatureFlagDto, type FeatureFlagDto } from '../dto/feature-flag.dto';
-import { featureFlagNotFound } from '../feature-flag-errors';
+import { featureFlagChangedConcurrently, featureFlagNotFound } from '../feature-flag-errors';
+import type { FeatureFlagUpdatedPayload } from '../../contract';
 
 export interface UpdateFeatureFlagInput {
   readonly organizationId: string;
@@ -39,6 +41,21 @@ export class UpdateFeatureFlagCommand extends Command<FeatureFlagDto> {
   }
 }
 
+function assertApplied(outcome: FeatureFlagUpdateOutcome): void {
+  switch (outcome) {
+    case 'updated':
+      return;
+    case 'not_found':
+      throw featureFlagNotFound();
+    case 'stale':
+      throw featureFlagChangedConcurrently();
+    default: {
+      const unhandled: never = outcome;
+      throw new Error(`Unhandled feature flag update outcome: ${String(unhandled)}`);
+    }
+  }
+}
+
 @CommandHandler(UpdateFeatureFlagCommand)
 export class UpdateFeatureFlagHandler implements ICommandHandler<
   UpdateFeatureFlagCommand,
@@ -60,15 +77,18 @@ export class UpdateFeatureFlagHandler implements ICommandHandler<
       rolloutPercentage: command.rolloutPercentage,
     };
     const updated = existing.withChanges(changes);
+    const payload: FeatureFlagUpdatedPayload = {
+      userId: command.userId,
+      key: updated.key,
+      enabled: updated.enabled,
+      previousEnabled: existing.enabled,
+      rolloutPercentage: updated.rolloutPercentage,
+      previousRolloutPercentage: existing.rolloutPercentage,
+      description: updated.description,
+    };
 
     await this.prisma.transaction(async () => {
-      const applied = await this.flags.update(
-        command.organizationId,
-        command.id,
-        changes,
-        updated.updatedAt,
-      );
-      if (!applied) throw featureFlagNotFound();
+      assertApplied(await this.flags.update(updated));
 
       await this.events.publish({
         eventId: generateId(),
@@ -76,15 +96,7 @@ export class UpdateFeatureFlagHandler implements ICommandHandler<
         aggregateId: updated.id,
         occurredAt: new Date(),
         organizationId: command.organizationId,
-        payload: {
-          userId: command.userId,
-          key: updated.key,
-          enabled: updated.enabled,
-          previousEnabled: existing.enabled,
-          rolloutPercentage: updated.rolloutPercentage,
-          previousRolloutPercentage: existing.rolloutPercentage,
-          description: updated.description,
-        },
+        payload,
       });
     });
 

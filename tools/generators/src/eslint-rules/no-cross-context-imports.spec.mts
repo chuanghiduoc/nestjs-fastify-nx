@@ -1,6 +1,7 @@
+import { readFileSync } from 'node:fs';
 import { RuleTester } from 'eslint';
 import tseslint from 'typescript-eslint';
-import rule from './no-cross-context-imports.mjs';
+import rule, { CONTRACT_EDGES, INFRA_EDGES, findEdgeCycle } from './no-cross-context-imports.mjs';
 
 const ruleTester = new RuleTester({
   languageOptions: { ecmaVersion: 'latest', sourceType: 'module' },
@@ -167,6 +168,115 @@ ruleTester.run('libs-groups/no-cross-context-imports', rule, {
       errors: [{ messageId: 'rootOutsideGroup' }],
     },
   ],
+});
+
+ruleTester.run('libs-groups/no-cross-context-imports (published contracts)', rule, {
+  valid: [
+    {
+      code: `import { organizationMemberAddedPayloadSchema } from '${MODULES}/organizations/contract';`,
+      filename: 'libs/modules/src/notifications/membership-notification.listener.ts',
+    },
+    {
+      code: `import { organizationMemberAddedPayloadSchema } from '${MODULES}/organizations/contract';`,
+      filename: 'apps/worker/src/app/app.module.ts',
+    },
+    {
+      code: `import { featureFlagCreatedPayloadSchema } from '${MODULES}/feature-flags/contract';`,
+      filename: 'libs/composition/admin/src/presentation/controllers/admin.controller.ts',
+    },
+    {
+      code: `import { userRegisteredPayloadSchema } from '../../contract';`,
+      filename: 'libs/modules/src/users/application/listeners/user-registered.listener.ts',
+    },
+    {
+      code: `import { z } from 'zod';`,
+      filename: 'libs/modules/src/users/contract/user-events.ts',
+    },
+    {
+      code: `import { DOMAIN_EVENTS } from '@nestjs-fastify-nx/shared';`,
+      filename: 'libs/modules/src/users/contract/user-events.ts',
+    },
+    {
+      code: `export { userRegisteredPayloadSchema } from './user-events';`,
+      filename: 'libs/modules/src/users/contract/index.ts',
+    },
+  ],
+  invalid: [
+    {
+      code: `import { featureFlagCreatedPayloadSchema } from '${MODULES}/feature-flags/contract';`,
+      filename: 'libs/modules/src/notifications/membership-notification.listener.ts',
+      errors: [{ messageId: 'undeclaredContractEdge' }],
+    },
+    {
+      code: `import { OrganizationsModule } from '${MODULES}/organizations';`,
+      filename: 'libs/modules/src/notifications/membership-notification.listener.ts',
+      errors: [{ messageId: 'crossContext' }],
+    },
+    {
+      code: `import { schema } from '${MODULES}/organizations/contract/organization-events';`,
+      filename: 'libs/modules/src/notifications/membership-notification.listener.ts',
+      errors: [{ messageId: 'deepImport' }],
+    },
+    {
+      code: `import { schema } from '${MODULES}/organizations/contract/organization-events';`,
+      filename: 'apps/api/src/app/app.module.ts',
+      errors: [{ messageId: 'deepImport' }],
+    },
+    {
+      code: `import { organizationMemberAddedPayloadSchema } from '../organizations/contract';`,
+      filename: 'libs/modules/src/notifications/membership-notification.listener.ts',
+      errors: [{ messageId: 'relativeContractImport' }],
+    },
+    {
+      code: `import { Injectable } from '@nestjs/common';`,
+      filename: 'libs/modules/src/users/contract/user-events.ts',
+      errors: [{ messageId: 'impureContract' }],
+    },
+    {
+      code: `import { PrismaService } from '${INFRA}/database';`,
+      filename: 'libs/modules/src/users/contract/user-events.ts',
+      errors: [{ messageId: 'impureContract' }],
+    },
+    {
+      code: `import { UserRole } from '../domain/entities/user.entity';`,
+      filename: 'libs/modules/src/users/contract/user-events.ts',
+      errors: [{ messageId: 'impureContract' }],
+    },
+    {
+      code: `export * from '@nestjs-fastify-nx/core';`,
+      filename: 'libs/modules/src/users/contract/index.ts',
+      errors: [{ messageId: 'impureContract' }],
+    },
+  ],
+});
+
+describe('contract edges', () => {
+  it('declares an acyclic contract edge map', () => {
+    expect(findEdgeCycle(CONTRACT_EDGES)).toBeUndefined();
+  });
+
+  it('declares acyclic infra folder edges', () => {
+    expect(findEdgeCycle(INFRA_EDGES)).toBeUndefined();
+  });
+
+  it('finds a cycle in a cyclic edge map', () => {
+    expect(findEdgeCycle({ a: ['b'], b: ['c'], c: ['a'] })).toEqual(['a', 'b', 'c', 'a']);
+  });
+
+  it('finds a self edge', () => {
+    expect(findEdgeCycle({ a: ['a'] })).toEqual(['a', 'a']);
+  });
+
+  it('points every contract edge at a context that publishes a contract', () => {
+    const manifest = JSON.parse(
+      readFileSync(new URL('../../../../libs/modules/package.json', import.meta.url), 'utf8'),
+    ) as { exports: Record<string, unknown> };
+    const targets = Object.values(CONTRACT_EDGES).flat();
+    expect(targets.length).toBeGreaterThan(0);
+    for (const target of targets) {
+      expect(Object.keys(manifest.exports)).toContain(`./${target}/contract`);
+    }
+  });
 });
 
 const typeScriptRuleTester = new RuleTester({

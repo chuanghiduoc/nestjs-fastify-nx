@@ -65,8 +65,10 @@ export const I18N_KEYS = {
       role_not_found: 'errors.organizations.role_not_found',
       role_already_exists: 'errors.organizations.role_already_exists',
       role_in_use: 'errors.organizations.role_in_use',
+      role_changed_concurrently: 'errors.organizations.role_changed_concurrently',
       team_not_found: 'errors.organizations.team_not_found',
       team_name_taken: 'errors.organizations.team_name_taken',
+      team_changed_concurrently: 'errors.organizations.team_changed_concurrently',
       invitation_not_found: 'errors.organizations.invitation_not_found',
       invitation_not_pending: 'errors.organizations.invitation_not_pending',
     },
@@ -84,6 +86,7 @@ export const I18N_KEYS = {
     feature_flags: {
       not_found: 'errors.feature_flags.not_found',
       key_taken: 'errors.feature_flags.key_taken',
+      changed_concurrently: 'errors.feature_flags.changed_concurrently',
       invalid_key: 'errors.feature_flags.invalid_key',
       invalid_rollout: 'errors.feature_flags.invalid_rollout',
     },

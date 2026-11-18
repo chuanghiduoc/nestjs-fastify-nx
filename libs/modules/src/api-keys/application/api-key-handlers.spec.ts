@@ -10,6 +10,7 @@ import { RevokeApiKeyHandler } from './commands/revoke-api-key';
 import { RevokeApiKeyCommand } from './commands/revoke-api-key';
 import { ListApiKeysHandler } from './queries/list-api-keys';
 import { ListApiKeysQuery } from './queries/list-api-keys';
+import { apiKeyIssuedPayloadSchema, apiKeyRevokedPayloadSchema } from '../contract';
 
 const ORG_ID = '019dd1a5-9235-70db-8d57-54ef90900001';
 const OTHER_ORG_ID = '019dd1a5-9235-70db-8d57-54ef90900002';
@@ -24,6 +25,11 @@ function eventsDouble(): EventPublisherPort & { publish: ReturnType<typeof vi.fn
     publish: vi.fn(),
     publishAll: vi.fn(),
   } as unknown as EventPublisherPort & { publish: ReturnType<typeof vi.fn> };
+}
+
+function publishedPayload(events: ReturnType<typeof eventsDouble>): unknown {
+  const [event] = events.publish.mock.calls[0] as [{ payload: unknown }];
+  return event.payload;
 }
 
 function authorizationHolding(permissions: readonly Permission[]): AuthorizationPort {
@@ -103,6 +109,7 @@ describe('CreateApiKeyHandler', () => {
         payload: expect.objectContaining({ userId: USER_ID, name: 'CI bot' }),
       }),
     );
+    expect(apiKeyIssuedPayloadSchema.safeParse(publishedPayload(events)).success).toBe(true);
   });
 
   it('refuses a scope the caller does not hold', async () => {
@@ -184,6 +191,7 @@ describe('RevokeApiKeyHandler', () => {
         payload: expect.objectContaining({ userId: USER_ID }),
       }),
     );
+    expect(apiKeyRevokedPayloadSchema.safeParse(publishedPayload(events)).success).toBe(true);
   });
 
   it('is a no-op when the key is already revoked', async () => {

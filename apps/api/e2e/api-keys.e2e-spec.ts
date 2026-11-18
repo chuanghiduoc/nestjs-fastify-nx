@@ -2,7 +2,12 @@ import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import request from 'supertest';
 import { PrismaService } from '@nestjs-fastify-nx/infra/database';
 import { PERMISSIONS } from '@nestjs-fastify-nx/shared';
-import { createTestApp, cookieHeaderFromSetCookies, type TestAppContext } from './test-app';
+import {
+  createTestApp,
+  cookieHeaderFromSetCookies,
+  resetRateLimitBudget,
+  type TestAppContext,
+} from './test-app';
 
 describe('API keys E2E', () => {
   let ctx: TestAppContext;
@@ -14,6 +19,7 @@ describe('API keys E2E', () => {
 
   beforeEach(async () => {
     await ctx.cleaner.truncateAll();
+    await resetRateLimitBudget();
     const email = `apikey-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
     const signUp = await request(ctx.app.getHttpServer())
       .post('/api/auth/sign-up/email')
@@ -92,6 +98,27 @@ describe('API keys E2E', () => {
       .expect(200);
 
     expect(res.body.object).toBe('list');
+  });
+
+  it('reads the flags of its own organization through row-level security', async () => {
+    const created = await request(ctx.app.getHttpServer())
+      .post('/api/v1/feature-flags')
+      .set('Cookie', cookie)
+      .send({ key: 'checkout.machine', enabled: true, rolloutPercentage: 100 })
+      .expect(201);
+    const raw = await issueKey();
+
+    const listed = await request(ctx.app.getHttpServer())
+      .get('/api/v1/feature-flags')
+      .set('Authorization', `Bearer ${raw}`)
+      .expect(200);
+    const evaluated = await request(ctx.app.getHttpServer())
+      .get('/api/v1/feature-flags/evaluate')
+      .set('Authorization', `Bearer ${raw}`)
+      .expect(200);
+
+    expect(listed.body.data.map((flag: { id: string }) => flag.id)).toEqual([created.body.id]);
+    expect(evaluated.body.flags).toEqual({ 'checkout.machine': true });
   });
 
   it('accepts the key through the X-Api-Key header too', async () => {

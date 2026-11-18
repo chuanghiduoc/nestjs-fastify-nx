@@ -107,7 +107,7 @@ export class OrganizationRolesController {
   })
   @ApiParam({ name: 'role', description: 'Role name.', example: 'auditor' })
   @ApiOkResponse({ type: OrganizationRoleResponseDto, description: 'Role updated.' })
-  @ApiCommonErrors({ notFound: true })
+  @ApiCommonErrors({ notFound: true, conflict: true })
   update(
     @CurrentUser() user: AuthenticatedSession,
     @Param('role') role: string,

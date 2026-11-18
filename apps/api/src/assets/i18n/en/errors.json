@@ -44,8 +44,10 @@
     "role_not_found": "Role not found",
     "role_already_exists": "A role with this name already exists in the organization",
     "role_in_use": "Role is still assigned to at least one member",
+    "role_changed_concurrently": "The role changed while this request was applying an update. Read it again, then retry.",
     "team_not_found": "Team not found",
     "team_name_taken": "A team with this name already exists in the organization",
+    "team_changed_concurrently": "The team changed while this request was applying an update. Read it again, then retry.",
     "invitation_not_found": "Invitation not found",
     "invitation_not_pending": "Only a pending invitation can be canceled"
   },
@@ -63,6 +65,7 @@
   "feature_flags": {
     "not_found": "Feature flag not found",
     "key_taken": "A feature flag with this key already exists in the organization",
+    "changed_concurrently": "The feature flag changed while this request was applying an update. Read it again, then retry.",
     "invalid_key": "Feature flag key must be 2-100 lowercase letters, digits, dot, hyphen or underscore",
     "invalid_rollout": "rolloutPercentage must be between 0 and 100"
   },

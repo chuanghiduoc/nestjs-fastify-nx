@@ -173,6 +173,7 @@ model Team {
   name           String
   memberCount    Int       @default(0)
   organizationId String    @db.Uuid
+  version        Int       @default(0)
   createdAt      DateTime  @default(now())
   updatedAt      DateTime? @updatedAt
 
@@ -206,6 +207,7 @@ model OrganizationRole {
   organizationId String    @db.Uuid
   role           String
   permission     String
+  version        Int       @default(0)
   createdAt      DateTime  @default(now())
   updatedAt      DateTime? @updatedAt
 
@@ -356,6 +358,7 @@ model FeatureFlag {
   description       String?
   enabled           Boolean  @default(false)
   rolloutPercentage Int      @default(0)
+  version           Int      @default(0)
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 

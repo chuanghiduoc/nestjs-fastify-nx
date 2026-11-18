@@ -4,9 +4,10 @@ import { AUTHORIZATION_PORT, type AuthorizationPort } from '@nestjs-fastify-nx/c
 import {
   ORGANIZATION_ROLE_REPOSITORY,
   type OrganizationRoleRepositoryPort,
+  type RoleUpdateOutcome,
 } from '../../domain/ports/organization-role-repository.port';
 import { toRoleDto, type OrganizationRoleDto } from '../dto/organization-role-application.dto';
-import { roleNotFound } from '../organization-errors';
+import { roleChangedConcurrently, roleNotFound } from '../organization-errors';
 
 export interface UpdateOrganizationRoleInput {
   readonly organizationId: string;
@@ -27,6 +28,21 @@ export class UpdateOrganizationRoleCommand extends Command<OrganizationRoleDto> 
     this.actorUserId = input.actorUserId;
     this.role = input.role;
     this.permissions = input.permissions;
+  }
+}
+
+function assertRoleUpdated(outcome: RoleUpdateOutcome): void {
+  switch (outcome) {
+    case 'updated':
+      return;
+    case 'not_found':
+      throw roleNotFound();
+    case 'stale':
+      throw roleChangedConcurrently();
+    default: {
+      const unhandled: never = outcome;
+      throw new Error(`Unhandled role update outcome: ${String(unhandled)}`);
+    }
   }
 }
 
@@ -52,7 +68,7 @@ export class UpdateOrganizationRoleHandler implements ICommandHandler<
 
     const updated = existing.withPermissions(command.permissions, grantedToActor);
 
-    if (!(await this.roles.update(updated))) throw roleNotFound();
+    assertRoleUpdated(await this.roles.update(updated));
 
     return toRoleDto(updated);
   }
