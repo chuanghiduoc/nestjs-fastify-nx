@@ -15,6 +15,8 @@ import {
   InMemoryOrganizationRoleRepository,
   InMemoryTeamRepository,
 } from '../testing/in-memory-repositories';
+import type { OrganizationRoleRepositoryPort } from '../domain/ports/organization-role-repository.port';
+import type { TeamRepositoryPort } from '../domain/ports/team-repository.port';
 import { ListOrganizationRolesHandler } from './queries/list-organization-roles';
 import { ListOrganizationRolesQuery } from './queries/list-organization-roles';
 import { CreateOrganizationRoleHandler } from './commands/create-organization-role';
@@ -152,6 +154,75 @@ describe('organization role handlers', () => {
     ).execute(new UpdateOrganizationRoleCommand(roleCommand('ghost', [PERMISSIONS.FILE_READ])));
 
     await expect(execute).rejects.toMatchObject({ kind: 'not_found' });
+  });
+
+  it('answers a retryable conflict when the role changed between the read and the write', async () => {
+    const original = OrganizationRole.create({
+      organizationId: ORG_ID,
+      grantedToActor: ALL_PERMISSIONS,
+      role: 'auditor',
+      permissions: [PERMISSIONS.AUDIT_LOG_READ],
+    });
+    await roles.create(original);
+    await roles.update(original.withPermissions([PERMISSIONS.MEMBER_READ], ALL_PERMISSIONS));
+    const staleRead: OrganizationRoleRepositoryPort = {
+      findAll: (organizationId) => roles.findAll(organizationId),
+      findByName: async () => original,
+      create: (role) => roles.create(role),
+      update: (role) => roles.update(role),
+      deleteUnlessHeld: (organizationId, role) => roles.deleteUnlessHeld(organizationId, role),
+    };
+
+    const execute = new UpdateOrganizationRoleHandler(
+      staleRead,
+      authorizationHolding(ALL_PERMISSIONS),
+    ).execute(new UpdateOrganizationRoleCommand(roleCommand('auditor', [PERMISSIONS.FILE_READ])));
+
+    await expect(execute).rejects.toBeInstanceOf(DomainException);
+    await expect(execute).rejects.toMatchObject({
+      kind: 'conflict',
+      code: 'conflict',
+      permanent: false,
+    });
+    expect((await roles.findByName(ORG_ID, 'auditor'))?.permissions).toEqual([
+      PERMISSIONS.MEMBER_READ,
+    ]);
+  });
+
+  it('answers a retryable conflict when the role was recreated under the same name since the read', async () => {
+    const original = OrganizationRole.create({
+      organizationId: ORG_ID,
+      grantedToActor: ALL_PERMISSIONS,
+      role: 'auditor',
+      permissions: [PERMISSIONS.AUDIT_LOG_READ],
+    });
+    await roles.create(original);
+    await roles.deleteUnlessHeld(ORG_ID, 'auditor');
+    const replacement = OrganizationRole.create({
+      organizationId: ORG_ID,
+      grantedToActor: ALL_PERMISSIONS,
+      role: 'auditor',
+      permissions: [PERMISSIONS.MEMBER_READ],
+    });
+    await roles.create(replacement);
+    const staleRead: OrganizationRoleRepositoryPort = {
+      findAll: (organizationId) => roles.findAll(organizationId),
+      findByName: async () => original,
+      create: (role) => roles.create(role),
+      update: (role) => roles.update(role),
+      deleteUnlessHeld: (organizationId, role) => roles.deleteUnlessHeld(organizationId, role),
+    };
+
+    const execute = new UpdateOrganizationRoleHandler(
+      staleRead,
+      authorizationHolding(ALL_PERMISSIONS),
+    ).execute(new UpdateOrganizationRoleCommand(roleCommand('auditor', [PERMISSIONS.FILE_READ])));
+
+    await expect(execute).rejects.toMatchObject({ kind: 'conflict', permanent: false });
+    const stored = await roles.findByName(ORG_ID, 'auditor');
+    expect(stored?.id).toBe(replacement.id);
+    expect(stored?.permissions).toEqual([PERMISSIONS.MEMBER_READ]);
+    expect(stored?.version).toBe(replacement.version);
   });
 
   it('deletes a role nobody holds', async () => {
@@ -324,6 +395,52 @@ describe('team handlers', () => {
     await expect(execute).rejects.toMatchObject({ kind: 'not_found' });
   });
 
+  it('answers not_found when the team is deleted between the read and the write', async () => {
+    const team = Team.create({ organizationId: ORG_ID, name: 'Platform' });
+    teams.seed(team);
+    const snapshot = await teams.findById(ORG_ID, team.id);
+    await teams.delete(ORG_ID, team.id);
+    const staleRead: TeamRepositoryPort = {
+      findAllCursor: (options) => teams.findAllCursor(options),
+      findById: async () => snapshot,
+      create: (created) => teams.create(created),
+      update: (renamed) => teams.update(renamed),
+      delete: (organizationId, id) => teams.delete(organizationId, id),
+    };
+
+    const execute = new UpdateTeamHandler(staleRead).execute(
+      new UpdateTeamCommand(ORG_ID, team.id, 'Core'),
+    );
+
+    await expect(execute).rejects.toMatchObject({ kind: 'not_found' });
+  });
+
+  it('answers a retryable conflict when the team changed between the read and the write', async () => {
+    const team = Team.create({ organizationId: ORG_ID, name: 'Platform' });
+    teams.seed(team);
+    const snapshot = await teams.findById(ORG_ID, team.id);
+    await teams.update(team.renamedTo('Core'));
+    const staleRead: TeamRepositoryPort = {
+      findAllCursor: (options) => teams.findAllCursor(options),
+      findById: async () => snapshot,
+      create: (created) => teams.create(created),
+      update: (renamed) => teams.update(renamed),
+      delete: (organizationId, id) => teams.delete(organizationId, id),
+    };
+
+    const execute = new UpdateTeamHandler(staleRead).execute(
+      new UpdateTeamCommand(ORG_ID, team.id, 'Infrastructure'),
+    );
+
+    await expect(execute).rejects.toBeInstanceOf(DomainException);
+    await expect(execute).rejects.toMatchObject({
+      kind: 'conflict',
+      code: 'conflict',
+      permanent: false,
+    });
+    expect((await teams.findById(ORG_ID, team.id))?.name).toBe('Core');
+  });
+
   it('deletes a team and reports not_found on a second delete', async () => {
     const team = Team.create({ organizationId: ORG_ID, name: 'Platform' });
     teams.seed(team);
@@ -344,6 +461,7 @@ describe('team handlers', () => {
       name: 'Alpha',
       createdAt,
       updatedAt: null,
+      version: 0,
     });
     const higher = Team.reconstitute({
       id: '019dd1a5-9235-70db-8d57-54ef90700020',
@@ -351,6 +469,7 @@ describe('team handlers', () => {
       name: 'Beta',
       createdAt,
       updatedAt: null,
+      version: 0,
     });
     teams.seed(lower);
     teams.seed(higher);

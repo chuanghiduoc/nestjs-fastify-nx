@@ -8,8 +8,9 @@ How this codebase gets split into separately deployed services — and why it is
 | --------------------- | ---------------------------------------------------------------------------------------------------------------------- |
 | Deployable units      | 4 (`api`, `worker`, `scheduler`, `migration`), each with its own Docker target and pruned `package.json`               |
 | Bounded contexts      | 9 (`users`, `audit-log`, `upload`, `organizations`, `api-keys`, `notifications`, `feature-flags`, `terms`, `sessions`) |
-| Cross-context imports | Blocked — `libs-groups/no-cross-context-imports` (contexts are folders in one group project; barrels only)             |
-| Table ownership       | Clean: each context's repository touches only its own tables                                                           |
+| Cross-context imports | Blocked — `libs-groups/no-cross-context-imports`; only a declared edge may import another context's `contract`         |
+| Table ownership       | Enforced by `libs-groups/prisma-table-ownership`: one owner per table, plus named grants for the known exceptions      |
+| Event payloads        | Per-event zod schemas in each publisher's `contract` entry point (`@nestjs-fastify-nx/modules/<ctx>/contract`)         |
 | Cross-context FKs     | Only to the Better Auth core (`users`, `organizations`) — never between two feature contexts                           |
 | Cross-process events  | `outbox_events` + `OutboxRelayService`, at-least-once, with backoff                                                    |
 | Event names           | `DOMAIN_EVENTS` in `@nestjs-fastify-nx/shared`, locked to the trigger SQL by `domain-events.spec.ts`                   |
@@ -23,6 +24,31 @@ key pointing _into_ it costs nothing until Stage 3.
 What matters is what is absent — **no feature context references another feature context**.
 `stored_files.userId` and `audit_logs.userId` carry no foreign key at all so the scheduler can still
 purge objects after a user row is gone.
+
+## Table ownership
+
+`tools/generators/src/eslint-rules/table-ownership.map.mjs` is the single source of truth. Every
+Prisma model has one owner: a context folder (`modules/<ctx>`) or an infra folder for tables that no
+context owns (`infra/messaging` for `outbox_events`, `infra/auth` for `accounts` and
+`verifications`). A spec fails when a model in `prisma/schema.prisma` has no owner.
+
+The lint rule runs in `libs/modules/src/**` and `apps/*/src/**`. It reports a Prisma delegate call,
+a relation key inside a query, or a raw-SQL table name when the accessor does not own the table and
+holds no grant. A `read` grant does not permit writes. Today the map declares these grants:
+
+| Accessor                | Table                                                                     | Access | Reason                                               |
+| ----------------------- | ------------------------------------------------------------------------- | ------ | ---------------------------------------------------- |
+| `modules/organizations` | `users`                                                                   | read   | Names the personal workspace after the user          |
+| `modules/users`         | `members`                                                                 | read   | Scopes the member list to one organization           |
+| `apps/api`              | `outbox_events`                                                           | read   | Outbox lag metric                                    |
+| `apps/scheduler`        | `users`, `stored_files`, `outbox_events`                                  | write  | Retention purges and the orphan-file sweep           |
+| `apps/scheduler`        | `sessions`, `verifications`, `invitations`, `notifications`, `audit_logs` | write  | Retention purges and audit partition maintenance     |
+| `apps/scheduler`        | `organizations`                                                           | read   | The orphan-file sweep finds files of deleted tenants |
+
+These grants are the exact list of places that a split must replace with an event or an API call.
+The rule cannot see a table name that is built at run time. `BatchedPurgeRunner` takes its table
+from a config object, and the audit partition functions name `audit_logs` inside SQL. The grants for
+those tables are declared from the code inventory, not found by lint.
 
 ## What is deliberately not done yet
 
@@ -70,9 +96,12 @@ Per context:
 4. Keep consumers idempotent. They must be already: the outbox redelivers whenever
    publish succeeds but mark-processed fails.
 
-`DOMAIN_EVENTS` + `userEventPayloadSchema` are the wire contract for this step. They are versioned
-by `OUTBOX_SCHEMA_VERSION`; the relay refuses envelopes newer than it understands rather than
-guessing.
+`DOMAIN_EVENTS` and the per-event payload schemas in each context's `contract` entry point are the
+wire contract for this step. `OUTBOX_SCHEMA_VERSION` versions the envelope only. The relay refuses
+envelopes newer than it understands rather than guessing. The relay does not version the payload or
+check its fields: it passes the payload to listeners unchanged. The payload schema in the contract
+entry point of the publishing context is the payload contract. Make only additive changes to that
+schema: add optional fields, and do not remove, rename or retype a field.
 
 ## Stage 3 — separate the core (users/auth)
 
@@ -87,9 +116,9 @@ it means:
 
 ## Checklist for extracting one context
 
-- [ ] Context owns its tables and nothing joins into them
+- [ ] Context owns its tables and no grant in `table-ownership.map.mjs` points into them
 - [ ] Every inbound dependency is an event or an explicit API call, never a shared repository
-- [ ] Events it emits are declared in `DOMAIN_EVENTS` and covered by the contract test
+- [ ] Events it emits are declared in `DOMAIN_EVENTS`, with a payload schema in its `contract`
 - [ ] Consumers are idempotent under redelivery
 - [ ] Its listeners parse payloads (`safeParse`) instead of casting
 - [ ] Health probes split correctly: only core serving deps on `/health/ready`

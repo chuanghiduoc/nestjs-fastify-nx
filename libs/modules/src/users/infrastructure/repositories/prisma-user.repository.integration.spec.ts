@@ -5,14 +5,22 @@ import {
   deployTestMigrations,
 } from '@nestjs-fastify-nx/testing';
 import type { TestContainers } from '@nestjs-fastify-nx/testing';
-import type { DecodedCursor } from '@nestjs-fastify-nx/shared';
+import { DOMAIN_EVENTS, type DecodedCursor } from '@nestjs-fastify-nx/shared';
 import { isDomainException } from '@nestjs-fastify-nx/core';
 import { ERROR_CODES } from '@nestjs-fastify-nx/contracts';
 import { UserFactory } from '../../testing/user.factory';
 import { PrismaUserRepository } from './prisma-user.repository';
 import { PrismaService } from '@nestjs-fastify-nx/infra/database';
+import { z } from 'zod';
+import {
+  userLoggedInPayloadSchema,
+  userLoggedOutPayloadSchema,
+  userRegisteredPayloadSchema,
+} from '../../contract';
 
 const ORG_ID = '019dd1a5-9235-70db-8d57-54ef90300001';
+const ONE_DAY_MS = 86_400_000;
+const outboxEnvelopeSchema = z.object({ payload: z.unknown() });
 
 describe('PrismaUserRepository (integration)', () => {
   let containers: TestContainers;
@@ -64,6 +72,37 @@ describe('PrismaUserRepository (integration)', () => {
     const found = await repository.findById(user.id);
     if (!found) throw new Error('expected user to be persisted');
     expect(found.email.toString()).toBe('repo@test.com');
+  });
+
+  it('stores trigger payloads that satisfy the published users contract', async () => {
+    const user = UserFactory.create({ email: 'contract@test.com' });
+    await repository.save(user);
+    const session = await prismaService.db.session.create({
+      data: {
+        userId: user.id,
+        token: 'contract-session-token',
+        expiresAt: new Date(Date.now() + ONE_DAY_MS),
+        ipAddress: '203.0.113.5',
+      },
+    });
+    await prismaService.db.session.delete({ where: { id: session.id } });
+
+    const payloadOf = async (eventType: string): Promise<unknown> => {
+      const row = await prismaService.db.outboxEvent.findFirstOrThrow({
+        where: { eventType, aggregateId: user.id },
+      });
+      return outboxEnvelopeSchema.parse(row.payload).payload;
+    };
+
+    expect(
+      userRegisteredPayloadSchema.parse(await payloadOf(DOMAIN_EVENTS.USERS_REGISTERED)),
+    ).toEqual({ email: 'contract@test.com' });
+    expect(userLoggedInPayloadSchema.parse(await payloadOf(DOMAIN_EVENTS.USERS_LOGGED_IN))).toEqual(
+      { sessionId: session.id, ip: '203.0.113.5' },
+    );
+    expect(
+      userLoggedOutPayloadSchema.parse(await payloadOf(DOMAIN_EVENTS.USERS_LOGGED_OUT)),
+    ).toMatchObject({ tokenId: session.id, ip: '203.0.113.5' });
   });
 
   it('maps a duplicate email to user_already_exists with permanent=false', async () => {

@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { PrismaService, type TransactionClient } from '@nestjs-fastify-nx/infra/database';
+import { PrismaService } from '@nestjs-fastify-nx/infra/database';
 import { STORED_FILE_STATUS, type StoredFileStatus } from '@nestjs-fastify-nx/shared';
 import { StoredFile, type StoredFileProps } from '../../domain/entities/stored-file.entity';
 import type {
@@ -45,24 +45,10 @@ function matchesSoftDeleted(from: StoredFileStatus, to: StoredFileStatus): boole
 export class PrismaStoredFileRepository implements StoredFileRepositoryPort {
   constructor(private readonly prisma: PrismaService) {}
 
-  private run<R>(
-    fn: (client: TransactionClient) => Promise<R>,
-    options: { readOnly: boolean },
-  ): Promise<R> {
-    const joined = options.readOnly
-      ? (this.prisma.currentTransaction ?? this.prisma.currentReadTransaction)
-      : this.prisma.currentTransaction;
-    if (joined) return fn(joined);
-    if (!this.prisma.hasTenantContext) {
-      return fn(options.readOnly ? this.prisma.dbRead : this.prisma.db);
-    }
-    return this.prisma.withTenantContext(fn, { readOnly: options.readOnly });
-  }
-
   private async findOne(
     where: { sourceKey: string } | { key: string } | { id: string },
   ): Promise<StoredFile | null> {
-    const row = await this.run(
+    const row = await this.prisma.runTenantScoped(
       (client) => client.storedFile.findFirst({ where: { ...where, deletedAt: null } }),
       { readOnly: true },
     );
@@ -83,7 +69,9 @@ export class PrismaStoredFileRepository implements StoredFileRepositoryPort {
 
   async create(props: StoredFileProps): Promise<StoredFileCreateOutcome> {
     try {
-      await this.run((client) => client.storedFile.create({ data: props }), { readOnly: false });
+      await this.prisma.runTenantScoped((client) => client.storedFile.create({ data: props }), {
+        readOnly: false,
+      });
       return 'created';
     } catch (err) {
       if (isUniqueConstraintViolation(err)) return 'duplicate';
@@ -93,16 +81,17 @@ export class PrismaStoredFileRepository implements StoredFileRepositoryPort {
 
   async createBatch(props: readonly StoredFileProps[]): Promise<void> {
     if (props.length === 0) throw new Error('Cannot create an empty upload batch');
-    await this.run((client) => client.storedFile.createMany({ data: [...props] }), {
-      readOnly: false,
-    });
+    await this.prisma.runTenantScoped(
+      (client) => client.storedFile.createMany({ data: [...props] }),
+      { readOnly: false },
+    );
   }
 
   async publishBatch(ids: readonly string[], status: 'READY' | 'VERIFYING'): Promise<void> {
     if (ids.length === 0 || new Set(ids).size !== ids.length) {
       throw new Error('Upload publication requires a nonempty set of distinct IDs');
     }
-    await this.run(
+    await this.prisma.runTenantScoped(
       async (client) => {
         const updated = await client.storedFile.updateMany({
           where: { id: { in: [...ids] }, status: STORED_FILE_STATUS.FINALIZING, deletedAt: null },
@@ -125,7 +114,7 @@ export class PrismaStoredFileRepository implements StoredFileRepositoryPort {
     const where = matchesSoftDeleted(from, to)
       ? { ...selector, status: from }
       : { ...selector, status: from, deletedAt: null };
-    const result = await this.run(
+    const result = await this.prisma.runTenantScoped(
       (client) =>
         client.storedFile.updateMany({
           where,
@@ -155,13 +144,14 @@ export class PrismaStoredFileRepository implements StoredFileRepositoryPort {
   }
 
   async deleteIfStatus(id: string, status: StoredFileStatus): Promise<void> {
-    await this.run((client) => client.storedFile.deleteMany({ where: { id, status } }), {
-      readOnly: false,
-    });
+    await this.prisma.runTenantScoped(
+      (client) => client.storedFile.deleteMany({ where: { id, status } }),
+      { readOnly: false },
+    );
   }
 
   async softDelete(id: string): Promise<boolean> {
-    const result = await this.run(
+    const result = await this.prisma.runTenantScoped(
       (client) =>
         client.storedFile.updateMany({
           where: { id, deletedAt: null },

@@ -45,6 +45,7 @@ const schedulerEnvSchema = z
     OUTBOX_TX_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(300_000).default(30_000),
     OUTBOX_DISPATCH_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(300_000).default(30_000),
     OUTBOX_DISPATCH_CONCURRENCY: z.coerce.number().int().min(1).max(64).default(8),
+    OUTBOX_MAX_BATCHES_PER_TICK: z.coerce.number().int().min(1).max(1_000).default(20),
 
     ...outboxPurgeEnvShape(),
     OUTBOX_PARKED_RETENTION_DAYS: z.coerce.number().int().min(1).max(90).default(30),

@@ -40,36 +40,45 @@ export class PrismaNotificationRepository implements NotificationRepositoryPort 
     if (unreadOnly) where.readAt = null;
     if (startingAfter) where.AND = [keysetAfter(startingAfter)];
 
-    const rows = await this.prisma.readTarget().notification.findMany({
-      where,
-      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-      take: limit + 1,
-    });
+    const rows = await this.prisma.runTenantScoped(
+      (client) =>
+        client.notification.findMany({
+          where,
+          orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+          take: limit + 1,
+        }),
+      { readOnly: true },
+    );
 
     const { items, hasMore } = takePage(rows, limit);
     return { items: items.map(toEntity), hasMore };
   }
 
   async countUnread(organizationId: string, userId: string): Promise<number> {
-    return this.prisma
-      .readTarget()
-      .notification.count({ where: { organizationId, userId, readAt: null } });
+    return this.prisma.runTenantScoped(
+      (client) => client.notification.count({ where: { organizationId, userId, readAt: null } }),
+      { readOnly: true },
+    );
   }
 
   async create(notification: Notification): Promise<void> {
     try {
-      await this.prisma.writeTarget().notification.create({
-        data: {
-          id: notification.id,
-          organizationId: notification.organizationId,
-          userId: notification.userId,
-          type: notification.type,
-          title: notification.title,
-          body: notification.body,
-          data: notification.data as Prisma.InputJsonValue,
-          createdAt: notification.createdAt,
-        },
-      });
+      await this.prisma.runTenantScoped(
+        (client) =>
+          client.notification.create({
+            data: {
+              id: notification.id,
+              organizationId: notification.organizationId,
+              userId: notification.userId,
+              type: notification.type,
+              title: notification.title,
+              body: notification.body,
+              data: notification.data as Prisma.InputJsonValue,
+              createdAt: notification.createdAt,
+            },
+          }),
+        { readOnly: false },
+      );
     } catch (err) {
       // A deterministic id makes outbox redelivery collide on the primary key; that is the
       // idempotency signal, not a failure.
@@ -87,25 +96,38 @@ export class PrismaNotificationRepository implements NotificationRepositoryPort 
     id: string,
     readAt: Date,
   ): Promise<boolean> {
-    const { count } = await this.prisma.writeTarget().notification.updateMany({
-      where: { id, organizationId, userId, readAt: null },
-      data: { readAt },
-    });
+    const { count } = await this.prisma.runTenantScoped(
+      (client) =>
+        client.notification.updateMany({
+          where: { id, organizationId, userId, readAt: null },
+          data: { readAt },
+        }),
+      { readOnly: false },
+    );
     return count > 0;
   }
 
   async markAllRead(organizationId: string, userId: string, readAt: Date): Promise<number> {
-    const { count } = await this.prisma.writeTarget().notification.updateMany({
-      where: { organizationId, userId, readAt: null },
-      data: { readAt },
-    });
+    const { count } = await this.prisma.runTenantScoped(
+      (client) =>
+        client.notification.updateMany({
+          where: { organizationId, userId, readAt: null },
+          data: { readAt },
+        }),
+      { readOnly: false },
+    );
     return count;
   }
 
   async exists(organizationId: string, userId: string, id: string): Promise<boolean> {
-    const row = await this.prisma
-      .writeTarget()
-      .notification.findFirst({ where: { id, organizationId, userId }, select: { id: true } });
+    const row = await this.prisma.runTenantScoped(
+      (client) =>
+        client.notification.findFirst({
+          where: { id, organizationId, userId },
+          select: { id: true },
+        }),
+      { readOnly: false },
+    );
     return row !== null;
   }
 }

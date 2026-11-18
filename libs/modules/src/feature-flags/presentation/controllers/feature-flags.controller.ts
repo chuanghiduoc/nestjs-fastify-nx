@@ -151,7 +151,7 @@ export class FeatureFlagsController {
   })
   @ApiParam({ name: 'id', format: 'uuid', description: 'Feature flag id (UUID v7).' })
   @ApiOkResponse({ type: FeatureFlagResponseDto, description: 'Flag updated.' })
-  @ApiCommonErrors({ validation: true, notFound: true })
+  @ApiCommonErrors({ validation: true, notFound: true, conflict: true })
   update(
     @CurrentUser() user: AuthenticatedSession,
     @Param('id', new ParseUUIDPipe({ version: '7' })) id: string,

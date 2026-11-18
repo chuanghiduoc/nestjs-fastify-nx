@@ -45,6 +45,21 @@ describe('validateSchedulerConfig', () => {
     ).toThrow(/OUTBOX_MAX_ATTEMPTS/);
   });
 
+  it('defaults OUTBOX_MAX_BATCHES_PER_TICK to 20', () => {
+    const config = validateSchedulerConfig({ DATABASE_URL: 'postgresql://localhost/app' });
+
+    expect(config.OUTBOX_MAX_BATCHES_PER_TICK).toBe(20);
+  });
+
+  it('rejects an OUTBOX_MAX_BATCHES_PER_TICK below 1', () => {
+    expect(() =>
+      validateSchedulerConfig({
+        DATABASE_URL: 'postgresql://localhost/app',
+        OUTBOX_MAX_BATCHES_PER_TICK: '0',
+      }),
+    ).toThrow(/OUTBOX_MAX_BATCHES_PER_TICK/);
+  });
+
   it('rejects a non-postgres DATABASE_URL in production', () => {
     expect(() =>
       validateSchedulerConfig({

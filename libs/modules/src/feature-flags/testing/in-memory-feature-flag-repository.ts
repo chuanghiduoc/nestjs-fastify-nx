@@ -1,7 +1,8 @@
 import { paginateNewestFirst } from '@nestjs-fastify-nx/shared';
-import { FeatureFlag, type FeatureFlagChanges } from '../domain/entities/feature-flag.entity';
+import { FeatureFlag } from '../domain/entities/feature-flag.entity';
 import type {
   FeatureFlagRepositoryPort,
+  FeatureFlagUpdateOutcome,
   FindFeatureFlagsCursorOptions,
   FindFeatureFlagsCursorResult,
 } from '../domain/ports/feature-flag-repository.port';
@@ -40,30 +41,28 @@ export class InMemoryFeatureFlagRepository implements FeatureFlagRepositoryPort 
     return Promise.resolve();
   }
 
-  update(
-    organizationId: string,
-    id: string,
-    changes: FeatureFlagChanges,
-    updatedAt: Date,
-  ): Promise<boolean> {
-    const flag = this.flags.get(id);
-    if (!flag || flag.organizationId !== organizationId) return Promise.resolve(false);
+  update(flag: FeatureFlag): Promise<FeatureFlagUpdateOutcome> {
+    const stored = this.flags.get(flag.id);
+    if (!stored || stored.organizationId !== flag.organizationId) {
+      return Promise.resolve('not_found');
+    }
+    if (stored.version !== flag.version) return Promise.resolve('stale');
 
-    const merged = flag.withChanges(changes);
     this.flags.set(
-      id,
+      flag.id,
       FeatureFlag.reconstitute({
-        id: merged.id,
-        organizationId: merged.organizationId,
-        key: merged.key,
-        description: merged.description,
-        enabled: merged.enabled,
-        rolloutPercentage: merged.rolloutPercentage,
-        createdAt: merged.createdAt,
-        updatedAt,
+        id: stored.id,
+        organizationId: stored.organizationId,
+        key: stored.key,
+        description: flag.description,
+        enabled: flag.enabled,
+        rolloutPercentage: flag.rolloutPercentage,
+        createdAt: stored.createdAt,
+        updatedAt: flag.updatedAt,
+        version: stored.version + 1,
       }),
     );
-    return Promise.resolve(true);
+    return Promise.resolve('updated');
   }
 
   delete(organizationId: string, id: string): Promise<boolean> {

@@ -3,6 +3,14 @@ import nxPlugin from '@nx/eslint-plugin';
 import tseslint from 'typescript-eslint';
 import { defineConfig } from 'eslint/config';
 import noCrossContextImports from './tools/generators/src/eslint-rules/no-cross-context-imports.mjs';
+import prismaTableOwnership from './tools/generators/src/eslint-rules/prisma-table-ownership.mjs';
+
+const libsGroupsPlugin = {
+  rules: {
+    'no-cross-context-imports': noCrossContextImports,
+    'prisma-table-ownership': prismaTableOwnership,
+  },
+};
 
 // @nx/eslint-plugin ships tseslint-flavoured flat configs; defineConfig's stricter
 // ConfigWithExtends doesn't accept them nominally, so widen once at the boundary.
@@ -308,10 +316,21 @@ export default defineConfig(
     files: ['**/*.ts'],
     ignores: ['**/*.spec.ts', '**/*.test.ts', '**/*.integration.ts', '**/e2e/**'],
     plugins: {
-      'libs-groups': { rules: { 'no-cross-context-imports': noCrossContextImports } },
+      'libs-groups': libsGroupsPlugin,
     },
     rules: {
       'libs-groups/no-cross-context-imports': 'error',
+    },
+  },
+
+  {
+    files: ['libs/modules/src/**/*.ts', 'apps/*/src/**/*.ts'],
+    ignores: ['**/*.spec.ts', '**/*.test.ts', '**/*.integration.ts', '**/e2e/**'],
+    plugins: {
+      'libs-groups': libsGroupsPlugin,
+    },
+    rules: {
+      'libs-groups/prisma-table-ownership': 'error',
     },
   },
 

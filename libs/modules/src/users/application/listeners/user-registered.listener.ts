@@ -9,8 +9,8 @@ import {
   EMAIL_TEMPLATES,
   QUEUE_NAMES,
   RETRIED_JOB_OPTIONS,
-  userEventPayloadSchema,
 } from '@nestjs-fastify-nx/shared';
+import { userRegisteredPayloadSchema } from '../../contract';
 
 @Injectable()
 export class UserRegisteredListener {
@@ -24,7 +24,7 @@ export class UserRegisteredListener {
   // here rather than trusted.
   @OnEvent(DOMAIN_EVENTS.USERS_REGISTERED, { async: true, promisify: true, suppressErrors: false })
   async handle(event: DomainEvent): Promise<void> {
-    const parsed = userEventPayloadSchema.safeParse(event.payload);
+    const parsed = userRegisteredPayloadSchema.safeParse(event.payload);
     if (!parsed.success) {
       throw new Error(
         `${DOMAIN_EVENTS.USERS_REGISTERED} payload is not deliverable (eventId=${event.eventId})`,

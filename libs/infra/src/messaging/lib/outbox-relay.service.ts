@@ -33,6 +33,7 @@ export class OutboxRelayService implements OnApplicationBootstrap, OnModuleDestr
   private readonly logger = new Logger(OutboxRelayService.name);
   private readonly pollIntervalMs = positiveIntEnv('OUTBOX_POLL_INTERVAL_MS', 1_000);
   private readonly batchSize = positiveIntEnv('OUTBOX_BATCH_SIZE', 50);
+  private readonly maxBatchesPerTick = positiveIntEnv('OUTBOX_MAX_BATCHES_PER_TICK', 20);
   private readonly dispatchConcurrency = positiveIntEnv('OUTBOX_DISPATCH_CONCURRENCY', 8);
   private readonly maxAttempts = positiveIntEnv('OUTBOX_MAX_ATTEMPTS', 10);
   private readonly txTimeoutMs = positiveIntEnv('OUTBOX_TX_TIMEOUT_MS', 30_000);
@@ -80,7 +81,7 @@ export class OutboxRelayService implements OnApplicationBootstrap, OnModuleDestr
     }, this.pollIntervalMs);
     this.timer.unref();
     this.logger.log(
-      `Outbox relay started — pollIntervalMs=${this.pollIntervalMs} batchSize=${this.batchSize}`,
+      `Outbox relay started — pollIntervalMs=${this.pollIntervalMs} batchSize=${this.batchSize} maxBatchesPerTick=${this.maxBatchesPerTick}`,
     );
   }
 
@@ -91,25 +92,33 @@ export class OutboxRelayService implements OnApplicationBootstrap, OnModuleDestr
   }
 
   async tick(): Promise<number> {
-    if (this.leadership && !this.leadership.isLeader()) return 0;
-    if (this.running || this.stopped) return 0;
+    if (this.running || !this.mayClaim()) return 0;
     this.running = true;
     try {
-      const claimed = await this.claimBatch();
-      if (claimed.length === 0) {
-        await this.checkStuckRows();
-        return 0;
-      }
-
-      // claimBatch() already incremented attempts for every claimed row, so each must be attempted
-      // this tick or it silently burns a retry — a failed row is retried later, it doesn't block.
-      const dispatched = await this.dispatchClaimed(claimed);
-
+      const dispatched = await this.drainBacklog();
       await this.checkStuckRows();
       return dispatched;
     } finally {
       this.running = false;
     }
+  }
+
+  private mayClaim(): boolean {
+    if (this.stopped) return false;
+    return !this.leadership || this.leadership.isLeader();
+  }
+
+  private async drainBacklog(): Promise<number> {
+    let dispatched = 0;
+    for (let batch = 0; batch < this.maxBatchesPerTick; batch++) {
+      if (batch > 0 && !this.mayClaim()) break;
+      const claimed = await this.claimBatch();
+      // claimBatch() already incremented attempts for every claimed row, so each must be attempted
+      // this tick or it silently burns a retry — a failed row is retried later, it doesn't block.
+      dispatched += await this.dispatchClaimed(claimed);
+      if (claimed.length < this.batchSize) break;
+    }
+    return dispatched;
   }
 
   /**

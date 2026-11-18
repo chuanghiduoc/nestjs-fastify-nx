@@ -78,12 +78,40 @@ describe('PrismaTeamRepository (integration)', () => {
     const team = Team.create({ organizationId: ORG_A, name: 'Platform' });
     await repository.create(team);
 
-    expect(await repository.update(team.renamedTo('Core'))).toBe(true);
+    expect(await repository.update(team.renamedTo('Core'))).toBe('updated');
     expect((await repository.findById(ORG_A, team.id))?.name).toBe('Core');
 
     const hijack = Team.create({ id: team.id, organizationId: ORG_B, name: 'Hijacked' });
-    expect(await repository.update(hijack)).toBe(false);
+    expect(await repository.update(hijack)).toBe('not_found');
     expect((await repository.findById(ORG_A, team.id))?.name).toBe('Core');
+  });
+
+  it('lets the first of two renames from the same read win and reports the second as stale', async () => {
+    const team = Team.create({ organizationId: ORG_A, name: 'Platform' });
+    await repository.create(team);
+    const read = await repository.findById(ORG_A, team.id);
+    if (!read) throw new Error('team fixture was not created');
+
+    expect(await repository.update(read.renamedTo('Core'))).toBe('updated');
+    expect(await repository.update(read.renamedTo('Infrastructure'))).toBe('stale');
+
+    const stored = await repository.findById(ORG_A, team.id);
+    expect(stored?.name).toBe('Core');
+    expect(stored?.version).toBe(read.version + 1);
+  });
+
+  it('bumps the version on a name change but not on a member count change', async () => {
+    const team = Team.create({ organizationId: ORG_A, name: 'Platform' });
+    await repository.create(team);
+
+    await prisma.db
+      .$executeRaw`UPDATE "teams" SET "memberCount" = "memberCount" + 1 WHERE "id" = ${team.id}::uuid`;
+    expect((await repository.findById(ORG_A, team.id))?.version).toBe(team.version);
+    expect(await repository.update(team.renamedTo('Core'))).toBe('updated');
+
+    await prisma.db
+      .$executeRaw`UPDATE "teams" SET "name" = 'Renamed outside' WHERE "id" = ${team.id}::uuid`;
+    expect((await repository.findById(ORG_A, team.id))?.version).toBe(team.version + 2);
   });
 
   it('translates a duplicate name on rename too', async () => {

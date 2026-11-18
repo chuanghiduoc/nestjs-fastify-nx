@@ -1,14 +1,16 @@
 import { paginateNewestFirst } from '@nestjs-fastify-nx/shared';
-import type { OrganizationRole } from '../domain/entities/organization-role.entity';
-import type { Team } from '../domain/entities/team.entity';
+import { OrganizationRole } from '../domain/entities/organization-role.entity';
+import { Team } from '../domain/entities/team.entity';
 import type {
   OrganizationRoleRepositoryPort,
   RoleDeletionOutcome,
+  RoleUpdateOutcome,
 } from '../domain/ports/organization-role-repository.port';
 import type {
   FindTeamsCursorOptions,
   FindTeamsCursorResult,
   TeamRepositoryPort,
+  TeamUpdateOutcome,
   TeamWithMemberCount,
 } from '../domain/ports/team-repository.port';
 import type {
@@ -49,11 +51,25 @@ export class InMemoryOrganizationRoleRepository implements OrganizationRoleRepos
     return Promise.resolve();
   }
 
-  update(role: OrganizationRole): Promise<boolean> {
+  update(role: OrganizationRole): Promise<RoleUpdateOutcome> {
     const key = this.key(role.organizationId, role.role);
-    if (!this.roles.has(key)) return Promise.resolve(false);
-    this.roles.set(key, role);
-    return Promise.resolve(true);
+    const stored = this.roles.get(key);
+    if (!stored) return Promise.resolve('not_found');
+    if (stored.id !== role.id || stored.version !== role.version) return Promise.resolve('stale');
+
+    this.roles.set(
+      key,
+      OrganizationRole.reconstitute({
+        id: stored.id,
+        organizationId: stored.organizationId,
+        role: stored.role,
+        permissions: role.permissions,
+        createdAt: stored.createdAt,
+        updatedAt: role.updatedAt,
+        version: stored.version + 1,
+      }),
+    );
+    return Promise.resolve('updated');
   }
 
   deleteUnlessHeld(organizationId: string, role: string): Promise<RoleDeletionOutcome> {
@@ -94,11 +110,23 @@ export class InMemoryTeamRepository implements TeamRepositoryPort {
     return Promise.resolve();
   }
 
-  update(team: Team): Promise<boolean> {
+  update(team: Team): Promise<TeamUpdateOutcome> {
     const existing = this.teams.get(team.id);
-    if (!existing || existing.organizationId !== team.organizationId) return Promise.resolve(false);
-    this.teams.set(team.id, Object.assign(team, { memberCount: existing.memberCount }));
-    return Promise.resolve(true);
+    if (!existing || existing.organizationId !== team.organizationId) {
+      return Promise.resolve('not_found');
+    }
+    if (existing.version !== team.version) return Promise.resolve('stale');
+
+    const renamed = Team.reconstitute({
+      id: existing.id,
+      organizationId: existing.organizationId,
+      name: team.name,
+      createdAt: existing.createdAt,
+      updatedAt: team.updatedAt,
+      version: existing.version + 1,
+    });
+    this.teams.set(team.id, Object.assign(renamed, { memberCount: existing.memberCount }));
+    return Promise.resolve('updated');
   }
 
   delete(organizationId: string, id: string): Promise<boolean> {

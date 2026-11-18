@@ -12,3 +12,8 @@ reason = "glob AbortSignal cancellation bypass (post-timeout filesystem traversa
 id = "GHSA-gcqx-w48m-w2h4"
 ignoreUntil = 2026-12-01
 reason = "deepmerge prototype poisoning through mergeObject(). Reached only through fork-ts-checker-webpack-plugin and jest-config at build/test time, both merging repository-owned configuration. The advisory lists 4.3.1 as last affected with no patched release, so there is no version to move to; review when deepmerge publishes one."
+
+[[IgnoredVulns]]
+id = "GHSA-fc5q-39xc-vjpf"
+ignoreUntil = 2026-12-01
+reason = "picomatch regular expression denial of service through single-branch repeated extglobs. The exploit needs an attacker-controlled glob pattern. Every copy matches repository-owned patterns: build and test tooling (nx, vite, vitest, jest, lint-staged, tinyglobby, fdir) and chokidar under nestjs-i18n and @nestjs/graphql, where file watching is off in production. No request input reaches a glob. The advisory lists 4.0.7, the latest release, as affected with no patched release, so there is no version to move to; review when picomatch publishes one."

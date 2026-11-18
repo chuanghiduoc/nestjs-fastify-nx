@@ -4,8 +4,13 @@ import { OnEvent } from '@nestjs/event-emitter';
 import { DomainException } from '@nestjs-fastify-nx/core';
 import type { DomainEvent } from '@nestjs-fastify-nx/core';
 import { ERROR_CODES } from '@nestjs-fastify-nx/contracts';
-import { DOMAIN_EVENT_STREAMS, configurationEventPayloadSchema } from '@nestjs-fastify-nx/shared';
+import { DOMAIN_EVENT_STREAMS } from '@nestjs-fastify-nx/shared';
+import { z } from 'zod';
 import { RecordAuditLogCommand } from '../commands/record-audit-log';
+
+const configurationEventActorSchema = z.looseObject({
+  userId: z.uuid().optional(),
+});
 
 @Injectable()
 export class AuditLogListener {
@@ -83,7 +88,7 @@ export class AuditLogListener {
   }
 
   private async recordConfigurationEvent(event: DomainEvent, resource: string): Promise<void> {
-    const parsed = configurationEventPayloadSchema.safeParse(event.payload);
+    const parsed = configurationEventActorSchema.safeParse(event.payload);
     if (!parsed.success) {
       throw new DomainException({
         kind: 'malformed',

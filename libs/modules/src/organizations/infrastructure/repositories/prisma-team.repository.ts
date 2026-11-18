@@ -7,6 +7,7 @@ import type {
   FindTeamsCursorOptions,
   FindTeamsCursorResult,
   TeamRepositoryPort,
+  TeamUpdateOutcome,
   TeamWithMemberCount,
 } from '../../domain/ports/team-repository.port';
 import { teamNameTaken } from '../../application/organization-errors';
@@ -17,6 +18,7 @@ type TeamRow = {
   name: string;
   createdAt: Date;
   updatedAt: Date | null;
+  version: number;
   _count?: { members: number };
 };
 
@@ -28,6 +30,7 @@ function toEntity(row: TeamRow): TeamWithMemberCount {
       name: row.name,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
+      version: row.version,
     }),
     { memberCount: row._count?.members ?? 0 },
   );
@@ -80,16 +83,23 @@ export class PrismaTeamRepository implements TeamRepositoryPort {
     }
   }
 
-  async update(team: Team): Promise<boolean> {
+  async update(team: Team): Promise<TeamUpdateOutcome> {
+    const client = this.prisma.writeTarget();
     try {
-      const { count } = await this.prisma.writeTarget().team.updateMany({
-        where: { id: team.id, organizationId: team.organizationId },
+      const { count } = await client.team.updateMany({
+        where: { id: team.id, organizationId: team.organizationId, version: team.version },
         data: { name: team.name },
       });
-      return count > 0;
+      if (count > 0) return 'updated';
     } catch (err) {
       throw this.translate(err);
     }
+
+    const current = await client.team.findFirst({
+      where: { id: team.id, organizationId: team.organizationId },
+      select: { id: true },
+    });
+    return current ? 'stale' : 'not_found';
   }
 
   async delete(organizationId: string, id: string): Promise<boolean> {

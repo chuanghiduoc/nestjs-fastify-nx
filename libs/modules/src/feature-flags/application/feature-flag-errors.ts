@@ -12,6 +12,18 @@ export const featureFlagNotFound = () =>
     }),
   );
 
+export const featureFlagChangedConcurrently = () =>
+  new DomainException(
+    fieldProblem({
+      kind: 'conflict',
+      code: ERROR_CODES.CONFLICT,
+      messageKey: I18N_KEYS.errors.feature_flags.changed_concurrently,
+      path: 'id',
+      message: 'The feature flag changed while this request was applying an update',
+      permanent: false,
+    }),
+  );
+
 export const featureFlagKeyTaken = () =>
   new DomainException(
     fieldProblem({

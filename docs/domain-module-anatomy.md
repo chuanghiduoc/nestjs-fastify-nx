@@ -12,8 +12,10 @@
 A bounded context is a **folder** under `libs/modules/src/<context>/`. The whole
 group is ONE Nx project (`modules`) and ONE workspace package; `libs/modules/package.json`
 maps `./<ctx>` → `./src/<ctx>/index.ts`, so consumers import
-`@nestjs-fastify-nx/modules/<ctx>` and nothing else. There is no per-context
-project, package, or tsconfig.
+`@nestjs-fastify-nx/modules/<ctx>`. The one other entry is
+`./<ctx>/contract` for a context that publishes event payload schemas (see
+[`contract/`](#contract--the-published-contract-optional)). There is no
+per-context project, package, or tsconfig.
 
 Contexts grow along a **tier ladder**: the leaf tier stays flat; promoting to engine **may** add DDD subfolders inside the same context folder (the group project, exports map, and barrels never change).
 
@@ -459,6 +461,32 @@ for the global filter to mask) so callers never see a raw Prisma
 error. This is the only place `User.reconstitute()` runs outside a test
 factory.
 
+#### Concurrent writes
+
+Three aggregates have compare-and-set protection: feature flags, organization
+roles and teams. Each of them carries a `version` column. Other aggregates, for
+example `User`, have no `version` column, and their updates use
+last-write-wins. Add a `version` column before you rely on this protection for
+a new aggregate. The entity holds the
+`version` it was read with, and the repository uses that value as the expected
+version. An update is a compare-and-set: the `where` clause matches the row
+key, the tenant column and `version` together. Never expose `version` in a DTO, an
+application result or an event payload.
+
+- If only Nest writes the table (`feature_flags`), increment the version in the
+  same statement: `data: { ..., version: { increment: 1 } }`.
+- If Better Auth also writes the table (`organization_roles`, `teams`), do not
+  increment in Nest. A `BEFORE UPDATE` trigger in the init migration increments
+  the version when a business column changes. A change to a counter that Better
+  Auth keeps, for example `teams.memberCount`, does not increment it.
+
+When the compare-and-set matches zero rows, the repository reads the row again
+with the same tenant predicate. It returns `'not_found'` if the row is absent,
+and `'stale'` if the row exists. The handler maps the result with an exhaustive
+`switch`. It maps `'stale'` to a `DomainException` with `kind: 'conflict'`,
+`code: ERROR_CODES.CONFLICT` and `permanent: false`, because a retry on fresh
+data can succeed.
+
 **Testing**: the adapter's test is the colocated
 `prisma-<ctx>.repository.integration.spec.ts` — real Postgres via
 Testcontainers, never a mocked `PrismaService`. The group's unit coverage
@@ -606,12 +634,13 @@ Swagger metadata, but still needs `UserRegisteredListener` alive to process
 
 **Rules**: one context folder can never import another (`libs-groups/no-cross-context-imports`).
 Cross-context data sharing goes through `scope:composition` or a domain
-event.
+event. The only exception is a declared edge to another context's `contract/`
+(see below).
 
 ### `index.ts` — the public barrel
 
-The only file other libs may import from — the group package's exports map
-resolves `@nestjs-fastify-nx/modules/users` to it.
+The only file other libs may import from, apart from `contract/index.ts` — the
+group package's exports map resolves `@nestjs-fastify-nx/modules/users` to it.
 
 ```typescript
 // libs/modules/src/users/index.ts
@@ -641,6 +670,54 @@ export {
 **Rules**: export only what a consumer genuinely needs — handlers, the entity
 class, and adapter internals stay unexported. Adding to the barrel is
 a deliberate API decision.
+
+### `contract/` — the published contract (optional)
+
+A context that publishes domain events may add `contract/index.ts`. The
+exports map resolves `@nestjs-fastify-nx/modules/<ctx>/contract` to it. A
+contract holds only what other contexts may depend on: today, one zod payload
+schema per event and its inferred type. `organizations`, `users`,
+`feature-flags` and `api-keys` publish one.
+
+```typescript
+// libs/modules/src/organizations/contract/organization-events.ts
+export const organizationMemberAddedPayloadSchema = z.object({
+  userId: z.uuid(),
+  role: z.string(),
+});
+export type OrganizationMemberAddedPayload = z.infer<typeof organizationMemberAddedPayloadSchema>;
+```
+
+- The publisher types its payload as the inferred type, so a missing field is
+  a compile error. A schema for a trigger-produced event matches the trigger
+  SQL, and an integration spec parses the stored row with it.
+- The owning context imports its contract by a relative path. Apps and
+  `libs/composition/*` import the package subpath freely. Another context
+  imports it only along an edge in `CONTRACT_EDGES`
+  (`tools/generators/src/eslint-rules/no-cross-context-imports.mjs`), and the
+  edges must stay acyclic. Today the only edge is
+  `notifications → organizations`.
+- A contract file imports only `zod`, `@nestjs-fastify-nx/shared` and files
+  inside its own `contract/` folder. Lint rejects anything else.
+- A consumer that records every stream (`audit-log`) keeps its own tolerant
+  local schema with only the fields it reads. It needs no edge.
+- Event names stay in `DOMAIN_EVENTS` in `@nestjs-fastify-nx/shared`.
+
+### Table ownership
+
+Each Prisma model has one owner in
+`tools/generators/src/eslint-rules/table-ownership.map.mjs`: a context folder,
+or an infra folder for tables that no context owns (`outbox_events`,
+`accounts`, `verifications`). `libs-groups/prisma-table-ownership` reports a
+delegate call (`client.featureFlag.findMany`), a relation key inside a query
+(`memberships: { some: ... }`, `include: { memberships: ... }`) or a raw-SQL
+table name when the context or app does not own the table. A named grant in
+the same file permits a known exception; a `read` grant does not permit
+writes. The rule is type-aware: it fires only when the receiver is the Prisma
+client or a transaction client, so `session.user` or `dto.team` never match.
+A new model without an owner fails the map spec. See
+[`scaling-to-services.md`](./scaling-to-services.md#table-ownership) for the
+current grants.
 
 ### `testing/` (engine) or flat `in-memory-*.ts` / `mock-*.ts` (leaf) — fakes and factories
 

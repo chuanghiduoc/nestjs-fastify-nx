@@ -9,6 +9,7 @@ import {
 } from '../../domain/ports/feature-flag-repository.port';
 import { FeatureFlag } from '../../domain/entities/feature-flag.entity';
 import { toFeatureFlagDto, type FeatureFlagDto } from '../dto/feature-flag.dto';
+import type { FeatureFlagCreatedPayload } from '../../contract';
 
 export interface CreateFeatureFlagInput {
   readonly organizationId: string;
@@ -58,6 +59,14 @@ export class CreateFeatureFlagHandler implements ICommandHandler<
       rolloutPercentage: command.rolloutPercentage,
     });
 
+    const payload: FeatureFlagCreatedPayload = {
+      userId: command.userId,
+      key: flag.key,
+      enabled: flag.enabled,
+      rolloutPercentage: flag.rolloutPercentage,
+      description: flag.description,
+    };
+
     await this.prisma.transaction(async () => {
       await this.flags.create(flag);
       await this.events.publish({
@@ -66,13 +75,7 @@ export class CreateFeatureFlagHandler implements ICommandHandler<
         aggregateId: flag.id,
         occurredAt: new Date(),
         organizationId: command.organizationId,
-        payload: {
-          userId: command.userId,
-          key: flag.key,
-          enabled: flag.enabled,
-          rolloutPercentage: flag.rolloutPercentage,
-          description: flag.description,
-        },
+        payload,
       });
     });
 

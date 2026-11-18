@@ -12,6 +12,7 @@ import {
   API_KEY_REPOSITORY,
   type ApiKeyRepositoryPort,
 } from '../../domain/ports/api-key-repository.port';
+import type { ApiKeyRevokedPayload } from '../../contract';
 
 export class RevokeApiKeyCommand extends Command<void> {
   constructor(
@@ -32,6 +33,8 @@ export class RevokeApiKeyHandler implements ICommandHandler<RevokeApiKeyCommand,
   ) {}
 
   async execute(command: RevokeApiKeyCommand): Promise<void> {
+    const payload: ApiKeyRevokedPayload = { userId: command.userId };
+
     await this.prisma.transaction(async () => {
       const revoked = await this.apiKeys.revoke(command.organizationId, command.id, new Date());
       if (revoked) {
@@ -41,7 +44,7 @@ export class RevokeApiKeyHandler implements ICommandHandler<RevokeApiKeyCommand,
           aggregateId: command.id,
           occurredAt: new Date(),
           organizationId: command.organizationId,
-          payload: { userId: command.userId },
+          payload,
         });
         return;
       }

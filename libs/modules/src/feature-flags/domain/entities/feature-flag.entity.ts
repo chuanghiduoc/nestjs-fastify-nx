@@ -7,6 +7,7 @@ export const KEY_PATTERN = /^[a-z][a-z0-9._-]{1,99}$/;
 const ROLLOUT_MIN = 0;
 const ROLLOUT_MAX = 100;
 const BUCKET_COUNT = 100;
+const INITIAL_VERSION = 0;
 
 export interface FeatureFlagProps {
   id: string;
@@ -17,6 +18,7 @@ export interface FeatureFlagProps {
   rolloutPercentage: number;
   createdAt: Date;
   updatedAt: Date;
+  version: number;
 }
 
 export interface CreateFeatureFlagInput {
@@ -76,6 +78,7 @@ export class FeatureFlag {
       rolloutPercentage: assertRollout(input.rolloutPercentage ?? ROLLOUT_MAX),
       createdAt: now,
       updatedAt: now,
+      version: INITIAL_VERSION,
     });
   }
 
@@ -133,5 +136,8 @@ export class FeatureFlag {
   }
   get updatedAt(): Date {
     return this.props.updatedAt;
+  }
+  get version(): number {
+    return this.props.version;
   }
 }
