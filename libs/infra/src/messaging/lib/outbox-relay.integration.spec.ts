@@ -111,6 +111,24 @@ describe('Outbox relay and publisher (integration)', () => {
     expect(row.nextAttemptAt?.getTime() ?? 0).toBeGreaterThan(Date.now());
   });
 
+  it('drains more pending rows than one batch in a single tick', async () => {
+    const pendingIds = ['1', '2', '3', '4', '5'].map(
+      (n) => `019dd1a5-9235-70db-8d57-54050000002${n}`,
+    );
+    for (const id of pendingIds) await seedEvent(id, { eventId: id });
+    process.env['OUTBOX_BATCH_SIZE'] = '2';
+    try {
+      const smallBatchRelay = new OutboxRelayService(prisma, bus);
+
+      expect(await smallBatchRelay.tick()).toBe(pendingIds.length);
+    } finally {
+      delete process.env['OUTBOX_BATCH_SIZE'];
+    }
+
+    expect(await prisma.db.outboxEvent.count({ where: { processedAt: null } })).toBe(0);
+    expect(bus.publish).toHaveBeenCalledTimes(pendingIds.length);
+  });
+
   it('writes the outbox row atomically with the caller transaction', async () => {
     const event: DomainEvent = {
       eventId: EVENT_ID,

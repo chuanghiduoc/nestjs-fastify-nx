@@ -22,7 +22,9 @@ the application layer.
 2. **The relay uses three stages:** claim (`FOR UPDATE SKIP LOCKED`, short
    transaction), publish (outside any transaction), mark processed (per row).
    Backoff is stamped by the claim statement itself so a relay crash mid-dispatch
-   leaves the row invisible for the backoff window.
+   leaves the row invisible for the backoff window. When a claim returns a full
+   batch, the relay claims the next batch at once, up to
+   `OUTBOX_MAX_BATCHES_PER_TICK` batches per poll.
 3. **At-least-once delivery; consumers are idempotent by design.** Notification and
    audit rows derive their primary key from the outbox `eventId`; BullMQ jobs use a
    deterministic `jobId`. A publish succeeded / mark failed crash therefore

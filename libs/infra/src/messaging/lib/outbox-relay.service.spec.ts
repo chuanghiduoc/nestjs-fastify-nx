@@ -505,6 +505,100 @@ describe('OutboxRelayService', () => {
     }
   });
 
+  describe('draining a backlog within one tick', () => {
+    const BATCH_SIZE = 10;
+
+    afterEach(() => {
+      delete process.env['OUTBOX_MAX_BATCHES_PER_TICK'];
+    });
+
+    function buildRows(count: number, prefix: string): OutboxRow[] {
+      return Array.from({ length: count }, (_, index) =>
+        buildRow({ id: `${prefix}-${index}`, aggregateId: `${prefix}-agg-${index}` }),
+      );
+    }
+
+    function claimSequence(...batches: OutboxRow[][]): (limit: number) => OutboxRow[] {
+      let call = 0;
+      return () => batches[call++] ?? [];
+    }
+
+    it('claims the next batch immediately when a claim returns a full batch', async () => {
+      const { prisma } = buildPrisma({
+        claim: claimSequence(buildRows(BATCH_SIZE, 'first'), buildRows(3, 'second')),
+      });
+      const bus = buildBus();
+      const relay = new OutboxRelayService(prisma, bus);
+
+      expect(await relay.tick()).toBe(BATCH_SIZE + 3);
+      expect(prisma.transaction).toHaveBeenCalledTimes(2);
+      expect(bus.publish).toHaveBeenCalledTimes(BATCH_SIZE + 3);
+    });
+
+    it('stops after one claim when the batch is not full', async () => {
+      const { prisma } = buildPrisma({
+        claim: claimSequence(buildRows(3, 'first'), buildRows(BATCH_SIZE, 'second')),
+      });
+      const relay = new OutboxRelayService(prisma, buildBus());
+
+      expect(await relay.tick()).toBe(3);
+      expect(prisma.transaction).toHaveBeenCalledTimes(1);
+    });
+
+    it('stops claiming at OUTBOX_MAX_BATCHES_PER_TICK even when every batch is full', async () => {
+      process.env['OUTBOX_MAX_BATCHES_PER_TICK'] = '3';
+      const { prisma } = buildPrisma({ claim: () => buildRows(BATCH_SIZE, 'full') });
+      const relay = new OutboxRelayService(prisma, buildBus());
+
+      expect(await relay.tick()).toBe(3 * BATCH_SIZE);
+      expect(prisma.transaction).toHaveBeenCalledTimes(3);
+    });
+
+    it('sums only successfully dispatched rows across batches', async () => {
+      const { prisma } = buildPrisma({
+        claim: claimSequence(buildRows(BATCH_SIZE, 'first'), buildRows(4, 'second')),
+      });
+      const bus = buildBus();
+      bus.publish.mockRejectedValueOnce(new Error('listener failed'));
+      const relay = new OutboxRelayService(prisma, bus);
+
+      expect(await relay.tick()).toBe(BATCH_SIZE + 4 - 1);
+    });
+
+    it('stops draining when leadership is lost between batches', async () => {
+      const isLeader = vi.fn().mockReturnValueOnce(true).mockReturnValue(false);
+      const { prisma } = buildPrisma({ claim: () => buildRows(BATCH_SIZE, 'full') });
+      const relay = new OutboxRelayService(prisma, buildBus(), { isLeader });
+
+      expect(await relay.tick()).toBe(BATCH_SIZE);
+      expect(prisma.transaction).toHaveBeenCalledTimes(1);
+    });
+
+    it('stops draining when the relay is stopped between batches', async () => {
+      const { prisma } = buildPrisma({
+        claim: () => {
+          void relay.onModuleDestroy();
+          return buildRows(BATCH_SIZE, 'full');
+        },
+      });
+      const relay = new OutboxRelayService(prisma, buildBus());
+
+      expect(await relay.tick()).toBe(BATCH_SIZE);
+      expect(prisma.transaction).toHaveBeenCalledTimes(1);
+    });
+
+    it('checks for stuck rows once per tick however many batches it drains', async () => {
+      const { prisma, countMock } = buildPrisma({
+        claim: claimSequence(buildRows(BATCH_SIZE, 'first'), buildRows(BATCH_SIZE, 'second')),
+      });
+      const relay = new OutboxRelayService(prisma, buildBus());
+
+      expect(await relay.tick()).toBe(2 * BATCH_SIZE);
+      expect(prisma.transaction).toHaveBeenCalledTimes(3);
+      expect(countMock).toHaveBeenCalledTimes(1);
+    });
+  });
+
   it('contains scheduled tick failures so a database outage cannot crash the process', async () => {
     vi.useFakeTimers();
     try {

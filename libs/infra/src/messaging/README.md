@@ -57,11 +57,12 @@ OutboxRelayService (in scheduler app)
 
 Tunables (see `docs/environment.md`):
 
-| Variable                  | Default | Purpose                     |
-| ------------------------- | ------- | --------------------------- |
-| `OUTBOX_POLL_INTERVAL_MS` | `1000`  | Relay polling cadence       |
-| `OUTBOX_BATCH_SIZE`       | `50`    | Max events relayed per poll |
-| `OUTBOX_MAX_ATTEMPTS`     | `10`    | Retry budget before parking |
+| Variable                      | Default | Purpose                      |
+| ----------------------------- | ------- | ---------------------------- |
+| `OUTBOX_POLL_INTERVAL_MS`     | `1000`  | Relay polling cadence        |
+| `OUTBOX_BATCH_SIZE`           | `50`    | Max events claimed per batch |
+| `OUTBOX_MAX_BATCHES_PER_TICK` | `20`    | Max batches claimed per poll |
+| `OUTBOX_MAX_ATTEMPTS`         | `10`    | Retry budget before parking  |
 
 ## Why the outbox?
 
