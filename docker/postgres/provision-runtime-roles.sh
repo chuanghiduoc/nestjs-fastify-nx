@@ -58,6 +58,7 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO :"api_use
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO :"api_user";
 REVOKE ALL ON TABLE "_prisma_migrations" FROM :"api_user";
 REVOKE UPDATE, DELETE ON TABLE "outbox_events" FROM :"api_user";
+REVOKE UPDATE, DELETE ON TABLE "audit_logs" FROM :"api_user";
 
 REVOKE ALL ON ALL TABLES IN SCHEMA public FROM :"worker_user";
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE "stored_files" TO :"worker_user";

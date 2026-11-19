@@ -443,6 +443,15 @@ BEGIN
     'CREATE TABLE IF NOT EXISTS public.%I PARTITION OF "audit_logs" FOR VALUES FROM (%L) TO (%L)',
     pname, start_ts AT TIME ZONE 'UTC', end_ts AT TIME ZONE 'UTC'
   );
+  -- The parent's tenant policies apply only to statements that name "audit_logs". A statement that
+  -- names a partition directly is checked against that partition's own RLS state, which is off by
+  -- default, and api_user holds DML on every partition through the default privileges. Enabling RLS
+  -- with no policy makes direct partition access default-deny for every non-owner role that does
+  -- not hold BYPASSRLS, while access through the parent keeps the parent's policies. The guard keeps
+  -- the ACCESS EXCLUSIVE lock of ALTER TABLE off the daily call for a partition that already has RLS.
+  IF NOT (SELECT relrowsecurity FROM pg_class WHERE oid = format('public.%I', pname)::regclass) THEN
+    EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', pname);
+  END IF;
 END;
 $$;
 REVOKE ALL ON FUNCTION public.ensure_audit_log_partition(timestamptz) FROM PUBLIC;
