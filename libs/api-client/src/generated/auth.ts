@@ -20,7 +20,9 @@
  */
 import type {
   AccountInfo200,
+  CallbackIdParams,
   CallbackIdPostBody,
+  CallbackIdPostParams,
   ChangeEmail200,
   ChangeEmailBody,
   ChangePassword200,
@@ -33,9 +35,13 @@ import type {
   DeleteUserCallbackParams,
   GetAccessToken200,
   GetAccessTokenBody,
+  GetFullOrganizationParams,
+  GetOrganizationParams,
   GetSession200,
+  GetSessionParams,
   GetSessionPost200,
   GetSessionPostBody,
+  GetSessionPostParams,
   LinkSocialAccount200,
   LinkSocialAccountBody,
   ListUserAccounts200Item,
@@ -54,14 +60,22 @@ import type {
   OrganizationDeleteBody,
   OrganizationDeleteRoleBody,
   OrganizationGetActiveMember200,
+  OrganizationGetActiveMemberRoleParams,
   OrganizationGetInvitation200,
   OrganizationGetInvitationParams,
   OrganizationHasPermission200,
   OrganizationHasPermissionBody,
   OrganizationLeaveBody,
+  OrganizationListInvitationsParams,
+  OrganizationListMembersParams,
+  OrganizationListRolesParams,
   OrganizationListTeamMembers200Item,
+  OrganizationListTeamMembersParams,
   OrganizationListTeams200Item,
+  OrganizationListTeamsParams,
   OrganizationListUserInvitations200Item,
+  OrganizationListUserInvitationsParams,
+  OrganizationListUserTeamsParams,
   OrganizationRejectInvitation200,
   OrganizationRejectInvitationBody,
   OrganizationRemoveMember200,
@@ -83,6 +97,7 @@ import type {
   ResetPasswordBody,
   ResetPasswordCallback200,
   ResetPasswordCallbackParams,
+  ResetPasswordParams,
   RevokeOtherSessions200,
   RevokeOtherSessionsBody,
   RevokeSession200,
@@ -130,32 +145,45 @@ export const getAuth = () => {
       data: socialSignInBody,
     });
   };
-  const callbackId = (id: string) => {
-    return customAxiosInstance<unknown>({ url: `/api/auth/callback/${id}`, method: 'GET' });
+  const callbackId = (id: string, params?: CallbackIdParams) => {
+    return customAxiosInstance<unknown>({ url: `/api/auth/callback/${id}`, method: 'GET', params });
   };
-  const callbackIdPost = (id: string, callbackIdPostBody?: CallbackIdPostBody) => {
+  const callbackIdPost = (
+    id: string,
+    callbackIdPostBody?: CallbackIdPostBody,
+    params?: CallbackIdPostParams,
+  ) => {
     return customAxiosInstance<unknown>({
       url: `/api/auth/callback/${id}`,
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       data: callbackIdPostBody,
+      params,
     });
   };
   /**
    * Get the current session
    */
-  const getSession = () => {
-    return customAxiosInstance<GetSession200>({ url: `/api/auth/get-session`, method: 'GET' });
+  const getSession = (params?: GetSessionParams) => {
+    return customAxiosInstance<GetSession200>({
+      url: `/api/auth/get-session`,
+      method: 'GET',
+      params,
+    });
   };
   /**
    * Get the current session
    */
-  const getSessionPost = (getSessionPostBody?: GetSessionPostBody) => {
+  const getSessionPost = (
+    getSessionPostBody?: GetSessionPostBody,
+    params?: GetSessionPostParams,
+  ) => {
     return customAxiosInstance<GetSessionPost200>({
       url: `/api/auth/get-session`,
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       data: getSessionPostBody,
+      params,
     });
   };
   /**
@@ -196,12 +224,13 @@ export const getAuth = () => {
   /**
    * Reset the password for a user
    */
-  const resetPassword = (resetPasswordBody: ResetPasswordBody) => {
+  const resetPassword = (resetPasswordBody: ResetPasswordBody, params?: ResetPasswordParams) => {
     return customAxiosInstance<ResetPassword200>({
       url: `/api/auth/reset-password`,
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       data: resetPasswordBody,
+      params,
     });
   };
   /**
@@ -476,19 +505,21 @@ export const getAuth = () => {
   /**
    * Get the organization metadata
    */
-  const getOrganization = () => {
+  const getOrganization = (params?: GetOrganizationParams) => {
     return customAxiosInstance<Organization>({
       url: `/api/auth/organization/get-organization`,
       method: 'GET',
+      params,
     });
   };
   /**
    * Get the full organization
    */
-  const getFullOrganization = () => {
+  const getFullOrganization = (params?: GetFullOrganizationParams) => {
     return customAxiosInstance<Organization>({
       url: `/api/auth/organization/get-full-organization`,
       method: 'GET',
+      params,
     });
   };
   /**
@@ -559,10 +590,11 @@ export const getAuth = () => {
       data: organizationRejectInvitationBody,
     });
   };
-  const organizationListInvitations = () => {
+  const organizationListInvitations = (params?: OrganizationListInvitationsParams) => {
     return customAxiosInstance<unknown>({
       url: `/api/auth/organization/list-invitations`,
       method: 'GET',
+      params,
     });
   };
   /**
@@ -617,22 +649,25 @@ export const getAuth = () => {
   /**
    * List all invitations a user has received
    */
-  const organizationListUserInvitations = () => {
+  const organizationListUserInvitations = (params?: OrganizationListUserInvitationsParams) => {
     return customAxiosInstance<OrganizationListUserInvitations200Item[]>({
       url: `/api/auth/organization/list-user-invitations`,
       method: 'GET',
+      params,
     });
   };
-  const organizationListMembers = () => {
+  const organizationListMembers = (params?: OrganizationListMembersParams) => {
     return customAxiosInstance<unknown>({
       url: `/api/auth/organization/list-members`,
       method: 'GET',
+      params,
     });
   };
-  const organizationGetActiveMemberRole = () => {
+  const organizationGetActiveMemberRole = (params?: OrganizationGetActiveMemberRoleParams) => {
     return customAxiosInstance<unknown>({
       url: `/api/auth/organization/get-active-member-role`,
       method: 'GET',
+      params,
     });
   };
   /**
@@ -649,10 +684,11 @@ export const getAuth = () => {
   /**
    * List all teams in an organization
    */
-  const organizationListTeams = () => {
+  const organizationListTeams = (params?: OrganizationListTeamsParams) => {
     return customAxiosInstance<OrganizationListTeams200Item[]>({
       url: `/api/auth/organization/list-teams`,
       method: 'GET',
+      params,
     });
   };
   /**
@@ -693,19 +729,21 @@ export const getAuth = () => {
   /**
    * List teams for a user. Without parameters, returns teams for the current user across every organization they belong to. Pass `organizationId` to scope the result to a specific organization. Pass `userId` to list teams for another member; this requires `member:update` permission in the target organization (the explicit `organizationId` if provided, otherwise the session's active organization).
    */
-  const organizationListUserTeams = () => {
+  const organizationListUserTeams = (params?: OrganizationListUserTeamsParams) => {
     return customAxiosInstance<Team[]>({
       url: `/api/auth/organization/list-user-teams`,
       method: 'GET',
+      params,
     });
   };
   /**
    * List the members of the given team.
    */
-  const organizationListTeamMembers = () => {
+  const organizationListTeamMembers = (params?: OrganizationListTeamMembersParams) => {
     return customAxiosInstance<OrganizationListTeamMembers200Item[]>({
       url: `/api/auth/organization/list-team-members`,
       method: 'GET',
+      params,
     });
   };
   /**
@@ -750,10 +788,11 @@ export const getAuth = () => {
       data: organizationDeleteRoleBody,
     });
   };
-  const organizationListRoles = () => {
+  const organizationListRoles = (params?: OrganizationListRolesParams) => {
     return customAxiosInstance<unknown>({
       url: `/api/auth/organization/list-roles`,
       method: 'GET',
+      params,
     });
   };
   const organizationGetRole = () => {
