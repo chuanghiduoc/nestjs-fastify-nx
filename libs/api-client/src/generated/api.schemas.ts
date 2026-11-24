@@ -1319,6 +1319,16 @@ export type SocialSignIn404 = {
   message?: string;
 };
 
+export type CallbackIdParams = {
+  code?: string;
+  error?: string;
+  device_id?: string;
+  error_description?: string;
+  state?: string;
+  user?: string;
+  iss?: string;
+};
+
 export type CallbackId400 = {
   message: string;
 };
@@ -1333,6 +1343,16 @@ export type CallbackId403 = {
 
 export type CallbackId404 = {
   message?: string;
+};
+
+export type CallbackIdPostParams = {
+  code?: string;
+  error?: string;
+  device_id?: string;
+  error_description?: string;
+  state?: string;
+  user?: string;
+  iss?: string;
 };
 
 export type CallbackIdPostBody = {
@@ -1361,6 +1381,13 @@ export type CallbackIdPost404 = {
   message?: string;
 };
 
+export type GetSessionParams = {
+  /** Disable cookie cache and fetch session from database */
+  disableCookieCache?: boolean;
+  /** Disable session refresh. Useful for checking session status, without updating the session */
+  disableRefresh?: boolean;
+};
+
 /**
  * @nullable
  */
@@ -1383,6 +1410,13 @@ export type GetSession403 = {
 
 export type GetSession404 = {
   message?: string;
+};
+
+export type GetSessionPostParams = {
+  /** Disable cookie cache and fetch session from database */
+  disableCookieCache?: boolean;
+  /** Disable session refresh. Useful for checking session status, without updating the session */
+  disableRefresh?: boolean;
 };
 
 export type GetSessionPostBody = { [key: string]: unknown };
@@ -1545,6 +1579,10 @@ export type SignInEmail403 = {
 
 export type SignInEmail404 = {
   message?: string;
+};
+
+export type ResetPasswordParams = {
+  token?: string;
 };
 
 export type ResetPasswordBody = {
@@ -2462,6 +2500,13 @@ export type SetActiveOrganization404 = {
   message?: string;
 };
 
+export type GetOrganizationParams = {
+  /** The organization id to get */
+  organizationId?: string;
+  /** The organization slug to get */
+  organizationSlug?: string;
+};
+
 export type GetOrganization400 = {
   message: string;
 };
@@ -2476,6 +2521,15 @@ export type GetOrganization403 = {
 
 export type GetOrganization404 = {
   message?: string;
+};
+
+export type GetFullOrganizationParams = {
+  /** The organization id to get */
+  organizationId?: string;
+  /** The organization slug to get */
+  organizationSlug?: string;
+  /** The limit of members to get. By default, it uses the membershipLimit option. */
+  membersLimit?: number | string;
 };
 
 export type GetFullOrganization400 = {
@@ -2668,6 +2722,11 @@ export type OrganizationRejectInvitation404 = {
   message?: string;
 };
 
+export type OrganizationListInvitationsParams = {
+  /** The ID of the organization to list invitations for */
+  organizationId?: string;
+};
+
 export type OrganizationListInvitations400 = {
   message: string;
 };
@@ -2819,6 +2878,11 @@ export type OrganizationLeave404 = {
   message?: string;
 };
 
+export type OrganizationListUserInvitationsParams = {
+  /** The email of the user to list invitations for. This only works for server side API calls. */
+  email?: string;
+};
+
 export type OrganizationListUserInvitations200Item = {
   id: string;
   email: string;
@@ -2853,6 +2917,49 @@ export type OrganizationListUserInvitations404 = {
   message?: string;
 };
 
+export type OrganizationListMembersParams = {
+  limit?: string | number;
+  offset?: string | number;
+  /** The field to sort by */
+  sortBy?: string;
+  /** The direction to sort by */
+  sortDirection?: OrganizationListMembersSortDirection;
+  /** The field to filter by */
+  filterField?: string;
+  filterValue?: string | number | boolean | string[] | number[];
+  /** The operator to use for the filter */
+  filterOperator?: OrganizationListMembersFilterOperator;
+  /** The organization ID to list members for. If not provided, will default to the user's active organization. Eg: "organization-id" */
+  organizationId?: string;
+  /** The organization slug to list members for. If not provided, will default to the user's active organization. Eg: "organization-slug" */
+  organizationSlug?: string;
+};
+
+export type OrganizationListMembersSortDirection =
+  (typeof OrganizationListMembersSortDirection)[keyof typeof OrganizationListMembersSortDirection];
+
+export const OrganizationListMembersSortDirection = {
+  asc: 'asc',
+  desc: 'desc',
+} as const;
+
+export type OrganizationListMembersFilterOperator =
+  (typeof OrganizationListMembersFilterOperator)[keyof typeof OrganizationListMembersFilterOperator];
+
+export const OrganizationListMembersFilterOperator = {
+  eq: 'eq',
+  ne: 'ne',
+  lt: 'lt',
+  lte: 'lte',
+  gt: 'gt',
+  gte: 'gte',
+  in: 'in',
+  not_in: 'not_in',
+  contains: 'contains',
+  starts_with: 'starts_with',
+  ends_with: 'ends_with',
+} as const;
+
 export type OrganizationListMembers400 = {
   message: string;
 };
@@ -2867,6 +2974,15 @@ export type OrganizationListMembers403 = {
 
 export type OrganizationListMembers404 = {
   message?: string;
+};
+
+export type OrganizationGetActiveMemberRoleParams = {
+  /** The user ID to get the role for. If not provided, will default to the current user's */
+  userId?: string;
+  /** The organization ID to list members for. If not provided, will default to the user's active organization. Eg: "organization-id" */
+  organizationId?: string;
+  /** The organization slug to list members for. If not provided, will default to the user's active organization. Eg: "organization-slug" */
+  organizationSlug?: string;
 };
 
 export type OrganizationGetActiveMemberRole400 = {
@@ -2919,6 +3035,11 @@ export type OrganizationCreateTeam403 = {
 
 export type OrganizationCreateTeam404 = {
   message?: string;
+};
+
+export type OrganizationListTeamsParams = {
+  /** The organization ID which the teams are under to list. Defaults to the users active organization. Eg: "organization-id" */
+  organizationId?: string;
 };
 
 export type OrganizationListTeams200Item = {
@@ -3053,6 +3174,11 @@ export type OrganizationSetActiveTeam404 = {
   message?: string;
 };
 
+export type OrganizationListUserTeamsParams = {
+  userId?: string;
+  organizationId?: string;
+};
+
 export type OrganizationListUserTeams400 = {
   message: string;
 };
@@ -3067,6 +3193,10 @@ export type OrganizationListUserTeams403 = {
 
 export type OrganizationListUserTeams404 = {
   message?: string;
+};
+
+export type OrganizationListTeamMembersParams = {
+  teamId?: string;
 };
 
 /**
@@ -3243,6 +3373,10 @@ export type OrganizationDeleteRole403 = {
 
 export type OrganizationDeleteRole404 = {
   message?: string;
+};
+
+export type OrganizationListRolesParams = {
+  organizationId?: string;
 };
 
 export type OrganizationListRoles400 = {
