@@ -47,7 +47,7 @@ services:
       start_period: 10s
 
   redis-cache:
-    image: redis:8-alpine@sha256:8096655e437712b07503796fb64d81359256cfcff0ab29d95a7da72863786efb
+    image: redis:8-alpine@sha256:7958cfbb9d152f87dadfbc89f1b0b15938f0b81ff8982feb327476f4911935c3
     restart: unless-stopped
     mem_limit: 128m
     cpus: 0.5
@@ -72,7 +72,7 @@ services:
       retries: 5
 
   redis-queue:
-    image: redis:8-alpine@sha256:8096655e437712b07503796fb64d81359256cfcff0ab29d95a7da72863786efb
+    image: redis:8-alpine@sha256:7958cfbb9d152f87dadfbc89f1b0b15938f0b81ff8982feb327476f4911935c3
     restart: unless-stopped
     mem_limit: 256m
     cpus: 0.5
